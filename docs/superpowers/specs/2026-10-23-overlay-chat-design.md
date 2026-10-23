@@ -372,3 +372,22 @@ signed, so Windows SmartScreen warns on first run. The README says so.
 
 Public release waits until Anthropic confirms that a published app may start
 the player's logged-in `claude` CLI. See the roadmap spec.
+
+## Phase 0 results
+
+- CLI version used for the fixtures: 2.1.308 (Claude Code).
+- stream-json shapes: the field names and nesting listed in Events hold. The recordings differ from the expected list in these ways:
+  - The first line is `system/hook_started`, not `system/init`. Several `hook_started` and `hook_response` lines come before `init`. Find `init` by type and subtype; do not assume it is line 1.
+  - Other event types appear that the parser must ignore: `system/hook_started`, `system/hook_response`, `system/status`, `system/commands_changed`, `rate_limit_event`, and `stream_event` types `message_start`, `content_block_start`, `content_block_stop` and `message_delta`.
+  - `content_block_delta` has more delta types than `text_delta`: `input_json_delta` (tool input), `thinking_delta` and `signature_delta`. Only `delta.type` `text_delta` carries chat text, in `event.delta.text`.
+  - Every `stream_event`, `assistant` and `user` line also has `session_id`, `parent_tool_use_id` and `uuid`. `stream_event` lines also have `api_message_id`.
+  - `assistant` lines hold one content block each (one line per `thinking`, `text` or `tool_use` block). The `tool_use` block also has `caller: {"type":"direct"}`. The `tool_use` block also has the full `input` (for example `command` and `description` for Bash).
+  - `mcp_servers` in `init` lists every server with `name`, `status` and `source` (`user`, `plugin` or `claudeai`). At `init` time, servers have status `pending`, not `connected` (`failed` and `needs-auth` also occur). The `tools` array at `init` had no `mcp__` tools for the same reason. Do not decide "ed-mcp not connected" from `init` alone.
+  - `permissionMode` in `init` is `auto` when no flag is given and `default` with `--permission-mode default`.
+  - `user` lines with a `tool_result` block also have `tool_use_result` and `tool_result_meta` at the top level. A denied tool gives a `tool_result` with `is_error: true` and the denial text in `content`.
+  - A denied tool also produces a `system/permission_denied` line (`tool_name`, `tool_use_id`, `message`) before the `user` line.
+  - `result` has `is_error`, `duration_ms`, `result`, `session_id`, `subtype`, `permission_denials`, `terminal_reason` and `stop_reason`, as expected.
+  - `permission_denials[]` entries have `tool_name`, `tool_use_id` and `tool_input`.
+- Denied tools appear in `result.permission_denials[].tool_name`.
+- `handwritten.jsonl` uses the real shape (extra `session_id`, `parent_tool_use_id`, `uuid`, `caller`, `source` fields), with the same events and texts as the original plan.
+- The recorded files hold personal data: the home path in `init.cwd`, `memory_paths` and the plugin paths, the `mcp_servers` names, and the home path in `result` text and tool output.
