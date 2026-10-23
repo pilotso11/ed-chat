@@ -1,0 +1,187 @@
+import { describe, expect, it } from "vitest";
+import {
+  INITIAL_STATE,
+  canOpenChat,
+  currentChips,
+  reduce,
+  windowProps,
+  type Action,
+  type OverlayState,
+} from "../src/core/controller.js";
+
+const run = (actions: Action[], from: OverlayState = INITIAL_STATE) => actions.reduce(reduce, from);
+const ready: Action = {
+  type: "backend",
+  event: { type: "ready", sessionId: "s", tools: [], mcpServers: [], permissionMode: "auto" },
+};
+const text = (delta: string): Action => ({ type: "backend", event: { type: "text", delta } });
+const result = (
+  over: Partial<{ isError: boolean; text: string | null; denials: string[] }> = {},
+): Action => ({
+  type: "backend",
+  event: {
+    type: "result",
+    isError: false,
+    durationMs: 1,
+    text: null,
+    sessionId: "s",
+    denials: [],
+    ...over,
+  },
+});
+
+describe("reduce", () => {
+  it("goes idle on ready", () => {
+    expect(run([ready]).session).toBe("idle");
+  });
+
+  it("streams a reply into the card, then pins it with its chips", () => {
+    let s = run([ready, { type: "openChat" }, { type: "sent", text: "where?" }]);
+    expect(s).toMatchObject({ chatOpen: false, cardOpen: true, session: "thinking", reply: "" });
+    expect(s.history).toEqual([{ role: "user", text: "where?" }]);
+    s = run([text("Go to ⟦Hip 3922⟧\nthen dock")], s);
+    expect(currentChips(s)).toEqual([{ n: 1, text: "Hip 3922" }]);
+    s = run([result()], s);
+    expect(s).toMatchObject({
+      session: "idle",
+      pinned: "Go to Hip 3922",
+      chips: [{ n: 1, text: "Hip 3922" }],
+    });
+    expect(s.history.at(-1)).toEqual({ role: "assistant", text: "Go to ⟦Hip 3922⟧\nthen dock" });
+    expect(run([{ type: "cardTimeout" }], s).cardOpen).toBe(false);
+  });
+
+  it("keeps the old chips while the next reply streams", () => {
+    const s = run([
+      ready,
+      { type: "sent", text: "a" },
+      text("⟦Sol⟧"),
+      result(),
+      { type: "sent", text: "b" },
+    ]);
+    expect(s.chips).toEqual([{ n: 1, text: "Sol" }]);
+    expect(currentChips(s)).toEqual([]);
+  });
+
+  it("does not close the card while thinking", () => {
+    const s = run([ready, { type: "sent", text: "a" }, { type: "cardTimeout" }]);
+    expect(s.cardOpen).toBe(true);
+  });
+
+  it("stays thinking when a restarted CLI reports ready", () => {
+    expect(run([{ type: "sent", text: "a" }, ready]).session).toBe("thinking");
+  });
+
+  it("shows the running tool", () => {
+    const start: Action = {
+      type: "backend",
+      event: { type: "toolStart", id: "1", name: "mcp__ed-mcp__spansh_route" },
+    };
+    const end: Action = {
+      type: "backend",
+      event: { type: "toolEnd", id: "1", name: "x", isError: false },
+    };
+    expect(run([ready, { type: "sent", text: "a" }, start]).tool).toBe("mcp__ed-mcp__spansh_route");
+    expect(run([ready, { type: "sent", text: "a" }, start, end]).tool).toBeNull();
+  });
+
+  it("shows an error result's message in the card", () => {
+    const s = run([
+      ready,
+      { type: "sent", text: "a" },
+      result({ isError: true, text: "Please run /login" }),
+    ]);
+    expect(s.reply).toBe("Please run /login");
+    expect(s.cardOpen).toBe(true);
+  });
+
+  it("records the first denied tool", () => {
+    expect(run([ready, { type: "sent", text: "a" }, result({ denials: ["Bash"] })]).blocked).toBe(
+      "Bash",
+    );
+  });
+
+  it("reports exits, give-ups and spawn errors as notices", () => {
+    const exit: Action = {
+      type: "backend",
+      event: { type: "exit", code: 1, stderrTail: ["x", "boom"] },
+    };
+    expect(run([exit]).notices.claude).toBe("⚠ Claude stopped: boom");
+    expect(run([exit]).session).toBe("stopped");
+    const gave: Action = { type: "backend", event: { type: "gaveUp", stderrTail: [] } };
+    expect(run([gave]).notices.claude).toBe("⚠ Claude keeps stopping");
+    const missing: Action = {
+      type: "backend",
+      event: { type: "spawnError", message: "spawn claude ENOENT" },
+    };
+    expect(run([missing]).notices.claude).toBe(
+      "⚠ claude not found: install Claude Code or set claude.path",
+    );
+    expect(run([missing, ready]).notices.claude).toBeUndefined();
+  });
+
+  it("sets and clears notices", () => {
+    const s = run([{ type: "notice", key: "a", text: "⚠ x" }]);
+    expect(s.notices).toEqual({ a: "⚠ x" });
+    expect(run([{ type: "notice", key: "a", text: null }], s).notices).toEqual({});
+  });
+
+  it("tracks approvals by id", () => {
+    const req = { id: "r1", toolName: "Bash", summary: "{}" };
+    const s = run([{ type: "approval", request: req }]);
+    expect(s.approval).toEqual(req);
+    expect(run([{ type: "approvalSettled", id: "other" }], s).approval).toEqual(req);
+    expect(run([{ type: "approvalSettled", id: "r1" }], s).approval).toBeNull();
+  });
+
+  it("clears the conversation on newSession", () => {
+    const s = run([
+      ready,
+      { type: "sent", text: "a" },
+      text("⟦Sol⟧"),
+      result(),
+      { type: "newSession" },
+    ]);
+    expect(s).toMatchObject({
+      reply: "",
+      chips: [],
+      pinned: null,
+      history: [],
+      session: "starting",
+      cardOpen: false,
+    });
+  });
+
+  it("returns to starting on cancel", () => {
+    expect(run([ready, { type: "sent", text: "a" }, { type: "cancelled" }]).session).toBe(
+      "starting",
+    );
+  });
+});
+
+describe("windowProps", () => {
+  it("is interactive only with the chat open", () => {
+    expect(windowProps(INITIAL_STATE)).toEqual({ show: true, interactive: false });
+    expect(windowProps(run([{ type: "openChat" }]))).toEqual({ show: true, interactive: true });
+    expect(windowProps(run([{ type: "toggleHistory" }]))).toEqual({
+      show: true,
+      interactive: false,
+    });
+  });
+
+  it("hides, but still shows a pending approval", () => {
+    const hidden = run([{ type: "toggleVisible" }]);
+    expect(windowProps(hidden).show).toBe(false);
+    const req = { id: "r", toolName: "Bash", summary: "" };
+    expect(windowProps(run([{ type: "approval", request: req }], hidden)).show).toBe(true);
+  });
+});
+
+describe("canOpenChat", () => {
+  it("blocks only when in danger and blocking is on", () => {
+    const danger = run([{ type: "flags", flags: { docked: false, inDanger: true } }]);
+    expect(canOpenChat(danger, true)).toBe(false);
+    expect(canOpenChat(danger, false)).toBe(true);
+    expect(canOpenChat(INITIAL_STATE, true)).toBe(true);
+  });
+});
