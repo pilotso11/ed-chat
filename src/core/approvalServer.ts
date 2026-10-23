@@ -12,6 +12,7 @@ export interface ApprovalRequest {
   summary: string;
 }
 export type ApprovalDecision = "allow" | "deny";
+type Outcome = ApprovalDecision | "timeout" | "cancelled";
 
 export interface ApprovalServerOptions {
   timeoutMs: number;
@@ -28,7 +29,7 @@ export class ApprovalServer {
   private server?: http.Server;
   private port = 0;
   private readonly token = randomBytes(24).toString("hex");
-  private readonly pending = new Map<string, (d: ApprovalDecision | "timeout") => void>();
+  private readonly pending = new Map<string, (d: Outcome) => void>();
   private timeoutMs: number;
 
   constructor(private readonly opts: ApprovalServerOptions) {
@@ -115,8 +116,8 @@ export class ApprovalServer {
           tool_use_id: z.string().optional(),
         },
       },
-      async ({ tool_name, input }) => {
-        const d = await this.ask(tool_name, input ?? {});
+      async ({ tool_name, input }, extra) => {
+        const d = await this.ask(tool_name, input ?? {}, extra.signal);
         const payload =
           d === "allow"
             ? { behavior: "allow", updatedInput: input ?? {} }
@@ -130,17 +131,22 @@ export class ApprovalServer {
     return mcp;
   }
 
-  private ask(toolName: string, input: unknown): Promise<ApprovalDecision | "timeout"> {
+  private ask(toolName: string, input: unknown, signal: AbortSignal): Promise<Outcome> {
     const id = randomUUID();
     return new Promise((resolve) => {
-      const settle = (d: ApprovalDecision | "timeout") => {
+      const settle = (d: Outcome) => {
         clearTimeout(timer);
+        signal.removeEventListener("abort", onAbort);
         if (!this.pending.delete(id)) return;
         this.opts.onSettled(id);
         resolve(d);
       };
       // A turn must never wait forever for a player who is busy flying.
+      const onAbort = () => settle("cancelled");
       const timer = setTimeout(() => settle("timeout"), this.timeoutMs);
+      // The CLI may disconnect (Ctrl-C, crash, its own tool timeout) while the card is up.
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (signal.aborted) onAbort();
       this.pending.set(id, settle);
       this.opts.onRequest({ id, toolName, summary: summarize(input) });
     });

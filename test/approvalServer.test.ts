@@ -74,6 +74,36 @@ describe("ApprovalServer", () => {
     expect(res.status).toBe(401);
   });
 
+  it("rejects a wrong token", async () => {
+    const t = await setup();
+    const res = await fetch(t.cfg.url, {
+      method: "POST",
+      headers: { Authorization: "Bearer wrong" },
+      body: "{}",
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("answers 404 for a wrong path", async () => {
+    const t = await setup();
+    const res = await fetch(t.cfg.url.replace("/mcp", "/other"), {
+      method: "POST",
+      headers: t.cfg.headers,
+      body: "{}",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("releases the approval when the client disconnects", async () => {
+    const t = await setup();
+    void t.call().catch(() => {});
+    const req = await t.waitRequest();
+    await t.client.close();
+    while (!t.settled.length) await new Promise((r) => setTimeout(r, 10));
+    expect(t.settled).toEqual([req.id]);
+    expect(server!.answer(req.id, "allow")).toBe(false);
+  });
+
   it("listens on 127.0.0.1", async () => {
     const t = await setup();
     expect(t.cfg.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
