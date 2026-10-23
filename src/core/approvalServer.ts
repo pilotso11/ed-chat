@@ -18,6 +18,7 @@ export interface ApprovalServerOptions {
   timeoutMs: number;
   onRequest: (r: ApprovalRequest) => void;
   onSettled: (id: string) => void;
+  onError?: (err: unknown) => void;
 }
 
 export function summarize(input: unknown, max = 80): string {
@@ -99,7 +100,8 @@ export class ApprovalServer {
     try {
       await mcp.connect(transport);
       await transport.handleRequest(req, res);
-    } catch {
+    } catch (err) {
+      this.opts.onError?.(err);
       if (!res.headersSent) res.writeHead(500).end();
     }
   }

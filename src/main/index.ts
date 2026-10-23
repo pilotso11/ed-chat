@@ -200,6 +200,8 @@ async function main(): Promise<void> {
     timeoutMs: settings.approval.timeoutSeconds * 1000,
     onRequest: (request) => dispatch({ type: "approval", request }),
     onSettled: (id) => dispatch({ type: "approvalSettled", id }),
+    // The message only: the request body can hold chat text.
+    onError: (err) => log.log("warn", `approval request failed: ${message(err)}`),
   });
   const mcpConfigFile = path.join(dataDir, "approval-mcp.json");
   const workspace = path.join(dataDir, "workspace");
