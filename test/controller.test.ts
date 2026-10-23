@@ -35,6 +35,18 @@ describe("reduce", () => {
     expect(run([ready]).session).toBe("idle");
   });
 
+  it("goes idle once the CLI has spawned, and clears the Claude notice", () => {
+    const spawned: Action = { type: "backend", event: { type: "spawned" } };
+    const exit: Action = { type: "backend", event: { type: "exit", code: 1, stderrTail: [] } };
+    expect(run([spawned]).session).toBe("idle");
+    expect(run([exit, spawned]).notices.claude).toBeUndefined();
+    expect(run([{ type: "sent", text: "a" }, spawned]).session).toBe("thinking");
+    expect(run([ready, { type: "newSession" }, spawned]).session).toBe("idle");
+    expect(run([ready, { type: "sent", text: "a" }, { type: "cancelled" }, spawned]).session).toBe(
+      "idle",
+    );
+  });
+
   it("streams a reply into the card, then pins it with its chips", () => {
     let s = run([ready, { type: "openChat" }, { type: "sent", text: "where?" }]);
     expect(s).toMatchObject({ chatOpen: false, cardOpen: true, session: "thinking", reply: "" });

@@ -1,4 +1,4 @@
-// Replays FAKE_FIXTURE: the first line at start, the rest after each stdin message.
+// Replays FAKE_FIXTURE like the real CLI: the init line comes only after the first stdin message.
 import { appendFileSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
@@ -11,9 +11,18 @@ if (mode === "exit-now") {
   process.stderr.write("boom\n");
   process.exit(1);
 }
-process.stdout.write(lines[0] + "\n");
+if (process.env.FAKE_STDERR_ON_KILL) {
+  process.on("SIGTERM", () => {
+    process.stderr.write("killed\n", () => process.exit(0));
+  });
+}
+let initSent = false;
 const rl = createInterface({ input: process.stdin });
 rl.on("line", () => {
+  if (!initSent) {
+    initSent = true;
+    process.stdout.write(lines[0] + "\n");
+  }
   if (mode === "crash") {
     process.stderr.write("boom\n");
     process.exit(1);

@@ -66,6 +66,7 @@ const tail = (lines: string[]) => (lines.length ? `: ${lines.at(-1)}` : "");
 
 function onBackend(s: OverlayState, e: BackendEvent): OverlayState {
   switch (e.type) {
+    case "spawned":
     case "ready":
       return withNotice(
         { ...s, session: s.session === "thinking" ? "thinking" : "idle" },

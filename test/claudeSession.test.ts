@@ -8,14 +8,20 @@ const fake = path.join(import.meta.dirname, "fake-claude.mjs");
 const fixture = path.join(import.meta.dirname, "fixtures", "stream", "handwritten.jsonl");
 const sessions: ClaudeSession[] = [];
 
-async function setup(mode = "ok", command = process.execPath) {
+async function setup(mode = "ok", command = process.execPath, extraEnv: NodeJS.ProcessEnv = {}) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "ed-overlay-"));
   const argsFile = path.join(dir, "args.jsonl");
   const s = new ClaudeSession({
     command,
     args: [fake, "--base"],
     cwd: dir,
-    env: { ...process.env, FAKE_FIXTURE: fixture, FAKE_ARGS_FILE: argsFile, FAKE_MODE: mode },
+    env: {
+      ...process.env,
+      FAKE_FIXTURE: fixture,
+      FAKE_ARGS_FILE: argsFile,
+      FAKE_MODE: mode,
+      ...extraEnv,
+    },
   });
   sessions.push(s);
   const events: BackendEvent[] = [];
@@ -41,23 +47,27 @@ afterEach(() => {
 });
 
 describe("ClaudeSession", () => {
-  it("starts and reports ready with the session ID", async () => {
+  it("reports spawned at start, and ready only after the first message", async () => {
     const { s, events } = await setup();
     s.start();
-    await until(() => events.some((e) => e.type === "ready"));
-    expect(s.sessionId).toBe("sess-1");
+    await until(() => events.some((e) => e.type === "spawned"));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(events.map((e) => e.type)).toEqual(["spawned"]);
+    expect(s.sessionId).toBeNull();
   });
 
   it("streams a reply and is busy until the result", async () => {
     const { s, events } = await setup();
     s.start();
-    await until(() => s.sessionId !== null);
+    await until(() => events.some((e) => e.type === "spawned"));
     expect(s.send("hi")).toBe(true);
     expect(s.busy).toBe(true);
     expect(s.send("again")).toBe(false);
     await until(() => events.some((e) => e.type === "result"));
     expect(s.busy).toBe(false);
+    expect(s.sessionId).toBe("sess-1");
     expect(events.map((e) => e.type)).toEqual([
+      "spawned",
       "ready",
       "text",
       "toolStart",
@@ -70,12 +80,13 @@ describe("ClaudeSession", () => {
   it("cancel restarts with --resume and reports no exit", async () => {
     const { s, events, spawns } = await setup("hang");
     s.start();
-    await until(() => s.sessionId !== null);
     s.send("hi");
+    await until(() => s.sessionId !== null);
     s.cancel();
     expect(s.busy).toBe(false);
     await until(async () => (await spawns()).length === 2);
     expect((await spawns())[1]).toEqual(["--base", "--resume", "sess-1"]);
+    await until(() => events.filter((e) => e.type === "spawned").length === 2);
     await new Promise((r) => setTimeout(r, 200));
     expect(events.some((e) => e.type === "exit")).toBe(false);
   });
@@ -83,7 +94,6 @@ describe("ClaudeSession", () => {
   it("reports exits, restarts on the next send, and gives up after 3", async () => {
     const { s, events, spawns } = await setup("crash");
     s.start();
-    await until(() => s.sessionId !== null);
     for (let i = 1; i <= 2; i++) {
       expect(s.send("hi")).toBe(true);
       await until(() => events.filter((e) => e.type === "exit").length === i);
@@ -96,9 +106,10 @@ describe("ClaudeSession", () => {
   });
 
   it("newSession starts without --resume", async () => {
-    const { s, spawns } = await setup();
+    const { s, events, spawns } = await setup();
     s.start();
-    await until(() => s.sessionId !== null);
+    s.send("hi");
+    await until(() => events.some((e) => e.type === "result"));
     s.newSession();
     expect(s.sessionId).toBeNull();
     await until(async () => (await spawns()).length === 2);

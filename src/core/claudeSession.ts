@@ -5,6 +5,7 @@ import { StreamParser, type SessionEvent } from "./streamJson.js";
 
 export type BackendEvent =
   | SessionEvent
+  | { type: "spawned" }
   | { type: "exit"; code: number | null; stderrTail: string[] }
   | { type: "gaveUp"; stderrTail: string[] }
   | { type: "spawnError"; message: string };
@@ -127,6 +128,10 @@ export class ClaudeSession implements ClaudeBackend {
       },
     );
     this.child = child;
+    // The CLI prints init only after the first message, so a running process already counts as idle.
+    child.on("spawn", () => {
+      if (this.child === child) this.emit({ type: "spawned" });
+    });
     const parser = new StreamParser();
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");

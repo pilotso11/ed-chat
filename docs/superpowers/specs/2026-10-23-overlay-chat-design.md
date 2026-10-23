@@ -228,8 +228,10 @@ claude -p --input-format stream-json --output-format stream-json
 - Working folder: `%APPDATA%\ed-overlay\workspace`. The player's user-level
   configuration (`~/.claude`, user-scope MCP servers, plugins) applies. No
   project's `.claude/` folder applies.
-- The CLI starts when the app starts, so the first message is fast and the
-  MCP server list is known early.
+- The CLI starts when the app starts, so the first message is fast. The CLI
+  prints `init` only after the first message, not at start. The status line
+  shows idle as soon as the process has spawned, and the ed-mcp and
+  permission-mode checks run when `init` arrives with the first message.
 - A new session starts when the app starts and on `/new`.
 - Each message is one stdin line: `{"type":"user","message":{…}}`.
 - `cancel` stops the process and starts it again with `--resume`.
@@ -242,7 +244,8 @@ claude -p --input-format stream-json --output-format stream-json
 
 ### ed-mcp check
 
-The `init` event lists the configured MCP servers. They are still starting
+The `init` event lists the configured MCP servers. It arrives with the first
+message, so the check, and the auto-mode check, happen then. They are still starting
 (`pending`) at that point and their tools are not listed yet, so the check
 uses server names: `ed-mcp`, or `plugin:<plugin>:ed-mcp` for the Claude
 plugin. A server with status `failed` shows "⚠ ed-mcp failed to start; run
@@ -261,6 +264,9 @@ names `-s user`. Chat works without ed-mcp, but without game tools.
 | `user` message with `tool_result` | `toolEnd{name, isError}` |
 | `result` | `result{isError, durationMs}` |
 | anything else | ignored, logged at debug level |
+
+ClaudeSession also emits `spawned` when the process starts, before any
+output, and `exit`, `gaveUp` and `spawnError` for process failures.
 
 A `tool_result` names its `tool_use_id`, not the tool. ClaudeSession keeps a
 map from ID to name for `toolEnd`. The exact shapes come from the phase 0
@@ -380,6 +386,7 @@ the player's logged-in `claude` CLI. See the roadmap spec.
 
 - CLI version used for the fixtures: 2.1.308 (Claude Code).
 - stream-json shapes: the field names and nesting listed in Events hold. The recordings differ from the expected list in these ways:
+  - `init` is lazy: with stdin open and idle for 12 s, the CLI printed only `hook_started` and `hook_response` lines. `init` comes after the first user message. The overlay treats a spawned process as idle, and runs the ed-mcp and permission-mode checks on the first message.
   - The first line is `system/hook_started`, not `system/init`. Several `hook_started` and `hook_response` lines come before `init`. Find `init` by type and subtype; do not assume it is line 1.
   - Other event types appear that the parser must ignore: `system/hook_started`, `system/hook_response`, `system/status`, `system/commands_changed`, `rate_limit_event`, and `stream_event` types `message_start`, `content_block_start`, `content_block_stop` and `message_delta`.
   - `content_block_delta` has more delta types than `text_delta`: `input_json_delta` (tool input), `thinking_delta` and `signature_delta`. Only `delta.type` `text_delta` carries chat text, in `event.delta.text`.
