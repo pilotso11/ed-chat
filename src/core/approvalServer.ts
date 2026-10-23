@@ -132,6 +132,7 @@ export class ApprovalServer {
   }
 
   private ask(toolName: string, input: unknown, signal: AbortSignal): Promise<Outcome> {
+    if (signal.aborted) return Promise.resolve("cancelled");
     const id = randomUUID();
     return new Promise((resolve) => {
       const settle = (d: Outcome) => {
@@ -141,12 +142,11 @@ export class ApprovalServer {
         this.opts.onSettled(id);
         resolve(d);
       };
-      // A turn must never wait forever for a player who is busy flying.
       const onAbort = () => settle("cancelled");
+      // A turn must never wait forever for a player who is busy flying.
       const timer = setTimeout(() => settle("timeout"), this.timeoutMs);
       // The CLI may disconnect (Ctrl-C, crash, its own tool timeout) while the card is up.
       signal.addEventListener("abort", onAbort, { once: true });
-      if (signal.aborted) onAbort();
       this.pending.set(id, settle);
       this.opts.onRequest({ id, toolName, summary: summarize(input) });
     });

@@ -104,6 +104,18 @@ describe("ApprovalServer", () => {
     expect(server!.answer(req.id, "allow")).toBe(false);
   });
 
+  it("cancels at once when the request is already aborted", async () => {
+    const t = await setup(60_000);
+    const ask = (
+      server as unknown as {
+        ask: (n: string, i: unknown, s: AbortSignal) => Promise<string>;
+      }
+    ).ask.bind(server);
+    expect(await ask("Bash", {}, AbortSignal.abort())).toBe("cancelled");
+    expect(t.requests).toEqual([]);
+    expect(t.settled).toEqual([]);
+  });
+
   it("listens on 127.0.0.1", async () => {
     const t = await setup();
     expect(t.cfg.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
