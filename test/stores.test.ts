@@ -9,6 +9,7 @@ import {
   StateStore,
   effectivePosition,
   savePosition,
+  type LoadResult,
 } from "../src/core/stores.js";
 
 const tmp = () => mkdtemp(path.join(os.tmpdir(), "ed-overlay-"));
@@ -36,6 +37,30 @@ describe("SettingsStore", () => {
     await writeFile(file, '{"card":{"maxLines":3}}');
     expect(await s.load()).toEqual({ changed: true, error: null });
     expect(s.settings.card.maxLines).toBe(3);
+  });
+});
+
+describe("SettingsStore.watch", () => {
+  it("reports a failed reload instead of dropping it", async () => {
+    const file = path.join(await tmp(), "settings.json");
+    await writeFile(file, "{}");
+    class Failing extends SettingsStore {
+      override load(): Promise<LoadResult> {
+        return Promise.reject(new Error("disk gone"));
+      }
+    }
+    const s = new Failing(file);
+    const results: LoadResult[] = [];
+    s.watch((r) => results.push(r), 20);
+    try {
+      await new Promise((r) => setTimeout(r, 100));
+      await writeFile(file, '{"card":{"maxLines":3}}');
+      const end = Date.now() + 5_000;
+      while (!results.length && Date.now() < end) await new Promise((r) => setTimeout(r, 20));
+      expect(results[0]).toEqual({ changed: false, error: "⚠ settings.json: disk gone" });
+    } finally {
+      s.unwatch();
+    }
   });
 });
 

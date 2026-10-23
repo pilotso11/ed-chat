@@ -59,7 +59,12 @@ export class SettingsStore {
   // Polling, because editors often save by replacing the file, which fs.watch can lose.
   watch(cb: (r: LoadResult) => void, intervalMs = 1_000): void {
     watchFile(this.file, { interval: intervalMs }, () => {
-      void this.load().then(cb);
+      this.load().then(cb, (err: unknown) =>
+        cb({
+          changed: false,
+          error: `⚠ settings.json: ${err instanceof Error ? err.message : String(err)}`,
+        }),
+      );
     });
   }
 
