@@ -19,3 +19,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+
+  ci-ok:
+    # Single stable check name for branch protection.
+    name: ci-ok
+    needs: [check]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - run: test "${{ needs.check.result }}" = "success"
