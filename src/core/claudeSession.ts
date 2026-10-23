@@ -128,6 +128,7 @@ export class ClaudeSession implements ClaudeBackend {
       },
     );
     this.child = child;
+    this.stderr = [];
     // The CLI prints init only after the first message, so a running process already counts as idle.
     child.on("spawn", () => {
       if (this.child === child) this.emit({ type: "spawned" });
@@ -140,6 +141,7 @@ export class ClaudeSession implements ClaudeBackend {
       for (const e of parser.feed(chunk)) this.handle(e);
     });
     child.stderr.on("data", (chunk: string) => {
+      if (this.child !== child) return;
       this.stderr = [...this.stderr, ...chunk.split(/\r?\n/).filter(Boolean)].slice(-20);
     });
     // EPIPE after the process has gone; the exit handler reports it.

@@ -105,6 +105,20 @@ describe("ClaudeSession", () => {
     expect(s.send("hi")).toBe(false);
   });
 
+  it("ignores stderr from a child it has replaced", async () => {
+    const { s, events } = await setup("crash", process.execPath, { FAKE_STDERR_ON_KILL: "1" });
+    s.start();
+    await until(() => events.some((e) => e.type === "spawned"));
+    // Let the fake install its SIGTERM handler.
+    await new Promise((r) => setTimeout(r, 300));
+    s.cancel();
+    await until(() => events.filter((e) => e.type === "spawned").length === 2);
+    await new Promise((r) => setTimeout(r, 300));
+    s.send("hi");
+    await until(() => events.some((e) => e.type === "exit"));
+    expect(events.find((e) => e.type === "exit")).toMatchObject({ stderrTail: ["boom"] });
+  });
+
   it("newSession starts without --resume", async () => {
     const { s, events, spawns } = await setup();
     s.start();
