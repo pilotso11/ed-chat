@@ -118,6 +118,15 @@ async function main(): Promise<void> {
     render();
   }
 
+  // The card closes after a reply, and after a turn that ends without one.
+  function scheduleFade(): void {
+    clearTimeout(fadeTimer);
+    fadeTimer = setTimeout(
+      () => dispatch({ type: "cardTimeout" }),
+      settings.card.fadeSeconds * 1000,
+    );
+  }
+
   function flash(key: string, text: string, ms = 4_000): void {
     clearTimeout(timers.get(key));
     dispatch({ type: "notice", key, text });
@@ -270,18 +279,16 @@ async function main(): Promise<void> {
         break;
       case "result":
         void history.append({ role: "assistant", text: state.reply });
-        clearTimeout(fadeTimer);
-        fadeTimer = setTimeout(
-          () => dispatch({ type: "cardTimeout" }),
-          settings.card.fadeSeconds * 1000,
-        );
+        scheduleFade();
         break;
       case "exit":
       case "gaveUp":
+        scheduleFade();
         // stderr is kept for diagnosis; capped because it can quote request content.
         log.log("warn", `claude ${e.type}: ${capLines(e.stderrTail).join(" | ")}`);
         break;
       case "spawnError":
+        scheduleFade();
         log.log("warn", `claude spawn error: ${e.message}`);
         break;
       case "unknown": {
@@ -356,7 +363,8 @@ async function main(): Promise<void> {
       case "cancel":
         if (!session?.busy) return;
         session.cancel();
-        return dispatch({ type: "cancelled" });
+        dispatch({ type: "cancelled" });
+        return scheduleFade();
       case "copyChip":
         return copyChip(a.n);
       case "move":

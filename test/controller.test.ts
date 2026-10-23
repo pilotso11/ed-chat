@@ -81,6 +81,14 @@ describe("reduce", () => {
     expect(s.cardOpen).toBe(true);
   });
 
+  it("closes the card after a turn that ends without a result", () => {
+    const sent = run([ready, { type: "sent", text: "a" }]);
+    const exit: Action = { type: "backend", event: { type: "exit", code: 1, stderrTail: [] } };
+    for (const end of [{ type: "cancelled" } as const, exit]) {
+      expect(run([end, { type: "cardTimeout" }], sent).cardOpen).toBe(false);
+    }
+  });
+
   it("stays thinking when a restarted CLI reports ready", () => {
     expect(run([{ type: "sent", text: "a" }, ready]).session).toBe("thinking");
   });
