@@ -95,7 +95,7 @@ describe("ApprovalServer", () => {
   });
 
   it("releases the approval when the client disconnects", async () => {
-    const t = await setup();
+    const t = await setup(60_000);
     void t.call().catch(() => {});
     const req = await t.waitRequest();
     await t.client.close();
