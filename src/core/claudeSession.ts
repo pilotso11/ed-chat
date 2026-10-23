@@ -108,7 +108,11 @@ export class ClaudeSession implements ClaudeBackend {
     this.child = null;
     // With a .cmd shim, kill() would stop cmd.exe and leave claude running.
     if (process.platform === "win32" && c.pid) {
-      spawn("taskkill", ["/pid", String(c.pid), "/T", "/F"], { windowsHide: true });
+      // A missing taskkill must not throw in main; the child is already dropped.
+      spawn("taskkill", ["/pid", String(c.pid), "/T", "/F"], { windowsHide: true }).on(
+        "error",
+        () => {},
+      );
     } else {
       c.kill();
     }
