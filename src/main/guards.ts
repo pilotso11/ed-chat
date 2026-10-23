@@ -1,0 +1,42 @@
+import type { Foreground } from "../core/focus.js";
+import type { Settings } from "../core/settings.js";
+
+export const MAX_HEIGHT = 2000;
+export const STDERR_CHARS = 160;
+
+export function hotkeysWanted(
+  scope: Settings["hotkeys"]["scope"],
+  f: Foreground | null | undefined,
+): boolean {
+  return scope === "always" || Boolean(f?.isGame || f?.isOverlay);
+}
+
+export function textArg(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
+}
+
+export function chipArg(v: unknown): number | null {
+  return typeof v === "number" && Number.isInteger(v) && v >= 1 ? v : null;
+}
+
+export function heightArg(v: unknown): number | null {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return null;
+  return Math.min(v, MAX_HEIGHT);
+}
+
+const label = (v: unknown): string =>
+  typeof v === "string" ? v.slice(0, 40) : v === undefined ? "-" : typeof v;
+
+// Unknown events can carry message text, so only their type is logged. Null means drop silently.
+export function describeUnknown(raw: unknown): string | null {
+  if (typeof raw === "string") return `non-JSON line (${raw.length} chars)`;
+  if (typeof raw !== "object" || raw === null) return `non-object ${typeof raw}`;
+  const r = raw as Record<string, unknown>;
+  if (r.type === "system" && typeof r.subtype === "string" && r.subtype.startsWith("hook_"))
+    return null;
+  return `type=${label(r.type)} subtype=${label(r.subtype)}`;
+}
+
+export function capLines(lines: string[], max = STDERR_CHARS): string[] {
+  return lines.map((l) => (l.length > max ? `${l.slice(0, max)}…` : l));
+}

@@ -3,7 +3,15 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { watchFile } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { app, clipboard, globalShortcut, ipcMain, screen, type BrowserWindow } from "electron";
+import {
+  app,
+  clipboard,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  screen,
+  type BrowserWindow,
+} from "electron";
 import { chooseDisplay, place, step } from "../core/anchor.js";
 import { ApprovalServer } from "../core/approvalServer.js";
 import {
@@ -41,11 +49,13 @@ import {
 } from "../core/stores.js";
 import { buildView } from "../core/view.js";
 import { IPC } from "../shared/ipc.js";
+import { capLines, chipArg, describeUnknown, heightArg, hotkeysWanted, textArg } from "./guards.js";
 import { loadWin32 } from "./win32.js";
 import { applyWindow, createOverlayWindow } from "./window.js";
 
 const dataDir = path.join(app.getPath("appData"), "ed-overlay");
 app.setPath("userData", dataDir);
+const log = new Logger(path.join(dataDir, "logs", "overlay.log"));
 
 const ED_MCP_MISSING =
   "⚠ ed-mcp not connected. Run: claude mcp add ed-mcp -s user -- npx -y ed-mcp";
@@ -55,12 +65,21 @@ const NO_CLAUDE = "⚠ claude not found: install Claude Code or set claude.path"
 const REFOCUS = "⚠ click the game to refocus";
 const IN_DANGER = "⛔ in danger: chat blocked";
 const NO_AUTO = "⚠ auto mode unavailable, using manual approvals";
+const BUSY = "⚠ Claude is busy";
+const GAVE_UP = "⚠ Claude keeps stopping";
+
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+function fatal(err: unknown): void {
+  log.log("warn", `fatal: ${message(err)}`);
+  dialog.showErrorBox("ed-overlay", `ed-overlay could not start: ${message(err)}`);
+  app.quit();
+}
 
 if (!app.requestSingleInstanceLock()) app.quit();
-else app.whenReady().then(main);
+else app.whenReady().then(main).catch(fatal);
 
 async function main(): Promise<void> {
-  const log = new Logger(path.join(dataDir, "logs", "overlay.log"));
   const settingsStore = new SettingsStore(path.join(dataDir, "settings.json"));
   const stateStore = new StateStore(path.join(dataDir, "state.json"));
   const history = new HistoryStore(path.join(dataDir, "history"));
@@ -159,7 +178,10 @@ async function main(): Promise<void> {
       win.setAlwaysOnTop(true, "screen-saver");
       win.moveTop();
     }
-    const want = settings.hotkeys.scope === "always" || f.isGame || f.isOverlay;
+    syncHotkeys(f);
+  }
+  function syncHotkeys(f: Foreground | null): void {
+    const want = hotkeysWanted(settings.hotkeys.scope, f);
     if (want && !hotkeys.active) reportHotkeys(hotkeys.activate());
     if (!want && hotkeys.active) hotkeys.deactivate();
   }
@@ -178,13 +200,22 @@ async function main(): Promise<void> {
     onRequest: (request) => dispatch({ type: "approval", request }),
     onSettled: (id) => dispatch({ type: "approvalSettled", id }),
   });
-  await approval.start();
   const mcpConfigFile = path.join(dataDir, "approval-mcp.json");
-  await writeFile(mcpConfigFile, JSON.stringify(approval.mcpConfig()));
   const workspace = path.join(dataDir, "workspace");
-  await mkdir(workspace, { recursive: true });
+  // Without the approval server Claude cannot ask for permission, so the overlay runs without Claude.
+  let claudeBlocked: string | null = null;
+  try {
+    await approval.start();
+    await writeFile(mcpConfigFile, JSON.stringify(approval.mcpConfig()));
+    await mkdir(workspace, { recursive: true });
+  } catch (err) {
+    log.log("warn", `approval server: ${message(err)}`);
+    claudeBlocked = `⚠ Can't start the approval server: ${message(err)}`;
+  }
+  const noClaude = () => claudeBlocked ?? NO_CLAUDE;
 
   const claudeCommand = (s: Settings) => {
+    if (claudeBlocked) return null;
     const resolved = resolveClaude(s.claude.path);
     if (!resolved) return null;
     const args = buildClaudeArgs({
@@ -196,19 +227,20 @@ async function main(): Promise<void> {
   };
 
   let session: ClaudeSession | null = null;
-  const cmd = claudeCommand(settings);
-  if (!cmd) dispatch({ type: "notice", key: "claude", text: NO_CLAUDE });
-  else {
+  function startSession(c: { command: string; args: string[]; shell: boolean }): void {
     session = new ClaudeSession({
-      command: cmd.command,
-      args: cmd.args,
-      shell: cmd.shell,
+      command: c.command,
+      args: c.args,
+      shell: c.shell,
       cwd: workspace,
     });
     session.onEvent(onBackend);
     session.start();
-    checkVersion(cmd.command, cmd.shell);
+    checkVersion(c.command, c.shell);
   }
+  const cmd = claudeCommand(settings);
+  if (cmd) startSession(cmd);
+  else dispatch({ type: "notice", key: "claude", text: noClaude() });
 
   function onBackend(e: BackendEvent): void {
     dispatch({ type: "backend", event: e });
@@ -243,14 +275,17 @@ async function main(): Promise<void> {
         break;
       case "exit":
       case "gaveUp":
-        log.log("warn", `claude ${e.type}: ${e.stderrTail.join(" | ")}`);
+        // stderr is kept for diagnosis; capped because it can quote request content.
+        log.log("warn", `claude ${e.type}: ${capLines(e.stderrTail).join(" | ")}`);
         break;
       case "spawnError":
         log.log("warn", `claude spawn error: ${e.message}`);
         break;
-      case "unknown":
-        log.log("debug", `unknown stream-json: ${JSON.stringify(e.raw).slice(0, 200)}`);
+      case "unknown": {
+        const d = describeUnknown(e.raw);
+        if (d) log.log("debug", `unknown stream-json: ${d}`);
         break;
+      }
     }
   }
 
@@ -281,10 +316,10 @@ async function main(): Promise<void> {
       return;
     }
     if (!session) {
-      dispatch({ type: "notice", key: "claude", text: NO_CLAUDE });
+      dispatch({ type: "notice", key: "claude", text: noClaude() });
       return;
     }
-    if (!session.send(t)) return;
+    if (!session.send(t)) return flash("chat", session.busy ? BUSY : GAVE_UP);
     clearTimeout(fadeTimer);
     void history.append({ role: "user", text: t });
     // Give focus back before the window stops being focusable, while the overlay still holds the foreground.
@@ -334,12 +369,21 @@ async function main(): Promise<void> {
   }
 
   // Renderer IPC.
-  ipcMain.on(IPC.send, (_e, text: string) => void send(text));
+  // The renderer is sandboxed but still untrusted input; a bad value must not throw in main.
+  ipcMain.on(IPC.send, (_e, v: unknown) => {
+    const text = textArg(v);
+    if (text !== null) void send(text);
+  });
   ipcMain.on(IPC.closeChat, () => {
     void giveFocusBack().then(() => dispatch({ type: "closeChat" }));
   });
-  ipcMain.on(IPC.copyChip, (_e, n: number) => copyChip(n));
-  ipcMain.on(IPC.height, (_e, h: number) => {
+  ipcMain.on(IPC.copyChip, (_e, v: unknown) => {
+    const n = chipArg(v);
+    if (n !== null) copyChip(n);
+  });
+  ipcMain.on(IPC.height, (_e, v: unknown) => {
+    const h = heightArg(v);
+    if (h === null) return;
     contentHeight = h;
     reposition();
   });
@@ -376,7 +420,7 @@ async function main(): Promise<void> {
   // Settings, live.
   function applySettings(): void {
     reportHotkeys(hotkeys.setBindings(bindings(settings.hotkeys)));
-    if (settings.hotkeys.scope === "always" && !hotkeys.active) reportHotkeys(hotkeys.activate());
+    syncHotkeys(focus?.current ?? null);
     approval.setTimeoutMs(settings.approval.timeoutSeconds * 1000);
     reposition();
     render();
@@ -392,11 +436,16 @@ async function main(): Promise<void> {
     void stateStore.write(saved);
     if (JSON.stringify(old.claude) !== JSON.stringify(settings.claude)) {
       const c = claudeCommand(settings);
-      if (c && session) session.configure(c);
-      flash("claudeSettings", "claude settings apply after /new", 6_000);
+      dispatch({ type: "notice", key: "claude", text: c ? null : noClaude() });
+      if (c && session) {
+        session.configure(c);
+        flash("claudeSettings", "ⓘ claude settings apply after /new", 6_000);
+      } else if (c) startSession(c);
     }
     if (journalDir(old) !== journalDir(settings)) {
       status.stop();
+      // Flags from the old journal folder no longer describe the ship.
+      dispatch({ type: "flags", flags: null });
       status = new StatusWatcher(path.join(journalDir(settings), "Status.json"), (flags) =>
         dispatch({ type: "flags", flags }),
       );
