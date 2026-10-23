@@ -1,0 +1,18 @@
+appId: com.pilotso11.ed-overlay
+productName: ED Overlay
+directories:
+  output: dist
+files:
+  - out/**
+  - package.json
+asarUnpack:
+  - node_modules/koffi/**
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+publish:
+  provider: github
+  owner: pilotso11
+  repo: ed-overlay

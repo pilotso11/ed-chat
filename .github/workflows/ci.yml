@@ -19,6 +19,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ed-overlay-installer
+          path: dist/*.exe
 
   ci-ok:
     # Single stable check name for branch protection.
