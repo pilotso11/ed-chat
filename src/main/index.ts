@@ -4,12 +4,16 @@ import { watchFile } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  Menu,
+  Tray,
   app,
   clipboard,
   dialog,
   globalShortcut,
   ipcMain,
+  nativeImage,
   screen,
+  shell,
   type BrowserWindow,
 } from "electron";
 import { chooseDisplay, place, step } from "../core/anchor.js";
@@ -56,7 +60,9 @@ import { applyWindow, createOverlayWindow } from "./window.js";
 
 const dataDir = path.join(app.getPath("appData"), "ed-overlay");
 app.setPath("userData", dataDir);
-const log = new Logger(path.join(dataDir, "logs", "overlay.log"));
+const logDir = path.join(dataDir, "logs");
+const log = new Logger(path.join(logDir, "overlay.log"));
+const settingsFile = path.join(dataDir, "settings.json");
 
 const ED_MCP_MISSING =
   "⚠ ed-mcp not connected. Run: claude mcp add ed-mcp -s user -- npx -y ed-mcp";
@@ -81,7 +87,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else app.whenReady().then(main).catch(fatal);
 
 async function main(): Promise<void> {
-  const settingsStore = new SettingsStore(path.join(dataDir, "settings.json"));
+  const settingsStore = new SettingsStore(settingsFile);
   const stateStore = new StateStore(path.join(dataDir, "state.json"));
   const history = new HistoryStore(path.join(dataDir, "history"));
   history.newSession();
@@ -472,6 +478,26 @@ async function main(): Promise<void> {
     applySettings();
   });
 
+  // Tray: the only way to quit, since the overlay has no window frame.
+  const openPath = (p: string) =>
+    void shell.openPath(p).then((err) => {
+      if (err) log.log("warn", `open ${path.basename(p)}: ${err}`);
+    });
+  const trayIcon = app.isPackaged
+    ? path.join(process.resourcesPath, "tray.png")
+    : path.join(app.getAppPath(), "resources", "tray.png");
+  const tray = new Tray(nativeImage.createFromPath(trayIcon));
+  tray.setToolTip("ED Overlay");
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Show/Hide overlay", click: () => void runHotkey({ type: "toggleOverlay" }) },
+      { label: "Open settings", click: () => openPath(settingsFile) },
+      { label: "Open log folder", click: () => openPath(logDir) },
+      { type: "separator" },
+      { label: "Quit", click: () => app.quit() },
+    ]),
+  );
+
   screen.on("display-removed", reposition);
   screen.on("display-metrics-changed", reposition);
   app.on("second-instance", () => {
@@ -482,6 +508,7 @@ async function main(): Promise<void> {
   log.log("info", `started; claude ${cmd ? cmd.command : "not found"}`);
 
   app.on("will-quit", () => {
+    tray.destroy();
     globalShortcut.unregisterAll();
     focus?.stop();
     status.stop();

@@ -5,6 +5,9 @@ directories:
 files:
   - out/**
   - package.json
+extraResources:
+  - from: resources/tray.png
+    to: tray.png
 asarUnpack:
   - node_modules/koffi/**
   - node_modules/@koromix/**

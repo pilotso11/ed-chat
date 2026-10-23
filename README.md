@@ -41,6 +41,10 @@ Select **More info → Run anyway**. Releases are not public yet.
 
 Type `/new` in the chat to start a new conversation.
 
+The overlay has an orange ring icon in the notification area (system tray).
+Right-click it to show or hide the overlay, open `settings.json`, open the log
+folder, or quit.
+
 Hotkeys work only while the game or the overlay is in front, so they do not
 take keys from other apps. While the ship is in danger, the chat does not open.
 
