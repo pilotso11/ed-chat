@@ -59,7 +59,9 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
     card: mode === "card" ? { text: reply.plain, chips: reply.chips } : null,
     chat: open
       ? {
-          history: s.history,
+          history: s.history.map((t) =>
+            t.role === "assistant" ? { ...t, text: parseChips(t.text).plain } : t,
+          ),
           streaming: s.session === "thinking" ? reply.plain : null,
           input: s.chatOpen,
           moving: s.flags ? !s.flags.docked : false,

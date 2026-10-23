@@ -126,6 +126,31 @@ describe("buildView", () => {
     expect(buildView(hist, DEFAULT_SETTINGS).chat?.input).toBe(false);
   });
 
+  it("shows plain names in the history, without chip markers", () => {
+    const st = run([
+      ready,
+      { type: "sent", text: "where ⟦is⟧ it?" },
+      { type: "backend", event: { type: "text", delta: "Go to ⟦Sol⟧" } },
+      {
+        type: "backend",
+        event: {
+          type: "result",
+          isError: false,
+          durationMs: 1,
+          text: null,
+          sessionId: "s",
+          denials: [],
+        },
+      },
+      { type: "toggleHistory" },
+    ]);
+    expect(buildView(st, DEFAULT_SETTINGS).chat?.history).toEqual([
+      { role: "user", text: "where ⟦is⟧ it?" },
+      { role: "assistant", text: "Go to Sol" },
+    ]);
+    expect(st.history.at(-1)?.text).toBe("Go to ⟦Sol⟧");
+  });
+
   it("shows the latest notice and the approval with its keys", () => {
     const st = run([
       { type: "notice", key: "a", text: "⚠ one" },
