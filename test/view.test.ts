@@ -156,6 +156,7 @@ describe("buildView", () => {
       { type: "notice", key: "a", text: "⚠ one" },
       { type: "notice", key: "b", text: "⚠ two" },
       { type: "approval", request: { id: "r", toolName: "mcp__x__y", summary: "{}" } },
+      { type: "approval", request: { id: "r2", toolName: "Bash", summary: "ls" } },
     ]);
     const v = buildView(st, DEFAULT_SETTINGS);
     expect(v.notice).toBe("⚠ two");

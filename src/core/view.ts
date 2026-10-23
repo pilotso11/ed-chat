@@ -1,6 +1,6 @@
 import { growsUp } from "./anchor.js";
 import { parseChips, type Chip } from "./chips.js";
-import type { OverlayState, Turn } from "./controller.js";
+import { currentApproval, windowProps, type OverlayState, type Turn } from "./controller.js";
 import type { Settings } from "./settings.js";
 
 export interface ViewModel {
@@ -49,8 +49,9 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
   const mode = open ? "chat" : s.cardOpen ? "card" : "strip";
   const reply = parseChips(s.reply);
   const scale = settings.style.fontSize / 14;
+  const approval = currentApproval(s);
   return {
-    show: s.visible || s.chatOpen || s.approval !== null,
+    show: windowProps(s).show,
     mode,
     status: statusText(s),
     notice: Object.values(s.notices).at(-1) ?? null,
@@ -67,10 +68,10 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
           moving: s.flags ? !s.flags.docked : false,
         }
       : null,
-    approval: s.approval
+    approval: approval
       ? {
-          toolName: shortTool(s.approval.toolName),
-          summary: s.approval.summary,
+          toolName: shortTool(approval.toolName),
+          summary: approval.summary,
           approveKey: settings.hotkeys.approve,
           denyKey: settings.hotkeys.deny,
         }

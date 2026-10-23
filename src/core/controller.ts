@@ -20,7 +20,7 @@ export interface OverlayState {
   chips: Chip[];
   pinned: string | null;
   history: Turn[];
-  approval: ApprovalRequest | null;
+  approvals: ApprovalRequest[];
   flags: ShipFlags | null;
   notices: Record<string, string>;
 }
@@ -37,7 +37,7 @@ export const INITIAL_STATE: OverlayState = {
   chips: [],
   pinned: null,
   history: [],
-  approval: null,
+  approvals: [],
   flags: null,
   notices: {},
 };
@@ -145,9 +145,9 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     case "cardTimeout":
       return s.session === "thinking" ? s : { ...s, cardOpen: false };
     case "approval":
-      return { ...s, approval: a.request };
+      return { ...s, approvals: [...s.approvals, a.request] };
     case "approvalSettled":
-      return s.approval?.id === a.id ? { ...s, approval: null } : s;
+      return { ...s, approvals: s.approvals.filter((r) => r.id !== a.id) };
     case "flags":
       return { ...s, flags: a.flags };
     case "notice":
@@ -179,7 +179,15 @@ export interface WindowProps {
 }
 
 export function windowProps(s: OverlayState): WindowProps {
-  return { show: s.visible || s.chatOpen || s.approval !== null, interactive: s.chatOpen };
+  return {
+    show: s.visible || s.chatOpen || s.approvals.length > 0,
+    interactive: s.chatOpen,
+  };
+}
+
+/** The approval that is shown and that the hotkeys answer; later ones wait their turn. */
+export function currentApproval(s: OverlayState): ApprovalRequest | null {
+  return s.approvals[0] ?? null;
 }
 
 export function canOpenChat(s: OverlayState, blockWhenInDanger: boolean): boolean {

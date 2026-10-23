@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   INITIAL_STATE,
   canOpenChat,
+  currentApproval,
   currentChips,
   reduce,
   windowProps,
@@ -141,9 +142,23 @@ describe("reduce", () => {
   it("tracks approvals by id", () => {
     const req = { id: "r1", toolName: "Bash", summary: "{}" };
     const s = run([{ type: "approval", request: req }]);
-    expect(s.approval).toEqual(req);
-    expect(run([{ type: "approvalSettled", id: "other" }], s).approval).toEqual(req);
-    expect(run([{ type: "approvalSettled", id: "r1" }], s).approval).toBeNull();
+    expect(currentApproval(s)).toEqual(req);
+    expect(currentApproval(run([{ type: "approvalSettled", id: "other" }], s))).toEqual(req);
+    expect(currentApproval(run([{ type: "approvalSettled", id: "r1" }], s))).toBeNull();
+  });
+
+  it("queues approvals that arrive together", () => {
+    const r1 = { id: "r1", toolName: "Bash", summary: "1" };
+    const r2 = { id: "r2", toolName: "Read", summary: "2" };
+    const s = run([
+      { type: "approval", request: r1 },
+      { type: "approval", request: r2 },
+    ]);
+    expect(currentApproval(s)).toEqual(r1);
+    expect(currentApproval(run([{ type: "approvalSettled", id: "r2" }], s))).toEqual(r1);
+    const next = run([{ type: "approvalSettled", id: "r1" }], s);
+    expect(currentApproval(next)).toEqual(r2);
+    expect(currentApproval(run([{ type: "approvalSettled", id: "r2" }], next))).toBeNull();
   });
 
   it("clears the conversation on newSession", () => {

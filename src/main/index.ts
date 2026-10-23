@@ -27,6 +27,7 @@ import { ClaudeSession, type BackendEvent } from "../core/claudeSession.js";
 import {
   INITIAL_STATE,
   canOpenChat,
+  currentApproval,
   currentChips,
   reduce,
   windowProps,
@@ -345,10 +346,11 @@ async function main(): Promise<void> {
       case "showHistory":
         return dispatch({ type: "toggleHistory" });
       case "approve":
-      case "deny":
-        if (state.approval)
-          approval.answer(state.approval.id, a.type === "approve" ? "allow" : "deny");
+      case "deny": {
+        const req = currentApproval(state);
+        if (req) approval.answer(req.id, a.type === "approve" ? "allow" : "deny");
         return;
+      }
       case "cancel":
         if (!session?.busy) return;
         session.cancel();
