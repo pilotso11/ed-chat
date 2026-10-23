@@ -51,9 +51,9 @@ describe("FocusManager", () => {
     w.fg = 20;
     f.poll();
     expect(seen).toEqual([
-      { hwnd: 10, isGame: true, isOverlay: false },
-      { hwnd: 99, isGame: false, isOverlay: true },
-      { hwnd: 20, isGame: false, isOverlay: false },
+      { hwnd: 10, isGame: true, isOverlay: false, processName: "EliteDangerous64.exe" },
+      { hwnd: 99, isGame: false, isOverlay: true, processName: null },
+      { hwnd: 20, isGame: false, isOverlay: false, processName: "notepad.exe" },
     ]);
   });
 

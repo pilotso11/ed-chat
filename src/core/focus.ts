@@ -11,13 +11,14 @@ export interface Foreground {
   hwnd: number;
   isGame: boolean;
   isOverlay: boolean;
+  processName: string | null;
 }
 
 // Polling avoids passing a WinEvent callback through FFI; 250 ms is fast enough for hotkey scope and topmost.
 export class FocusManager {
   private saved = 0;
   private lastHwnd = -1;
-  private last: Foreground = { hwnd: 0, isGame: false, isOverlay: false };
+  private last: Foreground = { hwnd: 0, isGame: false, isOverlay: false, processName: null };
   private timer?: NodeJS.Timeout;
 
   constructor(
@@ -40,7 +41,12 @@ export class FocusManager {
     this.lastHwnd = hwnd;
     const isOverlay = hwnd !== 0 && hwnd === this.o.overlayHwnd();
     const name = hwnd === 0 || isOverlay ? null : this.w.processName(hwnd);
-    this.last = { hwnd, isOverlay, isGame: name?.toLowerCase() === GAME_EXE.toLowerCase() };
+    this.last = {
+      hwnd,
+      isOverlay,
+      isGame: name?.toLowerCase() === GAME_EXE.toLowerCase(),
+      processName: name,
+    };
     this.o.onChange(this.last);
   }
 

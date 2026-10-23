@@ -182,7 +182,13 @@ async function main(): Promise<void> {
       text: failed.length ? `⚠ hotkeys not registered: ${failed.join(", ")}` : null,
     });
 
+  let wasGame: boolean | null = null;
   function onForeground(f: Foreground): void {
+    // For diagnosing game detection on the PC; only the flag and the process name are logged.
+    if (f.isGame !== wasGame) {
+      wasGame = f.isGame;
+      log.log("info", `game in front: ${f.isGame} (${f.processName ?? "-"})`);
+    }
     // Some games make their own borderless window topmost; the last activated topmost window wins.
     if (f.isGame) {
       win.setAlwaysOnTop(true, "screen-saver");

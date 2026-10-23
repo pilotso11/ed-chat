@@ -9,7 +9,12 @@ import {
   textArg,
 } from "../src/main/guards.js";
 
-const fg = (isGame: boolean, isOverlay: boolean) => ({ hwnd: 1, isGame, isOverlay });
+const fg = (isGame: boolean, isOverlay: boolean) => ({
+  hwnd: 1,
+  isGame,
+  isOverlay,
+  processName: null,
+});
 
 describe("hotkeysWanted", () => {
   it("is always on for scope always", () => {
