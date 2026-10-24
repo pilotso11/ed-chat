@@ -326,27 +326,31 @@ async function main(): Promise<void> {
     });
   }
 
-  async function send(text: string): Promise<void> {
+  async function send(text: string): Promise<boolean> {
     const t = text.trim();
-    if (!t) return;
+    if (!t) return false;
     if (t === "/new") {
       session?.newSession();
       history.newSession();
       await giveFocusBack();
       dispatch({ type: "newSession" });
       dispatch({ type: "closeChat" });
-      return;
+      return true;
     }
     if (!session) {
       dispatch({ type: "notice", key: "claude", text: noClaude() });
-      return;
+      return false;
     }
-    if (!session.send(t)) return flash("chat", session.busy ? BUSY : GAVE_UP);
+    if (!session.send(t)) {
+      flash("chat", session.busy ? BUSY : GAVE_UP);
+      return false;
+    }
     clearTimeout(fadeTimer);
     void history.append({ role: "user", text: t });
     // Give focus back before the window stops being focusable, while the overlay still holds the foreground.
     await giveFocusBack();
     dispatch({ type: "sent", text: t });
+    return true;
   }
 
   function copyChip(n: number): void {
@@ -394,9 +398,9 @@ async function main(): Promise<void> {
 
   // Renderer IPC.
   // The renderer is sandboxed but still untrusted input; a bad value must not throw in main.
-  ipcMain.on(IPC.send, (_e, v: unknown) => {
+  ipcMain.handle(IPC.send, (_e, v: unknown) => {
     const text = textArg(v);
-    if (text !== null) void send(text);
+    return text === null ? false : send(text);
   });
   ipcMain.on(IPC.closeChat, () => {
     void giveFocusBack().then(() => dispatch({ type: "closeChat" }));

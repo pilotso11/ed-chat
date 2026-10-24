@@ -1,6 +1,12 @@
 import { growsUp } from "./anchor.js";
 import { parseChips, type Chip } from "./chips.js";
-import { currentApproval, windowProps, type OverlayState, type Turn } from "./controller.js";
+import {
+  currentApproval,
+  currentChips,
+  windowProps,
+  type OverlayState,
+  type Turn,
+} from "./controller.js";
 import type { Settings } from "./settings.js";
 
 export interface ViewModel {
@@ -11,7 +17,14 @@ export interface ViewModel {
   pinned: string | null;
   chips: Chip[];
   card: { text: string; chips: Chip[] } | null;
-  chat: { history: Turn[]; streaming: string | null; input: boolean; moving: boolean } | null;
+  chat: {
+    history: Turn[];
+    streaming: string | null;
+    chips: Chip[];
+    input: boolean;
+    canSend: boolean;
+    moving: boolean;
+  } | null;
   approval: { toolName: string; summary: string; approveKey: string; denyKey: string } | null;
   ui: {
     fontSize: number;
@@ -64,7 +77,9 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
             t.role === "assistant" ? { ...t, text: parseChips(t.text).plain } : t,
           ),
           streaming: s.session === "thinking" ? reply.plain : null,
+          chips: currentChips(s),
           input: s.chatOpen,
+          canSend: s.session !== "thinking",
           moving: s.flags ? !s.flags.docked : false,
         }
       : null,

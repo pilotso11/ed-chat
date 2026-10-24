@@ -119,11 +119,41 @@ describe("buildView", () => {
     expect(buildView(st, DEFAULT_SETTINGS).chat).toEqual({
       history: [],
       streaming: null,
+      chips: [],
       input: true,
+      canSend: true,
       moving: true,
     });
     const hist = run([ready, { type: "toggleHistory" }]);
     expect(buildView(hist, DEFAULT_SETTINGS).chat?.input).toBe(false);
+  });
+
+  // Ctrl+Shift+n copies currentChips, so the chat must number the same chips.
+  it("shows the streaming reply's chips in the chat and blocks sending meanwhile", () => {
+    const done: Action = {
+      type: "backend",
+      event: {
+        type: "result",
+        isError: false,
+        durationMs: 1,
+        text: null,
+        sessionId: "s",
+        denials: [],
+      },
+    };
+    const st = run([
+      ready,
+      { type: "sent", text: "a" },
+      { type: "backend", event: { type: "text", delta: "⟦Sol⟧" } },
+      done,
+      { type: "sent", text: "b" },
+      { type: "backend", event: { type: "text", delta: "⟦Achenar⟧" } },
+      { type: "openChat" },
+    ]);
+    expect(buildView(st, DEFAULT_SETTINGS).chat).toMatchObject({
+      chips: [{ n: 1, text: "Achenar" }],
+      canSend: false,
+    });
   });
 
   it("shows plain names in the history, without chip markers", () => {

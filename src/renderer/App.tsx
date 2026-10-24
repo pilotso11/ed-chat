@@ -22,7 +22,7 @@ function Chips({ chips, keyLabel }: { chips: Chip[]; keyLabel: string }) {
   );
 }
 
-function ChatInput({ moving }: { moving: boolean }) {
+function ChatInput({ moving, canSend }: { moving: boolean; canSend: boolean }) {
   const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => ref.current?.focus(), []);
@@ -33,8 +33,11 @@ function ChatInput({ moving }: { moving: boolean }) {
       window.overlay.closeChat();
     } else if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      window.overlay.send(text);
-      setText("");
+      // Keep the text when main refuses it (a reply is running, or Claude gave up).
+      if (!canSend) return;
+      void window.overlay.send(text).then((ok) => {
+        if (ok) setText("");
+      });
     }
   };
   return (
@@ -44,6 +47,7 @@ function ChatInput({ moving }: { moving: boolean }) {
         ref={ref}
         rows={2}
         value={text}
+        placeholder={canSend ? undefined : "Claude is replying…"}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={onKey}
       />
@@ -112,8 +116,8 @@ export function App() {
             ))}
             {v.chat.streaming !== null && <div className="assistant">{v.chat.streaming}</div>}
           </div>
-          <Chips chips={v.chips} keyLabel={v.ui.copyChipKey} />
-          {v.chat.input && <ChatInput moving={v.chat.moving} />}
+          <Chips chips={v.chat.chips} keyLabel={v.ui.copyChipKey} />
+          {v.chat.input && <ChatInput moving={v.chat.moving} canSend={v.chat.canSend} />}
         </div>
       )}
     </div>

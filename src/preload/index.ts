@@ -6,7 +6,7 @@ const api: OverlayApi = {
   onView: (cb) => {
     ipcRenderer.on(IPC.view, (_e, v: ViewModel) => cb(v));
   },
-  send: (text) => ipcRenderer.send(IPC.send, text),
+  send: (text) => ipcRenderer.invoke(IPC.send, text) as Promise<boolean>,
   closeChat: () => ipcRenderer.send(IPC.closeChat),
   copyChip: (n) => ipcRenderer.send(IPC.copyChip, n),
   reportHeight: (h) => ipcRenderer.send(IPC.height, h),

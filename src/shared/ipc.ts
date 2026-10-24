@@ -10,7 +10,8 @@ export const IPC = {
 
 export interface OverlayApi {
   onView(cb: (v: ViewModel) => void): void;
-  send(text: string): void;
+  /** Resolves true when main took the message, so the input can be cleared. */
+  send(text: string): Promise<boolean>;
   closeChat(): void;
   copyChip(n: number): void;
   reportHeight(h: number): void;

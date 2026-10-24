@@ -8,6 +8,14 @@ describe("decodeStatus", () => {
     expect(decodeStatus(`{"Flags":${1 << 23}}`)).toEqual({ docked: false, inDanger: true });
   });
 
+  // Bit 24 is InMainShip and is set in almost all flight; it must not count as danger.
+  // 150994968 is a real Status.json value: shields up, supercruise, main ship, analysis HUD.
+  it("ignores InMainShip and other flight bits", () => {
+    expect(decodeStatus(`{"Flags":${1 << 24}}`)).toEqual({ docked: false, inDanger: false });
+    expect(decodeStatus('{"Flags":150994968}')).toEqual({ docked: false, inDanger: false });
+    expect(decodeStatus(`{"Flags":${1 << 21}}`)).toEqual({ docked: false, inDanger: false });
+  });
+
   it("treats a missing Flags as neither", () => {
     expect(decodeStatus('{"event":"Status"}')).toEqual({ docked: false, inDanger: false });
   });
