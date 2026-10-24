@@ -58,7 +58,7 @@ import { capLines, chipArg, describeUnknown, heightArg, hotkeysWanted, textArg }
 import { loadWin32 } from "./win32.js";
 import { applyWindow, createOverlayWindow } from "./window.js";
 
-const dataDir = path.join(app.getPath("appData"), "ed-overlay");
+const dataDir = path.join(app.getPath("appData"), "ed-chat");
 app.setPath("userData", dataDir);
 const logDir = path.join(dataDir, "logs");
 const log = new Logger(path.join(logDir, "overlay.log"));
@@ -79,7 +79,7 @@ const message = (err: unknown) => (err instanceof Error ? err.message : String(e
 
 function fatal(err: unknown): void {
   log.log("warn", `fatal: ${message(err)}`);
-  dialog.showErrorBox("ed-overlay", `ed-overlay could not start: ${message(err)}`);
+  dialog.showErrorBox("ed-chat", `ed-chat could not start: ${message(err)}`);
   app.quit();
 }
 
@@ -487,7 +487,7 @@ async function main(): Promise<void> {
     ? path.join(process.resourcesPath, "tray.png")
     : path.join(app.getAppPath(), "resources", "tray.png");
   const tray = new Tray(nativeImage.createFromPath(trayIcon));
-  tray.setToolTip("ED Overlay");
+  tray.setToolTip("ED Chat");
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Show/Hide overlay", click: () => void runHotkey({ type: "toggleOverlay" }) },

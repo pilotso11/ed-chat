@@ -24,7 +24,7 @@ const server = new ApprovalServer({
   onSettled: () => {},
 });
 await server.start();
-const dir = await mkdtemp(path.join(os.tmpdir(), "ed-overlay-probe-"));
+const dir = await mkdtemp(path.join(os.tmpdir(), "ed-chat-probe-"));
 const cfg = path.join(dir, "approval-mcp.json");
 await writeFile(cfg, JSON.stringify(server.mcpConfig()));
 const child = spawn(

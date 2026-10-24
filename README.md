@@ -1,4 +1,4 @@
-# ED Overlay
+# ED Chat
 
 A small Claude chat window on top of Elite Dangerous. Press a hotkey, ask a
 question, press Enter, and keep flying. The reply shows in a corner of the
@@ -22,7 +22,7 @@ Windows 10 and 11 only.
 
 ## Install
 
-Download `ED Overlay Setup <version>.exe` from Releases and run it. The
+Download `ED Chat Setup <version>.exe` from Releases and run it. The
 installer is not code signed yet, so Windows SmartScreen warns on first run.
 Select **More info → Run anyway**. Releases are not public yet.
 
@@ -57,7 +57,7 @@ with Ctrl+Shift+Y or Ctrl+Shift+N. To never be asked about ed-mcp tools, add
 
 ## Settings
 
-`%APPDATA%\ed-overlay\settings.json` is written with the defaults on first run.
+`%APPDATA%\ed-chat\settings.json` is written with the defaults on first run.
 Changes apply when you save the file. The file is plain JSON. Settings for
 `claude` apply after `/new`; the overlay shows `ⓘ claude settings apply after /new`.
 
@@ -90,4 +90,4 @@ A position chosen with the hotkeys is saved in `state.json`, until you change
 The first line of the overlay shows problems. If ed-mcp is added but does not
 start, the overlay shows `⚠ ed-mcp failed to start; run claude mcp list`. If
 the overlay cannot start at all, it shows an error dialog. The log is
-`%APPDATA%\ed-overlay\logs\overlay.log`. It never contains chat text.
+`%APPDATA%\ed-chat\logs\overlay.log`. It never contains chat text.

@@ -9,7 +9,7 @@ const fixture = path.join(import.meta.dirname, "fixtures", "stream", "handwritte
 const sessions: ClaudeSession[] = [];
 
 async function setup(mode = "ok", command = process.execPath, extraEnv: NodeJS.ProcessEnv = {}) {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "ed-overlay-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ed-chat-"));
   const argsFile = path.join(dir, "args.jsonl");
   const s = new ClaudeSession({
     command,

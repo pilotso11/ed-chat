@@ -1,5 +1,5 @@
-appId: com.pilotso11.ed-overlay
-productName: ED Overlay
+appId: com.pilotso11.ed-chat
+productName: ED Chat
 directories:
   output: dist
 files:
@@ -21,4 +21,4 @@ nsis:
 publish:
   provider: github
   owner: pilotso11
-  repo: ed-overlay
+  repo: ed-chat

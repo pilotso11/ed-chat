@@ -12,7 +12,7 @@ import {
   type LoadResult,
 } from "../src/core/stores.js";
 
-const tmp = () => mkdtemp(path.join(os.tmpdir(), "ed-overlay-"));
+const tmp = () => mkdtemp(path.join(os.tmpdir(), "ed-chat-"));
 
 describe("SettingsStore", () => {
   it("writes defaults on first run", async () => {

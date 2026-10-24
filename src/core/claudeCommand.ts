@@ -3,7 +3,7 @@ import path from "node:path";
 import { HUD_PROMPT } from "./prompt.js";
 import type { McpServerInfo } from "./streamJson.js";
 
-export const APPROVAL_SERVER = "ed_overlay";
+export const APPROVAL_SERVER = "ed_chat";
 export const APPROVAL_TOOL = `mcp__${APPROVAL_SERVER}__approve`;
 
 // The version the stream-json fixtures were recorded with.

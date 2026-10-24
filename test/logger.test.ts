@@ -6,7 +6,7 @@ import { Logger } from "../src/core/logger.js";
 
 describe("Logger", () => {
   it("rotates and keeps 3 files", async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), "ed-overlay-"));
+    const dir = await mkdtemp(path.join(os.tmpdir(), "ed-chat-"));
     const file = path.join(dir, "logs", "overlay.log");
     const log = new Logger(file, 100, 3);
     for (let i = 0; i < 20; i++) log.log("info", `line ${i} ${"x".repeat(30)}`);

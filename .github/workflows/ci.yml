@@ -22,7 +22,7 @@ jobs:
       - run: npm run dist
       - uses: actions/upload-artifact@v4
         with:
-          name: ed-overlay-installer
+          name: ed-chat-installer
           path: dist/*.exe
 
   ci-ok:

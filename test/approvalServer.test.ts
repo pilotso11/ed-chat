@@ -18,7 +18,7 @@ async function setup(timeoutMs = 5_000) {
     onSettled: (id) => settled.push(id),
   });
   await server.start();
-  const cfg = server.mcpConfig().mcpServers.ed_overlay!;
+  const cfg = server.mcpConfig().mcpServers.ed_chat!;
   const client = new Client({ name: "test", version: "1.0.0" });
   await client.connect(
     new StreamableHTTPClientTransport(new URL(cfg.url), { requestInit: { headers: cfg.headers } }),

@@ -13,10 +13,10 @@ describe("StreamParser", () => {
       {
         type: "ready",
         sessionId: "sess-1",
-        tools: ["Bash", "mcp__ed-mcp__journal_status", "mcp__ed_overlay__approve"],
+        tools: ["Bash", "mcp__ed-mcp__journal_status", "mcp__ed_chat__approve"],
         mcpServers: [
           { name: "ed-mcp", status: "connected" },
-          { name: "ed_overlay", status: "connected" },
+          { name: "ed_chat", status: "connected" },
         ],
         permissionMode: "auto",
       },
