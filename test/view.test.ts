@@ -68,9 +68,34 @@ describe("buildView", () => {
       width: 420,
       maxLines: 4,
       chatLines: 14,
-      growsUp: false,
+      growsUp: true,
+      align: "start",
       copyChipKey: "Ctrl+Shift+n",
     });
+  });
+
+  it("shows only the icon at rest in icon mode, with a dot for chips or notices", () => {
+    const idle = run([ready, { type: "toggleIcon" }]);
+    expect(buildView(idle, DEFAULT_SETTINGS)).toMatchObject({
+      mode: "icon",
+      icon: { dot: false, danger: false },
+    });
+    const noticed = run([ready, { type: "toggleIcon" }, { type: "notice", key: "a", text: "⚠ x" }]);
+    expect(buildView(noticed, DEFAULT_SETTINGS).icon).toEqual({ dot: true, danger: false });
+    const danger = run([
+      ready,
+      { type: "toggleIcon" },
+      { type: "flags", flags: { docked: false, inDanger: true } },
+    ]);
+    expect(buildView(danger, DEFAULT_SETTINGS).icon).toEqual({ dot: false, danger: true });
+    expect(buildView(run([ready]), DEFAULT_SETTINGS).icon).toBeNull();
+  });
+
+  it("aligns the window content with the anchor's column", () => {
+    const right = SettingsSchema.parse({ position: { anchor: "top-right" } });
+    expect(buildView(run([ready]), right).ui.align).toBe("end");
+    const top = SettingsSchema.parse({ position: { anchor: "top" } });
+    expect(buildView(run([ready]), top).ui.align).toBe("center");
   });
 
   it("hides the pinned line and chips when settings say so", () => {

@@ -21,7 +21,7 @@ function fakeRegistrar(taken: string[] = []) {
 describe("bindings", () => {
   it("expands copyChip to 9 bindings and lists the rest", () => {
     const b = bindings(DEFAULT_SETTINGS.hotkeys);
-    expect(b).toHaveLength(11 + 9);
+    expect(b).toHaveLength(12 + 9);
     expect(b.find((x) => x.accelerator === "Ctrl+Shift+3")?.action).toEqual({
       type: "copyChip",
       n: 3,
@@ -43,7 +43,7 @@ describe("HotkeyManager", () => {
     m.setBindings(bindings(DEFAULT_SETTINGS.hotkeys));
     expect(live.size).toBe(0);
     expect(m.activate()).toEqual([]);
-    expect(live.size).toBe(20);
+    expect(live.size).toBe(21);
     live.get("Ctrl+Shift+Space")!();
     expect(ran).toEqual([{ type: "openChat" }]);
     m.deactivate();

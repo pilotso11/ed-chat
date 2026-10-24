@@ -23,6 +23,8 @@ next to each item.
 - [ ] The overlay shows over the game in Borderless mode.
 - [ ] The fullscreen warning shows in exclusive fullscreen.
 - [ ] Hotkeys work while the game is in front, and not while another app is.
+- [ ] ` switches to the icon and back, and the game does not also act on `.
+- [ ] In icon mode, a reply expands the overlay and it stays expanded.
 - [ ] Enter gives focus back to the game.
 - [ ] A copied chip pastes into the galaxy map search with Ctrl+V.
 - [ ] A tool request shows the approval card; Ctrl+Shift+Y and N work.

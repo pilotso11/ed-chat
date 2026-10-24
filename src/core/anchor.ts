@@ -69,6 +69,11 @@ export function growsUp(anchor: Anchor): boolean {
   return anchor.startsWith("bottom");
 }
 
+export function column(anchor: Anchor): "left" | "center" | "right" {
+  const c = cell(anchor)[1];
+  return c === 0 ? "left" : c === 2 ? "right" : "center";
+}
+
 export function chooseDisplay<T>(all: T[], primary: T, which: "primary" | number): T {
   return which === "primary" ? primary : (all[which] ?? primary);
 }

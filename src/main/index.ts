@@ -103,6 +103,7 @@ async function main(): Promise<void> {
   let saved: SavedState = await stateStore.read();
   let position: Position;
   ({ position, saved } = effectivePosition(settings.position, saved));
+  state = { ...state, iconMode: saved.iconMode ?? settings.strip.startAsIcon };
 
   const win: BrowserWindow = createOverlayWindow(
     path.join(import.meta.dirname, "../preload/index.cjs"),
@@ -120,7 +121,12 @@ async function main(): Promise<void> {
   }
 
   function dispatch(a: Action): void {
+    const wasIcon = state.iconMode;
     state = reduce(state, a);
+    if (state.iconMode !== wasIcon) {
+      saved = { ...saved, iconMode: state.iconMode };
+      void stateStore.write(saved);
+    }
     render();
   }
 
@@ -368,6 +374,8 @@ async function main(): Promise<void> {
         return dispatch({ type: "openChat" });
       case "toggleOverlay":
         return dispatch({ type: "toggleVisible" });
+      case "toggleIcon":
+        return dispatch({ type: "toggleIcon" });
       case "showHistory":
         return dispatch({ type: "toggleHistory" });
       case "approve":

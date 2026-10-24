@@ -76,11 +76,13 @@ export class SettingsStore {
 export interface SavedState {
   position?: Position;
   positionBase?: string;
+  iconMode?: boolean;
 }
 
 const SavedStateSchema = z.object({
   position: PositionSchema.optional(),
   positionBase: z.string().optional(),
+  iconMode: z.boolean().optional(),
 });
 
 // A hotkey-chosen position is kept until the player edits position in settings.json.

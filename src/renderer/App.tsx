@@ -81,7 +81,17 @@ export function App() {
 
   return (
     <div ref={root} className="overlay" style={style}>
-      <div className="strip">
+      {v.icon && (
+        <div
+          className={v.icon.danger ? "icon danger" : "icon"}
+          style={{ alignSelf: v.ui.align }}
+          title="ED Chat"
+        >
+          {v.icon.danger ? "⛔" : "✦"}
+          {v.icon.dot && !v.icon.danger && <span className="dot" />}
+        </div>
+      )}
+      <div className="strip" hidden={v.mode === "icon"}>
         <div className="status">
           <span>{v.status}</span>
           {v.notice && <span className="notice">{v.notice}</span>}

@@ -7,10 +7,11 @@ describe("parseSettings", () => {
     expect(r).toEqual({ ok: true, settings: DEFAULT_SETTINGS });
     expect(DEFAULT_SETTINGS.hotkeys.openChat).toBe("Ctrl+Shift+Space");
     expect(DEFAULT_SETTINGS.hotkeys.scope).toBe("game");
-    expect(DEFAULT_SETTINGS.strip).toEqual({ lines: 2, keepChips: true });
+    expect(DEFAULT_SETTINGS.strip).toEqual({ lines: 2, keepChips: true, startAsIcon: false });
+    expect(DEFAULT_SETTINGS.hotkeys.toggleIcon).toBe("`");
     expect(DEFAULT_SETTINGS.card).toEqual({ maxLines: 4, fadeSeconds: 20, width: 420 });
     expect(DEFAULT_SETTINGS.position).toEqual({
-      anchor: "top-right",
+      anchor: "bottom-left",
       offsetX: 24,
       offsetY: 24,
       display: "primary",

@@ -1,4 +1,4 @@
-import { growsUp } from "./anchor.js";
+import { column, growsUp } from "./anchor.js";
 import { parseChips, type Chip } from "./chips.js";
 import {
   currentApproval,
@@ -11,7 +11,7 @@ import type { Settings } from "./settings.js";
 
 export interface ViewModel {
   show: boolean;
-  mode: "strip" | "card" | "chat";
+  mode: "icon" | "strip" | "card" | "chat";
   status: string;
   notice: string | null;
   pinned: string | null;
@@ -26,12 +26,14 @@ export interface ViewModel {
     moving: boolean;
   } | null;
   approval: { toolName: string; summary: string; approveKey: string; denyKey: string } | null;
+  icon: { dot: boolean; danger: boolean } | null;
   ui: {
     fontSize: number;
     width: number;
     maxLines: number;
     chatLines: number;
     growsUp: boolean;
+    align: "start" | "center" | "end";
     copyChipKey: string;
   };
 }
@@ -57,15 +59,24 @@ export function statusText(s: OverlayState): string {
   return state + ship;
 }
 
+const ALIGN = { left: "start", center: "center", right: "end" } as const;
+
 export function buildView(s: OverlayState, settings: Settings): ViewModel {
   const open = s.chatOpen || s.historyOpen;
-  const mode = open ? "chat" : s.cardOpen ? "card" : "strip";
+  const mode = open ? "chat" : s.cardOpen ? "card" : s.iconMode ? "icon" : "strip";
   const reply = parseChips(s.reply);
   const scale = settings.style.fontSize / 14;
   const approval = currentApproval(s);
   return {
     show: windowProps(s).show,
     mode,
+    icon:
+      mode === "icon"
+        ? {
+            dot: s.chips.length > 0 || Object.keys(s.notices).length > 0,
+            danger: s.flags?.inDanger === true,
+          }
+        : null,
     status: statusText(s),
     notice: Object.values(s.notices).at(-1) ?? null,
     pinned: settings.strip.lines === 2 ? s.pinned : null,
@@ -97,6 +108,7 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
       maxLines: settings.card.maxLines,
       chatLines: settings.chat.lines,
       growsUp: growsUp(settings.position.anchor),
+      align: ALIGN[column(settings.position.anchor)],
       copyChipKey: settings.hotkeys.copyChip.replace("{n}", "n"),
     },
   };

@@ -194,6 +194,41 @@ describe("reduce", () => {
   });
 });
 
+describe("icon mode", () => {
+  const req = { id: "r", toolName: "Bash", summary: "" };
+  it("toggles with the hotkey", () => {
+    expect(run([{ type: "toggleIcon" }]).iconMode).toBe(true);
+    expect(run([{ type: "toggleIcon" }, { type: "toggleIcon" }]).iconMode).toBe(false);
+    expect(run([{ type: "setIcon", on: true }]).iconMode).toBe(true);
+  });
+
+  it("expands for a reply, an approval, the chat or the history, and stays expanded", () => {
+    const icon: Action = { type: "toggleIcon" };
+    expect(run([ready, icon, text("hi")]).iconMode).toBe(false);
+    expect(run([icon, { type: "approval", request: req }]).iconMode).toBe(false);
+    expect(run([icon, { type: "openChat" }]).iconMode).toBe(false);
+    expect(run([icon, { type: "toggleHistory" }]).iconMode).toBe(false);
+    const faded = run([
+      ready,
+      icon,
+      { type: "sent", text: "a" },
+      text("x"),
+      result(),
+      { type: "cardTimeout" },
+    ]);
+    expect(faded.iconMode).toBe(false);
+  });
+
+  it("stays an icon for notices and ship flags", () => {
+    const s = run([
+      { type: "toggleIcon" },
+      { type: "notice", key: "a", text: "⚠ x" },
+      { type: "flags", flags: { docked: true, inDanger: false } },
+    ]);
+    expect(s.iconMode).toBe(true);
+  });
+});
+
 describe("windowProps", () => {
   it("is interactive only with the chat open", () => {
     expect(windowProps(INITIAL_STATE)).toEqual({ show: true, interactive: false });

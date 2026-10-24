@@ -35,6 +35,7 @@ Select **More info → Run anyway**. Releases are not public yet.
 | Ctrl+Shift+Y / N | Allow / deny a tool that Claude asks to run |
 | Ctrl+Shift+X | Stop the current reply |
 | Ctrl+Shift+H | Show or hide the history |
+| ` (backquote) | Switch between the full overlay and a small icon |
 | Ctrl+Shift+O | Hide or show the overlay |
 | Ctrl+Alt+Arrows | Move the overlay around the screen edge |
 | Ctrl+Alt+M | Move the overlay to the next monitor |
@@ -44,6 +45,10 @@ Type `/new` in the chat to start a new conversation.
 The overlay has an orange ring icon in the notification area (system tray).
 Right-click it to show or hide the overlay, open `settings.json`, open the log
 folder, or quit.
+
+In icon mode a reply, an approval or the chat expands the overlay. It stays
+expanded until you press ` again. The icon shows a dot when the last reply
+has chips or a notice is waiting.
 
 Hotkeys work only while the game or the overlay is in front, so they do not
 take keys from other apps. While the ship is in danger, the chat does not open.
@@ -67,12 +72,13 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 | `hotkeys.scope` | `game` | `game`: only while the game or overlay is in front. `always`: everywhere |
 | `strip.lines` | `2` | `1`: status only. `2`: also the first line of the last reply |
 | `strip.keepChips` | `true` | Keep the last reply's chips under the status line |
+| `strip.startAsIcon` | `false` | Start as the icon on first run (later runs remember the last choice) |
 | `card.maxLines` | `4` | Reply lines shown (2–8) |
 | `card.fadeSeconds` | `20` | Seconds before the reply card closes |
 | `card.width` | `420` | Width in pixels at font size 14 |
 | `chat.lines` | `14` | History lines in the chat |
 | `style.fontSize` | `14` | Font size; scales the window |
-| `position.anchor` | `top-right` | `top-left`, `top`, `top-right`, `left`, `right`, `bottom-left`, `bottom`, `bottom-right` |
+| `position.anchor` | `bottom-left` | `top-left`, `top`, `top-right`, `left`, `right`, `bottom-left`, `bottom`, `bottom-right` |
 | `position.offsetX` / `offsetY` | `24` | Pixels from the screen edges |
 | `position.display` | `primary` | `primary` or a monitor number (0, 1, …) |
 | `safety.blockWhenInDanger` | `true` | Do not open the chat while in danger |

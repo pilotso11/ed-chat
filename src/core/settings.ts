@@ -19,6 +19,7 @@ const HotkeysSchema = z.strictObject({
   scope: z.enum(["game", "always"]).default("game"),
   openChat: key.default("Ctrl+Shift+Space"),
   toggleOverlay: key.default("Ctrl+Shift+O"),
+  toggleIcon: key.default("`"),
   showHistory: key.default("Ctrl+Shift+H"),
   approve: key.default("Ctrl+Shift+Y"),
   deny: key.default("Ctrl+Shift+N"),
@@ -32,7 +33,7 @@ const HotkeysSchema = z.strictObject({
 });
 
 export const PositionSchema = z.strictObject({
-  anchor: z.enum(ANCHORS).default("top-right"),
+  anchor: z.enum(ANCHORS).default("bottom-left"),
   offsetX: z.number().int().min(0).default(24),
   offsetY: z.number().int().min(0).default(24),
   display: z.union([z.literal("primary"), z.number().int().min(0)]).default("primary"),
@@ -45,6 +46,7 @@ export const SettingsSchema = z.strictObject({
     .strictObject({
       lines: z.union([z.literal(1), z.literal(2)]).default(2),
       keepChips: z.boolean().default(true),
+      startAsIcon: z.boolean().default(false),
     })
     .prefault({}),
   card: z

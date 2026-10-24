@@ -4,6 +4,7 @@ import type { Settings } from "./settings.js";
 export type HotkeyAction =
   | { type: "openChat" }
   | { type: "toggleOverlay" }
+  | { type: "toggleIcon" }
   | { type: "showHistory" }
   | { type: "approve" }
   | { type: "deny" }
@@ -27,6 +28,7 @@ export function bindings(h: Settings["hotkeys"]): Binding[] {
   return [
     b("openChat", h.openChat, { type: "openChat" }),
     b("toggleOverlay", h.toggleOverlay, { type: "toggleOverlay" }),
+    b("toggleIcon", h.toggleIcon, { type: "toggleIcon" }),
     b("showHistory", h.showHistory, { type: "showHistory" }),
     b("approve", h.approve, { type: "approve" }),
     b("deny", h.deny, { type: "deny" }),

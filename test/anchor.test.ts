@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseDisplay, growsUp, place, step } from "../src/core/anchor.js";
+import { chooseDisplay, column, growsUp, place, step } from "../src/core/anchor.js";
 
 describe("step", () => {
   it.each([
@@ -55,5 +55,16 @@ describe("chooseDisplay", () => {
     expect(chooseDisplay(["a", "b"], "a", 1)).toBe("b");
     expect(chooseDisplay(["a", "b"], "a", 5)).toBe("a");
     expect(chooseDisplay(["a", "b"], "b", "primary")).toBe("b");
+  });
+});
+
+describe("column", () => {
+  it("names the anchor's column", () => {
+    expect(column("bottom-left")).toBe("left");
+    expect(column("left")).toBe("left");
+    expect(column("top")).toBe("center");
+    expect(column("bottom")).toBe("center");
+    expect(column("right")).toBe("right");
+    expect(column("top-right")).toBe("right");
   });
 });

@@ -92,6 +92,8 @@ describe("StateStore", () => {
     const saved = savePosition(DEFAULT_SETTINGS.position, {}, DEFAULT_SETTINGS.position);
     await st.write(saved);
     expect(await st.read()).toEqual(saved);
+    await st.write({ ...saved, iconMode: true });
+    expect((await st.read()).iconMode).toBe(true);
     await writeFile(file, "{");
     expect(await st.read()).toEqual({});
   });

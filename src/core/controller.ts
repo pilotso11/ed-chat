@@ -23,6 +23,8 @@ export interface OverlayState {
   approvals: ApprovalRequest[];
   flags: ShipFlags | null;
   notices: Record<string, string>;
+  /** The resting state is a small icon; replies, approvals and the chat leave it. */
+  iconMode: boolean;
 }
 
 export const INITIAL_STATE: OverlayState = {
@@ -40,10 +42,13 @@ export const INITIAL_STATE: OverlayState = {
   approvals: [],
   flags: null,
   notices: {},
+  iconMode: false,
 };
 
 export type Action =
   | { type: "toggleVisible" }
+  | { type: "toggleIcon" }
+  | { type: "setIcon"; on: boolean }
   | { type: "openChat" }
   | { type: "closeChat" }
   | { type: "toggleHistory" }
@@ -74,7 +79,7 @@ function onBackend(s: OverlayState, e: BackendEvent): OverlayState {
         null,
       );
     case "text":
-      return { ...s, reply: s.reply + e.delta, session: "thinking" };
+      return { ...s, reply: s.reply + e.delta, session: "thinking", iconMode: false };
     case "toolStart":
       return { ...s, tool: e.name };
     case "toolEnd":
@@ -124,12 +129,16 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
   switch (a.type) {
     case "toggleVisible":
       return { ...s, visible: !s.visible };
+    case "toggleIcon":
+      return { ...s, iconMode: !s.iconMode, visible: true };
+    case "setIcon":
+      return { ...s, iconMode: a.on };
     case "openChat":
-      return { ...s, chatOpen: true, visible: true };
+      return { ...s, chatOpen: true, visible: true, iconMode: false };
     case "closeChat":
       return { ...s, chatOpen: false };
     case "toggleHistory":
-      return { ...s, historyOpen: !s.historyOpen, visible: true };
+      return { ...s, historyOpen: !s.historyOpen, visible: true, iconMode: false };
     case "sent":
       return {
         ...s,
@@ -145,7 +154,7 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     case "cardTimeout":
       return s.session === "thinking" ? s : { ...s, cardOpen: false };
     case "approval":
-      return { ...s, approvals: [...s.approvals, a.request] };
+      return { ...s, approvals: [...s.approvals, a.request], iconMode: false };
     case "approvalSettled":
       return { ...s, approvals: s.approvals.filter((r) => r.id !== a.id) };
     case "flags":
