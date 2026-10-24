@@ -47,6 +47,17 @@ export function bindings(h: Settings["hotkeys"]): Binding[] {
   ];
 }
 
+const MODIFIER =
+  /(^|\+)(Ctrl|Control|Alt|Shift|Cmd|Command|CmdOrCtrl|CommandOrControl|Super|Meta|Option|AltGr)\+/i;
+
+/**
+ * The bindings to register. While the overlay has focus, keys without a modifier are left
+ * out: a global shortcut swallows the key, so it could not be typed in the chat input.
+ */
+export function activeBindings(all: Binding[], overlayFocused: boolean): Binding[] {
+  return overlayFocused ? all.filter((b) => MODIFIER.test(b.accelerator)) : all;
+}
+
 export interface Registrar {
   register(accelerator: string, cb: () => void): boolean;
   unregister(accelerator: string): void;

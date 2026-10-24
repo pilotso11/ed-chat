@@ -115,6 +115,7 @@ describe("edMcpState", () => {
       "ok",
     );
     expect(edMcpState([{ name: "ed-mcp", status: "failed" }])).toBe("failed");
+    expect(edMcpState([{ name: "ed-mcp", status: "needs-auth" }])).toBe("needsAuth");
     expect(edMcpState([{ name: "semble", status: "pending" }])).toBe("missing");
   });
 });

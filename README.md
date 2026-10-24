@@ -34,7 +34,7 @@ Select **More info → Run anyway**. Releases are not public yet.
 | Ctrl+Shift+1…9 | Copy chip 1…9 |
 | Ctrl+Shift+Y / N | Allow / deny a tool that Claude asks to run |
 | Ctrl+Shift+X | Stop the current reply |
-| Ctrl+Shift+H | Show or hide the history |
+| Ctrl+Shift+H | Show or hide this session's history |
 | ` (backquote) | Switch between the full overlay and a small icon |
 | Ctrl+Shift+O | Hide or show the overlay |
 | Ctrl+Alt+Arrows | Move the overlay around the screen edge |
@@ -55,10 +55,17 @@ take keys from other apps. While the ship is in danger, the chat does not open.
 
 ## Permissions
 
-The overlay runs Claude in auto mode: a classifier approves low-risk actions
-and blocks risky ones. When Claude asks, the overlay shows the request; answer
-with Ctrl+Shift+Y or Ctrl+Shift+N. To never be asked about ed-mcp tools, add
-`"mcp__ed-mcp__*"` to `permissions.allow` in `~/.claude/settings.json`.
+The overlay runs Claude in auto mode by default. A classifier reviews each
+action, but it runs a command that you ask for explicitly without asking you
+first. In testing, auto mode ran `curl … | sh` when asked to, with no prompt.
+Claude also acts on text it reads, such as tool results, so be careful what you
+ask it to do.
+
+For an approval before every action that your Claude Code rules do not already
+allow, set `"claude": { "permissionMode": "default" }`. The overlay then shows
+each request; answer with Ctrl+Shift+Y or Ctrl+Shift+N. To never be asked about
+ed-mcp tools, add `"mcp__ed-mcp__*"` to `permissions.allow` in
+`~/.claude/settings.json`.
 
 ## Settings
 
@@ -100,4 +107,11 @@ A position chosen with the hotkeys or by dragging is saved in `state.json`, unti
 The first line of the overlay shows problems. If ed-mcp is added but does not
 start, the overlay shows `⚠ ed-mcp failed to start; run claude mcp list`. If
 the overlay cannot start at all, it shows an error dialog. The log is
-`%APPDATA%\ed-chat\logs\overlay.log`. It never contains chat text.
+`%APPDATA%\ed-chat\logs\overlay.log`. It does not record your messages or
+Claude's replies. When the `claude` CLI stops, the log keeps its last error
+lines, cut to 160 characters each, and those can quote part of a request. Check
+the log before you share it.
+
+Each session's messages are also saved in `%APPDATA%\ed-chat\history\`, one
+file per session. The overlay does not read them back; they are an archive you
+can open or delete.

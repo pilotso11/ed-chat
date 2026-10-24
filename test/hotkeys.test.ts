@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { HotkeyManager, bindings, type HotkeyAction, type Registrar } from "../src/core/hotkeys.js";
+import {
+  HotkeyManager,
+  activeBindings,
+  bindings,
+  type HotkeyAction,
+  type Registrar,
+} from "../src/core/hotkeys.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
 
 function fakeRegistrar(taken: string[] = []) {
@@ -17,6 +23,18 @@ function fakeRegistrar(taken: string[] = []) {
   };
   return { reg, live };
 }
+
+// A global shortcut eats the key, so a bare key would be untypeable in the chat input.
+describe("activeBindings", () => {
+  it("drops keys without a modifier while the overlay has focus", () => {
+    const all = bindings(DEFAULT_SETTINGS.hotkeys);
+    expect(activeBindings(all, false)).toHaveLength(all.length);
+    const focused = activeBindings(all, true);
+    expect(focused.some((b) => b.name === "toggleIcon")).toBe(false);
+    expect(focused.some((b) => b.name === "openChat")).toBe(true);
+    expect(focused).toHaveLength(all.length - 1);
+  });
+});
 
 describe("bindings", () => {
   it("expands copyChip to 9 bindings and lists the rest", () => {

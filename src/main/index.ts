@@ -37,10 +37,11 @@ import {
   windowProps,
   type Action,
   type OverlayState,
+  type Turn,
   type WindowProps,
 } from "../core/controller.js";
 import { FocusManager, type Foreground } from "../core/focus.js";
-import { HotkeyManager, bindings, type HotkeyAction } from "../core/hotkeys.js";
+import { HotkeyManager, activeBindings, bindings, type HotkeyAction } from "../core/hotkeys.js";
 import { Logger } from "../core/logger.js";
 import type { Position, Settings } from "../core/settings.js";
 import { StatusWatcher, fullscreenMode } from "../core/status.js";
@@ -67,6 +68,7 @@ const settingsFile = path.join(dataDir, "settings.json");
 const ED_MCP_MISSING =
   "⚠ ed-mcp not connected. Run: claude mcp add ed-mcp -s user -- npx -y ed-mcp";
 const ED_MCP_FAILED = "⚠ ed-mcp failed to start; run claude mcp list";
+const ED_MCP_AUTH = "⚠ ed-mcp needs authentication; run claude mcp list";
 const FULLSCREEN = "⚠ Elite is in fullscreen; switch to Borderless to see the overlay";
 const NO_CLAUDE = "⚠ claude not found: install Claude Code or set claude.path";
 const REFOCUS = "⚠ click the game to refocus";
@@ -85,6 +87,9 @@ function fatal(err: unknown): void {
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else app.whenReady().then(main).catch(fatal);
+
+// Last resort: a stray rejection must not end the process while the player flies.
+process.on("unhandledRejection", (err) => log.log("warn", `unhandled rejection: ${message(err)}`));
 
 async function main(): Promise<void> {
   const settingsStore = new SettingsStore(settingsFile);
@@ -120,12 +125,21 @@ async function main(): Promise<void> {
     win.webContents.send(IPC.view, buildView(state, viewSettings()));
   }
 
+  // Disk writes must never take the overlay down: on Windows an antivirus or indexer can
+  // hold state.json or a history file for a moment.
+  function writeState(): void {
+    stateStore.write(saved).catch((err) => log.log("warn", `state.json: ${message(err)}`));
+  }
+  function appendHistory(t: Turn): void {
+    history.append(t).catch((err) => log.log("warn", `history: ${message(err)}`));
+  }
+
   function dispatch(a: Action): void {
     const wasIcon = state.iconMode;
     state = reduce(state, a);
     if (state.iconMode !== wasIcon) {
       saved = { ...saved, iconMode: state.iconMode };
-      void stateStore.write(saved);
+      writeState();
     }
     render();
   }
@@ -195,7 +209,7 @@ async function main(): Promise<void> {
   async function movePosition(next: Position): Promise<void> {
     position = next;
     saved = savePosition(settings.position, saved, position);
-    await stateStore.write(saved);
+    writeState();
     reposition();
     render();
   }
@@ -211,7 +225,7 @@ async function main(): Promise<void> {
       register: (acc, cb) => globalShortcut.register(acc, cb),
       unregister: (acc) => globalShortcut.unregister(acc),
     },
-    (a) => void runHotkey(a),
+    (a) => runHotkey(a).catch((err) => log.log("warn", `hotkey ${a.type}: ${message(err)}`)),
   );
   const reportHotkeys = (failed: string[]) =>
     dispatch({
@@ -234,7 +248,16 @@ async function main(): Promise<void> {
     }
     syncHotkeys(f);
   }
+  let overlayFocused = false;
+  function bindHotkeys(): void {
+    reportHotkeys(hotkeys.setBindings(activeBindings(bindings(settings.hotkeys), overlayFocused)));
+  }
+
   function syncHotkeys(f: Foreground | null): void {
+    if ((f?.isOverlay ?? false) !== overlayFocused) {
+      overlayFocused = f?.isOverlay ?? false;
+      bindHotkeys();
+    }
     const want = hotkeysWanted(settings.hotkeys.scope, f);
     if (want && !hotkeys.active) reportHotkeys(hotkeys.activate());
     if (!want && hotkeys.active) hotkeys.deactivate();
@@ -307,7 +330,14 @@ async function main(): Promise<void> {
           dispatch({
             type: "notice",
             key: "edmcp",
-            text: ed === "missing" ? ED_MCP_MISSING : ed === "failed" ? ED_MCP_FAILED : null,
+            text:
+              ed === "missing"
+                ? ED_MCP_MISSING
+                : ed === "failed"
+                  ? ED_MCP_FAILED
+                  : ed === "needsAuth"
+                    ? ED_MCP_AUTH
+                    : null,
           });
         }
         dispatch({
@@ -322,7 +352,7 @@ async function main(): Promise<void> {
         });
         break;
       case "result":
-        void history.append({ role: "assistant", text: state.reply });
+        appendHistory({ role: "assistant", text: state.reply });
         scheduleFade();
         break;
       case "exit":
@@ -378,10 +408,12 @@ async function main(): Promise<void> {
       return false;
     }
     clearTimeout(fadeTimer);
-    void history.append({ role: "user", text: t });
+    appendHistory({ role: "user", text: t });
+    // "sent" first, so stream events that arrive during a focus retry land on this turn.
+    dispatch({ type: "sent", text: t });
     // Give focus back before the window stops being focusable, while the overlay still holds the foreground.
     await giveFocusBack();
-    dispatch({ type: "sent", text: t });
+    dispatch({ type: "closeChat" });
     return true;
   }
 
@@ -481,7 +513,7 @@ async function main(): Promise<void> {
 
   // Settings, live.
   function applySettings(): void {
-    reportHotkeys(hotkeys.setBindings(bindings(settings.hotkeys)));
+    bindHotkeys();
     syncHotkeys(focus?.current ?? null);
     approval.setTimeoutMs(settings.approval.timeoutSeconds * 1000);
     reposition();
@@ -495,7 +527,7 @@ async function main(): Promise<void> {
     const old = settings;
     settings = settingsStore.settings;
     ({ position, saved } = effectivePosition(settings.position, saved));
-    void stateStore.write(saved);
+    writeState();
     if (JSON.stringify(old.claude) !== JSON.stringify(settings.claude)) {
       const c = claudeCommand(settings);
       dispatch({ type: "notice", key: "claude", text: c ? null : noClaude() });

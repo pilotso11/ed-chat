@@ -24,6 +24,14 @@ describe("SettingsStore", () => {
     expect(await s.load()).toEqual({ changed: false, error: null });
   });
 
+  it("accepts a file saved with a UTF-8 BOM", async () => {
+    const file = path.join(await tmp(), "settings.json");
+    await writeFile(file, '\uFEFF{"card":{"maxLines":5}}');
+    const s = new SettingsStore(file);
+    expect(await s.load()).toEqual({ changed: true, error: null });
+    expect(s.settings.card.maxLines).toBe(5);
+  });
+
   it("keeps the last good settings on a bad edit", async () => {
     const file = path.join(await tmp(), "settings.json");
     await writeFile(file, '{"card":{"maxLines":6}}');

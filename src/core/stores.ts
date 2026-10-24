@@ -41,6 +41,8 @@ export class SettingsStore {
       await mkdir(path.dirname(this.file), { recursive: true });
       await writeFile(this.file, text);
     }
+    // Some Windows editors save UTF-8 with a BOM, which JSON.parse rejects.
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
     if (text === this.lastText) return { changed: false, error: this.lastError };
     this.lastText = text;
     const r = parseSettings(text);

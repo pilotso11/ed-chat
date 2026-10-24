@@ -79,12 +79,12 @@ export function isOlder(a: Version, b: Version): boolean {
   return false;
 }
 
-export type EdMcpState = "ok" | "missing" | "failed";
+export type EdMcpState = "ok" | "missing" | "failed" | "needsAuth";
 
 // Servers are still pending at init and their tools are not listed yet, so read the configured list.
 // The Claude plugin names its server plugin:<plugin>:ed-mcp.
 export function edMcpState(servers: McpServerInfo[]): EdMcpState {
   const s = servers.find((m) => m.name === "ed-mcp" || /^plugin:[^:]+:ed-mcp$/.test(m.name));
   if (!s) return "missing";
-  return s.status === "failed" ? "failed" : "ok";
+  return s.status === "failed" ? "failed" : s.status === "needs-auth" ? "needsAuth" : "ok";
 }

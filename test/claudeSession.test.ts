@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -137,5 +137,27 @@ describe("ClaudeSession", () => {
     expect(events.find((e) => e.type === "spawnError")).toMatchObject({
       message: expect.stringContaining("ENOENT"),
     });
+  });
+});
+
+// npm installs Claude Code as claude.cmd, which needs a shell; the args must survive cmd.exe.
+describe.skipIf(process.platform !== "win32")("ClaudeSession through a .cmd shim", () => {
+  it("passes quoted args intact from a path with spaces", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "ed chat spaces-"));
+    const shim = path.join(dir, "fake claude.cmd");
+    await writeFile(shim, `@"${process.execPath}" "${fake}" %*\r\n`);
+    const argsFile = path.join(dir, "args.jsonl");
+    const s = new ClaudeSession({
+      command: shim,
+      args: ["--base", "two words", path.join(dir, "mcp config.json")],
+      shell: true,
+      cwd: dir,
+      env: { ...process.env, FAKE_FIXTURE: fixture, FAKE_ARGS_FILE: argsFile, FAKE_MODE: "ok" },
+    });
+    sessions.push(s);
+    s.start();
+    await until(async () => (await readFile(argsFile, "utf8").catch(() => "")).length > 0);
+    const first = JSON.parse((await readFile(argsFile, "utf8")).split("\n")[0]!) as string[];
+    expect(first).toEqual(["--base", "two words", path.join(dir, "mcp config.json")]);
   });
 });

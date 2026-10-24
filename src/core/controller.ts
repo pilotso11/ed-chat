@@ -48,7 +48,6 @@ export const INITIAL_STATE: OverlayState = {
 export type Action =
   | { type: "toggleVisible" }
   | { type: "toggleIcon" }
-  | { type: "setIcon"; on: boolean }
   | { type: "openChat" }
   | { type: "closeChat" }
   | { type: "toggleHistory" }
@@ -131,18 +130,16 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
       return { ...s, visible: !s.visible };
     case "toggleIcon":
       return { ...s, iconMode: !s.iconMode, visible: true };
-    case "setIcon":
-      return { ...s, iconMode: a.on };
     case "openChat":
       return { ...s, chatOpen: true, visible: true, iconMode: false };
     case "closeChat":
       return { ...s, chatOpen: false };
     case "toggleHistory":
       return { ...s, historyOpen: !s.historyOpen, visible: true, iconMode: false };
+    // The chat stays open: main closes it once focus is back with the game.
     case "sent":
       return {
         ...s,
-        chatOpen: false,
         cardOpen: true,
         session: "thinking",
         reply: "",

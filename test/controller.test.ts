@@ -50,7 +50,9 @@ describe("reduce", () => {
 
   it("streams a reply into the card, then pins it with its chips", () => {
     let s = run([ready, { type: "openChat" }, { type: "sent", text: "where?" }]);
-    expect(s).toMatchObject({ chatOpen: false, cardOpen: true, session: "thinking", reply: "" });
+    // Main closes the chat after focus is back, so stream events cannot overtake "sent".
+    expect(s).toMatchObject({ chatOpen: true, cardOpen: true, session: "thinking", reply: "" });
+    s = run([{ type: "closeChat" }], s);
     expect(s.history).toEqual([{ role: "user", text: "where?" }]);
     s = run([text("Go to ⟦Hip 3922⟧\nthen dock")], s);
     expect(currentChips(s)).toEqual([{ n: 1, text: "Hip 3922" }]);
@@ -199,7 +201,6 @@ describe("icon mode", () => {
   it("toggles with the hotkey", () => {
     expect(run([{ type: "toggleIcon" }]).iconMode).toBe(true);
     expect(run([{ type: "toggleIcon" }, { type: "toggleIcon" }]).iconMode).toBe(false);
-    expect(run([{ type: "setIcon", on: true }]).iconMode).toBe(true);
   });
 
   it("expands for a reply, an approval, the chat or the history, and stays expanded", () => {
