@@ -78,6 +78,7 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 | `card.width` | `420` | Width in pixels at font size 14 |
 | `chat.lines` | `14` | History lines in the chat |
 | `style.fontSize` | `14` | Font size; scales the window |
+| `style.backgroundOpacity` | `0.78` | Panel background opacity, from 0 (none) to 1 (solid). Text stays opaque |
 | `position.anchor` | `bottom-left` | `top-left`, `top`, `top-right`, `left`, `right`, `bottom-left`, `bottom`, `bottom-right` |
 | `position.offsetX` / `offsetY` | `24` | Pixels from the screen edges |
 | `position.display` | `primary` | `primary` or a monitor number (0, 1, …) |
@@ -88,7 +89,10 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 | `claude.extraArgs` | `[]` | More arguments for `claude` |
 | `journalDir` | `null` | The game's journal folder; `null` uses Saved Games |
 
-A position chosen with the hotkeys is saved in `state.json`, until you change
+With the chat open you can also drag the overlay by its status line. It snaps
+to the nearest edge or corner when you let go.
+
+A position chosen with the hotkeys or by dragging is saved in `state.json`, until you change
 `position` in `settings.json`.
 
 ## Troubleshooting

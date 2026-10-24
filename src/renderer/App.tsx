@@ -74,6 +74,7 @@ export function App() {
   if (!v) return null;
   const style = {
     "--font": `${v.ui.fontSize}px`,
+    "--bg-alpha": v.ui.backgroundOpacity,
     "--max-lines": v.ui.maxLines,
     "--chat-lines": v.ui.chatLines,
     flexDirection: v.ui.growsUp ? "column-reverse" : "column",
@@ -91,7 +92,10 @@ export function App() {
           {v.icon.dot && !v.icon.danger && <span className="dot" />}
         </div>
       )}
-      <div className="strip" hidden={v.mode === "icon"}>
+      <div
+        className={v.mode === "chat" && v.chat?.input ? "strip drag" : "strip"}
+        hidden={v.mode === "icon"}
+      >
         <div className="status">
           <span>{v.status}</span>
           {v.notice && <span className="notice">{v.notice}</span>}

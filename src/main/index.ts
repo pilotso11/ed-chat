@@ -16,7 +16,7 @@ import {
   shell,
   type BrowserWindow,
 } from "electron";
-import { chooseDisplay, place, step } from "../core/anchor.js";
+import { chooseDisplay, place, snap, step } from "../core/anchor.js";
 import { ApprovalServer } from "../core/approvalServer.js";
 import {
   TESTED_CLI_VERSION,
@@ -148,6 +148,9 @@ async function main(): Promise<void> {
     );
   }
 
+  // Where reposition() last put the window, so its own moves are not taken as drags.
+  let placed: { x: number; y: number } | null = null;
+
   function reposition(): void {
     const display = chooseDisplay(
       screen.getAllDisplays(),
@@ -163,8 +166,31 @@ async function main(): Promise<void> {
       display.workArea,
       size,
     );
+    placed = { x, y };
     win.setBounds({ x, y, ...size });
   }
+
+  // A window dropped by the user snaps to the nearest anchor, so it keeps its place
+  // when the resolution or the content height changes. macOS reports moves during the
+  // drag, so act once the window has been still for a moment.
+  let dragTimer: NodeJS.Timeout | undefined;
+  win.on("moved", () => {
+    if (!state.chatOpen) return;
+    clearTimeout(dragTimer);
+    dragTimer = setTimeout(() => {
+      const b = win.getBounds();
+      if (placed && b.x === placed.x && b.y === placed.y) return;
+      const d = screen.getDisplayMatching(b);
+      const display =
+        d.id === screen.getPrimaryDisplay().id
+          ? ("primary" as const)
+          : Math.max(
+              0,
+              screen.getAllDisplays().findIndex((x) => x.id === d.id),
+            );
+      void movePosition({ ...position, ...snap(b, d.workArea), display });
+    }, 250);
+  });
 
   async function movePosition(next: Position): Promise<void> {
     position = next;

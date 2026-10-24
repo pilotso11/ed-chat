@@ -65,6 +65,7 @@ describe("buildView", () => {
     });
     expect(v.ui).toEqual({
       fontSize: 14,
+      backgroundOpacity: 0.78,
       width: 420,
       maxLines: 4,
       chatLines: 14,

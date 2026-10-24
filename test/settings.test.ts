@@ -9,6 +9,7 @@ describe("parseSettings", () => {
     expect(DEFAULT_SETTINGS.hotkeys.scope).toBe("game");
     expect(DEFAULT_SETTINGS.strip).toEqual({ lines: 2, keepChips: true, startAsIcon: false });
     expect(DEFAULT_SETTINGS.hotkeys.toggleIcon).toBe("`");
+    expect(DEFAULT_SETTINGS.style).toEqual({ fontSize: 14, backgroundOpacity: 0.78 });
     expect(DEFAULT_SETTINGS.card).toEqual({ maxLines: 4, fadeSeconds: 20, width: 420 });
     expect(DEFAULT_SETTINGS.position).toEqual({
       anchor: "bottom-left",
@@ -38,6 +39,12 @@ describe("parseSettings", () => {
   it("reports a value out of range with its path", () => {
     const r = parseSettings('{"card":{"maxLines":9}}');
     expect(!r.ok && r.error).toMatch(/^card\.maxLines: /);
+  });
+
+  it("keeps backgroundOpacity between 0 and 1", () => {
+    expect(parseSettings('{"style":{"backgroundOpacity":0}}').ok).toBe(true);
+    const r = parseSettings('{"style":{"backgroundOpacity":1.5}}');
+    expect(!r.ok && r.error).toMatch(/^style\.backgroundOpacity: /);
   });
 
   it("requires {n} in copyChip", () => {

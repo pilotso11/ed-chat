@@ -29,6 +29,7 @@ export interface ViewModel {
   icon: { dot: boolean; danger: boolean } | null;
   ui: {
     fontSize: number;
+    backgroundOpacity: number;
     width: number;
     maxLines: number;
     chatLines: number;
@@ -104,6 +105,7 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
       : null,
     ui: {
       fontSize: settings.style.fontSize,
+      backgroundOpacity: settings.style.backgroundOpacity,
       width: Math.round(settings.card.width * scale),
       maxLines: settings.card.maxLines,
       chatLines: settings.chat.lines,

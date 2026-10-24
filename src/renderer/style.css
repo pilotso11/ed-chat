@@ -18,7 +18,7 @@ body {
 .card,
 .chat,
 .approval {
-  background: rgba(10, 12, 16, 0.78);
+  background: rgba(10, 12, 16, var(--bg-alpha, 0.78));
   border: 1px solid rgba(255, 140, 0, 0.45);
   border-radius: 4px;
   padding: 4px 8px;
@@ -99,7 +99,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10, 12, 16, 0.78);
+  background: rgba(10, 12, 16, var(--bg-alpha, 0.78));
   border: 1px solid rgba(255, 140, 0, 0.6);
   color: #ff8c00;
   font-size: 15px;
@@ -115,4 +115,9 @@ body {
   height: 7px;
   border-radius: 50%;
   background: #ffb347;
+}
+/* Only the open chat takes the mouse, so only there is the status line a drag handle. */
+.strip.drag {
+  -webkit-app-region: drag;
+  cursor: move;
 }

@@ -25,6 +25,8 @@ next to each item.
 - [ ] Hotkeys work while the game is in front, and not while another app is.
 - [ ] ` switches to the icon and back, and the game does not also act on `.
 - [ ] In icon mode, a reply expands the overlay and it stays expanded.
+- [ ] With the chat open, dragging the status line moves the overlay, and it snaps to the nearest edge or corner.
+- [ ] `style.backgroundOpacity` changes apply live, and text stays readable over a bright star.
 - [ ] Enter gives focus back to the game.
 - [ ] A copied chip pastes into the galaxy map search with Ctrl+V.
 - [ ] A tool request shows the approval card; Ctrl+Shift+Y and N work.

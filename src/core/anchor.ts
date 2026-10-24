@@ -77,3 +77,28 @@ export function column(anchor: Anchor): "left" | "center" | "right" {
 export function chooseDisplay<T>(all: T[], primary: T, which: "primary" | number): T {
   return which === "primary" ? primary : (all[which] ?? primary);
 }
+
+/** The anchor and offsets that put a window dropped at `win` back where it is. */
+export function snap(win: Rect, area: Rect): { anchor: Anchor; offsetX: number; offsetY: number } {
+  const left = win.x - area.x;
+  const right = area.x + area.width - (win.x + win.width);
+  const top = win.y - area.y;
+  const bottom = area.y + area.height - (win.y + win.height);
+  const third = (v: number, size: number) => (v < size / 3 ? 0 : v >= (2 * size) / 3 ? 2 : 1);
+  let c = third(left + win.width / 2, area.width);
+  let r = third(top + win.height / 2, area.height);
+  // The center cell has no anchor, so the nearest edge decides.
+  if (r === 1 && c === 1) {
+    const nearest = Math.min(top, bottom, left, right);
+    if (nearest === top) r = 0;
+    else if (nearest === bottom) r = 2;
+    else if (nearest === left) c = 0;
+    else c = 2;
+  }
+  const off = (v: number) => Math.max(0, Math.round(v));
+  return {
+    anchor: GRID[r]![c]!,
+    offsetX: c === 0 ? off(left) : c === 2 ? off(right) : 0,
+    offsetY: r === 0 ? off(top) : r === 2 ? off(bottom) : 0,
+  };
+}

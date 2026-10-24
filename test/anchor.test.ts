@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseDisplay, column, growsUp, place, step } from "../src/core/anchor.js";
+import { chooseDisplay, column, growsUp, place, snap, step } from "../src/core/anchor.js";
 
 describe("step", () => {
   it.each([
@@ -66,5 +66,29 @@ describe("column", () => {
     expect(column("bottom")).toBe("center");
     expect(column("right")).toBe("right");
     expect(column("top-right")).toBe("right");
+  });
+});
+
+describe("snap", () => {
+  const area = { x: 0, y: 0, width: 1920, height: 1080 };
+  const win = (x: number, y: number) => ({ x, y, width: 420, height: 70 });
+  it.each([
+    [win(30, 990), { anchor: "bottom-left", offsetX: 30, offsetY: 20 }],
+    [win(1470, 40), { anchor: "top-right", offsetX: 30, offsetY: 40 }],
+    [win(750, 40), { anchor: "top", offsetX: 0, offsetY: 40 }],
+    [win(30, 505), { anchor: "left", offsetX: 30, offsetY: 0 }],
+    // The center cell has no anchor; the nearest edge wins.
+    [win(760, 480), { anchor: "top", offsetX: 0, offsetY: 480 }],
+    [win(-50, -10), { anchor: "top-left", offsetX: 0, offsetY: 0 }],
+  ] as const)("%o", (rect, expected) => {
+    expect(snap(rect, area)).toEqual(expected);
+  });
+
+  it("measures from the display's origin", () => {
+    expect(snap(win(1950, 30), { x: 1920, y: 0, width: 1920, height: 1080 })).toEqual({
+      anchor: "top-left",
+      offsetX: 30,
+      offsetY: 30,
+    });
   });
 });

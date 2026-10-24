@@ -57,7 +57,12 @@ export const SettingsSchema = z.strictObject({
     })
     .prefault({}),
   chat: z.strictObject({ lines: z.number().int().min(4).max(40).default(14) }).prefault({}),
-  style: z.strictObject({ fontSize: z.number().min(8).max(48).default(14) }).prefault({}),
+  style: z
+    .strictObject({
+      fontSize: z.number().min(8).max(48).default(14),
+      backgroundOpacity: z.number().min(0).max(1).default(0.78),
+    })
+    .prefault({}),
   position: PositionSchema.prefault({}),
   safety: z.strictObject({ blockWhenInDanger: z.boolean().default(true) }).prefault({}),
   approval: z
