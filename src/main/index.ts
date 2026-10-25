@@ -164,8 +164,11 @@ async function main(): Promise<void> {
 
   // Where reposition() last put the window, so its own moves are not taken as drags.
   let placed: { x: number; y: number } | null = null;
+  // While the user drags, height updates must not put the window back at its anchor.
+  let dragging = false;
 
   function reposition(): void {
+    if (dragging) return;
     const display = chooseDisplay(
       screen.getAllDisplays(),
       screen.getPrimaryDisplay(),
@@ -185,25 +188,36 @@ async function main(): Promise<void> {
   }
 
   // A window dropped by the user snaps to the nearest anchor, so it keeps its place
-  // when the resolution or the content height changes. macOS reports moves during the
-  // drag, so act once the window has been still for a moment.
+  // when the resolution or the content height changes. will-move fires only for user
+  // moves. Windows sends one "moved" when the drag ends; macOS sends it during the drag,
+  // so finish once the window has been still for a moment. The long timer only covers a
+  // drag that never reports its end.
   let dragTimer: NodeJS.Timeout | undefined;
-  win.on("moved", () => {
+  function finishDrag(): void {
+    dragging = false;
+    const b = win.getBounds();
+    // No real move: apply any height change that waited for the drag.
+    if (placed && b.x === placed.x && b.y === placed.y) return reposition();
+    const d = screen.getDisplayMatching(b);
+    const display =
+      d.id === screen.getPrimaryDisplay().id
+        ? ("primary" as const)
+        : Math.max(
+            0,
+            screen.getAllDisplays().findIndex((x) => x.id === d.id),
+          );
+    void movePosition({ ...position, ...snap(b, d.workArea), display });
+  }
+  win.on("will-move", () => {
     if (!state.chatOpen) return;
+    dragging = true;
     clearTimeout(dragTimer);
-    dragTimer = setTimeout(() => {
-      const b = win.getBounds();
-      if (placed && b.x === placed.x && b.y === placed.y) return;
-      const d = screen.getDisplayMatching(b);
-      const display =
-        d.id === screen.getPrimaryDisplay().id
-          ? ("primary" as const)
-          : Math.max(
-              0,
-              screen.getAllDisplays().findIndex((x) => x.id === d.id),
-            );
-      void movePosition({ ...position, ...snap(b, d.workArea), display });
-    }, 250);
+    dragTimer = setTimeout(finishDrag, 2_000);
+  });
+  win.on("moved", () => {
+    if (!dragging) return;
+    clearTimeout(dragTimer);
+    dragTimer = setTimeout(finishDrag, 250);
   });
 
   async function movePosition(next: Position): Promise<void> {
@@ -285,11 +299,18 @@ async function main(): Promise<void> {
   let claudeBlocked: string | null = null;
   try {
     await approval.start();
-    await writeFile(mcpConfigFile, JSON.stringify(approval.mcpConfig()));
-    await mkdir(workspace, { recursive: true });
   } catch (err) {
     log.log("warn", `approval server: ${message(err)}`);
     claudeBlocked = `⚠ Can't start the approval server: ${message(err)}`;
+  }
+  if (!claudeBlocked) {
+    try {
+      await writeFile(mcpConfigFile, JSON.stringify(approval.mcpConfig()));
+      await mkdir(workspace, { recursive: true });
+    } catch (err) {
+      log.log("warn", `data folder: ${message(err)}`);
+      claudeBlocked = `⚠ Can't write to ${dataDir}: ${message(err)}`;
+    }
   }
   const noClaude = () => claudeBlocked ?? NO_CLAUDE;
 

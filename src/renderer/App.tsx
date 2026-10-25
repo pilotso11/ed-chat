@@ -9,15 +9,30 @@ import {
 import type { Chip } from "../core/chips.js";
 import type { ViewModel } from "../core/view.js";
 
-function Chips({ chips, keyLabel }: { chips: Chip[]; keyLabel: string }) {
+// Only the open chat takes the mouse; elsewhere chips are labels for the copy hotkey.
+function Chips({
+  chips,
+  keyLabel,
+  clickable = false,
+}: {
+  chips: Chip[];
+  keyLabel: string;
+  clickable?: boolean;
+}) {
   if (!chips.length) return null;
   return (
     <div className="chips" title={`${keyLabel} copies chip n`}>
-      {chips.map((c) => (
-        <button key={c.n} className="chip" onClick={() => window.overlay.copyChip(c.n)}>
-          {c.n} 📋 {c.text}
-        </button>
-      ))}
+      {chips.map((c) =>
+        clickable ? (
+          <button key={c.n} className="chip" onClick={() => window.overlay.copyChip(c.n)}>
+            {c.n} 📋 {c.text}
+          </button>
+        ) : (
+          <span key={c.n} className="chip">
+            {c.n} 📋 {c.text}
+          </span>
+        ),
+      )}
     </div>
   );
 }
@@ -58,6 +73,12 @@ function ChatInput({ moving, canSend }: { moving: boolean; canSend: boolean }) {
 export function App() {
   const [v, setV] = useState<ViewModel | null>(null);
   const root = useRef<HTMLDivElement>(null);
+  const historyBox = useRef<HTMLDivElement>(null);
+  // The history view does not take the mouse, so keep the newest turn in sight.
+  useLayoutEffect(() => {
+    const el = historyBox.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  });
 
   useEffect(() => window.overlay.onView(setV), []);
 
@@ -122,7 +143,7 @@ export function App() {
       )}
       {v.chat && (
         <div className="chat">
-          <div className="history">
+          <div className="history" ref={historyBox}>
             {v.chat.history.map((t, i) => (
               <div key={i} className={t.role}>
                 {t.text}
@@ -130,7 +151,7 @@ export function App() {
             ))}
             {v.chat.streaming !== null && <div className="assistant">{v.chat.streaming}</div>}
           </div>
-          <Chips chips={v.chat.chips} keyLabel={v.ui.copyChipKey} />
+          <Chips chips={v.chat.chips} keyLabel={v.ui.copyChipKey} clickable={v.chat.input} />
           {v.chat.input && <ChatInput moving={v.chat.moving} canSend={v.chat.canSend} />}
         </div>
       )}
