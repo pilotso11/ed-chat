@@ -1,0 +1,117 @@
+import { column, growsUp } from "./anchor.js";
+import { parseChips, type Chip } from "./chips.js";
+import {
+  currentApproval,
+  currentChips,
+  windowProps,
+  type OverlayState,
+  type Turn,
+} from "./controller.js";
+import type { Settings } from "./settings.js";
+
+export interface ViewModel {
+  show: boolean;
+  mode: "icon" | "strip" | "card" | "chat";
+  status: string;
+  notice: string | null;
+  pinned: string | null;
+  chips: Chip[];
+  card: { text: string; chips: Chip[] } | null;
+  chat: {
+    history: Turn[];
+    streaming: string | null;
+    chips: Chip[];
+    input: boolean;
+    canSend: boolean;
+    moving: boolean;
+  } | null;
+  approval: { toolName: string; summary: string; approveKey: string; denyKey: string } | null;
+  icon: { dot: boolean; danger: boolean } | null;
+  ui: {
+    fontSize: number;
+    backgroundOpacity: number;
+    width: number;
+    maxLines: number;
+    chatLines: number;
+    growsUp: boolean;
+    align: "start" | "center" | "end";
+    copyChipKey: string;
+  };
+}
+
+export function shortTool(name: string): string {
+  return name.split("__").at(-1) ?? name;
+}
+
+export function statusText(s: OverlayState): string {
+  const state =
+    s.session === "starting"
+      ? "● starting"
+      : s.session === "stopped"
+        ? "⚠ stopped"
+        : s.tool
+          ? `🔧 ${shortTool(s.tool)}…`
+          : s.session === "thinking"
+            ? "● thinking"
+            : s.blocked
+              ? `🛡 blocked: ${shortTool(s.blocked)}`
+              : "● idle";
+  const ship = s.flags?.inDanger ? "   ⛔ in danger" : s.flags?.docked ? "   ⚓ docked" : "";
+  return state + ship;
+}
+
+const ALIGN = { left: "start", center: "center", right: "end" } as const;
+
+export function buildView(s: OverlayState, settings: Settings): ViewModel {
+  const open = s.chatOpen || s.historyOpen;
+  const mode = open ? "chat" : s.cardOpen ? "card" : s.iconMode ? "icon" : "strip";
+  const reply = parseChips(s.reply);
+  const scale = settings.style.fontSize / 14;
+  const approval = currentApproval(s);
+  return {
+    show: windowProps(s).show,
+    mode,
+    icon:
+      mode === "icon"
+        ? {
+            dot: s.chips.length > 0 || Object.keys(s.notices).length > 0,
+            danger: s.flags?.inDanger === true,
+          }
+        : null,
+    status: statusText(s),
+    notice: Object.values(s.notices).at(-1) ?? null,
+    pinned: settings.strip.lines === 2 ? s.pinned : null,
+    chips: settings.strip.keepChips ? s.chips : [],
+    card: mode === "card" ? { text: reply.plain, chips: reply.chips } : null,
+    chat: open
+      ? {
+          history: s.history.map((t) =>
+            t.role === "assistant" ? { ...t, text: parseChips(t.text).plain } : t,
+          ),
+          streaming: s.session === "thinking" ? reply.plain : null,
+          chips: currentChips(s),
+          input: s.chatOpen,
+          canSend: s.session !== "thinking",
+          moving: s.flags ? !s.flags.docked : false,
+        }
+      : null,
+    approval: approval
+      ? {
+          toolName: shortTool(approval.toolName),
+          summary: approval.summary,
+          approveKey: settings.hotkeys.approve,
+          denyKey: settings.hotkeys.deny,
+        }
+      : null,
+    ui: {
+      fontSize: settings.style.fontSize,
+      backgroundOpacity: settings.style.backgroundOpacity,
+      width: Math.round(settings.card.width * scale),
+      maxLines: settings.card.maxLines,
+      chatLines: settings.chat.lines,
+      growsUp: growsUp(settings.position.anchor),
+      align: ALIGN[column(settings.position.anchor)],
+      copyChipKey: settings.hotkeys.copyChip.replace("{n}", "n"),
+    },
+  };
+}

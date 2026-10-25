@@ -1,0 +1,24 @@
+appId: com.pilotso11.ed-chat
+productName: ED Chat
+directories:
+  output: dist
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: resources/tray.png
+    to: tray.png
+asarUnpack:
+  - node_modules/koffi/**
+  - node_modules/@koromix/**
+win:
+  target:
+    - target: nsis
+      arch: x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+publish:
+  provider: github
+  owner: pilotso11
+  repo: ed-chat
