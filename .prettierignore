@@ -5,3 +5,4 @@ node_modules
 test/fixtures
 *.md
 package-lock.json
+.release-please-manifest.json
