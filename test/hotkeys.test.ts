@@ -62,7 +62,7 @@ describe("HotkeyManager", () => {
     expect(live.size).toBe(0);
     expect(m.activate()).toEqual([]);
     expect(live.size).toBe(21);
-    live.get("Ctrl+Shift+Space")!();
+    live.get("Ctrl+Alt+C")!();
     expect(ran).toEqual([{ type: "openChat" }]);
     m.deactivate();
     expect(live.size).toBe(0);

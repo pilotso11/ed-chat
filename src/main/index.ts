@@ -66,7 +66,7 @@ const log = new Logger(path.join(logDir, "overlay.log"));
 const settingsFile = path.join(dataDir, "settings.json");
 
 const ED_MCP_MISSING =
-  "⚠ ed-mcp not connected. Run: claude mcp add ed-mcp -s user -- npx -y ed-mcp";
+  "⚠ ed-mcp not connected. Run: claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp";
 const ED_MCP_FAILED = "⚠ ed-mcp failed to start; run claude mcp list";
 const ED_MCP_AUTH = "⚠ ed-mcp needs authentication; run claude mcp list";
 const FULLSCREEN = "⚠ Elite is in fullscreen; switch to Borderless to see the overlay";
