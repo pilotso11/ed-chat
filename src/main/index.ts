@@ -239,7 +239,7 @@ async function main(): Promise<void> {
       register: (acc, cb) => globalShortcut.register(acc, cb),
       unregister: (acc) => globalShortcut.unregister(acc),
     },
-    (a) => runHotkey(a).catch((err) => log.log("warn", `hotkey ${a.type}: ${message(err)}`)),
+    (a) => runAction(a),
   );
   const reportHotkeys = (failed: string[]) =>
     dispatch({
@@ -445,6 +445,11 @@ async function main(): Promise<void> {
     flash("copy", `📋 copied ${chip.text}`, 2_000);
   }
 
+  // Hotkeys and the tray share one error path: a failed action is logged, never fatal.
+  function runAction(a: HotkeyAction): void {
+    runHotkey(a).catch((err) => log.log("warn", `action ${a.type}: ${message(err)}`));
+  }
+
   async function runHotkey(a: HotkeyAction): Promise<void> {
     switch (a.type) {
       case "openChat":
@@ -581,7 +586,7 @@ async function main(): Promise<void> {
   tray.setToolTip("ED Chat");
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "Show/Hide overlay", click: () => void runHotkey({ type: "toggleOverlay" }) },
+      { label: "Show/Hide overlay", click: () => runAction({ type: "toggleOverlay" }) },
       { label: "Open settings", click: () => openPath(settingsFile) },
       { label: "Open log folder", click: () => openPath(logDir) },
       { type: "separator" },
