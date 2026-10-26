@@ -47,6 +47,22 @@ export class SettingsStore {
     }
   }
 
+  // A settings.json from before the schema link, or a hand-made one, gets the link too, so
+  // editors complete it. Only the first line changes; the rest keeps the player's layout.
+  // A failure is ignored: the link only helps editing.
+  private async addSchemaLink(text: string): Promise<void> {
+    const raw: unknown = JSON.parse(text);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || "$schema" in raw) return;
+    const empty = Object.keys(raw).length === 0;
+    const linked = text.replace("{", `{\n  "$schema": "./${SCHEMA_FILE}"${empty ? "" : ","}`);
+    try {
+      await writeFile(this.file, linked);
+      this.lastText = linked;
+    } catch {
+      // Read-only file: keep it as it is.
+    }
+  }
+
   /** settings.json could not be read or parsed; a reference-file error does not count. */
   get broken(): boolean {
     return this.lastError !== null || this.lastText === null;
@@ -91,6 +107,7 @@ export class SettingsStore {
       return { changed: false, error: this.lastError };
     }
     this.lastError = null;
+    if (this.firstLoad) await this.addSchemaLink(text);
     const changed = this.firstLoad || JSON.stringify(r.settings) !== JSON.stringify(this.current);
     this.firstLoad = false;
     this.current = r.settings;
