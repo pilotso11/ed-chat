@@ -21,6 +21,14 @@ describe("chordFromKey", () => {
     expect(chordFromKey(press({ key: "+", code: "Equal" }))).toBe("Ctrl+Alt+Plus");
   });
 
+  it("takes a non-Latin letter key from its position, as Windows matches it", () => {
+    // Russian: the X key types ч; Greek: the X key types χ.
+    expect(chordFromKey(press({ key: "ч", code: "KeyX" }))).toBe("Ctrl+Alt+X");
+    expect(chordFromKey(press({ key: "Χ", code: "KeyX", shift: true }))).toBe("Ctrl+Alt+Shift+X");
+    // A Latin layout's own punctuation key keeps its character.
+    expect(chordFromKey(press({ key: "ù", code: "Quote" }))).toBe("Ctrl+Alt+Ù");
+  });
+
   it("takes a digit from its position, as Windows matches digit hotkeys", () => {
     // AZERTY: the 1 key types "&" without Shift.
     expect(chordFromKey(press({ key: "&", code: "Digit1" }))).toBe("Ctrl+Alt+1");
