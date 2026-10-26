@@ -29,6 +29,12 @@ export class SettingsStore {
     return this.current;
   }
 
+  // A reference copy of every default, rewritten each start so it matches this version.
+  private async writeDefaultsReference(): Promise<void> {
+    const ref = path.join(path.dirname(this.file), "settings.defaults.json");
+    await writeFile(ref, defaultSettingsText()).catch(() => {});
+  }
+
   async load(): Promise<LoadResult> {
     let text: string;
     try {
@@ -37,10 +43,12 @@ export class SettingsStore {
       const code = (err as NodeJS.ErrnoException).code;
       if (code !== "ENOENT")
         return { changed: false, error: `⚠ settings.json: ${code ?? String(err)}` };
-      text = defaultSettingsText();
+      // Only overrides go in settings.json, so a later release's defaults still apply.
+      text = "{}\n";
       await mkdir(path.dirname(this.file), { recursive: true });
       await writeFile(this.file, text);
     }
+    if (this.firstLoad) await this.writeDefaultsReference();
     // Some Windows editors save UTF-8 with a BOM, which JSON.parse rejects.
     if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
     if (text === this.lastText) return { changed: false, error: this.lastError };

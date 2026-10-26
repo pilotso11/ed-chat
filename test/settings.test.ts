@@ -6,6 +6,8 @@ describe("parseSettings", () => {
     const r = parseSettings("{}");
     expect(r).toEqual({ ok: true, settings: DEFAULT_SETTINGS });
     expect(DEFAULT_SETTINGS.hotkeys.openChat).toBe("Ctrl+Alt+C");
+    expect(DEFAULT_SETTINGS.hotkeys.toggleOverlay).toBe("Ctrl+Alt+O");
+    expect(DEFAULT_SETTINGS.hotkeys.cancel).toBe("Ctrl+Alt+X");
     expect(DEFAULT_SETTINGS.hotkeys.scope).toBe("game");
     expect(DEFAULT_SETTINGS.strip).toEqual({ lines: 2, keepChips: true, startAsIcon: false });
     expect(DEFAULT_SETTINGS.hotkeys.toggleIcon).toBe("`");

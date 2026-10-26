@@ -47,15 +47,30 @@ export function bindings(h: Settings["hotkeys"]): Binding[] {
   ];
 }
 
-const MODIFIER =
-  /(^|\+)(Ctrl|Control|Alt|Shift|Cmd|Command|CmdOrCtrl|CommandOrControl|Super|Meta|Option|AltGr)\+/i;
+const CTRL = new Set(["ctrl", "control", "cmdorctrl", "commandorcontrol"]);
 
 /**
- * The bindings to register. While the overlay has focus, keys without a modifier are left
- * out: a global shortcut swallows the key, so it could not be typed in the chat input.
+ * True when the accelerator is a key the player could type: a character alone or with Shift,
+ * or with Ctrl+Alt, which is how Windows reports AltGr.
+ */
+function typesText(accelerator: string): boolean {
+  const parts = accelerator.split("+");
+  const key = parts.at(-1) ?? "";
+  if (key.length !== 1) return false;
+  const mods = parts
+    .slice(0, -1)
+    .map((m) => m.toLowerCase())
+    .filter((m) => m !== "shift");
+  if (mods.length === 0) return true;
+  return mods.length === 2 && mods.includes("alt") && mods.some((m) => CTRL.has(m));
+}
+
+/**
+ * The bindings to register. While the overlay has focus, keys that type text are left out:
+ * a global shortcut swallows the key, so it could not be typed in the chat input.
  */
 export function activeBindings(all: Binding[], overlayFocused: boolean): Binding[] {
-  return overlayFocused ? all.filter((b) => MODIFIER.test(b.accelerator)) : all;
+  return overlayFocused ? all.filter((b) => !typesText(b.accelerator)) : all;
 }
 
 export interface Registrar {

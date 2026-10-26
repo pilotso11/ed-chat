@@ -72,7 +72,14 @@ ed-mcp tools, add `"mcp__ed-mcp__*"` to `permissions.allow` in
 
 ## Settings
 
-`%APPDATA%\ed-chat\settings.json` is written with the defaults on first run.
+`%APPDATA%\ed-chat\settings.json` holds only the settings you change. It starts
+as `{}`; add a key to override its default, for example
+`{ "hotkeys": { "openChat": "Ctrl+Alt+Space" } }`. Every default is listed in
+`settings.defaults.json` next to it, which is rewritten at each start; do not
+edit that one. Version 0.1.0 wrote every default into `settings.json`, so the
+0.1.0 hotkeys stay in effect there: delete the keys you did not change, or the
+whole file, to get the current defaults.
+
 Changes apply when you save the file. The file is plain JSON. Settings for
 `claude` apply after `/new`; the overlay shows `ⓘ claude settings apply after /new`.
 

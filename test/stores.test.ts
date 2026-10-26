@@ -15,11 +15,15 @@ import {
 const tmp = () => mkdtemp(path.join(os.tmpdir(), "ed-chat-"));
 
 describe("SettingsStore", () => {
-  it("writes defaults on first run", async () => {
+  // settings.json holds only the player's overrides, so new defaults reach existing installs.
+  it("starts with empty overrides and writes the defaults as a reference", async () => {
     const file = path.join(await tmp(), "sub", "settings.json");
     const s = new SettingsStore(file);
     expect(await s.load()).toEqual({ changed: true, error: null });
-    expect(await readFile(file, "utf8")).toBe(defaultSettingsText());
+    expect(await readFile(file, "utf8")).toBe("{}\n");
+    expect(await readFile(path.join(path.dirname(file), "settings.defaults.json"), "utf8")).toBe(
+      defaultSettingsText(),
+    );
     expect(s.settings).toEqual(DEFAULT_SETTINGS);
     expect(await s.load()).toEqual({ changed: false, error: null });
   });

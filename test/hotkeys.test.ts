@@ -26,13 +26,17 @@ function fakeRegistrar(taken: string[] = []) {
 
 // A global shortcut eats the key, so a bare key would be untypeable in the chat input.
 describe("activeBindings", () => {
-  it("drops keys without a modifier while the overlay has focus", () => {
+  // Windows sends AltGr as Ctrl+Alt, so Ctrl+Alt+<character> would also eat AltGr letters.
+  it("drops bare keys and Ctrl+Alt+character while the overlay has focus", () => {
     const all = bindings(DEFAULT_SETTINGS.hotkeys);
     expect(activeBindings(all, false)).toHaveLength(all.length);
-    const focused = activeBindings(all, true);
-    expect(focused.some((b) => b.name === "toggleIcon")).toBe(false);
-    expect(focused.some((b) => b.name === "openChat")).toBe(true);
-    expect(focused).toHaveLength(all.length - 1);
+    const names = activeBindings(all, true).map((b) => b.name);
+    for (const gone of ["toggleIcon", "openChat", "toggleOverlay", "cancel", "nextDisplay"]) {
+      expect(names).not.toContain(gone);
+    }
+    for (const kept of ["moveLeft", "moveUp", "approve", "deny", "showHistory", "copyChip1"]) {
+      expect(names).toContain(kept);
+    }
   });
 });
 
