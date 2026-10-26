@@ -3,7 +3,7 @@
 A small Claude chat window on top of Elite Dangerous. Press a hotkey, ask a
 question, press Enter, and keep flying. The reply shows in a corner of the
 screen. Star system and station names in the reply become numbered chips;
-Ctrl+Shift+1…9 copies one, ready to paste into the galaxy map search.
+Ctrl+Shift+1…9 or a click copies one, ready to paste into the galaxy map search.
 
 Windows 10 and 11 only.
 
@@ -31,7 +31,7 @@ Select **More info → Run anyway**. Releases are not public yet.
 | Key | Action |
 | --- | --- |
 | Ctrl+Alt+C | Open the chat. Enter sends and returns to the game. Esc closes. |
-| Ctrl+Shift+1…9 | Copy chip 1…9 |
+| Ctrl+Shift+1…9 | Copy chip 1…9. A click on a chip also copies it. |
 | Ctrl+Shift+Y / N | Allow / deny a tool that Claude asks to run |
 | Ctrl+Alt+X | Stop the current reply |
 | Ctrl+Shift+H | Show or hide this session's history |
@@ -47,8 +47,8 @@ Right-click it to show or hide the overlay, open `settings.json`, open the log
 folder, or quit.
 
 In icon mode a reply, an approval or the chat expands the overlay. It stays
-expanded until you press ` again. The icon shows a dot when the last reply
-has chips or a notice is waiting.
+expanded until you press ` again. A click on the icon also expands it. The icon
+shows a dot when the last reply has chips or a notice is waiting.
 
 Hotkeys work only while the game or the overlay is in front, so they do not
 take keys from other apps. While the ship is in danger, the chat does not open.

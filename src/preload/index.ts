@@ -11,6 +11,8 @@ const api: OverlayApi = {
   copyChip: (n) => ipcRenderer.send(IPC.copyChip, n),
   reportHeight: (h) => ipcRenderer.send(IPC.height, h),
   chord: (accelerator) => ipcRenderer.send(IPC.chord, accelerator),
+  hover: (over) => ipcRenderer.send(IPC.hover, over),
+  expand: () => ipcRenderer.send(IPC.expand),
 };
 
 contextBridge.exposeInMainWorld("overlay", api);

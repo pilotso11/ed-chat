@@ -61,7 +61,15 @@ import {
 } from "../core/stores.js";
 import { buildView } from "../core/view.js";
 import { IPC } from "../shared/ipc.js";
-import { capLines, chipArg, describeUnknown, heightArg, hotkeysWanted, textArg } from "./guards.js";
+import {
+  boolArg,
+  capLines,
+  chipArg,
+  describeUnknown,
+  heightArg,
+  hotkeysWanted,
+  textArg,
+} from "./guards.js";
 import { loadWin32 } from "./win32.js";
 import { applyWindow, createOverlayWindow } from "./window.js";
 
@@ -511,6 +519,15 @@ async function main(): Promise<void> {
     const chord = textArg(v);
     const b = chord === null ? null : chordBinding(bindings(settings.hotkeys), chord);
     if (b) runAction(b.action, "hotkey");
+  });
+  // The open chat takes all clicks already; otherwise only a chip or the icon under the pointer does.
+  ipcMain.on(IPC.hover, (_e, v: unknown) => {
+    const over = boolArg(v);
+    if (over === null || windowProps(state).interactive) return;
+    win.setIgnoreMouseEvents(!over, { forward: true });
+  });
+  ipcMain.on(IPC.expand, () => {
+    if (state.iconMode) dispatch({ type: "toggleIcon" });
   });
   ipcMain.on(IPC.height, (_e, v: unknown) => {
     const h = heightArg(v);

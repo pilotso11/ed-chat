@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_HEIGHT,
+  boolArg,
   capLines,
   chipArg,
   describeUnknown,
@@ -42,6 +43,12 @@ describe("IPC argument guards", () => {
     expect(chipArg(0)).toBeNull();
     expect(chipArg(1.5)).toBeNull();
     expect(chipArg("1")).toBeNull();
+  });
+  it("accepts only booleans as hover flags", () => {
+    expect(boolArg(true)).toBe(true);
+    expect(boolArg(false)).toBe(false);
+    expect(boolArg(1)).toBeNull();
+    expect(boolArg("true")).toBeNull();
   });
   it("rejects bad heights and caps large ones", () => {
     expect(heightArg(120.5)).toBe(120.5);

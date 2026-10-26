@@ -19,6 +19,10 @@ export function chipArg(v: unknown): number | null {
   return typeof v === "number" && Number.isInteger(v) && v >= 1 ? v : null;
 }
 
+export function boolArg(v: unknown): boolean | null {
+  return typeof v === "boolean" ? v : null;
+}
+
 export function heightArg(v: unknown): number | null {
   if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return null;
   return Math.min(v, MAX_HEIGHT);
