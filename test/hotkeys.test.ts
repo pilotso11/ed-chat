@@ -34,10 +34,18 @@ describe("activeBindings", () => {
     const all = bindings(DEFAULT_SETTINGS.hotkeys);
     expect(activeBindings(all, false)).toHaveLength(all.length);
     const names = activeBindings(all, true).map((b) => b.name);
-    for (const gone of ["toggleIcon", "openChat", "toggleOverlay", "cancel", "nextDisplay"]) {
+    for (const gone of ["openChat", "toggleOverlay", "cancel", "nextDisplay"]) {
       expect(names).not.toContain(gone);
     }
-    for (const kept of ["moveLeft", "moveUp", "approve", "deny", "showHistory", "copyChip1"]) {
+    for (const kept of [
+      "toggleIcon",
+      "moveLeft",
+      "moveUp",
+      "approve",
+      "deny",
+      "showHistory",
+      "copyChip1",
+    ]) {
       expect(names).toContain(kept);
     }
   });
@@ -174,7 +182,7 @@ describe("key lists", () => {
   });
 
   it("drops keys without a modifier in always scope, so other apps keep them", () => {
-    const all = bindings(DEFAULT_SETTINGS.hotkeys);
+    const all = bindings(hk({ toggleIcon: "`" }));
     const always = activeBindings(all, false, "always").map((b) => b.accelerator);
     expect(always).not.toContain("`");
     expect(activeBindings(all, false, "game").map((b) => b.accelerator)).toContain("`");
@@ -203,7 +211,7 @@ describe("key lists", () => {
   });
 
   it("marks keys that always scope never registers", () => {
-    const h = SettingsSchema.parse({ hotkeys: { scope: "always" } }).hotkeys;
+    const h = hk({ scope: "always", toggleIcon: "`" });
     const icon = keyRows(h, []).find((r) => r.label === "Icon mode");
     expect(icon?.unused).toEqual(["`"]);
     expect(keyRows(DEFAULT_SETTINGS.hotkeys, []).every((r) => r.unused.length === 0)).toBe(true);

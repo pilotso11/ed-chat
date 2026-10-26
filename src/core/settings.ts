@@ -25,7 +25,7 @@ export const keyList = (k: Keys): string[] => (typeof k === "string" ? [k] : k);
 const HotkeysSchema = z.strictObject({
   scope: z.enum(["game", "always"]).default("game"),
   openChat: keys.default("Ctrl+Alt+C"),
-  toggleIcon: keys.default("`"),
+  toggleIcon: keys.default("Ctrl+Alt+Enter"),
   showMore: keys.default("Ctrl+`"),
   showHistory: keys.default("Ctrl+Shift+H"),
   approve: keys.default("Ctrl+Shift+Y"),

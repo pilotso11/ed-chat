@@ -38,7 +38,7 @@ Select **More info → Run anyway**. Releases are not public yet.
 | Ctrl+Alt+X | Stop the current reply |
 | Ctrl+` | Show the whole last reply, or go back to the short card |
 | Ctrl+Shift+H | Show or hide this session's history |
-| ` (backquote) | Switch between the full overlay and a small icon |
+| Ctrl+Alt+Enter | Switch between the full overlay and a small icon |
 | Ctrl+Alt+Arrows | Move the overlay around the screen edge |
 | Ctrl+Alt+M | Move the overlay to the next monitor |
 
@@ -128,7 +128,7 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 | --- | --- | --- |
 | `hotkeys.*` | see above | An Electron accelerator string, or a list of them for more than one key. `copyChip` must contain `{n}` |
 | `hotkeys.copyChipNumpad` | `false` | Also copy chips with Ctrl+numpad 1…9. Windows changes Shift+numpad keys, so these use Ctrl only |
-| `hotkeys.scope` | `game` | `game`: only while the game or overlay is in front. `always`: everywhere, except keys without a modifier, such as the backquote for icon mode |
+| `hotkeys.scope` | `game` | `game`: only while the game or overlay is in front. `always`: everywhere, except keys without a modifier, such as a bare backquote |
 | `startup.showKeys` | `true` | Show the hotkeys at startup |
 | `strip.lines` | `2` | `1`: status only. `2`: also the first line of the last reply |
 | `strip.keepChips` | `true` | Keep the last reply's chips under the status line |
