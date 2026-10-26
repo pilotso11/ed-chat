@@ -37,14 +37,18 @@ export class SettingsStore {
   // A failure is reported, not thrown: the overlay works without them.
   private async writeDefaultsReference(): Promise<string | null> {
     const dir = path.dirname(this.file);
-    try {
-      await writeFile(path.join(dir, SCHEMA_FILE), settingsSchemaText());
-      await writeFile(path.join(dir, DEFAULTS_FILE), defaultSettingsText());
-      return null;
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      return `⚠ settings.defaults.json: ${code ?? String(err)}`;
+    for (const [name, text] of [
+      [SCHEMA_FILE, settingsSchemaText()],
+      [DEFAULTS_FILE, defaultSettingsText()],
+    ] as const) {
+      try {
+        await writeFile(path.join(dir, name), text);
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        return `⚠ ${name}: ${code ?? String(err)}`;
+      }
     }
+    return null;
   }
 
   // A settings.json from before the schema link, or a hand-made one, gets the link too, so

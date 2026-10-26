@@ -254,6 +254,12 @@ describe("windowProps", () => {
     const req = { id: "r", toolName: "Bash", summary: "", shell: false, deadline: 0 };
     expect(windowProps(run([{ type: "approval", request: req }], hidden)).show).toBe(true);
   });
+
+  it("shows the hotkey list while minimized to the tray", () => {
+    const hidden = run([{ type: "toggleVisible" }]);
+    expect(windowProps(run([{ type: "keys", rows: [] }], hidden)).show).toBe(true);
+    expect(windowProps(run([{ type: "keys", rows: null }], hidden)).show).toBe(false);
+  });
 });
 
 describe("canOpenChat", () => {

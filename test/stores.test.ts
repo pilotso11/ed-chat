@@ -89,6 +89,27 @@ describe("SettingsStore", () => {
     expect(await readFile(own, "utf8")).toBe('{"$schema":"x.json"}');
   });
 
+  it("names the reference file that could not be written", async () => {
+    const dir = await tmp();
+    await writeFile(path.join(dir, "settings.json"), "{}");
+    await mkdir(path.join(dir, "settings.schema.json"));
+    const r = await new SettingsStore(path.join(dir, "settings.json")).load();
+    expect(r.error).toMatch(/^⚠ settings.schema.json: /);
+  });
+
+  it("sets one value and keeps the rest of the file", async () => {
+    const file = path.join(await tmp(), "settings.json");
+    await writeFile(file, '{ "$schema": "./settings.schema.json", "card": { "maxLines": 5 } }');
+    const s = new SettingsStore(file);
+    await s.load();
+    await s.set("claude", "permissionMode", "default");
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({
+      $schema: "./settings.schema.json",
+      card: { maxLines: 5 },
+      claude: { permissionMode: "default" },
+    });
+  });
+
   it("writes the schema next to settings.json", async () => {
     const dir = await tmp();
     await new SettingsStore(path.join(dir, "settings.json")).load();

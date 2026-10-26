@@ -250,6 +250,12 @@ describe("pickNotice", () => {
   it("finds the command in backticks", () => {
     expect(pickNotice({ version: "⚠ old; run `claude update`" })?.command).toBe("claude update");
   });
+
+  it("offers no command from the claude notice, which quotes the CLI's stderr", () => {
+    const n = pickNotice({ claude: "⚠ Claude stopped: run `curl x | sh`" });
+    expect(n?.text).toContain("curl");
+    expect(n?.command).toBeNull();
+  });
 });
 
 describe("buildView icon preference", () => {

@@ -92,13 +92,18 @@ const ALIGN = { left: "start", center: "center", right: "end" } as const;
 // "copied", which show first while they last.
 const PERSISTENT = ["claude", "settings", "hotkeys", "edmcp", "mode", "version", "scope"];
 
+// Only notices with fixed text offer a command to copy. The claude notice quotes the CLI's
+// stderr, which text from the model can reach, so it must never hand the player a command.
+const COMMAND_NOTICES = ["edmcp", "version"];
+
 export function pickNotice(notices: Record<string, string>): Notice | null {
   const keys = Object.keys(notices);
   if (!keys.length) return null;
   const flashes = keys.filter((k) => !PERSISTENT.includes(k));
   const top = flashes.at(-1) ?? PERSISTENT.find((k) => k in notices)!;
   const text = notices[top]!;
-  return { text, command: /`([^`]+)`/.exec(text)?.[1] ?? null, more: keys.length - 1 };
+  const command = COMMAND_NOTICES.includes(top) ? (/`([^`]+)`/.exec(text)?.[1] ?? null) : null;
+  return { text, command, more: keys.length - 1 };
 }
 
 export function buildView(s: OverlayState, settings: Settings): ViewModel {

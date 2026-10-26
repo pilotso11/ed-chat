@@ -209,7 +209,8 @@ export interface WindowProps {
 
 export function windowProps(s: OverlayState): WindowProps {
   return {
-    show: s.visible || s.chatOpen || s.approvals.length > 0,
+    // Show hotkeys works while minimized to the tray, when the strip is gone.
+    show: s.visible || s.chatOpen || s.approvals.length > 0 || s.keys !== null,
     interactive: s.chatOpen,
   };
 }

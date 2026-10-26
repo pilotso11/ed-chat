@@ -429,11 +429,18 @@ async function main(): Promise<void> {
       });
     }
   }
-  await askPermissionMode();
-
-  const cmd = claudeCommand(settings);
-  if (cmd) startSession(cmd);
-  else dispatch({ type: "notice", key: "claude", text: noClaude() });
+  // Runs after the tray exists: the question can open behind a fullscreen game, and the tray is
+  // how the player quits. Settings reloads start no session before the answer.
+  let claudeStarted = false;
+  async function startClaude(): Promise<void> {
+    await askPermissionMode();
+    claudeStarted = true;
+    const cmd = claudeCommand(settings);
+    log.log("info", `started; claude ${cmd ? cmd.command : "not found"}`);
+    if (session) return;
+    if (cmd) startSession(cmd);
+    else dispatch({ type: "notice", key: "claude", text: noClaude() });
+  }
 
   function onBackend(e: BackendEvent): void {
     dispatch({ type: "backend", event: e });
@@ -729,7 +736,7 @@ async function main(): Promise<void> {
       if (c && session) {
         session.configure(c);
         flash("claudeSettings", "ⓘ claude settings apply after /new", 6_000);
-      } else if (c) startSession(c);
+      } else if (c && claudeStarted) startSession(c);
     }
     if (journalDir(old) !== journalDir(settings)) {
       status.stop();
@@ -839,7 +846,7 @@ async function main(): Promise<void> {
   });
   focus?.start();
   render();
-  log.log("info", `started; claude ${cmd ? cmd.command : "not found"}`);
+  startClaude().catch((err) => log.log("warn", `claude start: ${message(err)}`));
   // After the first foreground check, so the list shows which keys other apps hold.
   if (settings.startup.showKeys) setTimeout(showKeys, 1_000);
 

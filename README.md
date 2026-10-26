@@ -128,7 +128,7 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 | --- | --- | --- |
 | `hotkeys.*` | see above | An Electron accelerator string, or a list of them for more than one key. `copyChip` must contain `{n}` |
 | `hotkeys.copyChipNumpad` | `false` | Also copy chips with Ctrl+numpad 1…9. Windows changes Shift+numpad keys, so these use Ctrl only |
-| `hotkeys.scope` | `game` | `game`: only while the game or overlay is in front. `always`: everywhere, except keys without a modifier such as ` |
+| `hotkeys.scope` | `game` | `game`: only while the game or overlay is in front. `always`: everywhere, except keys without a modifier, such as the backquote for icon mode |
 | `startup.showKeys` | `true` | Show the hotkeys at startup |
 | `strip.lines` | `2` | `1`: status only. `2`: also the first line of the last reply |
 | `strip.keepChips` | `true` | Keep the last reply's chips under the status line |
