@@ -227,3 +227,20 @@ export function canOpenChat(s: OverlayState, blockWhenInDanger: boolean): boolea
 export function currentChips(s: OverlayState): Chip[] {
   return s.session === "thinking" ? parseChips(s.reply).chips : s.chips;
 }
+
+export const ANSWER_GUARD_MS = 750;
+
+/**
+ * Whether an answer to approval `id` counts. An allow that comes within ANSWER_GUARD_MS of the
+ * card appearing is ignored: the key was on its way before the player could read the card.
+ * Deny always counts.
+ */
+export function answerAllowed(
+  answer: "approve" | "deny" | "alwaysAllow",
+  id: string,
+  shown: { id: string; at: number } | null,
+  now: number,
+): boolean {
+  if (answer === "deny") return true;
+  return !(shown?.id === id && now - shown.at < ANSWER_GUARD_MS);
+}

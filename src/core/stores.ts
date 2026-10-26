@@ -47,6 +47,11 @@ export class SettingsStore {
     }
   }
 
+  /** settings.json could not be read or parsed; a reference-file error does not count. */
+  get broken(): boolean {
+    return this.lastError !== null || this.lastText === null;
+  }
+
   /** The file as last read, without a BOM. */
   get text(): string {
     return this.lastText ?? "";

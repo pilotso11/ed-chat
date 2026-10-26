@@ -192,6 +192,8 @@ export interface KeyRow {
   label: string;
   keys: string;
   failed: string[];
+  /** Keys that "always" scope never registers, because they have no modifier. */
+  unused: string[];
 }
 
 const LABELS: [keyof Settings["hotkeys"], string][] = [
@@ -208,17 +210,33 @@ const LABELS: [keyof Settings["hotkeys"], string][] = [
 /** The hotkey list for the keys card; failed holds the keys another app has taken. */
 export function keyRows(h: Settings["hotkeys"], failed: string[]): KeyRow[] {
   const taken = (ks: string[]) => ks.filter((k) => failed.includes(k));
+  const unused = (ks: string[]) => (h.scope === "always" ? ks.filter((k) => !hasModifier(k)) : []);
   const rows: KeyRow[] = LABELS.map(([name, label]) => {
     const ks = keyList(h[name] as Keys);
-    return { label, keys: ks.join(" / "), failed: taken(ks) };
+    return { label, keys: ks.join(" / "), failed: taken(ks), unused: unused(ks) };
   });
   const chipKeys = chipPatterns(h).flatMap((p) =>
     Array.from({ length: 9 }, (_, i) => p.replace("{n}", String(i + 1))),
   );
-  rows.splice(1, 0, { label: "Copy chip", keys: chipKeyLabel(h), failed: taken(chipKeys) });
+  rows.splice(1, 0, {
+    label: "Copy chip",
+    keys: chipKeyLabel(h),
+    failed: taken(chipKeys),
+    unused: unused(chipKeys),
+  });
   const arrows = [h.moveUp, h.moveDown, h.moveLeft, h.moveRight].flatMap(keyList);
-  rows.push({ label: "Move overlay", keys: arrowLabel(arrows), failed: taken(arrows) });
+  rows.push({
+    label: "Move overlay",
+    keys: arrowLabel(arrows),
+    failed: taken(arrows),
+    unused: unused(arrows),
+  });
   const next = keyList(h.nextDisplay);
-  rows.push({ label: "Next monitor", keys: next.join(" / "), failed: taken(next) });
+  rows.push({
+    label: "Next monitor",
+    keys: next.join(" / "),
+    failed: taken(next),
+    unused: unused(next),
+  });
   return rows;
 }

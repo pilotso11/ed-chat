@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  ANSWER_GUARD_MS,
   INITIAL_STATE,
+  answerAllowed,
   canOpenChat,
   currentApproval,
   currentChips,
@@ -260,5 +262,23 @@ describe("canOpenChat", () => {
     expect(canOpenChat(danger, true)).toBe(false);
     expect(canOpenChat(danger, false)).toBe(true);
     expect(canOpenChat(INITIAL_STATE, true)).toBe(true);
+  });
+});
+
+describe("answerAllowed", () => {
+  const shown = { id: "r", at: 1_000 };
+  it("ignores an allow that comes before the card can be read", () => {
+    expect(answerAllowed("approve", "r", shown, 1_000 + ANSWER_GUARD_MS - 1)).toBe(false);
+    expect(answerAllowed("alwaysAllow", "r", shown, 1_000)).toBe(false);
+    expect(answerAllowed("approve", "r", shown, 1_000 + ANSWER_GUARD_MS)).toBe(true);
+  });
+
+  it("always takes a deny", () => {
+    expect(answerAllowed("deny", "r", shown, 1_000)).toBe(true);
+  });
+
+  it("does not hold back an answer to a request that is not the one just shown", () => {
+    expect(answerAllowed("approve", "other", shown, 1_000)).toBe(true);
+    expect(answerAllowed("approve", "r", null, 1_000)).toBe(true);
   });
 });

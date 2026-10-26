@@ -182,16 +182,30 @@ describe("key lists", () => {
 
   it("lists the keys for the keys card and marks the taken ones", () => {
     const rows = keyRows(DEFAULT_SETTINGS.hotkeys, ["Ctrl+Alt+C", "Ctrl+Shift+3", "Ctrl+Alt+Up"]);
-    expect(rows[0]).toEqual({ label: "Open chat", keys: "Ctrl+Alt+C", failed: ["Ctrl+Alt+C"] });
+    expect(rows[0]).toEqual({
+      label: "Open chat",
+      keys: "Ctrl+Alt+C",
+      failed: ["Ctrl+Alt+C"],
+      unused: [],
+    });
     expect(rows[1]).toEqual({
       label: "Copy chip",
       keys: "Ctrl+Shift+1–9",
       failed: ["Ctrl+Shift+3"],
+      unused: [],
     });
     expect(rows.find((r) => r.label === "Move overlay")).toEqual({
       label: "Move overlay",
       keys: "Ctrl+Alt+Arrows",
       failed: ["Ctrl+Alt+Up"],
+      unused: [],
     });
+  });
+
+  it("marks keys that always scope never registers", () => {
+    const h = SettingsSchema.parse({ hotkeys: { scope: "always" } }).hotkeys;
+    const icon = keyRows(h, []).find((r) => r.label === "Icon mode");
+    expect(icon?.unused).toEqual(["`"]);
+    expect(keyRows(DEFAULT_SETTINGS.hotkeys, []).every((r) => r.unused.length === 0)).toBe(true);
   });
 });

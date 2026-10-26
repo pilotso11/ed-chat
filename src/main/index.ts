@@ -30,6 +30,7 @@ import {
 import { ClaudeSession, type BackendEvent } from "../core/claudeSession.js";
 import {
   INITIAL_STATE,
+  answerAllowed,
   canOpenChat,
   currentApproval,
   currentChips,
@@ -169,8 +170,12 @@ async function main(): Promise<void> {
   }
 
   // The card closes after a reply, and after a turn that ends without one.
+  // The pointer is on the card. Kept even while a reply streams, so the fade that the result
+  // schedules waits until the pointer leaves.
+  let cardHeld = false;
   function scheduleFade(): void {
     clearTimeout(fadeTimer);
+    if (cardHeld) return;
     fadeTimer = setTimeout(
       () => dispatch({ type: "cardTimeout" }),
       settings.card.fadeSeconds * 1000,
@@ -393,7 +398,7 @@ async function main(): Promise<void> {
   // Auto mode runs most tools without asking, so the player chooses once, before Claude starts.
   async function askPermissionMode(): Promise<void> {
     // A broken settings.json shows its own error; the question waits for a good file.
-    if (first.error || setsKey(settingsStore.text, "claude", "permissionMode")) return;
+    if (settingsStore.broken || setsKey(settingsStore.text, "claude", "permissionMode")) return;
     const r = await dialog.showMessageBox({
       type: "question",
       title: "ED Chat",
@@ -414,7 +419,14 @@ async function main(): Promise<void> {
       await settingsStore.load();
       settings = settingsStore.settings;
     } catch (err) {
+      // The choice still holds for this run; the player sees that it was not saved.
       log.log("warn", `settings.json: ${message(err)}`);
+      settings = { ...settings, claude: { ...settings.claude, permissionMode: mode } };
+      dispatch({
+        type: "notice",
+        key: "settings",
+        text: `⚠ settings.json: could not save ${mode} mode`,
+      });
     }
   }
   await askPermissionMode();
@@ -497,13 +509,10 @@ async function main(): Promise<void> {
     dispatch({ type: "newSession" });
   }
 
-  // A key that was on its way when the card appeared must not allow something unread.
-  const ANSWER_GUARD_MS = 750;
   function answerApproval(id: string, a: "approve" | "deny" | "alwaysAllow"): void {
     const req = state.approvals.find((r) => r.id === id);
     if (!req) return;
-    const early = shownApproval?.id === id && Date.now() - shownApproval.at < ANSWER_GUARD_MS;
-    if (a !== "deny" && early) return;
+    if (!answerAllowed(a, id, shownApproval, Date.now())) return;
     approval.answer(id, a === "deny" ? "deny" : "allow");
     if (a === "alwaysAllow") {
       approval.allowTool(req.toolName);
@@ -643,9 +652,10 @@ async function main(): Promise<void> {
   // The card does not fade while the player reads it with the pointer on it.
   ipcMain.on(IPC.holdCard, (_e, v: unknown) => {
     const hold = boolArg(v);
-    if (hold === null || !state.cardOpen || state.session === "thinking") return;
+    if (hold === null) return;
+    cardHeld = hold;
     if (hold) clearTimeout(fadeTimer);
-    else scheduleFade();
+    else if (state.cardOpen && state.session !== "thinking") scheduleFade();
   });
   ipcMain.on(IPC.copyNotice, () => {
     const command = pickNotice(state.notices)?.command;
