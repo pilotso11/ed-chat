@@ -61,7 +61,7 @@ import {
   savePosition,
   type SavedState,
 } from "../core/stores.js";
-import { buildView, pickNotice, shortTool } from "../core/view.js";
+import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
 import { IPC } from "../shared/ipc.js";
 import {
   answerArg,
@@ -780,8 +780,8 @@ async function main(): Promise<void> {
 
   function noticeMenu(): Menu {
     return Menu.buildFromTemplate(
-      Object.values(state.notices).map((text) => {
-        const command = /`([^`]+)`/.exec(text)?.[1];
+      Object.entries(state.notices).map(([key, text]) => {
+        const command = noticeCommand(key, text);
         return {
           label: label(command ? `${text.replace(/`/g, "")}  (click to copy)` : text),
           click: () => {

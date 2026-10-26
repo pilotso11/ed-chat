@@ -96,13 +96,18 @@ const PERSISTENT = ["claude", "settings", "hotkeys", "edmcp", "mode", "version",
 // stderr, which text from the model can reach, so it must never hand the player a command.
 const COMMAND_NOTICES = ["edmcp", "version"];
 
+/** The command a click on the notice copies, or null. */
+export function noticeCommand(key: string, text: string): string | null {
+  return COMMAND_NOTICES.includes(key) ? (/`([^`]+)`/.exec(text)?.[1] ?? null) : null;
+}
+
 export function pickNotice(notices: Record<string, string>): Notice | null {
   const keys = Object.keys(notices);
   if (!keys.length) return null;
   const flashes = keys.filter((k) => !PERSISTENT.includes(k));
   const top = flashes.at(-1) ?? PERSISTENT.find((k) => k in notices)!;
   const text = notices[top]!;
-  const command = COMMAND_NOTICES.includes(top) ? (/`([^`]+)`/.exec(text)?.[1] ?? null) : null;
+  const command = noticeCommand(top, text);
   return { text, command, more: keys.length - 1 };
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { INITIAL_STATE, reduce, type Action, type OverlayState } from "../src/core/controller.js";
 import { DEFAULT_SETTINGS, SettingsSchema } from "../src/core/settings.js";
-import { buildView, pickNotice, shortTool, statusText } from "../src/core/view.js";
+import { buildView, noticeCommand, pickNotice, shortTool, statusText } from "../src/core/view.js";
 
 const run = (actions: Action[]) => actions.reduce(reduce, INITIAL_STATE);
 const ready: Action = {
@@ -255,6 +255,8 @@ describe("pickNotice", () => {
     const n = pickNotice({ claude: "⚠ Claude stopped: run `curl x | sh`" });
     expect(n?.text).toContain("curl");
     expect(n?.command).toBeNull();
+    expect(noticeCommand("claude", "run `curl x | sh`")).toBeNull();
+    expect(noticeCommand("edmcp", "run `claude mcp list`")).toBe("claude mcp list");
   });
 });
 
