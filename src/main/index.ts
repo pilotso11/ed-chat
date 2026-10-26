@@ -41,7 +41,13 @@ import {
   type WindowProps,
 } from "../core/controller.js";
 import { FocusManager, type Foreground } from "../core/focus.js";
-import { HotkeyManager, activeBindings, bindings, type HotkeyAction } from "../core/hotkeys.js";
+import {
+  HotkeyManager,
+  activeBindings,
+  bindings,
+  chordBinding,
+  type HotkeyAction,
+} from "../core/hotkeys.js";
 import { Logger } from "../core/logger.js";
 import type { Position, Settings } from "../core/settings.js";
 import { StatusWatcher, fullscreenMode } from "../core/status.js";
@@ -500,6 +506,11 @@ async function main(): Promise<void> {
   ipcMain.on(IPC.copyChip, (_e, v: unknown) => {
     const n = chipArg(v);
     if (n !== null) copyChip(n);
+  });
+  ipcMain.on(IPC.chord, (_e, v: unknown) => {
+    const chord = textArg(v);
+    const b = chord === null ? null : chordBinding(bindings(settings.hotkeys), chord);
+    if (b) runAction(b.action, "hotkey");
   });
   ipcMain.on(IPC.height, (_e, v: unknown) => {
     const h = heightArg(v);

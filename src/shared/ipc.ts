@@ -6,6 +6,7 @@ export const IPC = {
   closeChat: "overlay:closeChat",
   copyChip: "overlay:copyChip",
   height: "overlay:height",
+  chord: "overlay:chord",
 } as const;
 
 export interface OverlayApi {
@@ -15,4 +16,6 @@ export interface OverlayApi {
   closeChat(): void;
   copyChip(n: number): void;
   reportHeight(h: number): void;
+  /** A Ctrl+Alt chord pressed in the chat input, such as "Ctrl+Alt+X". */
+  chord(accelerator: string): void;
 }

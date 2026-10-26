@@ -3,6 +3,7 @@ import {
   HotkeyManager,
   activeBindings,
   bindings,
+  chordBinding,
   type HotkeyAction,
   type Registrar,
 } from "../src/core/hotkeys.js";
@@ -39,8 +40,13 @@ describe("activeBindings", () => {
     }
   });
 
-  it("drops named editing keys, numpad keys and AltGr+character while the overlay has focus", () => {
+  it("drops editing, caret and numpad keys, Alt+numpad and AltGr+character while the overlay has focus", () => {
     const keys = [
+      "Home",
+      "Left",
+      "Shift+Home",
+      "PageUp",
+      "Alt+num5",
       "Space",
       "Tab",
       "Backspace",
@@ -50,14 +56,41 @@ describe("activeBindings", () => {
       "Plus",
       "Shift+Plus",
       "F13",
+      "Shift+F2",
       "Ctrl+num1",
+      "Ctrl+Left",
     ];
     const all = keys.map((accelerator) => ({
       name: accelerator,
       accelerator,
       action: { type: "openChat" } as const,
     }));
-    expect(activeBindings(all, true).map((b) => b.accelerator)).toEqual(["F13", "Ctrl+num1"]);
+    expect(activeBindings(all, true).map((b) => b.accelerator)).toEqual([
+      "F13",
+      "Shift+F2",
+      "Ctrl+num1",
+      "Ctrl+Left",
+    ]);
+  });
+});
+
+describe("chordBinding", () => {
+  const all = bindings(DEFAULT_SETTINGS.hotkeys);
+  it("finds a Ctrl+Alt binding that is left out while the chat has focus", () => {
+    expect(chordBinding(all, "Ctrl+Alt+X")?.action).toEqual({ type: "cancel" });
+    expect(chordBinding(all, "Ctrl+Alt+O")?.action).toEqual({ type: "toggleOverlay" });
+  });
+
+  it("matches modifiers in any order and spelling", () => {
+    const own = [
+      { name: "cancel", accelerator: "Alt+Control+X", action: { type: "cancel" } as const },
+    ];
+    expect(chordBinding(own, "Ctrl+Alt+X")?.name).toBe("cancel");
+  });
+
+  it("ignores chords with no binding, and bindings that stay registered", () => {
+    expect(chordBinding(all, "Ctrl+Alt+Q")).toBeNull();
+    expect(chordBinding(all, "Ctrl+Alt+Left")).toBeNull();
   });
 });
 

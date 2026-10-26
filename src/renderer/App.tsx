@@ -42,6 +42,14 @@ function ChatInput({ moving, canSend }: { moving: boolean; canSend: boolean }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => ref.current?.focus(), []);
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ctrl+Alt hotkeys are not registered while the chat has focus, so AltGr can type
+    // letters. A real Ctrl+Alt chord (AltGr sets AltGraph) goes to main instead.
+    const key = /^Key([A-Z])$/.exec(e.code)?.[1] ?? /^Digit(\d)$/.exec(e.code)?.[1];
+    if (e.ctrlKey && e.altKey && !e.getModifierState("AltGraph") && key) {
+      e.preventDefault();
+      window.overlay.chord(`Ctrl+Alt+${e.shiftKey ? "Shift+" : ""}${key}`);
+      return;
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       setText("");

@@ -53,6 +53,10 @@ has chips or a notice is waiting.
 Hotkeys work only while the game or the overlay is in front, so they do not
 take keys from other apps. While the ship is in danger, the chat does not open.
 
+While you type in the chat, the overlay leaves typing keys to the chat input,
+including AltGr letters. Ctrl+Alt hotkeys such as Ctrl+Alt+X still work there:
+use the left Ctrl and Alt keys, because AltGr types the letter.
+
 If the overlay shows `⚠ hotkeys not registered`, another app already uses
 that key. Set a different key in `settings.json`.
 
