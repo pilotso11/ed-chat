@@ -49,6 +49,20 @@ describe("SettingsStore", () => {
     expect(s.settings.card.maxLines).toBe(5);
   });
 
+  it("counts only a bad settings.json as broken, not a failed reference file", async () => {
+    const dir = await tmp();
+    await writeFile(path.join(dir, "settings.json"), "{");
+    const bad = new SettingsStore(path.join(dir, "settings.json"));
+    await bad.load();
+    expect(bad.broken).toBe(true);
+    const dir2 = await tmp();
+    await writeFile(path.join(dir2, "settings.json"), "{}");
+    await mkdir(path.join(dir2, "settings.defaults.json"));
+    const ok = new SettingsStore(path.join(dir2, "settings.json"));
+    expect((await ok.load()).error).not.toBeNull();
+    expect(ok.broken).toBe(false);
+  });
+
   it("writes the schema next to settings.json", async () => {
     const dir = await tmp();
     await new SettingsStore(path.join(dir, "settings.json")).load();
