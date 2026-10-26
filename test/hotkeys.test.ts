@@ -80,7 +80,7 @@ describe("chordBinding", () => {
   const all = bindings(DEFAULT_SETTINGS.hotkeys);
   it("finds a Ctrl+Alt binding that is left out while the chat has focus", () => {
     expect(chordBinding(all, "Ctrl+Alt+X")?.action).toEqual({ type: "cancel" });
-    expect(chordBinding(all, "Ctrl+Alt+O")?.action).toEqual({ type: "toggleOverlay" });
+    expect(chordBinding(all, "Ctrl+Alt+M")?.action).toEqual({ type: "nextDisplay" });
   });
 
   it("matches modifiers in any order and spelling", () => {
