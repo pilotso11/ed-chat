@@ -20,7 +20,10 @@ export function chordFromKey(k: KeyPress): string | null {
   if (!k.ctrl || !k.alt || k.altGraph) return null;
   const digit = /^Digit(\d)$/.exec(k.code)?.[1];
   const latin = /^[a-z]$/i.test(k.key) ? k.key.toUpperCase() : undefined;
-  const position = /^Key([A-Z])$/.exec(k.code)?.[1];
+  // Only for a letter outside A–Z: a Latin layout's punctuation key at a letter position (the
+  // "," key is KeyM on AZERTY) is not that letter to Windows.
+  const nonLatin = /^\p{L}$/u.test(k.key) && !latin;
+  const position = nonLatin ? /^Key([A-Z])$/.exec(k.code)?.[1] : undefined;
   const key =
     digit ??
     latin ??

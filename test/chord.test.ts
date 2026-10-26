@@ -27,6 +27,8 @@ describe("chordFromKey", () => {
     expect(chordFromKey(press({ key: "Χ", code: "KeyX", shift: true }))).toBe("Ctrl+Alt+Shift+X");
     // A Latin layout's own punctuation key keeps its character.
     expect(chordFromKey(press({ key: "ù", code: "Quote" }))).toBe("Ctrl+Alt+Ù");
+    // AZERTY: the "," key sits at KeyM, but Windows does not treat it as M.
+    expect(chordFromKey(press({ key: ",", code: "KeyM" }))).toBe("Ctrl+Alt+,");
   });
 
   it("takes a digit from its position, as Windows matches digit hotkeys", () => {
