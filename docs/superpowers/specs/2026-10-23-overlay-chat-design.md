@@ -52,7 +52,7 @@ One Electron app. The main process does all Windows and CLI work. The renderer
 | Component | Job |
 |---|---|
 | OverlayController | State machine over the modes below. The only code that changes window state (click-through, focusable, size, position). |
-| HotkeyManager | Registers the hotkeys from settings with `globalShortcut`. Registers them only while the game or the overlay is in front, unless `hotkeys.scope` is `always`. While the overlay has focus, keys without a modifier (such as `` ` ``) are left out, so they can be typed in the chat. |
+| HotkeyManager | Registers the hotkeys from settings with `globalShortcut`. Registers them only while the game or the overlay is in front, unless `hotkeys.scope` is `always`. While the overlay has focus, keys that type text are left out, so they can be typed in the chat: a character alone or with Shift (such as `` ` ``), and Ctrl+Alt+character, which is how Windows reports AltGr. |
 | FocusManager | Polls the foreground window every 250 ms. Saves the game window before chat opens and restores it after. Puts the overlay back on top when the game comes to the front. Uses `koffi` for Win32 calls. |
 | ClaudeSession | Owns the CLI child process. Turns stream-json into internal events. The only code that knows the CLI's output format. |
 | ApprovalServer | The overlay's own MCP server with one tool, `approve`. The CLI calls it for permission prompts. |
@@ -198,21 +198,23 @@ the saved position in `state.json` is removed.
 
 ## Settings
 
-File: `%APPDATA%\ed-chat\settings.json`. Written with the defaults on first
-run. Reloaded when it changes. The file is plain JSON; the comments below only
+File: `%APPDATA%\ed-chat\settings.json`. It holds only the player's overrides and
+starts as `{}`, so a later release's new defaults reach existing installs. Every
+default is written to `settings.defaults.json` at each start, as a reference.
+Reloaded when it changes. The file is plain JSON; the comments below only
 explain the keys. Hotkeys use Electron accelerator syntax.
 
 ```jsonc
 {
   "hotkeys": {
     "scope": "game",              // "game": only while the game or overlay is in front; "always"
-    "openChat": "Ctrl+Shift+Space",
-    "toggleOverlay": "Ctrl+Shift+O",
+    "openChat": "Ctrl+Alt+C",
+    "toggleOverlay": "Ctrl+Alt+O",
     "toggleIcon": "`",
     "showHistory": "Ctrl+Shift+H",
     "approve": "Ctrl+Shift+Y",
     "deny": "Ctrl+Shift+N",
-    "cancel": "Ctrl+Shift+X",
+    "cancel": "Ctrl+Alt+X",
     "copyChip": "Ctrl+Shift+{n}", // n = 1..9
     "moveUp": "Ctrl+Alt+Up",
     "moveDown": "Ctrl+Alt+Down",
@@ -285,7 +287,7 @@ plugin. A `pending` server counts as connecting; only absence, `failed` and
 `needs-auth` are decided at `init`. `failed` shows "⚠ ed-mcp failed to start;
 run claude mcp list", and `needs-auth` shows "⚠ ed-mcp needs authentication;
 run claude mcp list". When there is no such server, the status line shows: "⚠ ed-mcp not connected. Run:
-`claude mcp add ed-mcp -s user -- npx -y ed-mcp`". `claude mcp add` uses local
+`claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp`". `claude mcp add` uses local
 scope by default, which applies to one project folder only, so the message
 names `-s user`. Chat works without ed-mcp, but without game tools.
 

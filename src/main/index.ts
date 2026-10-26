@@ -41,7 +41,13 @@ import {
   type WindowProps,
 } from "../core/controller.js";
 import { FocusManager, type Foreground } from "../core/focus.js";
-import { HotkeyManager, activeBindings, bindings, type HotkeyAction } from "../core/hotkeys.js";
+import {
+  HotkeyManager,
+  activeBindings,
+  bindings,
+  chordBinding,
+  type HotkeyAction,
+} from "../core/hotkeys.js";
 import { Logger } from "../core/logger.js";
 import type { Position, Settings } from "../core/settings.js";
 import { StatusWatcher, fullscreenMode } from "../core/status.js";
@@ -66,7 +72,7 @@ const log = new Logger(path.join(logDir, "overlay.log"));
 const settingsFile = path.join(dataDir, "settings.json");
 
 const ED_MCP_MISSING =
-  "⚠ ed-mcp not connected. Run: claude mcp add ed-mcp -s user -- npx -y ed-mcp";
+  "⚠ ed-mcp not connected. Run: claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp";
 const ED_MCP_FAILED = "⚠ ed-mcp failed to start; run claude mcp list";
 const ED_MCP_AUTH = "⚠ ed-mcp needs authentication; run claude mcp list";
 const FULLSCREEN = "⚠ Elite is in fullscreen; switch to Borderless to see the overlay";
@@ -500,6 +506,11 @@ async function main(): Promise<void> {
   ipcMain.on(IPC.copyChip, (_e, v: unknown) => {
     const n = chipArg(v);
     if (n !== null) copyChip(n);
+  });
+  ipcMain.on(IPC.chord, (_e, v: unknown) => {
+    const chord = textArg(v);
+    const b = chord === null ? null : chordBinding(bindings(settings.hotkeys), chord);
+    if (b) runAction(b.action, "hotkey");
   });
   ipcMain.on(IPC.height, (_e, v: unknown) => {
     const h = heightArg(v);

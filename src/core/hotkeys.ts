@@ -47,15 +47,53 @@ export function bindings(h: Settings["hotkeys"]): Binding[] {
   ];
 }
 
-const MODIFIER =
-  /(^|\+)(Ctrl|Control|Alt|Shift|Cmd|Command|CmdOrCtrl|CommandOrControl|Super|Meta|Option|AltGr)\+/i;
+const CTRL = new Set(["ctrl", "control", "cmdorctrl", "commandorcontrol"]);
+const NUMPAD = /^num(\d|dec|add|sub|mult|div)$/;
 
 /**
- * The bindings to register. While the overlay has focus, keys without a modifier are left
- * out: a global shortcut swallows the key, so it could not be typed in the chat input.
+ * True when the chat input needs the key: any key but a function key, alone or with Shift
+ * (characters, editing and caret keys), a character with AltGr, which Windows reports as Ctrl+Alt, or Alt+numpad,
+ * which types Alt codes.
+ */
+function typesText(accelerator: string): boolean {
+  const parts = accelerator.split("+");
+  const key = (parts.at(-1) ?? "").toLowerCase();
+  const mods = parts
+    .slice(0, -1)
+    .map((m) => m.toLowerCase())
+    .filter((m) => m !== "shift");
+  // Function keys type nothing, and F13–F24 suit HOTAS buttons.
+  if (mods.length === 0) return !/^f\d+$/.test(key);
+  if (mods.length === 1 && mods[0] === "alt" && NUMPAD.test(key)) return true;
+  // "+" is the separator, so Electron names that character "Plus".
+  if (key.length !== 1 && key !== "plus") return false;
+  if (mods.length === 1 && mods[0] === "altgr") return true;
+  return mods.length === 2 && mods.includes("alt") && mods.some((m) => CTRL.has(m));
+}
+
+function normalize(accelerator: string): string {
+  const parts = accelerator.toLowerCase().split("+");
+  const key = parts.at(-1) ?? "";
+  const mods = parts.slice(0, -1).map((m) => (CTRL.has(m) ? "ctrl" : m));
+  return [...new Set(mods)].sort().concat(key).join("+");
+}
+
+/**
+ * The binding for a Ctrl+Alt chord pressed in the chat input. Such bindings are left out while
+ * the overlay has focus, so AltGr letters stay typeable; the input reports a real Ctrl+Alt
+ * chord (not AltGr) instead, so keys such as cancel still work while chatting.
+ */
+export function chordBinding(all: Binding[], chord: string): Binding | null {
+  const want = normalize(chord);
+  return all.find((b) => typesText(b.accelerator) && normalize(b.accelerator) === want) ?? null;
+}
+
+/**
+ * The bindings to register. While the overlay has focus, keys that type text are left out:
+ * a global shortcut swallows the key, so it could not be typed in the chat input.
  */
 export function activeBindings(all: Binding[], overlayFocused: boolean): Binding[] {
-  return overlayFocused ? all.filter((b) => MODIFIER.test(b.accelerator)) : all;
+  return overlayFocused ? all.filter((b) => !typesText(b.accelerator)) : all;
 }
 
 export interface Registrar {

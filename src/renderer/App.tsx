@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { Chip } from "../core/chips.js";
+import { chordFromKey } from "../core/chord.js";
 import type { ViewModel } from "../core/view.js";
 
 // Only the open chat takes the mouse; elsewhere chips are labels for the copy hotkey.
@@ -81,6 +82,29 @@ export function App() {
   });
 
   useEffect(() => window.overlay.onView(setV), []);
+
+  // Ctrl+Alt hotkeys are not registered while the chat has focus, so AltGr can type letters.
+  // A real Ctrl+Alt chord goes to main instead. The listener is on the window, so the chord
+  // still works after a click on a chip or the history moves focus off the input.
+  const chatInput = v?.chat?.input === true;
+  useEffect(() => {
+    if (!chatInput) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      const chord = chordFromKey({
+        key: e.key,
+        code: e.code,
+        ctrl: e.ctrlKey,
+        alt: e.altKey,
+        shift: e.shiftKey,
+        altGraph: e.getModifierState("AltGraph"),
+      });
+      if (!chord) return;
+      e.preventDefault();
+      window.overlay.chord(chord);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chatInput]);
 
   useLayoutEffect(() => {
     const el = root.current;

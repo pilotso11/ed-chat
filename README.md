@@ -14,10 +14,10 @@ Windows 10 and 11 only.
 - [Claude Code](https://claude.com/claude-code), installed and logged in. The
   overlay starts your own `claude` command and uses your login and settings.
 - Recommended: [ed-mcp](https://github.com/pilotso11/ed-mcp) for game tools.
-  Add it for your user, not one project:
+  Add it for your user, not one project. Windows needs `cmd /c` to run `npx`:
 
   ```
-  claude mcp add ed-mcp -s user -- npx -y ed-mcp
+  claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp
   ```
 
 ## Install
@@ -30,13 +30,13 @@ Select **More info → Run anyway**. Releases are not public yet.
 
 | Key | Action |
 | --- | --- |
-| Ctrl+Shift+Space | Open the chat. Enter sends and returns to the game. Esc closes. |
+| Ctrl+Alt+C | Open the chat. Enter sends and returns to the game. Esc closes. |
 | Ctrl+Shift+1…9 | Copy chip 1…9 |
 | Ctrl+Shift+Y / N | Allow / deny a tool that Claude asks to run |
-| Ctrl+Shift+X | Stop the current reply |
+| Ctrl+Alt+X | Stop the current reply |
 | Ctrl+Shift+H | Show or hide this session's history |
 | ` (backquote) | Switch between the full overlay and a small icon |
-| Ctrl+Shift+O | Hide or show the overlay |
+| Ctrl+Alt+O | Hide or show the overlay |
 | Ctrl+Alt+Arrows | Move the overlay around the screen edge |
 | Ctrl+Alt+M | Move the overlay to the next monitor |
 
@@ -52,6 +52,13 @@ has chips or a notice is waiting.
 
 Hotkeys work only while the game or the overlay is in front, so they do not
 take keys from other apps. While the ship is in danger, the chat does not open.
+
+While you type in the chat, the overlay leaves typing keys to the chat input,
+including AltGr letters. Ctrl+Alt hotkeys such as Ctrl+Alt+X still work there:
+use the left Ctrl and Alt keys, because AltGr types the letter.
+
+If the overlay shows `⚠ hotkeys not registered`, another app already uses
+that key. Set a different key in `settings.json`.
 
 ## Permissions
 
@@ -69,7 +76,14 @@ ed-mcp tools, add `"mcp__ed-mcp__*"` to `permissions.allow` in
 
 ## Settings
 
-`%APPDATA%\ed-chat\settings.json` is written with the defaults on first run.
+`%APPDATA%\ed-chat\settings.json` holds only the settings you change. It starts
+as `{}`; add a key to override its default, for example
+`{ "hotkeys": { "openChat": "Ctrl+Alt+Space" } }`. Every default is listed in
+`settings.defaults.json` next to it, which is rewritten at each start; do not
+edit that one. Version 0.1.0 wrote every default into `settings.json`, so the
+0.1.0 hotkeys stay in effect there: delete the keys you did not change, or the
+whole file, to get the current defaults.
+
 Changes apply when you save the file. The file is plain JSON. Settings for
 `claude` apply after `/new`; the overlay shows `ⓘ claude settings apply after /new`.
 

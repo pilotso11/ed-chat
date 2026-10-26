@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -15,13 +15,41 @@ import {
 const tmp = () => mkdtemp(path.join(os.tmpdir(), "ed-chat-"));
 
 describe("SettingsStore", () => {
-  it("writes defaults on first run", async () => {
+  // settings.json holds only the player's overrides, so new defaults reach existing installs.
+  it("starts with empty overrides and writes the defaults as a reference", async () => {
     const file = path.join(await tmp(), "sub", "settings.json");
     const s = new SettingsStore(file);
     expect(await s.load()).toEqual({ changed: true, error: null });
-    expect(await readFile(file, "utf8")).toBe(defaultSettingsText());
+    expect(await readFile(file, "utf8")).toBe("{}\n");
+    expect(await readFile(path.join(path.dirname(file), "settings.defaults.json"), "utf8")).toBe(
+      defaultSettingsText(),
+    );
     expect(s.settings).toEqual(DEFAULT_SETTINGS);
     expect(await s.load()).toEqual({ changed: false, error: null });
+  });
+
+  it("rewrites the defaults reference when settings.json already exists", async () => {
+    const dir = await tmp();
+    await writeFile(path.join(dir, "settings.json"), '{"card":{"maxLines":5}}');
+    await writeFile(path.join(dir, "settings.defaults.json"), "stale");
+    expect(await new SettingsStore(path.join(dir, "settings.json")).load()).toEqual({
+      changed: true,
+      error: null,
+    });
+    expect(await readFile(path.join(dir, "settings.defaults.json"), "utf8")).toBe(
+      defaultSettingsText(),
+    );
+  });
+
+  it("reports a defaults reference it cannot write, and still loads the settings", async () => {
+    const dir = await tmp();
+    await writeFile(path.join(dir, "settings.json"), '{"card":{"maxLines":5}}');
+    await mkdir(path.join(dir, "settings.defaults.json"));
+    const s = new SettingsStore(path.join(dir, "settings.json"));
+    const r = await s.load();
+    expect(r.changed).toBe(true);
+    expect(r.error).toMatch(/^⚠ settings\.defaults\.json: /);
+    expect(s.settings.card.maxLines).toBe(5);
   });
 
   it("accepts a file saved with a UTF-8 BOM", async () => {

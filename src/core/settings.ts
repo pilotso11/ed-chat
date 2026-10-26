@@ -17,13 +17,13 @@ const key = z.string().min(1);
 // zod 4: .default() skips inner defaults, .prefault() parses them.
 const HotkeysSchema = z.strictObject({
   scope: z.enum(["game", "always"]).default("game"),
-  openChat: key.default("Ctrl+Shift+Space"),
-  toggleOverlay: key.default("Ctrl+Shift+O"),
+  openChat: key.default("Ctrl+Alt+C"),
+  toggleOverlay: key.default("Ctrl+Alt+O"),
   toggleIcon: key.default("`"),
   showHistory: key.default("Ctrl+Shift+H"),
   approve: key.default("Ctrl+Shift+Y"),
   deny: key.default("Ctrl+Shift+N"),
-  cancel: key.default("Ctrl+Shift+X"),
+  cancel: key.default("Ctrl+Alt+X"),
   copyChip: key.refine((s) => s.includes("{n}"), "must contain {n}").default("Ctrl+Shift+{n}"),
   moveUp: key.default("Ctrl+Alt+Up"),
   moveDown: key.default("Ctrl+Alt+Down"),

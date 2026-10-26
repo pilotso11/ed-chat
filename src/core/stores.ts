@@ -29,6 +29,19 @@ export class SettingsStore {
     return this.current;
   }
 
+  // A reference copy of every default, rewritten each start so it matches this version.
+  // A failure is reported, not thrown: the overlay works without the reference.
+  private async writeDefaultsReference(): Promise<string | null> {
+    const ref = path.join(path.dirname(this.file), "settings.defaults.json");
+    try {
+      await writeFile(ref, defaultSettingsText());
+      return null;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      return `⚠ settings.defaults.json: ${code ?? String(err)}`;
+    }
+  }
+
   async load(): Promise<LoadResult> {
     let text: string;
     try {
@@ -37,10 +50,12 @@ export class SettingsStore {
       const code = (err as NodeJS.ErrnoException).code;
       if (code !== "ENOENT")
         return { changed: false, error: `⚠ settings.json: ${code ?? String(err)}` };
-      text = defaultSettingsText();
+      // Only overrides go in settings.json, so a later release's defaults still apply.
+      text = "{}\n";
       await mkdir(path.dirname(this.file), { recursive: true });
       await writeFile(this.file, text);
     }
+    const refError = this.firstLoad ? await this.writeDefaultsReference() : null;
     // Some Windows editors save UTF-8 with a BOM, which JSON.parse rejects.
     if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
     if (text === this.lastText) return { changed: false, error: this.lastError };
@@ -55,7 +70,7 @@ export class SettingsStore {
     const changed = this.firstLoad || JSON.stringify(r.settings) !== JSON.stringify(this.current);
     this.firstLoad = false;
     this.current = r.settings;
-    return { changed, error: null };
+    return { changed, error: refError };
   }
 
   // Polling, because editors often save by replacing the file, which fs.watch can lose.

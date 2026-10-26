@@ -3,6 +3,7 @@ import {
   HotkeyManager,
   activeBindings,
   bindings,
+  chordBinding,
   type HotkeyAction,
   type Registrar,
 } from "../src/core/hotkeys.js";
@@ -26,13 +27,70 @@ function fakeRegistrar(taken: string[] = []) {
 
 // A global shortcut eats the key, so a bare key would be untypeable in the chat input.
 describe("activeBindings", () => {
-  it("drops keys without a modifier while the overlay has focus", () => {
+  // Windows sends AltGr as Ctrl+Alt, so Ctrl+Alt+<character> would also eat AltGr letters.
+  it("drops bare keys and Ctrl+Alt+character while the overlay has focus", () => {
     const all = bindings(DEFAULT_SETTINGS.hotkeys);
     expect(activeBindings(all, false)).toHaveLength(all.length);
-    const focused = activeBindings(all, true);
-    expect(focused.some((b) => b.name === "toggleIcon")).toBe(false);
-    expect(focused.some((b) => b.name === "openChat")).toBe(true);
-    expect(focused).toHaveLength(all.length - 1);
+    const names = activeBindings(all, true).map((b) => b.name);
+    for (const gone of ["toggleIcon", "openChat", "toggleOverlay", "cancel", "nextDisplay"]) {
+      expect(names).not.toContain(gone);
+    }
+    for (const kept of ["moveLeft", "moveUp", "approve", "deny", "showHistory", "copyChip1"]) {
+      expect(names).toContain(kept);
+    }
+  });
+
+  it("drops editing, caret and numpad keys, Alt+numpad and AltGr+character while the overlay has focus", () => {
+    const keys = [
+      "Home",
+      "Left",
+      "Shift+Home",
+      "PageUp",
+      "Alt+num5",
+      "Space",
+      "Tab",
+      "Backspace",
+      "num1",
+      "Shift+numadd",
+      "AltGr+C",
+      "Plus",
+      "Shift+Plus",
+      "F13",
+      "Shift+F2",
+      "Ctrl+num1",
+      "Ctrl+Left",
+    ];
+    const all = keys.map((accelerator) => ({
+      name: accelerator,
+      accelerator,
+      action: { type: "openChat" } as const,
+    }));
+    expect(activeBindings(all, true).map((b) => b.accelerator)).toEqual([
+      "F13",
+      "Shift+F2",
+      "Ctrl+num1",
+      "Ctrl+Left",
+    ]);
+  });
+});
+
+describe("chordBinding", () => {
+  const all = bindings(DEFAULT_SETTINGS.hotkeys);
+  it("finds a Ctrl+Alt binding that is left out while the chat has focus", () => {
+    expect(chordBinding(all, "Ctrl+Alt+X")?.action).toEqual({ type: "cancel" });
+    expect(chordBinding(all, "Ctrl+Alt+O")?.action).toEqual({ type: "toggleOverlay" });
+  });
+
+  it("matches modifiers in any order and spelling", () => {
+    const own = [
+      { name: "cancel", accelerator: "Alt+Control+X", action: { type: "cancel" } as const },
+    ];
+    expect(chordBinding(own, "Ctrl+Alt+X")?.name).toBe("cancel");
+  });
+
+  it("ignores chords with no binding, and bindings that stay registered", () => {
+    expect(chordBinding(all, "Ctrl+Alt+Q")).toBeNull();
+    expect(chordBinding(all, "Ctrl+Alt+Left")).toBeNull();
   });
 });
 
@@ -62,7 +120,7 @@ describe("HotkeyManager", () => {
     expect(live.size).toBe(0);
     expect(m.activate()).toEqual([]);
     expect(live.size).toBe(21);
-    live.get("Ctrl+Shift+Space")!();
+    live.get("Ctrl+Alt+C")!();
     expect(ran).toEqual([{ type: "openChat" }]);
     m.deactivate();
     expect(live.size).toBe(0);
