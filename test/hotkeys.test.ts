@@ -4,10 +4,12 @@ import {
   activeBindings,
   bindings,
   chordBinding,
+  chipKeyLabel,
+  keyRows,
   type HotkeyAction,
   type Registrar,
 } from "../src/core/hotkeys.js";
-import { DEFAULT_SETTINGS } from "../src/core/settings.js";
+import { DEFAULT_SETTINGS, SettingsSchema } from "../src/core/settings.js";
 
 function fakeRegistrar(taken: string[] = []) {
   const live = new Map<string, () => void>();
@@ -146,5 +148,50 @@ describe("HotkeyManager", () => {
     m.setBindings([{ name: "deny", accelerator: "B", action: { type: "deny" } }]);
     expect([...live.keys()]).toEqual(["B"]);
     expect(m.active).toBe(true);
+  });
+});
+
+describe("key lists", () => {
+  const hk = (h: object) => SettingsSchema.parse({ hotkeys: h }).hotkeys;
+
+  it("binds every key in a list to the same action", () => {
+    const b = bindings(hk({ openChat: ["Ctrl+Alt+C", "F13"] })).filter(
+      (x) => x.name === "openChat",
+    );
+    expect(b.map((x) => x.accelerator)).toEqual(["Ctrl+Alt+C", "F13"]);
+  });
+
+  it("adds Ctrl+numpad copy keys when copyChipNumpad is on", () => {
+    const keys = (h: object) =>
+      bindings(hk(h))
+        .filter((x) => x.action.type === "copyChip")
+        .map((x) => x.accelerator);
+    expect(keys({})).not.toContain("Ctrl+num1");
+    expect(keys({ copyChipNumpad: true })).toEqual(
+      expect.arrayContaining(["Ctrl+Shift+1", "Ctrl+num9"]),
+    );
+    expect(chipKeyLabel(hk({ copyChipNumpad: true }))).toBe("Ctrl+Shift+1–9 / Ctrl+num1–9");
+  });
+
+  it("drops keys without a modifier in always scope, so other apps keep them", () => {
+    const all = bindings(DEFAULT_SETTINGS.hotkeys);
+    const always = activeBindings(all, false, "always").map((b) => b.accelerator);
+    expect(always).not.toContain("`");
+    expect(activeBindings(all, false, "game").map((b) => b.accelerator)).toContain("`");
+  });
+
+  it("lists the keys for the keys card and marks the taken ones", () => {
+    const rows = keyRows(DEFAULT_SETTINGS.hotkeys, ["Ctrl+Alt+C", "Ctrl+Shift+3", "Ctrl+Alt+Up"]);
+    expect(rows[0]).toEqual({ label: "Open chat", keys: "Ctrl+Alt+C", failed: ["Ctrl+Alt+C"] });
+    expect(rows[1]).toEqual({
+      label: "Copy chip",
+      keys: "Ctrl+Shift+1–9",
+      failed: ["Ctrl+Shift+3"],
+    });
+    expect(rows.find((r) => r.label === "Move overlay")).toEqual({
+      label: "Move overlay",
+      keys: "Ctrl+Alt+Arrows",
+      failed: ["Ctrl+Alt+Up"],
+    });
   });
 });

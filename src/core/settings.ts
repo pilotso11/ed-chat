@@ -12,25 +12,36 @@ export const ANCHORS = [
 ] as const;
 export type Anchor = (typeof ANCHORS)[number];
 
-const key = z.string().min(1);
+// One key, or several keys for the same action.
+const accel = z.string().min(1);
+const keys = z.union([accel, z.array(accel).min(1)]);
+const chipPattern = accel.refine((s) => s.includes("{n}"), "must contain {n}");
+const chipKeys = z.union([chipPattern, z.array(chipPattern).min(1)]);
+export type Keys = z.infer<typeof keys>;
+
+export const keyList = (k: Keys): string[] => (typeof k === "string" ? [k] : k);
 
 // zod 4: .default() skips inner defaults, .prefault() parses them.
 const HotkeysSchema = z.strictObject({
   scope: z.enum(["game", "always"]).default("game"),
-  openChat: key.default("Ctrl+Alt+C"),
-  toggleOverlay: key.default("Ctrl+Alt+O"),
-  toggleIcon: key.default("`"),
-  showHistory: key.default("Ctrl+Shift+H"),
-  approve: key.default("Ctrl+Shift+Y"),
-  deny: key.default("Ctrl+Shift+N"),
-  cancel: key.default("Ctrl+Alt+X"),
-  copyChip: key.refine((s) => s.includes("{n}"), "must contain {n}").default("Ctrl+Shift+{n}"),
-  moveUp: key.default("Ctrl+Alt+Up"),
-  moveDown: key.default("Ctrl+Alt+Down"),
-  moveLeft: key.default("Ctrl+Alt+Left"),
-  moveRight: key.default("Ctrl+Alt+Right"),
-  nextDisplay: key.default("Ctrl+Alt+M"),
+  openChat: keys.default("Ctrl+Alt+C"),
+  toggleOverlay: keys.default("Ctrl+Alt+O"),
+  toggleIcon: keys.default("`"),
+  showHistory: keys.default("Ctrl+Shift+H"),
+  approve: keys.default("Ctrl+Shift+Y"),
+  deny: keys.default("Ctrl+Shift+N"),
+  cancel: keys.default("Ctrl+Alt+X"),
+  copyChip: chipKeys.default("Ctrl+Shift+{n}"),
+  copyChipNumpad: z.boolean().default(false),
+  moveUp: keys.default("Ctrl+Alt+Up"),
+  moveDown: keys.default("Ctrl+Alt+Down"),
+  moveLeft: keys.default("Ctrl+Alt+Left"),
+  moveRight: keys.default("Ctrl+Alt+Right"),
+  nextDisplay: keys.default("Ctrl+Alt+M"),
 });
+
+// Windows turns Shift+numpad digit into End, Down and so on, so the numpad keys use Ctrl only.
+export const NUMPAD_CHIP = "Ctrl+num{n}";
 
 export const PositionSchema = z.strictObject({
   anchor: z.enum(ANCHORS).default("bottom-left"),
@@ -51,7 +62,7 @@ export const SettingsSchema = z.strictObject({
     .prefault({}),
   card: z
     .strictObject({
-      maxLines: z.number().int().min(2).max(8).default(4),
+      maxLines: z.number().int().min(2).max(10).default(4),
       fadeSeconds: z.number().min(0).default(20),
       width: z.number().int().min(200).max(1200).default(420),
     })
@@ -64,6 +75,7 @@ export const SettingsSchema = z.strictObject({
     })
     .prefault({}),
   position: PositionSchema.prefault({}),
+  startup: z.strictObject({ showKeys: z.boolean().default(true) }).prefault({}),
   safety: z.strictObject({ blockWhenInDanger: z.boolean().default(true) }).prefault({}),
   approval: z
     .strictObject({ timeoutSeconds: z.number().int().min(5).max(3600).default(120) })
@@ -90,6 +102,11 @@ export function parseSettings(text: string): ParseResult {
   } catch (err) {
     return { ok: false, error: `not valid JSON (${(err as Error).message})` };
   }
+  // "$schema" points editors at settings.schema.json; it is not a setting.
+  if (raw && typeof raw === "object" && !Array.isArray(raw) && "$schema" in raw) {
+    const { $schema: _s, ...rest } = raw as Record<string, unknown>;
+    raw = rest;
+  }
   const r = SettingsSchema.safeParse(raw);
   if (r.success) return { ok: true, settings: r.data };
   const issue = r.error.issues[0]!;
@@ -97,6 +114,25 @@ export function parseSettings(text: string): ParseResult {
   return { ok: false, error: `${where}: ${issue.message}` };
 }
 
+export const SCHEMA_FILE = "settings.schema.json";
+export const DEFAULTS_FILE = "settings.defaults.json";
+
 export function defaultSettingsText(): string {
   return JSON.stringify(DEFAULT_SETTINGS, null, 2) + "\n";
+}
+
+/**
+ * A new settings.json holds only the schema link. Every value comes from the defaults in
+ * code, so a later release can change a default for everyone who has not set that key.
+ */
+export function newSettingsText(): string {
+  return JSON.stringify({ $schema: `./${SCHEMA_FILE}` }, null, 2) + "\n";
+}
+
+export function settingsSchemaText(): string {
+  const schema = z.toJSONSchema(SettingsSchema, { io: "input" }) as {
+    properties?: Record<string, unknown>;
+  };
+  schema.properties = { $schema: { type: "string" }, ...schema.properties };
+  return JSON.stringify(schema, null, 2) + "\n";
 }

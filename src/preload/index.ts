@@ -13,6 +13,10 @@ const api: OverlayApi = {
   chord: (accelerator) => ipcRenderer.send(IPC.chord, accelerator),
   hover: (over) => ipcRenderer.send(IPC.hover, over),
   expand: () => ipcRenderer.send(IPC.expand),
+  holdCard: (hold) => ipcRenderer.send(IPC.holdCard, hold),
+  copyNotice: () => ipcRenderer.send(IPC.copyNotice),
+  showNotices: () => ipcRenderer.send(IPC.showNotices),
+  closeKeys: () => ipcRenderer.send(IPC.closeKeys),
 };
 
 contextBridge.exposeInMainWorld("overlay", api);

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, defaultSettingsText, parseSettings } from "../src/core/settings.js";
+import {
+  DEFAULT_SETTINGS,
+  SettingsSchema,
+  defaultSettingsText,
+  newSettingsText,
+  parseSettings,
+} from "../src/core/settings.js";
 
 describe("parseSettings", () => {
   it("fills every default from an empty object", () => {
@@ -39,7 +45,7 @@ describe("parseSettings", () => {
   });
 
   it("reports a value out of range with its path", () => {
-    const r = parseSettings('{"card":{"maxLines":9}}');
+    const r = parseSettings('{"card":{"maxLines":11}}');
     expect(!r.ok && r.error).toMatch(/^card\.maxLines: /);
   });
 
@@ -56,5 +62,44 @@ describe("parseSettings", () => {
 
   it("writes defaults that parse back to the defaults", () => {
     expect(parseSettings(defaultSettingsText())).toEqual({ ok: true, settings: DEFAULT_SETTINGS });
+  });
+});
+
+describe("settings defaults", () => {
+  // Every setting needs a default in code, so settings.json can stay empty and a later
+  // release can change a default for everyone who has not set that key.
+  it("gives every setting a default", () => {
+    const missing: string[] = [];
+    const walk = (schema: unknown, where: string): void => {
+      const def = (schema as { def: { type: string; innerType?: unknown; shape?: object } }).def;
+      if (def.type === "object") {
+        for (const [k, v] of Object.entries(def.shape!)) walk(v, where ? `${where}.${k}` : k);
+        return;
+      }
+      if (def.type === "prefault") return walk(def.innerType, where);
+      if (def.type !== "default") missing.push(where);
+    };
+    walk(SettingsSchema, "");
+    expect(missing).toEqual([]);
+  });
+
+  it("accepts one key or a list of keys", () => {
+    const r = parseSettings(
+      '{"hotkeys":{"openChat":["Ctrl+Alt+C","F13"],"copyChip":["Ctrl+Shift+{n}","F{n}"]}}',
+    );
+    expect(r.ok && r.settings.hotkeys.openChat).toEqual(["Ctrl+Alt+C", "F13"]);
+    expect(parseSettings('{"hotkeys":{"openChat":[]}}').ok).toBe(false);
+    expect(parseSettings('{"hotkeys":{"copyChip":["Ctrl+Shift+{n}","F1"]}}').ok).toBe(false);
+  });
+
+  it("ignores the $schema link", () => {
+    expect(parseSettings('{"$schema":"./settings.schema.json"}')).toEqual({
+      ok: true,
+      settings: DEFAULT_SETTINGS,
+    });
+  });
+
+  it("starts with an empty settings file that parses to the defaults", () => {
+    expect(parseSettings(newSettingsText())).toEqual({ ok: true, settings: DEFAULT_SETTINGS });
   });
 });

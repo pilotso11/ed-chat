@@ -4,10 +4,14 @@ import path from "node:path";
 import { z } from "zod";
 import type { Turn } from "./controller.js";
 import {
+  DEFAULTS_FILE,
   DEFAULT_SETTINGS,
   PositionSchema,
+  SCHEMA_FILE,
   defaultSettingsText,
+  newSettingsText,
   parseSettings,
+  settingsSchemaText,
   type Position,
   type Settings,
 } from "./settings.js";
@@ -29,12 +33,13 @@ export class SettingsStore {
     return this.current;
   }
 
-  // A reference copy of every default, rewritten each start so it matches this version.
-  // A failure is reported, not thrown: the overlay works without the reference.
+  // The schema and a copy of every default, rewritten each start so they match this version.
+  // A failure is reported, not thrown: the overlay works without them.
   private async writeDefaultsReference(): Promise<string | null> {
-    const ref = path.join(path.dirname(this.file), "settings.defaults.json");
+    const dir = path.dirname(this.file);
     try {
-      await writeFile(ref, defaultSettingsText());
+      await writeFile(path.join(dir, SCHEMA_FILE), settingsSchemaText());
+      await writeFile(path.join(dir, DEFAULTS_FILE), defaultSettingsText());
       return null;
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
@@ -51,7 +56,7 @@ export class SettingsStore {
       if (code !== "ENOENT")
         return { changed: false, error: `⚠ settings.json: ${code ?? String(err)}` };
       // Only overrides go in settings.json, so a later release's defaults still apply.
-      text = "{}\n";
+      text = newSettingsText();
       await mkdir(path.dirname(this.file), { recursive: true });
       await writeFile(this.file, text);
     }

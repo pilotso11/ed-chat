@@ -46,6 +46,7 @@ import {
   activeBindings,
   bindings,
   chordBinding,
+  keyRows,
   type HotkeyAction,
 } from "../core/hotkeys.js";
 import { Logger } from "../core/logger.js";
@@ -59,7 +60,7 @@ import {
   savePosition,
   type SavedState,
 } from "../core/stores.js";
-import { buildView } from "../core/view.js";
+import { buildView, pickNotice } from "../core/view.js";
 import { IPC } from "../shared/ipc.js";
 import {
   boolArg,
@@ -79,10 +80,14 @@ const logDir = path.join(dataDir, "logs");
 const log = new Logger(path.join(logDir, "overlay.log"));
 const settingsFile = path.join(dataDir, "settings.json");
 
+// A command in backticks is copied when the player clicks the notice.
 const ED_MCP_MISSING =
-  "⚠ ed-mcp not connected. Run: claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp";
-const ED_MCP_FAILED = "⚠ ed-mcp failed to start; run claude mcp list";
-const ED_MCP_AUTH = "⚠ ed-mcp needs authentication; run claude mcp list";
+  "⚠ ed-mcp not connected; click to copy `claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp`";
+const ED_MCP_FAILED = "⚠ ed-mcp failed to start; run `claude mcp list`";
+const ED_MCP_AUTH = "⚠ ed-mcp needs authentication; run `claude mcp list`";
+const SCOPE_GAME = "ⓘ hotkeys work while Elite is in front";
+const COMMAND_COPIED = "📋 copied; paste it in a terminal";
+const KEYS_SECONDS = 15;
 const FULLSCREEN = "⚠ Elite is in fullscreen; switch to Borderless to see the overlay";
 const NO_CLAUDE = "⚠ claude not found: install Claude Code or set claude.path";
 const REFOCUS = "⚠ click the game to refocus";
@@ -255,12 +260,19 @@ async function main(): Promise<void> {
     },
     (a) => runAction(a, "hotkey"),
   );
-  const reportHotkeys = (failed: string[]) =>
+  // The full list is long; the strip gets the count and the tray menu lists each key.
+  let failedHotkeys: string[] = [];
+  function reportHotkeys(failed: string[]): void {
+    failedHotkeys = failed;
     dispatch({
       type: "notice",
       key: "hotkeys",
-      text: failed.length ? `⚠ hotkeys not registered: ${failed.join(", ")}` : null,
+      text: failed.length
+        ? `⚠ ${failed.length} hotkey${failed.length > 1 ? "s" : ""} taken by other apps; see tray menu`
+        : null,
     });
+    if (state.keys) dispatch({ type: "keys", rows: keyRows(settings.hotkeys, hotkeys.failedKeys) });
+  }
 
   let wasGame: boolean | null = null;
   function onForeground(f: Foreground): void {
@@ -278,7 +290,14 @@ async function main(): Promise<void> {
   }
   let overlayFocused = false;
   function bindHotkeys(): void {
-    reportHotkeys(hotkeys.setBindings(activeBindings(bindings(settings.hotkeys), overlayFocused)));
+    const active = activeBindings(
+      bindings(settings.hotkeys),
+      overlayFocused,
+      settings.hotkeys.scope,
+    );
+    const failed = hotkeys.setBindings(active);
+    // Inactive bindings report nothing; keep the last known problems until the next activation.
+    if (hotkeys.active) reportHotkeys(failed);
   }
 
   function syncHotkeys(f: Foreground | null): void {
@@ -289,6 +308,10 @@ async function main(): Promise<void> {
     const want = hotkeysWanted(settings.hotkeys.scope, f);
     if (want && !hotkeys.active) reportHotkeys(hotkeys.activate());
     if (!want && hotkeys.active) hotkeys.deactivate();
+    // Without this, a hotkey pressed away from the game does nothing and says nothing.
+    const scopeNotice = want ? undefined : SCOPE_GAME;
+    if (state.notices.scope !== scopeNotice)
+      dispatch({ type: "notice", key: "scope", text: scopeNotice ?? null });
   }
   const focus = win32 ? new FocusManager(win32, { overlayHwnd, onChange: onForeground }) : null;
 
@@ -417,20 +440,35 @@ async function main(): Promise<void> {
         dispatch({
           type: "notice",
           key: "version",
-          text: `⚠ claude ${v.join(".")} is older than ${TESTED_CLI_VERSION}; update Claude Code`,
+          text: `⚠ claude ${v.join(".")} is older than ${TESTED_CLI_VERSION}; run \`claude update\``,
         });
       }
     });
+  }
+
+  function newConversation(): void {
+    session?.newSession();
+    history.newSession();
+    dispatch({ type: "newSession" });
+  }
+
+  let keysTimer: NodeJS.Timeout | undefined;
+  function showKeys(): void {
+    clearTimeout(keysTimer);
+    dispatch({ type: "keys", rows: keyRows(settings.hotkeys, hotkeys.failedKeys) });
+    keysTimer = setTimeout(() => dispatch({ type: "keys", rows: null }), KEYS_SECONDS * 1000);
+  }
+  function hideKeys(): void {
+    clearTimeout(keysTimer);
+    dispatch({ type: "keys", rows: null });
   }
 
   async function send(text: string): Promise<boolean> {
     const t = text.trim();
     if (!t) return false;
     if (t === "/new") {
-      session?.newSession();
-      history.newSession();
+      newConversation();
       await giveFocusBack();
-      dispatch({ type: "newSession" });
       dispatch({ type: "closeChat" });
       return true;
     }
@@ -453,8 +491,12 @@ async function main(): Promise<void> {
   }
 
   function copyChip(n: number): void {
-    const chip = currentChips(state)[n - 1];
-    if (!chip) return;
+    const chips = currentChips(state);
+    const chip = chips[n - 1];
+    if (!chip) {
+      const has = chips.length ? `the reply has ${chips.length}` : "the reply has none";
+      return flash("copy", `📋 no chip ${n}; ${has}`, 2_000);
+    }
     clipboard.writeText(chip.text);
     flash("copy", `📋 copied ${chip.text}`, 2_000);
   }
@@ -529,6 +571,21 @@ async function main(): Promise<void> {
   ipcMain.on(IPC.expand, () => {
     if (state.iconMode) dispatch({ type: "toggleIcon" });
   });
+  // The card does not fade while the player reads it with the pointer on it.
+  ipcMain.on(IPC.holdCard, (_e, v: unknown) => {
+    const hold = boolArg(v);
+    if (hold === null || !state.cardOpen || state.session === "thinking") return;
+    if (hold) clearTimeout(fadeTimer);
+    else scheduleFade();
+  });
+  ipcMain.on(IPC.copyNotice, () => {
+    const command = pickNotice(state.notices)?.command;
+    if (!command) return;
+    clipboard.writeText(command);
+    flash("copy", COMMAND_COPIED, 3_000);
+  });
+  ipcMain.on(IPC.showNotices, () => noticeMenu().popup({ window: win }));
+  ipcMain.on(IPC.closeKeys, hideKeys);
   ipcMain.on(IPC.height, (_e, v: unknown) => {
     const h = heightArg(v);
     if (h === null) return;
@@ -610,17 +667,84 @@ async function main(): Promise<void> {
   const trayIcon = app.isPackaged
     ? path.join(process.resourcesPath, "tray.png")
     : path.join(app.getAppPath(), "resources", "tray.png");
-  const tray = new Tray(nativeImage.createFromPath(trayIcon));
-  tray.setToolTip("ED Chat");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: "Show/Hide overlay", click: () => runAction({ type: "toggleOverlay" }, "tray") },
+  // A menu label treats & as a mnemonic marker.
+  const label = (s: string) => s.replace(/&/g, "&&");
+
+  function showHotkeyProblems(): void {
+    void dialog
+      .showMessageBox({
+        type: "warning",
+        title: "ED Chat",
+        message: "Other apps already use these keys, so ED Chat could not register them.",
+        detail:
+          failedHotkeys.join("\n") +
+          "\n\nSet other keys in settings.json, under hotkeys. Each setting takes one key or a list.",
+        buttons: ["Open settings", "OK"],
+        defaultId: 1,
+      })
+      .then((r) => {
+        if (r.response === 0) openPath(settingsFile);
+      });
+  }
+
+  function noticeMenu(): Menu {
+    return Menu.buildFromTemplate(
+      Object.values(state.notices).map((text) => {
+        const command = /`([^`]+)`/.exec(text)?.[1];
+        return {
+          label: label(command ? `${text.replace(/`/g, "")}  (click to copy)` : text),
+          click: () => {
+            if (!command) return;
+            clipboard.writeText(command);
+            flash("copy", COMMAND_COPIED, 3_000);
+          },
+        };
+      }),
+    );
+  }
+
+  // Built when opened, so the chips and problems are current.
+  function trayMenu(): Menu {
+    const chips = currentChips(state);
+    const tray = (a: HotkeyAction) => () => runAction(a, "tray");
+    return Menu.buildFromTemplate([
+      ...chips.map((c) => ({
+        label: label(`Copy ${c.n}: ${c.text}`),
+        click: () => copyChip(c.n),
+      })),
+      ...(chips.length ? [{ type: "separator" as const }] : []),
+      { label: "Open chat", click: tray({ type: "openChat" }) },
+      { label: "New conversation", click: newConversation },
+      { label: "Show hotkeys", click: showKeys },
+      ...(failedHotkeys.length
+        ? [{ label: `Hotkey problems (${failedHotkeys.length})…`, click: showHotkeyProblems }]
+        : []),
+      { type: "separator" },
+      {
+        label: "Icon mode",
+        type: "checkbox",
+        checked: state.iconMode,
+        click: tray({ type: "toggleIcon" }),
+      },
+      {
+        label: "Show overlay",
+        type: "checkbox",
+        checked: state.visible,
+        click: tray({ type: "toggleOverlay" }),
+      },
       { label: "Open settings", click: () => openPath(settingsFile) },
       { label: "Open log folder", click: () => openPath(logDir) },
       { type: "separator" },
       { label: "Quit", click: () => app.quit() },
-    ]),
-  );
+    ]);
+  }
+
+  const tray = new Tray(nativeImage.createFromPath(trayIcon));
+  tray.setToolTip("ED Chat");
+  // Left and right click open the same menu.
+  const popTray = () => tray.popUpContextMenu(trayMenu());
+  tray.on("click", popTray);
+  tray.on("right-click", popTray);
 
   screen.on("display-removed", reposition);
   screen.on("display-metrics-changed", reposition);
@@ -630,6 +754,8 @@ async function main(): Promise<void> {
   focus?.start();
   render();
   log.log("info", `started; claude ${cmd ? cmd.command : "not found"}`);
+  // After the first foreground check, so the list shows which keys other apps hold.
+  if (settings.startup.showKeys) setTimeout(showKeys, 1_000);
 
   app.on("will-quit", () => {
     tray.destroy();

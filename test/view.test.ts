@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { INITIAL_STATE, reduce, type Action, type OverlayState } from "../src/core/controller.js";
 import { DEFAULT_SETTINGS, SettingsSchema } from "../src/core/settings.js";
-import { buildView, shortTool, statusText } from "../src/core/view.js";
+import { buildView, pickNotice, shortTool, statusText } from "../src/core/view.js";
 
 const run = (actions: Action[]) => actions.reduce(reduce, INITIAL_STATE);
 const ready: Action = {
@@ -26,6 +26,7 @@ describe("statusText", () => {
     [s({ session: "thinking", tool: "mcp__ed-mcp__spansh_route" }), "🔧 spansh_route…"],
     [s({ session: "idle", blocked: "Bash" }), "🛡 blocked: Bash"],
     [s({ session: "stopped" }), "⚠ stopped"],
+    [s({ cancelled: true }), "■ stopped"],
     [s({ session: "idle", flags: { docked: true, inDanger: false } }), "● idle   ⚓ docked"],
     [s({ session: "idle", flags: { docked: false, inDanger: true } }), "● idle   ⛔ in danger"],
   ])("%#", (state, expected) => {
@@ -71,7 +72,7 @@ describe("buildView", () => {
       chatLines: 14,
       growsUp: true,
       align: "start",
-      copyChipKey: "Ctrl+Shift+n",
+      copyChipKey: "Ctrl+Shift+1–9",
     });
   });
 
@@ -215,12 +216,60 @@ describe("buildView", () => {
       { type: "approval", request: { id: "r2", toolName: "Bash", summary: "ls" } },
     ]);
     const v = buildView(st, DEFAULT_SETTINGS);
-    expect(v.notice).toBe("⚠ two");
+    expect(v.notice).toEqual({ text: "⚠ two", command: null, more: 1 });
     expect(v.approval).toEqual({
       toolName: "y",
       summary: "{}",
       approveKey: "Ctrl+Shift+Y",
       denyKey: "Ctrl+Shift+N",
     });
+  });
+});
+
+describe("pickNotice", () => {
+  it("shows a short flash first, then problems in order of importance, and counts the rest", () => {
+    const persistent = { version: "⚠ old", claude: "⚠ claude not found", scope: "ⓘ keys" };
+    expect(pickNotice(persistent)).toEqual({ text: "⚠ claude not found", command: null, more: 2 });
+    expect(pickNotice({ ...persistent, copy: "📋 copied Sol" })?.text).toBe("📋 copied Sol");
+    expect(pickNotice({})).toBeNull();
+  });
+
+  it("finds the command in backticks", () => {
+    expect(pickNotice({ version: "⚠ old; run `claude update`" })?.command).toBe("claude update");
+  });
+});
+
+describe("buildView icon preference", () => {
+  it("shows the card over the icon during a reply and goes back to the icon after the fade", () => {
+    const text = (delta: string): Action => ({ type: "backend", event: { type: "text", delta } });
+    const during = run([ready, { type: "toggleIcon" }, { type: "sent", text: "a" }, text("x")]);
+    expect(buildView(during, DEFAULT_SETTINGS).mode).toBe("card");
+    const after = run([
+      ready,
+      { type: "toggleIcon" },
+      { type: "sent", text: "a" },
+      text("x"),
+      {
+        type: "backend",
+        event: {
+          type: "result",
+          isError: false,
+          durationMs: 1,
+          text: "x",
+          sessionId: "s",
+          denials: [],
+        },
+      },
+      { type: "cardTimeout" },
+    ]);
+    expect(buildView(after, DEFAULT_SETTINGS).mode).toBe("icon");
+  });
+
+  it("shows the AUTO badge only when auto mode is in effect", () => {
+    expect(buildView(run([]), DEFAULT_SETTINGS).auto).toBe(true);
+    const noAuto = run([{ type: "notice", key: "mode", text: "⚠ auto mode unavailable" }]);
+    expect(buildView(noAuto, DEFAULT_SETTINGS).auto).toBe(false);
+    const manual = SettingsSchema.parse({ claude: { permissionMode: "default" } });
+    expect(buildView(run([]), manual).auto).toBe(false);
   });
 });

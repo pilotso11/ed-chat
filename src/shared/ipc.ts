@@ -9,6 +9,10 @@ export const IPC = {
   chord: "overlay:chord",
   hover: "overlay:hover",
   expand: "overlay:expand",
+  holdCard: "overlay:holdCard",
+  copyNotice: "overlay:copyNotice",
+  showNotices: "overlay:showNotices",
+  closeKeys: "overlay:closeKeys",
 } as const;
 
 export interface OverlayApi {
@@ -24,4 +28,11 @@ export interface OverlayApi {
   hover(over: boolean): void;
   /** Leave icon mode. */
   expand(): void;
+  /** The pointer is on the reply card, so it must not fade. */
+  holdCard(hold: boolean): void;
+  /** Copy the command in the shown notice. */
+  copyNotice(): void;
+  /** List every notice in a menu. */
+  showNotices(): void;
+  closeKeys(): void;
 }

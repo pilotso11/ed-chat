@@ -203,12 +203,12 @@ describe("icon mode", () => {
     expect(run([{ type: "toggleIcon" }, { type: "toggleIcon" }]).iconMode).toBe(false);
   });
 
-  it("expands for a reply, an approval, the chat or the history, and stays expanded", () => {
+  it("keeps the icon preference through a reply, an approval, the chat and the history", () => {
     const icon: Action = { type: "toggleIcon" };
-    expect(run([ready, icon, text("hi")]).iconMode).toBe(false);
-    expect(run([icon, { type: "approval", request: req }]).iconMode).toBe(false);
-    expect(run([icon, { type: "openChat" }]).iconMode).toBe(false);
-    expect(run([icon, { type: "toggleHistory" }]).iconMode).toBe(false);
+    expect(run([ready, icon, text("hi")]).iconMode).toBe(true);
+    expect(run([icon, { type: "approval", request: req }]).iconMode).toBe(true);
+    expect(run([icon, { type: "openChat" }]).iconMode).toBe(true);
+    expect(run([icon, { type: "toggleHistory" }]).iconMode).toBe(true);
     const faded = run([
       ready,
       icon,
@@ -217,7 +217,13 @@ describe("icon mode", () => {
       result(),
       { type: "cardTimeout" },
     ]);
-    expect(faded.iconMode).toBe(false);
+    expect(faded).toMatchObject({ iconMode: true, cardOpen: false });
+  });
+
+  it("marks a cancelled reply until the next send", () => {
+    const s = run([ready, { type: "sent", text: "a" }, { type: "cancelled" }]);
+    expect(s.cancelled).toBe(true);
+    expect(run([{ type: "sent", text: "b" }], s).cancelled).toBe(false);
   });
 
   it("stays an icon for notices and ship flags", () => {

@@ -1,6 +1,7 @@
 import type { ApprovalRequest } from "./approvalServer.js";
 import { firstLine, parseChips, type Chip } from "./chips.js";
 import type { BackendEvent } from "./claudeSession.js";
+import type { KeyRow } from "./hotkeys.js";
 import type { ShipFlags } from "./status.js";
 
 export interface Turn {
@@ -23,8 +24,12 @@ export interface OverlayState {
   approvals: ApprovalRequest[];
   flags: ShipFlags | null;
   notices: Record<string, string>;
-  /** The resting state is a small icon; replies, approvals and the chat leave it. */
+  /** The player prefers the small icon at rest. Replies, approvals and the chat show over it. */
   iconMode: boolean;
+  /** The player stopped the reply; Claude restarts. */
+  cancelled: boolean;
+  /** The hotkey list, shown at startup and from the tray. */
+  keys: KeyRow[] | null;
 }
 
 export const INITIAL_STATE: OverlayState = {
@@ -43,6 +48,8 @@ export const INITIAL_STATE: OverlayState = {
   flags: null,
   notices: {},
   iconMode: false,
+  cancelled: false,
+  keys: null,
 };
 
 export type Action =
@@ -59,7 +66,8 @@ export type Action =
   | { type: "flags"; flags: ShipFlags | null }
   | { type: "notice"; key: string; text: string | null }
   | { type: "newSession" }
-  | { type: "cancelled" };
+  | { type: "cancelled" }
+  | { type: "keys"; rows: KeyRow[] | null };
 
 function withNotice(s: OverlayState, key: string, text: string | null): OverlayState {
   const { [key]: _old, ...rest } = s.notices;
@@ -78,7 +86,7 @@ function onBackend(s: OverlayState, e: BackendEvent): OverlayState {
         null,
       );
     case "text":
-      return { ...s, reply: s.reply + e.delta, session: "thinking", iconMode: false };
+      return { ...s, reply: s.reply + e.delta, session: "thinking" };
     case "toolStart":
       return { ...s, tool: e.name };
     case "toolEnd":
@@ -131,17 +139,18 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     case "toggleIcon":
       return { ...s, iconMode: !s.iconMode, visible: true };
     case "openChat":
-      return { ...s, chatOpen: true, visible: true, iconMode: false };
+      return { ...s, chatOpen: true, visible: true };
     case "closeChat":
       return { ...s, chatOpen: false };
     case "toggleHistory":
-      return { ...s, historyOpen: !s.historyOpen, visible: true, iconMode: false };
+      return { ...s, historyOpen: !s.historyOpen, visible: true };
     // The chat stays open: main closes it once focus is back with the game.
     case "sent":
       return {
         ...s,
         cardOpen: true,
         session: "thinking",
+        cancelled: false,
         reply: "",
         blocked: null,
         history: [...s.history, { role: "user", text: a.text }],
@@ -151,7 +160,7 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     case "cardTimeout":
       return s.session === "thinking" ? s : { ...s, cardOpen: false };
     case "approval":
-      return { ...s, approvals: [...s.approvals, a.request], iconMode: false };
+      return { ...s, approvals: [...s.approvals, a.request] };
     case "approvalSettled":
       return { ...s, approvals: s.approvals.filter((r) => r.id !== a.id) };
     case "flags":
@@ -167,6 +176,7 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
           pinned: null,
           history: [],
           session: "starting",
+          cancelled: false,
           tool: null,
           blocked: null,
           cardOpen: false,
@@ -175,7 +185,9 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
         null,
       );
     case "cancelled":
-      return { ...s, session: "starting", tool: null };
+      return { ...s, session: "starting", tool: null, cancelled: true };
+    case "keys":
+      return { ...s, keys: a.rows };
   }
 }
 

@@ -7,13 +7,24 @@ import {
   type OverlayState,
   type Turn,
 } from "./controller.js";
+import { chipKeyLabel, keyLabel, type KeyRow } from "./hotkeys.js";
 import type { Settings } from "./settings.js";
+
+export interface Notice {
+  text: string;
+  /** A command in backticks in the text; a click on the notice copies it. */
+  command: string | null;
+  /** How many other notices wait behind this one. */
+  more: number;
+}
 
 export interface ViewModel {
   show: boolean;
   mode: "icon" | "strip" | "card" | "chat";
   status: string;
-  notice: string | null;
+  auto: boolean;
+  notice: Notice | null;
+  keys: KeyRow[] | null;
   pinned: string | null;
   chips: Chip[];
   card: { text: string; chips: Chip[] } | null;
@@ -46,7 +57,9 @@ export function shortTool(name: string): string {
 export function statusText(s: OverlayState): string {
   const state =
     s.session === "starting"
-      ? "● starting"
+      ? s.cancelled
+        ? "■ stopped"
+        : "● starting"
       : s.session === "stopped"
         ? "⚠ stopped"
         : s.tool
@@ -61,6 +74,19 @@ export function statusText(s: OverlayState): string {
 }
 
 const ALIGN = { left: "start", center: "center", right: "end" } as const;
+
+// Problems that stop the overlay working come first. Other keys are short flashes, such as
+// "copied", which show first while they last.
+const PERSISTENT = ["claude", "settings", "hotkeys", "edmcp", "mode", "version", "scope"];
+
+export function pickNotice(notices: Record<string, string>): Notice | null {
+  const keys = Object.keys(notices);
+  if (!keys.length) return null;
+  const flashes = keys.filter((k) => !PERSISTENT.includes(k));
+  const top = flashes.at(-1) ?? PERSISTENT.find((k) => k in notices)!;
+  const text = notices[top]!;
+  return { text, command: /`([^`]+)`/.exec(text)?.[1] ?? null, more: keys.length - 1 };
+}
 
 export function buildView(s: OverlayState, settings: Settings): ViewModel {
   const open = s.chatOpen || s.historyOpen;
@@ -79,7 +105,9 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
           }
         : null,
     status: statusText(s),
-    notice: Object.values(s.notices).at(-1) ?? null,
+    auto: settings.claude.permissionMode === "auto" && !("mode" in s.notices),
+    notice: pickNotice(s.notices),
+    keys: s.keys,
     pinned: settings.strip.lines === 2 ? s.pinned : null,
     chips: settings.strip.keepChips ? s.chips : [],
     card: mode === "card" ? { text: reply.plain, chips: reply.chips } : null,
@@ -99,8 +127,8 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
       ? {
           toolName: shortTool(approval.toolName),
           summary: approval.summary,
-          approveKey: settings.hotkeys.approve,
-          denyKey: settings.hotkeys.deny,
+          approveKey: keyLabel(settings.hotkeys.approve),
+          denyKey: keyLabel(settings.hotkeys.deny),
         }
       : null,
     ui: {
@@ -111,7 +139,7 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
       chatLines: settings.chat.lines,
       growsUp: growsUp(settings.position.anchor),
       align: ALIGN[column(settings.position.anchor)],
-      copyChipKey: settings.hotkeys.copyChip.replace("{n}", "n"),
+      copyChipKey: chipKeyLabel(settings.hotkeys),
     },
   };
 }

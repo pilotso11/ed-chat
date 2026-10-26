@@ -10,17 +10,30 @@ import type { Chip } from "../core/chips.js";
 import { chordFromKey } from "../core/chord.js";
 import type { ViewModel } from "../core/view.js";
 
-// Outside the open chat, clicks pass through to the game; a hovered chip or icon takes them.
-function useClickTarget() {
+// Outside the open chat, clicks pass through to the game; a hovered target takes them.
+// Targets nest (a chip in the card), so the window takes clicks while any target is hovered.
+let hovered = 0;
+function setHovered(delta: number): void {
+  const was = hovered > 0;
+  hovered = Math.max(0, hovered + delta);
+  if (hovered > 0 !== was) window.overlay.hover(hovered > 0);
+}
+
+function useClickTarget(onHover?: (over: boolean) => void) {
   const over = useRef(false);
   const hover = (v: boolean) => {
+    if (over.current === v) return;
     over.current = v;
-    window.overlay.hover(v);
+    setHovered(v ? 1 : -1);
+    onHover?.(v);
   };
   // A target can vanish under the pointer without a mouseleave; the game must get its clicks back.
   useEffect(
     () => () => {
-      if (over.current) window.overlay.hover(false);
+      if (over.current) {
+        setHovered(-1);
+        onHover?.(false);
+      }
     },
     [],
   );
@@ -31,8 +44,86 @@ function ChipButton({ chip }: { chip: Chip }) {
   const target = useClickTarget();
   return (
     <button className="chip" {...target} onClick={() => window.overlay.copyChip(chip.n)}>
-      {chip.n} 📋 {chip.text}
+      <span className="keycap">{chip.n}</span> {chip.text}
     </button>
+  );
+}
+
+// A command in backticks shows as code; a click copies it. "+n" lists every notice.
+function NoticeView({ notice }: { notice: NonNullable<ViewModel["notice"]> }) {
+  const target = useClickTarget();
+  const more = useClickTarget();
+  const parts = notice.text.split("`");
+  return (
+    <span className="notices">
+      <span
+        className={notice.command ? "notice copyable" : "notice"}
+        title={notice.command ? "Click to copy the command" : notice.text}
+        {...(notice.command ? target : {})}
+        onClick={notice.command ? () => window.overlay.copyNotice() : undefined}
+      >
+        {parts.map((p, i) => (i % 2 ? <code key={i}>{p}</code> : p))}
+      </span>
+      {notice.more > 0 && (
+        <button
+          className="more-notices"
+          title="Show all messages"
+          {...more}
+          onClick={() => window.overlay.showNotices()}
+        >
+          +{notice.more}
+        </button>
+      )}
+    </span>
+  );
+}
+
+function KeysCard({ rows }: { rows: NonNullable<ViewModel["keys"]> }) {
+  const target = useClickTarget();
+  return (
+    <div className="keys-card" {...target} onClick={() => window.overlay.closeKeys()}>
+      <div className="title">ED Chat hotkeys</div>
+      <table>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.label}>
+              <td>{r.label}</td>
+              <td className={r.failed.length ? "taken" : undefined}>
+                {r.keys}
+                {r.failed.length > 0 && ` ⚠ taken: ${r.failed.join(", ")}`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="hint">Click to close · tray menu → Show hotkeys</div>
+    </div>
+  );
+}
+
+// The card clamps long replies; "more" shows the whole reply. It does not fade while hovered.
+function Card({ card, keyLabel }: { card: NonNullable<ViewModel["card"]>; keyLabel: string }) {
+  const target = useClickTarget((over) => window.overlay.holdCard(over));
+  const text = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  useEffect(() => setFull(false), [card.text]);
+  useLayoutEffect(() => {
+    const el = text.current;
+    if (el) setClamped(el.scrollHeight > el.clientHeight + 1);
+  });
+  return (
+    <div className="card" {...target}>
+      <div ref={text} className={full ? "text full" : "text"}>
+        {card.text}
+      </div>
+      {(clamped || full) && (
+        <button className="more" onClick={() => setFull(!full)}>
+          {full ? "▴ less" : "▾ more"}
+        </button>
+      )}
+      <Chips chips={card.chips} keyLabel={keyLabel} />
+    </div>
   );
 }
 
@@ -164,12 +255,20 @@ export function App() {
         hidden={v.mode === "icon"}
       >
         <div className="status">
-          <span>{v.status}</span>
-          {v.notice && <span className="notice">{v.notice}</span>}
+          <span className="state">
+            {v.status}
+            {v.auto && (
+              <span className="badge" title="Claude runs most tools without asking">
+                AUTO
+              </span>
+            )}
+          </span>
+          {v.notice && <NoticeView notice={v.notice} />}
         </div>
         {v.mode === "strip" && v.pinned && <div className="pinned">▸ {v.pinned}</div>}
         {v.mode === "strip" && <Chips chips={v.chips} keyLabel={v.ui.copyChipKey} />}
       </div>
+      {v.keys && <KeysCard rows={v.keys} />}
       {v.approval && (
         <div className="approval">
           <div>
@@ -181,12 +280,7 @@ export function App() {
           </div>
         </div>
       )}
-      {v.card && (
-        <div className="card">
-          <div className="text">{v.card.text}</div>
-          <Chips chips={v.card.chips} keyLabel={v.ui.copyChipKey} />
-        </div>
-      )}
+      {v.card && <Card card={v.card} keyLabel={v.ui.copyChipKey} />}
       {v.chat && (
         <div className="chat">
           <div className="history" ref={historyBox}>
