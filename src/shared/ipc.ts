@@ -7,6 +7,8 @@ export const IPC = {
   copyChip: "overlay:copyChip",
   height: "overlay:height",
   chord: "overlay:chord",
+  hover: "overlay:hover",
+  expand: "overlay:expand",
 } as const;
 
 export interface OverlayApi {
@@ -18,4 +20,8 @@ export interface OverlayApi {
   reportHeight(h: number): void;
   /** A Ctrl+Alt chord pressed in the chat input, such as "Ctrl+Alt+X". */
   chord(accelerator: string): void;
+  /** The pointer is over a chip or the icon, so the window must take the click instead of the game. */
+  hover(over: boolean): void;
+  /** Leave icon mode. */
+  expand(): void;
 }

@@ -10,30 +10,61 @@ import type { Chip } from "../core/chips.js";
 import { chordFromKey } from "../core/chord.js";
 import type { ViewModel } from "../core/view.js";
 
-// Only the open chat takes the mouse; elsewhere chips are labels for the copy hotkey.
-function Chips({
-  chips,
-  keyLabel,
-  clickable = false,
+// Outside the open chat, clicks pass through to the game; a hovered chip or icon takes them.
+function useClickTarget() {
+  const over = useRef(false);
+  const hover = (v: boolean) => {
+    over.current = v;
+    window.overlay.hover(v);
+  };
+  // A target can vanish under the pointer without a mouseleave; the game must get its clicks back.
+  useEffect(
+    () => () => {
+      if (over.current) window.overlay.hover(false);
+    },
+    [],
+  );
+  return { onMouseEnter: () => hover(true), onMouseLeave: () => hover(false) };
+}
+
+function ChipButton({ chip }: { chip: Chip }) {
+  const target = useClickTarget();
+  return (
+    <button className="chip" {...target} onClick={() => window.overlay.copyChip(chip.n)}>
+      {chip.n} 📋 {chip.text}
+    </button>
+  );
+}
+
+function Icon({
+  icon,
+  align,
 }: {
-  chips: Chip[];
-  keyLabel: string;
-  clickable?: boolean;
+  icon: NonNullable<ViewModel["icon"]>;
+  align: ViewModel["ui"]["align"];
 }) {
+  const target = useClickTarget();
+  return (
+    <div
+      className={icon.danger ? "icon danger" : "icon"}
+      style={{ alignSelf: align }}
+      title="ED Chat"
+      {...target}
+      onClick={() => window.overlay.expand()}
+    >
+      {icon.danger ? "⛔" : "✦"}
+      {icon.dot && !icon.danger && <span className="dot" />}
+    </div>
+  );
+}
+
+function Chips({ chips, keyLabel }: { chips: Chip[]; keyLabel: string }) {
   if (!chips.length) return null;
   return (
-    <div className="chips" title={`${keyLabel} copies chip n`}>
-      {chips.map((c) =>
-        clickable ? (
-          <button key={c.n} className="chip" onClick={() => window.overlay.copyChip(c.n)}>
-            {c.n} 📋 {c.text}
-          </button>
-        ) : (
-          <span key={c.n} className="chip">
-            {c.n} 📋 {c.text}
-          </span>
-        ),
-      )}
+    <div className="chips" title={`Click or ${keyLabel} copies chip n`}>
+      {chips.map((c) => (
+        <ChipButton key={c.n} chip={c} />
+      ))}
     </div>
   );
 }
@@ -127,16 +158,7 @@ export function App() {
 
   return (
     <div ref={root} className="overlay" style={style}>
-      {v.icon && (
-        <div
-          className={v.icon.danger ? "icon danger" : "icon"}
-          style={{ alignSelf: v.ui.align }}
-          title="ED Chat"
-        >
-          {v.icon.danger ? "⛔" : "✦"}
-          {v.icon.dot && !v.icon.danger && <span className="dot" />}
-        </div>
-      )}
+      {v.icon && <Icon icon={v.icon} align={v.ui.align} />}
       <div
         className={v.mode === "chat" && v.chat?.input ? "strip drag" : "strip"}
         hidden={v.mode === "icon"}
@@ -175,7 +197,7 @@ export function App() {
             ))}
             {v.chat.streaming !== null && <div className="assistant">{v.chat.streaming}</div>}
           </div>
-          <Chips chips={v.chat.chips} keyLabel={v.ui.copyChipKey} clickable={v.chat.input} />
+          <Chips chips={v.chat.chips} keyLabel={v.ui.copyChipKey} />
           {v.chat.input && <ChatInput moving={v.chat.moving} canSend={v.chat.canSend} />}
         </div>
       )}
