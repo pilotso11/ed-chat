@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_HEIGHT,
+  answerArg,
   boolArg,
   capLines,
   chipArg,
@@ -49,6 +50,11 @@ describe("IPC argument guards", () => {
     expect(boolArg(false)).toBe(false);
     expect(boolArg(1)).toBeNull();
     expect(boolArg("true")).toBeNull();
+  });
+  it("accepts only the three approval answers", () => {
+    for (const a of ["approve", "deny", "alwaysAllow"]) expect(answerArg(a)).toBe(a);
+    for (const bad of ["allow", "Approve", "", 1, null, undefined, {}])
+      expect(answerArg(bad)).toBeNull();
   });
   it("rejects bad heights and caps large ones", () => {
     expect(heightArg(120.5)).toBe(120.5);

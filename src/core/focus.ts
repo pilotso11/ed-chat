@@ -17,6 +17,7 @@ export interface Foreground {
 // Polling avoids passing a WinEvent callback through FFI; 250 ms is fast enough for hotkey scope and topmost.
 export class FocusManager {
   private saved = 0;
+  private lastGame = 0;
   private lastHwnd = -1;
   private last: Foreground = { hwnd: 0, isGame: false, isOverlay: false, processName: null };
   private timer?: NodeJS.Timeout;
@@ -47,6 +48,7 @@ export class FocusManager {
       isGame: name?.toLowerCase() === GAME_EXE.toLowerCase(),
       processName: name,
     };
+    if (this.last.isGame) this.lastGame = hwnd;
     this.o.onChange(this.last);
   }
 
@@ -59,9 +61,15 @@ export class FocusManager {
     clearInterval(this.timer);
   }
 
-  save(): void {
+  /**
+   * Remembers the window to give focus back to. A tray click has already taken focus from the
+   * game, so preferGame picks the game when it is still open.
+   */
+  save(preferGame = false): void {
     const h = this.w.foreground();
-    if (h !== this.o.overlayHwnd()) this.saved = h;
+    if (h === this.o.overlayHwnd()) return;
+    const game = this.lastGame && this.w.isWindow(this.lastGame) ? this.lastGame : 0;
+    this.saved = (preferGame || !h) && game ? game : h;
   }
 
   /** False only when Windows refused to give the saved window focus. */

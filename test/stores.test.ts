@@ -16,14 +16,11 @@ const tmp = () => mkdtemp(path.join(os.tmpdir(), "ed-chat-"));
 
 describe("SettingsStore", () => {
   // settings.json holds only the player's overrides, so new defaults reach existing installs.
-  it("starts with empty overrides and writes the defaults as a reference", async () => {
+  it("writes only the schema link on first run, so every value comes from the defaults", async () => {
     const file = path.join(await tmp(), "sub", "settings.json");
     const s = new SettingsStore(file);
     expect(await s.load()).toEqual({ changed: true, error: null });
-    expect(await readFile(file, "utf8")).toBe("{}\n");
-    expect(await readFile(path.join(path.dirname(file), "settings.defaults.json"), "utf8")).toBe(
-      defaultSettingsText(),
-    );
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ $schema: "./settings.schema.json" });
     expect(s.settings).toEqual(DEFAULT_SETTINGS);
     expect(await s.load()).toEqual({ changed: false, error: null });
   });
@@ -50,6 +47,75 @@ describe("SettingsStore", () => {
     expect(r.changed).toBe(true);
     expect(r.error).toMatch(/^⚠ settings\.defaults\.json: /);
     expect(s.settings.card.maxLines).toBe(5);
+  });
+
+  it("counts only a bad settings.json as broken, not a failed reference file", async () => {
+    const dir = await tmp();
+    await writeFile(path.join(dir, "settings.json"), "{");
+    const bad = new SettingsStore(path.join(dir, "settings.json"));
+    await bad.load();
+    expect(bad.broken).toBe(true);
+    const dir2 = await tmp();
+    await writeFile(path.join(dir2, "settings.json"), "{}");
+    await mkdir(path.join(dir2, "settings.defaults.json"));
+    const ok = new SettingsStore(path.join(dir2, "settings.json"));
+    expect((await ok.load()).error).not.toBeNull();
+    expect(ok.broken).toBe(false);
+  });
+
+  it("adds the schema link to an existing settings.json and keeps its layout", async () => {
+    const file = path.join(await tmp(), "settings.json");
+    await writeFile(file, '{\n  "card": { "maxLines": 5 }\n}\n');
+    const s = new SettingsStore(file);
+    expect(await s.load()).toEqual({ changed: true, error: null });
+    expect(await readFile(file, "utf8")).toBe(
+      '{\n  "$schema": "./settings.schema.json",\n  "card": { "maxLines": 5 }\n}\n',
+    );
+    expect(s.settings.card.maxLines).toBe(5);
+    expect(await s.load()).toEqual({ changed: false, error: null });
+  });
+
+  it("adds the schema link to an empty object, and leaves a linked file alone", async () => {
+    const dir = await tmp();
+    const empty = path.join(dir, "settings.json");
+    await writeFile(empty, "{}");
+    await new SettingsStore(empty).load();
+    expect(JSON.parse(await readFile(empty, "utf8"))).toEqual({
+      $schema: "./settings.schema.json",
+    });
+    const own = path.join(await tmp(), "settings.json");
+    await writeFile(own, '{"$schema":"x.json"}');
+    await new SettingsStore(own).load();
+    expect(await readFile(own, "utf8")).toBe('{"$schema":"x.json"}');
+  });
+
+  it("names the reference file that could not be written", async () => {
+    const dir = await tmp();
+    await writeFile(path.join(dir, "settings.json"), "{}");
+    await mkdir(path.join(dir, "settings.schema.json"));
+    const r = await new SettingsStore(path.join(dir, "settings.json")).load();
+    expect(r.error).toMatch(/^⚠ settings.schema.json: /);
+  });
+
+  it("sets one value and keeps the rest of the file", async () => {
+    const file = path.join(await tmp(), "settings.json");
+    await writeFile(file, '{ "$schema": "./settings.schema.json", "card": { "maxLines": 5 } }');
+    const s = new SettingsStore(file);
+    await s.load();
+    await s.set("claude", "permissionMode", "default");
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({
+      $schema: "./settings.schema.json",
+      card: { maxLines: 5 },
+      claude: { permissionMode: "default" },
+    });
+  });
+
+  it("writes the schema next to settings.json", async () => {
+    const dir = await tmp();
+    await new SettingsStore(path.join(dir, "settings.json")).load();
+    const schema = JSON.parse(await readFile(path.join(dir, "settings.schema.json"), "utf8"));
+    expect(schema.properties.$schema).toEqual({ type: "string" });
+    expect(schema.properties.hotkeys.properties.openChat.default).toBe("Ctrl+Alt+C");
   });
 
   it("accepts a file saved with a UTF-8 BOM", async () => {

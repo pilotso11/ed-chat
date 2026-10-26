@@ -30,6 +30,7 @@ import {
 import { ClaudeSession, type BackendEvent } from "../core/claudeSession.js";
 import {
   INITIAL_STATE,
+  answerAllowed,
   canOpenChat,
   currentApproval,
   currentChips,
@@ -46,10 +47,11 @@ import {
   activeBindings,
   bindings,
   chordBinding,
+  keyRows,
   type HotkeyAction,
 } from "../core/hotkeys.js";
 import { Logger } from "../core/logger.js";
-import type { Position, Settings } from "../core/settings.js";
+import { setsKey, type Position, type Settings } from "../core/settings.js";
 import { StatusWatcher, fullscreenMode } from "../core/status.js";
 import {
   HistoryStore,
@@ -59,9 +61,10 @@ import {
   savePosition,
   type SavedState,
 } from "../core/stores.js";
-import { buildView } from "../core/view.js";
+import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
 import { IPC } from "../shared/ipc.js";
 import {
+  answerArg,
   boolArg,
   capLines,
   chipArg,
@@ -79,10 +82,14 @@ const logDir = path.join(dataDir, "logs");
 const log = new Logger(path.join(logDir, "overlay.log"));
 const settingsFile = path.join(dataDir, "settings.json");
 
+// A command in backticks is copied when the player clicks the notice.
 const ED_MCP_MISSING =
-  "⚠ ed-mcp not connected. Run: claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp";
-const ED_MCP_FAILED = "⚠ ed-mcp failed to start; run claude mcp list";
-const ED_MCP_AUTH = "⚠ ed-mcp needs authentication; run claude mcp list";
+  "⚠ ed-mcp not connected; click to copy `claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp`";
+const ED_MCP_FAILED = "⚠ ed-mcp failed to start; run `claude mcp list`";
+const ED_MCP_AUTH = "⚠ ed-mcp needs authentication; run `claude mcp list`";
+const SCOPE_GAME = "ⓘ hotkeys work while Elite is in front";
+const COMMAND_COPIED = "📋 copied; paste it in a terminal";
+const KEYS_SECONDS = 15;
 const FULLSCREEN = "⚠ Elite is in fullscreen; switch to Borderless to see the overlay";
 const NO_CLAUDE = "⚠ claude not found: install Claude Code or set claude.path";
 const REFOCUS = "⚠ click the game to refocus";
@@ -132,7 +139,11 @@ async function main(): Promise<void> {
 
   const viewSettings = (): Settings => ({ ...settings, position });
 
+  // When the approval on screen appeared; an answer key pressed just before that is ignored.
+  let shownApproval: { id: string; at: number } | null = null;
   function render(): void {
+    const req = currentApproval(state);
+    if (req?.id !== shownApproval?.id) shownApproval = req ? { id: req.id, at: Date.now() } : null;
     const props = windowProps(state);
     applyWindow(win, props, prevProps);
     prevProps = props;
@@ -159,8 +170,12 @@ async function main(): Promise<void> {
   }
 
   // The card closes after a reply, and after a turn that ends without one.
+  // The pointer is on the card. Kept even while a reply streams, so the fade that the result
+  // schedules waits until the pointer leaves.
+  let cardHeld = false;
   function scheduleFade(): void {
     clearTimeout(fadeTimer);
+    if (cardHeld) return;
     fadeTimer = setTimeout(
       () => dispatch({ type: "cardTimeout" }),
       settings.card.fadeSeconds * 1000,
@@ -255,12 +270,19 @@ async function main(): Promise<void> {
     },
     (a) => runAction(a, "hotkey"),
   );
-  const reportHotkeys = (failed: string[]) =>
+  // The full list is long; the strip gets the count and the tray menu lists each key.
+  let failedHotkeys: string[] = [];
+  function reportHotkeys(failed: string[]): void {
+    failedHotkeys = failed;
     dispatch({
       type: "notice",
       key: "hotkeys",
-      text: failed.length ? `⚠ hotkeys not registered: ${failed.join(", ")}` : null,
+      text: failed.length
+        ? `⚠ ${failed.length} hotkey${failed.length > 1 ? "s" : ""} taken by other apps; see tray menu`
+        : null,
     });
+    if (state.keys) dispatch({ type: "keys", rows: keyRows(settings.hotkeys, hotkeys.failedKeys) });
+  }
 
   let wasGame: boolean | null = null;
   function onForeground(f: Foreground): void {
@@ -278,7 +300,14 @@ async function main(): Promise<void> {
   }
   let overlayFocused = false;
   function bindHotkeys(): void {
-    reportHotkeys(hotkeys.setBindings(activeBindings(bindings(settings.hotkeys), overlayFocused)));
+    const active = activeBindings(
+      bindings(settings.hotkeys),
+      overlayFocused,
+      settings.hotkeys.scope,
+    );
+    const failed = hotkeys.setBindings(active);
+    // Inactive bindings report nothing; keep the last known problems until the next activation.
+    if (hotkeys.active) reportHotkeys(failed);
   }
 
   function syncHotkeys(f: Foreground | null): void {
@@ -289,6 +318,10 @@ async function main(): Promise<void> {
     const want = hotkeysWanted(settings.hotkeys.scope, f);
     if (want && !hotkeys.active) reportHotkeys(hotkeys.activate());
     if (!want && hotkeys.active) hotkeys.deactivate();
+    // Without this, a hotkey pressed away from the game does nothing and says nothing.
+    const scopeNotice = want ? undefined : SCOPE_GAME;
+    if (state.notices.scope !== scopeNotice)
+      dispatch({ type: "notice", key: "scope", text: scopeNotice ?? null });
   }
   const focus = win32 ? new FocusManager(win32, { overlayHwnd, onChange: onForeground }) : null;
 
@@ -302,8 +335,17 @@ async function main(): Promise<void> {
   // Claude.
   const approval = new ApprovalServer({
     timeoutMs: settings.approval.timeoutSeconds * 1000,
-    onRequest: (request) => dispatch({ type: "approval", request }),
-    onSettled: (id) => dispatch({ type: "approvalSettled", id }),
+    onRequest: (request) => {
+      dispatch({ type: "approval", request });
+      // The player's eyes are on the game; a sound says a request is waiting.
+      if (settings.approval.sound) shell.beep();
+    },
+    onSettled: (id, outcome) => {
+      const req = state.approvals.find((r) => r.id === id);
+      dispatch({ type: "approvalSettled", id });
+      if (outcome === "timeout" && req)
+        flash("approval", `⛔ denied ${shortTool(req.toolName)}: no answer`, 6_000);
+    },
     // The message only: the request body can hold chat text.
     onError: (err) => log.log("warn", `approval request failed: ${message(err)}`),
   });
@@ -352,9 +394,53 @@ async function main(): Promise<void> {
     session.start();
     checkVersion(c.command, c.shell);
   }
-  const cmd = claudeCommand(settings);
-  if (cmd) startSession(cmd);
-  else dispatch({ type: "notice", key: "claude", text: noClaude() });
+
+  // Auto mode runs most tools without asking, so the player chooses once, before Claude starts.
+  async function askPermissionMode(): Promise<void> {
+    // A broken settings.json shows its own error; the question waits for a good file.
+    if (settingsStore.broken || setsKey(settingsStore.text, "claude", "permissionMode")) return;
+    const r = await dialog.showMessageBox({
+      type: "question",
+      title: "ED Chat",
+      message: "How should Claude run tools?",
+      detail:
+        "Ask me: the overlay shows each tool that Claude wants to run, and you allow or deny it " +
+        "with a hotkey.\n\nAuto: Claude decides, and runs most tools without asking, including " +
+        "commands that you ask for.\n\nYou can change this later in settings.json, " +
+        "claude.permissionMode.",
+      buttons: ["Ask me", "Auto"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    const mode = r.response === 1 ? "auto" : "default";
+    try {
+      await settingsStore.set("claude", "permissionMode", mode);
+      await settingsStore.load();
+      settings = settingsStore.settings;
+    } catch (err) {
+      // The choice still holds for this run; the player sees that it was not saved.
+      log.log("warn", `settings.json: ${message(err)}`);
+      settings = { ...settings, claude: { ...settings.claude, permissionMode: mode } };
+      dispatch({
+        type: "notice",
+        key: "settings",
+        text: `⚠ settings.json: could not save ${mode} mode`,
+      });
+    }
+  }
+  // Runs after the tray exists: the question can open behind a fullscreen game, and the tray is
+  // how the player quits. Settings reloads start no session before the answer.
+  let claudeStarted = false;
+  async function startClaude(): Promise<void> {
+    await askPermissionMode();
+    claudeStarted = true;
+    const cmd = claudeCommand(settings);
+    log.log("info", `started; claude ${cmd ? cmd.command : "not found"}`);
+    if (session) return;
+    if (cmd) startSession(cmd);
+    else dispatch({ type: "notice", key: "claude", text: noClaude() });
+  }
 
   function onBackend(e: BackendEvent): void {
     dispatch({ type: "backend", event: e });
@@ -417,20 +503,50 @@ async function main(): Promise<void> {
         dispatch({
           type: "notice",
           key: "version",
-          text: `⚠ claude ${v.join(".")} is older than ${TESTED_CLI_VERSION}; update Claude Code`,
+          text: `⚠ claude ${v.join(".")} is older than ${TESTED_CLI_VERSION}; run \`claude update\``,
         });
       }
     });
+  }
+
+  function newConversation(): void {
+    session?.newSession();
+    history.newSession();
+    approval.clearAllowed();
+    dispatch({ type: "newSession" });
+  }
+
+  function answerApproval(id: string, a: "approve" | "deny" | "alwaysAllow"): void {
+    const req = state.approvals.find((r) => r.id === id);
+    if (!req) return;
+    if (!answerAllowed(a, id, shownApproval, Date.now())) return;
+    approval.answer(id, a === "deny" ? "deny" : "allow");
+    if (a === "alwaysAllow") {
+      approval.allowTool(req.toolName);
+      // Requests for the same tool that already wait in the queue are allowed too.
+      for (const r of state.approvals)
+        if (r.toolName === req.toolName) approval.answer(r.id, "allow");
+      flash("approval", `✓ ${shortTool(req.toolName)} allowed until /new`, 4_000);
+    }
+  }
+
+  let keysTimer: NodeJS.Timeout | undefined;
+  function showKeys(): void {
+    clearTimeout(keysTimer);
+    dispatch({ type: "keys", rows: keyRows(settings.hotkeys, hotkeys.failedKeys) });
+    keysTimer = setTimeout(() => dispatch({ type: "keys", rows: null }), KEYS_SECONDS * 1000);
+  }
+  function hideKeys(): void {
+    clearTimeout(keysTimer);
+    dispatch({ type: "keys", rows: null });
   }
 
   async function send(text: string): Promise<boolean> {
     const t = text.trim();
     if (!t) return false;
     if (t === "/new") {
-      session?.newSession();
-      history.newSession();
+      newConversation();
       await giveFocusBack();
-      dispatch({ type: "newSession" });
       dispatch({ type: "closeChat" });
       return true;
     }
@@ -453,22 +569,26 @@ async function main(): Promise<void> {
   }
 
   function copyChip(n: number): void {
-    const chip = currentChips(state)[n - 1];
-    if (!chip) return;
+    const chips = currentChips(state);
+    const chip = chips[n - 1];
+    if (!chip) {
+      const has = chips.length ? `the reply has ${chips.length}` : "the reply has none";
+      return flash("copy", `📋 no chip ${n}; ${has}`, 2_000);
+    }
     clipboard.writeText(chip.text);
     flash("copy", `📋 copied ${chip.text}`, 2_000);
   }
 
   // Hotkeys and the tray share one error path: a failed action is logged, never fatal.
   function runAction(a: HotkeyAction, source: "hotkey" | "tray"): void {
-    runHotkey(a).catch((err) => log.log("warn", `${source} ${a.type}: ${message(err)}`));
+    runHotkey(a, source).catch((err) => log.log("warn", `${source} ${a.type}: ${message(err)}`));
   }
 
-  async function runHotkey(a: HotkeyAction): Promise<void> {
+  async function runHotkey(a: HotkeyAction, source: "hotkey" | "tray"): Promise<void> {
     switch (a.type) {
       case "openChat":
         if (!canOpenChat(state, settings.safety.blockWhenInDanger)) return flash("chat", IN_DANGER);
-        focus?.save();
+        focus?.save(source === "tray");
         return dispatch({ type: "openChat" });
       case "toggleOverlay":
         return dispatch({ type: "toggleVisible" });
@@ -477,11 +597,18 @@ async function main(): Promise<void> {
       case "showHistory":
         return dispatch({ type: "toggleHistory" });
       case "approve":
-      case "deny": {
+      case "deny":
+      case "alwaysAllow": {
         const req = currentApproval(state);
-        if (req) approval.answer(req.id, a.type === "approve" ? "allow" : "deny");
+        if (req) answerApproval(req.id, a.type);
         return;
       }
+      case "showMore":
+        dispatch({ type: "showMore" });
+        // Either way the player starts reading now, so the card gets a full fade time.
+        // A reply still arriving does not fade; its end starts the fade.
+        if (state.session !== "thinking") scheduleFade();
+        return;
       case "cancel":
         if (!session?.busy) return;
         session.cancel();
@@ -528,6 +655,27 @@ async function main(): Promise<void> {
   });
   ipcMain.on(IPC.expand, () => {
     if (state.iconMode) dispatch({ type: "toggleIcon" });
+  });
+  // The card does not fade while the player reads it with the pointer on it.
+  ipcMain.on(IPC.holdCard, (_e, v: unknown) => {
+    const hold = boolArg(v);
+    if (hold === null) return;
+    cardHeld = hold;
+    if (hold) clearTimeout(fadeTimer);
+    else if (state.cardOpen && state.session !== "thinking") scheduleFade();
+  });
+  ipcMain.on(IPC.copyNotice, () => {
+    const command = pickNotice(state.notices)?.command;
+    if (!command) return;
+    clipboard.writeText(command);
+    flash("copy", COMMAND_COPIED, 3_000);
+  });
+  ipcMain.on(IPC.showNotices, () => noticeMenu().popup({ window: win }));
+  ipcMain.on(IPC.closeKeys, hideKeys);
+  ipcMain.on(IPC.showMore, () => runAction({ type: "showMore" }, "hotkey"));
+  ipcMain.on(IPC.answerApproval, (_e, id: unknown, a: unknown) => {
+    const answer = answerArg(a);
+    if (typeof id === "string" && answer) answerApproval(id, answer);
   });
   ipcMain.on(IPC.height, (_e, v: unknown) => {
     const h = heightArg(v);
@@ -588,7 +736,7 @@ async function main(): Promise<void> {
       if (c && session) {
         session.configure(c);
         flash("claudeSettings", "ⓘ claude settings apply after /new", 6_000);
-      } else if (c) startSession(c);
+      } else if (c && claudeStarted) startSession(c);
     }
     if (journalDir(old) !== journalDir(settings)) {
       status.stop();
@@ -607,20 +755,89 @@ async function main(): Promise<void> {
     void shell.openPath(p).then((err) => {
       if (err) log.log("warn", `open ${path.basename(p)}: ${err}`);
     });
-  const trayIcon = app.isPackaged
+  const trayIconFile = app.isPackaged
     ? path.join(process.resourcesPath, "tray.png")
     : path.join(app.getAppPath(), "resources", "tray.png");
-  const tray = new Tray(nativeImage.createFromPath(trayIcon));
-  tray.setToolTip("ED Chat");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: "Show/Hide overlay", click: () => runAction({ type: "toggleOverlay" }, "tray") },
+  // A menu label treats & as a mnemonic marker.
+  const label = (s: string) => s.replace(/&/g, "&&");
+
+  function showHotkeyProblems(): void {
+    void dialog
+      .showMessageBox({
+        type: "warning",
+        title: "ED Chat",
+        message: "Other apps already use these keys, so ED Chat could not register them.",
+        detail:
+          failedHotkeys.join("\n") +
+          "\n\nSet other keys in settings.json, under hotkeys. Each setting takes one key or a list.",
+        buttons: ["Open settings", "OK"],
+        defaultId: 1,
+      })
+      .then((r) => {
+        if (r.response === 0) openPath(settingsFile);
+      });
+  }
+
+  function noticeMenu(): Menu {
+    return Menu.buildFromTemplate(
+      Object.entries(state.notices).map(([key, text]) => {
+        const command = noticeCommand(key, text);
+        return {
+          label: label(command ? `${text.replace(/`/g, "")}  (click to copy)` : text),
+          click: () => {
+            if (!command) return;
+            clipboard.writeText(command);
+            flash("copy", COMMAND_COPIED, 3_000);
+          },
+        };
+      }),
+    );
+  }
+
+  // Built when opened, so the chips and problems are current.
+  function trayMenu(): Menu {
+    const chips = currentChips(state);
+    const tray = (a: HotkeyAction) => () => runAction(a, "tray");
+    return Menu.buildFromTemplate([
+      ...chips.map((c) => ({
+        label: label(`Copy ${c.n}: ${c.text}`),
+        click: () => copyChip(c.n),
+      })),
+      ...(chips.length ? [{ type: "separator" as const }] : []),
+      { label: "Open chat", click: tray({ type: "openChat" }) },
+      { label: "New conversation", click: newConversation },
+      { label: "Show hotkeys", click: showKeys },
+      ...(failedHotkeys.length
+        ? [{ label: `Hotkey problems (${failedHotkeys.length})…`, click: showHotkeyProblems }]
+        : []),
+      { type: "separator" },
+      {
+        label: "Icon mode",
+        type: "checkbox",
+        checked: state.iconMode,
+        click: tray({ type: "toggleIcon" }),
+      },
+      // Minimized, the overlay still shows the chat and approvals, and the hotkeys still work.
+      {
+        label: state.visible ? "Minimize to tray" : "Restore overlay",
+        click: () => {
+          runAction({ type: "toggleOverlay" }, "tray");
+          trayIcon.setToolTip(state.visible ? "ED Chat" : "ED Chat (minimized)");
+        },
+      },
       { label: "Open settings", click: () => openPath(settingsFile) },
       { label: "Open log folder", click: () => openPath(logDir) },
       { type: "separator" },
       { label: "Quit", click: () => app.quit() },
-    ]),
-  );
+    ]);
+  }
+
+  const trayIcon = new Tray(nativeImage.createFromPath(trayIconFile));
+  trayIcon.setToolTip("ED Chat");
+  // Left and right click open the same menu.
+  const popTray = () => trayIcon.popUpContextMenu(trayMenu());
+  trayIcon.on("click", popTray);
+  trayIcon.on("right-click", popTray);
 
   screen.on("display-removed", reposition);
   screen.on("display-metrics-changed", reposition);
@@ -629,10 +846,12 @@ async function main(): Promise<void> {
   });
   focus?.start();
   render();
-  log.log("info", `started; claude ${cmd ? cmd.command : "not found"}`);
+  startClaude().catch((err) => log.log("warn", `claude start: ${message(err)}`));
+  // After the first foreground check, so the list shows which keys other apps hold.
+  if (settings.startup.showKeys) setTimeout(showKeys, 1_000);
 
   app.on("will-quit", () => {
-    tray.destroy();
+    trayIcon.destroy();
     globalShortcut.unregisterAll();
     focus?.stop();
     status.stop();

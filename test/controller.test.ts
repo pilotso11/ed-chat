@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  ANSWER_GUARD_MS,
   INITIAL_STATE,
+  answerAllowed,
   canOpenChat,
   currentApproval,
   currentChips,
@@ -150,7 +152,7 @@ describe("reduce", () => {
   });
 
   it("tracks approvals by id", () => {
-    const req = { id: "r1", toolName: "Bash", summary: "{}" };
+    const req = { id: "r1", toolName: "Bash", summary: "{}", shell: false, deadline: 0 };
     const s = run([{ type: "approval", request: req }]);
     expect(currentApproval(s)).toEqual(req);
     expect(currentApproval(run([{ type: "approvalSettled", id: "other" }], s))).toEqual(req);
@@ -158,8 +160,8 @@ describe("reduce", () => {
   });
 
   it("queues approvals that arrive together", () => {
-    const r1 = { id: "r1", toolName: "Bash", summary: "1" };
-    const r2 = { id: "r2", toolName: "Read", summary: "2" };
+    const r1 = { id: "r1", toolName: "Bash", summary: "1", shell: false, deadline: 0 };
+    const r2 = { id: "r2", toolName: "Read", summary: "2", shell: false, deadline: 0 };
     const s = run([
       { type: "approval", request: r1 },
       { type: "approval", request: r2 },
@@ -197,18 +199,18 @@ describe("reduce", () => {
 });
 
 describe("icon mode", () => {
-  const req = { id: "r", toolName: "Bash", summary: "" };
+  const req = { id: "r", toolName: "Bash", summary: "", shell: false, deadline: 0 };
   it("toggles with the hotkey", () => {
     expect(run([{ type: "toggleIcon" }]).iconMode).toBe(true);
     expect(run([{ type: "toggleIcon" }, { type: "toggleIcon" }]).iconMode).toBe(false);
   });
 
-  it("expands for a reply, an approval, the chat or the history, and stays expanded", () => {
+  it("keeps the icon preference through a reply, an approval, the chat and the history", () => {
     const icon: Action = { type: "toggleIcon" };
-    expect(run([ready, icon, text("hi")]).iconMode).toBe(false);
-    expect(run([icon, { type: "approval", request: req }]).iconMode).toBe(false);
-    expect(run([icon, { type: "openChat" }]).iconMode).toBe(false);
-    expect(run([icon, { type: "toggleHistory" }]).iconMode).toBe(false);
+    expect(run([ready, icon, text("hi")]).iconMode).toBe(true);
+    expect(run([icon, { type: "approval", request: req }]).iconMode).toBe(true);
+    expect(run([icon, { type: "openChat" }]).iconMode).toBe(true);
+    expect(run([icon, { type: "toggleHistory" }]).iconMode).toBe(true);
     const faded = run([
       ready,
       icon,
@@ -217,7 +219,13 @@ describe("icon mode", () => {
       result(),
       { type: "cardTimeout" },
     ]);
-    expect(faded.iconMode).toBe(false);
+    expect(faded).toMatchObject({ iconMode: true, cardOpen: false });
+  });
+
+  it("marks a cancelled reply until the next send", () => {
+    const s = run([ready, { type: "sent", text: "a" }, { type: "cancelled" }]);
+    expect(s.cancelled).toBe(true);
+    expect(run([{ type: "sent", text: "b" }], s).cancelled).toBe(false);
   });
 
   it("stays an icon for notices and ship flags", () => {
@@ -243,8 +251,14 @@ describe("windowProps", () => {
   it("hides, but still shows a pending approval", () => {
     const hidden = run([{ type: "toggleVisible" }]);
     expect(windowProps(hidden).show).toBe(false);
-    const req = { id: "r", toolName: "Bash", summary: "" };
+    const req = { id: "r", toolName: "Bash", summary: "", shell: false, deadline: 0 };
     expect(windowProps(run([{ type: "approval", request: req }], hidden)).show).toBe(true);
+  });
+
+  it("shows the hotkey list while minimized to the tray", () => {
+    const hidden = run([{ type: "toggleVisible" }]);
+    expect(windowProps(run([{ type: "keys", rows: [] }], hidden)).show).toBe(true);
+    expect(windowProps(run([{ type: "keys", rows: null }], hidden)).show).toBe(false);
   });
 });
 
@@ -254,5 +268,23 @@ describe("canOpenChat", () => {
     expect(canOpenChat(danger, true)).toBe(false);
     expect(canOpenChat(danger, false)).toBe(true);
     expect(canOpenChat(INITIAL_STATE, true)).toBe(true);
+  });
+});
+
+describe("answerAllowed", () => {
+  const shown = { id: "r", at: 1_000 };
+  it("ignores an allow that comes before the card can be read", () => {
+    expect(answerAllowed("approve", "r", shown, 1_000 + ANSWER_GUARD_MS - 1)).toBe(false);
+    expect(answerAllowed("alwaysAllow", "r", shown, 1_000)).toBe(false);
+    expect(answerAllowed("approve", "r", shown, 1_000 + ANSWER_GUARD_MS)).toBe(true);
+  });
+
+  it("always takes a deny", () => {
+    expect(answerAllowed("deny", "r", shown, 1_000)).toBe(true);
+  });
+
+  it("does not hold back an answer to a request that is not the one just shown", () => {
+    expect(answerAllowed("approve", "other", shown, 1_000)).toBe(true);
+    expect(answerAllowed("approve", "r", null, 1_000)).toBe(true);
   });
 });

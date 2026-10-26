@@ -1,10 +1,12 @@
 import type { Direction } from "./anchor.js";
-import type { Settings } from "./settings.js";
+import { NUMPAD_CHIP, keyList, type Keys, type Settings } from "./settings.js";
 
 export type HotkeyAction =
   | { type: "openChat" }
   | { type: "toggleOverlay" }
   | { type: "toggleIcon" }
+  | { type: "showMore" }
+  | { type: "alwaysAllow" }
   | { type: "showHistory" }
   | { type: "approve" }
   | { type: "deny" }
@@ -19,36 +21,43 @@ export interface Binding {
   action: HotkeyAction;
 }
 
+export function chipPatterns(h: Settings["hotkeys"]): string[] {
+  return [...keyList(h.copyChip), ...(h.copyChipNumpad ? [NUMPAD_CHIP] : [])];
+}
+
 export function bindings(h: Settings["hotkeys"]): Binding[] {
-  const b = (name: string, accelerator: string, action: HotkeyAction): Binding => ({
-    name,
-    accelerator,
-    action,
-  });
+  const b = (name: string, k: Keys, action: HotkeyAction): Binding[] =>
+    keyList(k).map((accelerator) => ({ name, accelerator, action }));
   return [
-    b("openChat", h.openChat, { type: "openChat" }),
-    b("toggleOverlay", h.toggleOverlay, { type: "toggleOverlay" }),
-    b("toggleIcon", h.toggleIcon, { type: "toggleIcon" }),
-    b("showHistory", h.showHistory, { type: "showHistory" }),
-    b("approve", h.approve, { type: "approve" }),
-    b("deny", h.deny, { type: "deny" }),
-    b("cancel", h.cancel, { type: "cancel" }),
-    b("moveUp", h.moveUp, { type: "move", dir: "up" }),
-    b("moveDown", h.moveDown, { type: "move", dir: "down" }),
-    b("moveLeft", h.moveLeft, { type: "move", dir: "left" }),
-    b("moveRight", h.moveRight, { type: "move", dir: "right" }),
-    b("nextDisplay", h.nextDisplay, { type: "nextDisplay" }),
-    ...Array.from({ length: 9 }, (_, i) =>
-      b(`copyChip${i + 1}`, h.copyChip.replace("{n}", String(i + 1)), {
-        type: "copyChip",
-        n: i + 1,
-      }),
+    ...b("openChat", h.openChat, { type: "openChat" }),
+    ...b("toggleIcon", h.toggleIcon, { type: "toggleIcon" }),
+    ...b("showMore", h.showMore, { type: "showMore" }),
+    ...b("showHistory", h.showHistory, { type: "showHistory" }),
+    ...b("approve", h.approve, { type: "approve" }),
+    ...b("deny", h.deny, { type: "deny" }),
+    ...b("alwaysAllow", h.alwaysAllow, { type: "alwaysAllow" }),
+    ...b("cancel", h.cancel, { type: "cancel" }),
+    ...b("moveUp", h.moveUp, { type: "move", dir: "up" }),
+    ...b("moveDown", h.moveDown, { type: "move", dir: "down" }),
+    ...b("moveLeft", h.moveLeft, { type: "move", dir: "left" }),
+    ...b("moveRight", h.moveRight, { type: "move", dir: "right" }),
+    ...b("nextDisplay", h.nextDisplay, { type: "nextDisplay" }),
+    ...chipPatterns(h).flatMap((p) =>
+      Array.from({ length: 9 }, (_, i) => ({
+        name: `copyChip${i + 1}`,
+        accelerator: p.replace("{n}", String(i + 1)),
+        action: { type: "copyChip", n: i + 1 } as const,
+      })),
     ),
   ];
 }
 
 const CTRL = new Set(["ctrl", "control", "cmdorctrl", "commandorcontrol"]);
 const NUMPAD = /^num(\d|dec|add|sub|mult|div)$/;
+const MODIFIER =
+  /(^|\+)(Ctrl|Control|Alt|Shift|Cmd|Command|CmdOrCtrl|CommandOrControl|Super|Meta|Option|AltGr)\+/i;
+
+export const hasModifier = (accelerator: string) => MODIFIER.test(accelerator);
 
 /**
  * True when the chat input needs the key: any key but a function key, alone or with Shift
@@ -89,11 +98,30 @@ export function chordBinding(all: Binding[], chord: string): Binding | null {
 }
 
 /**
- * The bindings to register. While the overlay has focus, keys that type text are left out:
- * a global shortcut swallows the key, so it could not be typed in the chat input.
+ * The bindings to register. A global shortcut swallows its key. While the overlay has focus,
+ * keys that type text are left out, so the chat input gets them. In "always" scope, keys
+ * without a modifier are left out, so every other app gets them.
  */
-export function activeBindings(all: Binding[], overlayFocused: boolean): Binding[] {
-  return overlayFocused ? all.filter((b) => !typesText(b.accelerator)) : all;
+export function activeBindings(
+  all: Binding[],
+  overlayFocused: boolean,
+  scope: Settings["hotkeys"]["scope"] = "game",
+): Binding[] {
+  return all.filter(
+    (b) =>
+      !(overlayFocused && typesText(b.accelerator)) &&
+      !(scope === "always" && !hasModifier(b.accelerator)),
+  );
+}
+
+/** How a key list reads on screen: "Ctrl+Alt+C" or "Ctrl+Alt+C / F13". */
+export const keyLabel = (k: Keys) => keyList(k).join(" / ");
+
+/** The copy keys as one label: "Ctrl+Shift+1–9". */
+export function chipKeyLabel(h: Settings["hotkeys"]): string {
+  return chipPatterns(h)
+    .map((p) => p.replace("{n}", "1–9"))
+    .join(" / ");
 }
 
 export interface Registrar {
@@ -105,6 +133,8 @@ export class HotkeyManager {
   private current: Binding[] = [];
   private registered: string[] = [];
   private _active = false;
+  /** The accelerators that failed at the last activation. */
+  failedKeys: string[] = [];
 
   constructor(
     private readonly reg: Registrar,
@@ -137,6 +167,9 @@ export class HotkeyManager {
       if (ok) this.registered.push(b.accelerator);
       else failed.push(`${b.name} (${b.accelerator})`);
     }
+    this.failedKeys = this.current
+      .map((b) => b.accelerator)
+      .filter((a) => !this.registered.includes(a));
     return failed;
   }
 
@@ -145,4 +178,65 @@ export class HotkeyManager {
     this.registered = [];
     this._active = false;
   }
+}
+
+// "Ctrl+Alt+Arrows" when the four move keys share their modifiers, else the full list.
+function arrowLabel(keys: string[]): string {
+  const mods = keys.map((k) => k.slice(0, k.lastIndexOf("+") + 1));
+  const same = keys.length === 4 && mods.every((m) => m === mods[0]);
+  return same ? `${mods[0]}Arrows` : keys.join(" / ");
+}
+
+/** One line of the hotkey list. */
+export interface KeyRow {
+  label: string;
+  keys: string;
+  failed: string[];
+  /** Keys that "always" scope never registers, because they have no modifier. */
+  unused: string[];
+}
+
+const LABELS: [keyof Settings["hotkeys"], string][] = [
+  ["openChat", "Open chat"],
+  ["approve", "Allow tool"],
+  ["deny", "Deny tool"],
+  ["alwaysAllow", "Always allow tool"],
+  ["cancel", "Stop reply"],
+  ["showMore", "Whole reply"],
+  ["showHistory", "History"],
+  ["toggleIcon", "Icon mode"],
+];
+
+/** The hotkey list for the keys card; failed holds the keys another app has taken. */
+export function keyRows(h: Settings["hotkeys"], failed: string[]): KeyRow[] {
+  const taken = (ks: string[]) => ks.filter((k) => failed.includes(k));
+  const unused = (ks: string[]) => (h.scope === "always" ? ks.filter((k) => !hasModifier(k)) : []);
+  const rows: KeyRow[] = LABELS.map(([name, label]) => {
+    const ks = keyList(h[name] as Keys);
+    return { label, keys: ks.join(" / "), failed: taken(ks), unused: unused(ks) };
+  });
+  const chipKeys = chipPatterns(h).flatMap((p) =>
+    Array.from({ length: 9 }, (_, i) => p.replace("{n}", String(i + 1))),
+  );
+  rows.splice(1, 0, {
+    label: "Copy chip",
+    keys: chipKeyLabel(h),
+    failed: taken(chipKeys),
+    unused: unused(chipKeys),
+  });
+  const arrows = [h.moveUp, h.moveDown, h.moveLeft, h.moveRight].flatMap(keyList);
+  rows.push({
+    label: "Move overlay",
+    keys: arrowLabel(arrows),
+    failed: taken(arrows),
+    unused: unused(arrows),
+  });
+  const next = keyList(h.nextDisplay);
+  rows.push({
+    label: "Next monitor",
+    keys: next.join(" / "),
+    failed: taken(next),
+    unused: unused(next),
+  });
+  return rows;
 }

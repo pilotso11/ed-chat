@@ -13,7 +13,7 @@ next to each item.
    Borderless.
 4. Topmost: does the overlay stay on top after Alt+Tab back into the game?
 5. Frame time: run PresentMon for 60 s with the overlay shown and 60 s with it
-   hidden (Ctrl+Alt+O). Write down the average and 99th percentile frame
+   minimized to the tray (tray menu). Write down the average and 99th percentile frame
    times.
 6. Win32: the log shows no koffi errors, and the game is detected
    (`EliteDangerous64.exe`).
@@ -23,7 +23,7 @@ next to each item.
 - [ ] The overlay shows over the game in Borderless mode.
 - [ ] The fullscreen warning shows in exclusive fullscreen.
 - [ ] Hotkeys work while the game is in front, and not while another app is.
-- [ ] ` switches to the icon and back, and the game does not also act on `.
+- [ ] Ctrl+Alt+Enter switches to the icon and back, and the game does not also act on it.
 - [ ] In icon mode, a reply expands the overlay and it stays expanded.
 - [ ] With the chat open, dragging the status line moves the overlay, and it snaps to the nearest edge or corner.
 - [ ] `style.backgroundOpacity` changes apply live, and text stays readable over a bright star.

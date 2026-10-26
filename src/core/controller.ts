@@ -1,6 +1,7 @@
 import type { ApprovalRequest } from "./approvalServer.js";
 import { firstLine, parseChips, type Chip } from "./chips.js";
 import type { BackendEvent } from "./claudeSession.js";
+import type { KeyRow } from "./hotkeys.js";
 import type { ShipFlags } from "./status.js";
 
 export interface Turn {
@@ -13,6 +14,8 @@ export interface OverlayState {
   chatOpen: boolean;
   historyOpen: boolean;
   cardOpen: boolean;
+  /** The card shows the whole reply, not the first card.maxLines lines. */
+  cardFull: boolean;
   session: "starting" | "idle" | "thinking" | "stopped";
   tool: string | null;
   blocked: string | null;
@@ -23,8 +26,12 @@ export interface OverlayState {
   approvals: ApprovalRequest[];
   flags: ShipFlags | null;
   notices: Record<string, string>;
-  /** The resting state is a small icon; replies, approvals and the chat leave it. */
+  /** The player prefers the small icon at rest. Replies, approvals and the chat show over it. */
   iconMode: boolean;
+  /** The player stopped the reply; Claude restarts. */
+  cancelled: boolean;
+  /** The hotkey list, shown at startup and from the tray. */
+  keys: KeyRow[] | null;
 }
 
 export const INITIAL_STATE: OverlayState = {
@@ -32,6 +39,7 @@ export const INITIAL_STATE: OverlayState = {
   chatOpen: false,
   historyOpen: false,
   cardOpen: false,
+  cardFull: false,
   session: "starting",
   tool: null,
   blocked: null,
@@ -43,6 +51,8 @@ export const INITIAL_STATE: OverlayState = {
   flags: null,
   notices: {},
   iconMode: false,
+  cancelled: false,
+  keys: null,
 };
 
 export type Action =
@@ -54,12 +64,14 @@ export type Action =
   | { type: "sent"; text: string }
   | { type: "backend"; event: BackendEvent }
   | { type: "cardTimeout" }
+  | { type: "showMore" }
   | { type: "approval"; request: ApprovalRequest }
   | { type: "approvalSettled"; id: string }
   | { type: "flags"; flags: ShipFlags | null }
   | { type: "notice"; key: string; text: string | null }
   | { type: "newSession" }
-  | { type: "cancelled" };
+  | { type: "cancelled" }
+  | { type: "keys"; rows: KeyRow[] | null };
 
 function withNotice(s: OverlayState, key: string, text: string | null): OverlayState {
   const { [key]: _old, ...rest } = s.notices;
@@ -78,7 +90,7 @@ function onBackend(s: OverlayState, e: BackendEvent): OverlayState {
         null,
       );
     case "text":
-      return { ...s, reply: s.reply + e.delta, session: "thinking", iconMode: false };
+      return { ...s, reply: s.reply + e.delta, session: "thinking" };
     case "toolStart":
       return { ...s, tool: e.name };
     case "toolEnd":
@@ -131,17 +143,19 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     case "toggleIcon":
       return { ...s, iconMode: !s.iconMode, visible: true };
     case "openChat":
-      return { ...s, chatOpen: true, visible: true, iconMode: false };
+      return { ...s, chatOpen: true, visible: true };
     case "closeChat":
       return { ...s, chatOpen: false };
     case "toggleHistory":
-      return { ...s, historyOpen: !s.historyOpen, visible: true, iconMode: false };
+      return { ...s, historyOpen: !s.historyOpen, visible: true };
     // The chat stays open: main closes it once focus is back with the game.
     case "sent":
       return {
         ...s,
         cardOpen: true,
+        cardFull: false,
         session: "thinking",
+        cancelled: false,
         reply: "",
         blocked: null,
         history: [...s.history, { role: "user", text: a.text }],
@@ -149,9 +163,15 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     case "backend":
       return onBackend(s, a.event);
     case "cardTimeout":
-      return s.session === "thinking" ? s : { ...s, cardOpen: false };
+      return s.session === "thinking" ? s : { ...s, cardOpen: false, cardFull: false };
+    // Opens the last reply in full, or switches between full and short.
+    case "showMore":
+      if (!s.reply) return s;
+      return s.cardOpen
+        ? { ...s, cardFull: !s.cardFull }
+        : { ...s, cardOpen: true, cardFull: true };
     case "approval":
-      return { ...s, approvals: [...s.approvals, a.request], iconMode: false };
+      return { ...s, approvals: [...s.approvals, a.request] };
     case "approvalSettled":
       return { ...s, approvals: s.approvals.filter((r) => r.id !== a.id) };
     case "flags":
@@ -167,6 +187,7 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
           pinned: null,
           history: [],
           session: "starting",
+          cancelled: false,
           tool: null,
           blocked: null,
           cardOpen: false,
@@ -175,7 +196,9 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
         null,
       );
     case "cancelled":
-      return { ...s, session: "starting", tool: null };
+      return { ...s, session: "starting", tool: null, cancelled: true };
+    case "keys":
+      return { ...s, keys: a.rows };
   }
 }
 
@@ -186,7 +209,8 @@ export interface WindowProps {
 
 export function windowProps(s: OverlayState): WindowProps {
   return {
-    show: s.visible || s.chatOpen || s.approvals.length > 0,
+    // Show hotkeys works while minimized to the tray, when the strip is gone.
+    show: s.visible || s.chatOpen || s.approvals.length > 0 || s.keys !== null,
     interactive: s.chatOpen,
   };
 }
@@ -203,4 +227,21 @@ export function canOpenChat(s: OverlayState, blockWhenInDanger: boolean): boolea
 /** The chips that copyChip numbers refer to: the streaming reply's, else the last reply's. */
 export function currentChips(s: OverlayState): Chip[] {
   return s.session === "thinking" ? parseChips(s.reply).chips : s.chips;
+}
+
+export const ANSWER_GUARD_MS = 750;
+
+/**
+ * Whether an answer to approval `id` counts. An allow that comes within ANSWER_GUARD_MS of the
+ * card appearing is ignored: the key was on its way before the player could read the card.
+ * Deny always counts.
+ */
+export function answerAllowed(
+  answer: "approve" | "deny" | "alwaysAllow",
+  id: string,
+  shown: { id: string; at: number } | null,
+  now: number,
+): boolean {
+  if (answer === "deny") return true;
+  return !(shown?.id === id && now - shown.at < ANSWER_GUARD_MS);
 }

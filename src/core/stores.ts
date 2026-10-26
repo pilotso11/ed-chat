@@ -4,10 +4,14 @@ import path from "node:path";
 import { z } from "zod";
 import type { Turn } from "./controller.js";
 import {
+  DEFAULTS_FILE,
   DEFAULT_SETTINGS,
   PositionSchema,
+  SCHEMA_FILE,
   defaultSettingsText,
+  newSettingsText,
   parseSettings,
+  settingsSchemaText,
   type Position,
   type Settings,
 } from "./settings.js";
@@ -29,17 +33,57 @@ export class SettingsStore {
     return this.current;
   }
 
-  // A reference copy of every default, rewritten each start so it matches this version.
-  // A failure is reported, not thrown: the overlay works without the reference.
+  // The schema and a copy of every default, rewritten each start so they match this version.
+  // A failure is reported, not thrown: the overlay works without them.
   private async writeDefaultsReference(): Promise<string | null> {
-    const ref = path.join(path.dirname(this.file), "settings.defaults.json");
-    try {
-      await writeFile(ref, defaultSettingsText());
-      return null;
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      return `⚠ settings.defaults.json: ${code ?? String(err)}`;
+    const dir = path.dirname(this.file);
+    for (const [name, text] of [
+      [SCHEMA_FILE, settingsSchemaText()],
+      [DEFAULTS_FILE, defaultSettingsText()],
+    ] as const) {
+      try {
+        await writeFile(path.join(dir, name), text);
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        return `⚠ ${name}: ${code ?? String(err)}`;
+      }
     }
+    return null;
+  }
+
+  // A settings.json from before the schema link, or a hand-made one, gets the link too, so
+  // editors complete it. Only the first line changes; the rest keeps the player's layout.
+  // A failure is ignored: the link only helps editing.
+  private async addSchemaLink(text: string): Promise<void> {
+    const raw: unknown = JSON.parse(text);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || "$schema" in raw) return;
+    const empty = Object.keys(raw).length === 0;
+    const linked = text.replace("{", `{\n  "$schema": "./${SCHEMA_FILE}"${empty ? "" : ","}`);
+    try {
+      await writeFile(this.file, linked);
+      this.lastText = linked;
+    } catch {
+      // Read-only file: keep it as it is.
+    }
+  }
+
+  /** settings.json could not be read or parsed; a reference-file error does not count. */
+  get broken(): boolean {
+    return this.lastError !== null || this.lastText === null;
+  }
+
+  /** The file as last read, without a BOM. */
+  get text(): string {
+    return this.lastText ?? "";
+  }
+
+  /** Sets one value in settings.json and keeps the rest of the file. */
+  async set(group: string, key: string, value: unknown): Promise<void> {
+    // Throws on a broken file, which must not be replaced with one value.
+    const raw = JSON.parse(this.text) as Record<string, unknown>;
+    const g = raw[group];
+    raw[group] = { ...(g && typeof g === "object" ? g : {}), [key]: value };
+    await writeFile(this.file, JSON.stringify(raw, null, 2) + "\n");
   }
 
   async load(): Promise<LoadResult> {
@@ -51,7 +95,7 @@ export class SettingsStore {
       if (code !== "ENOENT")
         return { changed: false, error: `⚠ settings.json: ${code ?? String(err)}` };
       // Only overrides go in settings.json, so a later release's defaults still apply.
-      text = "{}\n";
+      text = newSettingsText();
       await mkdir(path.dirname(this.file), { recursive: true });
       await writeFile(this.file, text);
     }
@@ -67,6 +111,7 @@ export class SettingsStore {
       return { changed: false, error: this.lastError };
     }
     this.lastError = null;
+    if (this.firstLoad) await this.addSchemaLink(text);
     const changed = this.firstLoad || JSON.stringify(r.settings) !== JSON.stringify(this.current);
     this.firstLoad = false;
     this.current = r.settings;

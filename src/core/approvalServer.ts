@@ -10,20 +10,35 @@ export interface ApprovalRequest {
   id: string;
   toolName: string;
   summary: string;
+  /** The tool runs a shell command. */
+  shell: boolean;
+  /** When the request is denied for want of an answer, in ms since the epoch. */
+  deadline: number;
 }
 export type ApprovalDecision = "allow" | "deny";
-type Outcome = ApprovalDecision | "timeout" | "cancelled";
+export type Outcome = ApprovalDecision | "timeout" | "cancelled";
 
 export interface ApprovalServerOptions {
   timeoutMs: number;
   onRequest: (r: ApprovalRequest) => void;
-  onSettled: (id: string) => void;
+  onSettled: (id: string, outcome: Outcome) => void;
   onError?: (err: unknown) => void;
+  now?: () => number;
 }
 
-export function summarize(input: unknown, max = 80): string {
-  const s = JSON.stringify(input) ?? "";
-  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+const SHELL_TOOLS = ["Bash", "PowerShell"];
+
+const cut = (s: string, max: number) => (s.length > max ? s.slice(0, max - 1) + "…" : s);
+
+/** What the tool will do, short enough for three lines of the approval card. */
+export function summarize(toolName: string, input: unknown, max = 200): string {
+  const i = (input ?? {}) as Record<string, unknown>;
+  if (SHELL_TOOLS.includes(toolName) && typeof i.command === "string") return cut(i.command, max);
+  if (typeof i.file_path === "string") return cut(i.file_path, max);
+  const parts = Object.entries(i).map(
+    ([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`,
+  );
+  return cut(parts.join(", "), max);
 }
 
 export class ApprovalServer {
@@ -32,6 +47,8 @@ export class ApprovalServer {
   private readonly token = randomBytes(24).toString("hex");
   private readonly pending = new Map<string, (d: Outcome) => void>();
   private timeoutMs: number;
+  /** Tools the player allowed for the rest of this conversation. */
+  private readonly allowed = new Set<string>();
 
   constructor(private readonly opts: ApprovalServerOptions) {
     this.timeoutMs = opts.timeoutMs;
@@ -60,6 +77,15 @@ export class ApprovalServer {
 
   setTimeoutMs(ms: number): void {
     this.timeoutMs = ms;
+  }
+
+  /** Allows this tool without asking until clearAllowed(), for example at /new. */
+  allowTool(toolName: string): void {
+    this.allowed.add(toolName);
+  }
+
+  clearAllowed(): void {
+    this.allowed.clear();
   }
 
   answer(id: string, d: ApprovalDecision): boolean {
@@ -135,13 +161,14 @@ export class ApprovalServer {
 
   private ask(toolName: string, input: unknown, signal: AbortSignal): Promise<Outcome> {
     if (signal.aborted) return Promise.resolve("cancelled");
+    if (this.allowed.has(toolName)) return Promise.resolve("allow");
     const id = randomUUID();
     return new Promise((resolve) => {
       const settle = (d: Outcome) => {
         clearTimeout(timer);
         signal.removeEventListener("abort", onAbort);
         if (!this.pending.delete(id)) return;
-        this.opts.onSettled(id);
+        this.opts.onSettled(id, d);
         resolve(d);
       };
       const onAbort = () => settle("cancelled");
@@ -150,7 +177,14 @@ export class ApprovalServer {
       // The CLI may disconnect (Ctrl-C, crash, its own tool timeout) while the card is up.
       signal.addEventListener("abort", onAbort, { once: true });
       this.pending.set(id, settle);
-      this.opts.onRequest({ id, toolName, summary: summarize(input) });
+      const now = this.opts.now?.() ?? Date.now();
+      this.opts.onRequest({
+        id,
+        toolName,
+        summary: summarize(toolName, input),
+        shell: SHELL_TOOLS.includes(toolName),
+        deadline: now + this.timeoutMs,
+      });
     });
   }
 }
