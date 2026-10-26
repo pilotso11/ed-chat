@@ -574,14 +574,14 @@ async function main(): Promise<void> {
 
   // Hotkeys and the tray share one error path: a failed action is logged, never fatal.
   function runAction(a: HotkeyAction, source: "hotkey" | "tray"): void {
-    runHotkey(a).catch((err) => log.log("warn", `${source} ${a.type}: ${message(err)}`));
+    runHotkey(a, source).catch((err) => log.log("warn", `${source} ${a.type}: ${message(err)}`));
   }
 
-  async function runHotkey(a: HotkeyAction): Promise<void> {
+  async function runHotkey(a: HotkeyAction, source: "hotkey" | "tray"): Promise<void> {
     switch (a.type) {
       case "openChat":
         if (!canOpenChat(state, settings.safety.blockWhenInDanger)) return flash("chat", IN_DANGER);
-        focus?.save();
+        focus?.save(source === "tray");
         return dispatch({ type: "openChat" });
       case "toggleOverlay":
         return dispatch({ type: "toggleVisible" });

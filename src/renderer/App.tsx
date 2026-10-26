@@ -264,6 +264,12 @@ export function App() {
   useEffect(() => {
     if (!chatInput) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
+      // The input handles its own Escape; this one closes the chat after a click moved focus off it.
+      if (e.key === "Escape" && !(e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        window.overlay.closeChat();
+        return;
+      }
       const chord = chordFromKey({
         key: e.key,
         code: e.code,
