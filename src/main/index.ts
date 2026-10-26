@@ -604,11 +604,11 @@ async function main(): Promise<void> {
         return;
       }
       case "showMore":
-        if (!state.cardOpen) {
-          dispatch({ type: "showMore" });
-          return scheduleFade();
-        }
-        return dispatch({ type: "showMore" });
+        dispatch({ type: "showMore" });
+        // Either way the player starts reading now, so the card gets a full fade time.
+        // A reply still arriving does not fade; its end starts the fade.
+        if (state.session !== "thinking") scheduleFade();
+        return;
       case "cancel":
         if (!session?.busy) return;
         session.cancel();
