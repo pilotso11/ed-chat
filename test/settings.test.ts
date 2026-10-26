@@ -12,7 +12,8 @@ describe("parseSettings", () => {
     const r = parseSettings("{}");
     expect(r).toEqual({ ok: true, settings: DEFAULT_SETTINGS });
     expect(DEFAULT_SETTINGS.hotkeys.openChat).toBe("Ctrl+Alt+C");
-    expect(DEFAULT_SETTINGS.hotkeys.toggleOverlay).toBe("Ctrl+Alt+O");
+    expect(DEFAULT_SETTINGS.hotkeys.showMore).toBe("Ctrl+`");
+    expect(DEFAULT_SETTINGS.hotkeys.alwaysAllow).toBe("Ctrl+Shift+A");
     expect(DEFAULT_SETTINGS.hotkeys.cancel).toBe("Ctrl+Alt+X");
     expect(DEFAULT_SETTINGS.hotkeys.scope).toBe("game");
     expect(DEFAULT_SETTINGS.strip).toEqual({ lines: 2, keepChips: true, startAsIcon: false });
@@ -101,5 +102,12 @@ describe("settings defaults", () => {
 
   it("starts with an empty settings file that parses to the defaults", () => {
     expect(parseSettings(newSettingsText())).toEqual({ ok: true, settings: DEFAULT_SETTINGS });
+  });
+});
+
+describe("removed settings", () => {
+  it("loads an older settings.json that still sets hotkeys.toggleOverlay", () => {
+    const r = parseSettings('{"hotkeys":{"toggleOverlay":"Ctrl+Alt+O","openChat":"F13"}}');
+    expect(r.ok && r.settings.hotkeys.openChat).toBe("F13");
   });
 });

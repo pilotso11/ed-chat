@@ -13,7 +13,7 @@ next to each item.
    Borderless.
 4. Topmost: does the overlay stay on top after Alt+Tab back into the game?
 5. Frame time: run PresentMon for 60 s with the overlay shown and 60 s with it
-   hidden (Ctrl+Alt+O). Write down the average and 99th percentile frame
+   minimized to the tray (tray menu). Write down the average and 99th percentile frame
    times.
 6. Win32: the log shows no koffi errors, and the game is detected
    (`EliteDangerous64.exe`).
