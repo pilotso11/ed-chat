@@ -29,6 +29,8 @@ next to each item.
 - [ ] `style.backgroundOpacity` changes apply live, and text stays readable over a bright star.
 - [ ] Enter gives focus back to the game.
 - [ ] A copied chip pastes into the galaxy map search with Ctrl+V.
+- [ ] Clicking a chip in the card copies it, clicking the icon expands it, and neither takes focus from the game.
+- [ ] In flight, firing with the mouse still works while the hidden cursor rests over a chip or the icon.
 - [ ] A tool request shows the approval card; Ctrl+Shift+Y and N work.
 - [ ] The chat does not open while in danger.
 - [ ] Position hotkeys work, including Ctrl+Alt+M with two monitors.

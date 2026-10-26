@@ -100,8 +100,13 @@ some frame time. The `toggleOverlay` hotkey hides the overlay completely.
 | `strip` | yes | no | Status line, pinned line, chip row |
 | `card` | yes | no | The strip plus the latest reply, cut to `card.maxLines` lines; the full reply is in the chat history |
 | `chat` | no | yes | History, chips that can be clicked, input box |
-| history (`showHistory`) | yes | no | The chat history without the input box. It does not take the mouse, so chips are labels for the copy hotkeys and the history scrolls to the newest turn by itself |
+| history (`showHistory`) | yes | no | The chat history without the input box. The history scrolls to the newest turn by itself |
 | `approval` | yes | no | "Claude wants to run `<tool>`" with a one-line input summary and the approve and deny hotkeys. Requests that arrive while one is showing wait in a queue and show in turn |
+
+Click-through modes still take a click on a chip (copies it) or on the icon
+(leaves icon mode). The renderer reports when the pointer is over one; main then
+stops ignoring the mouse until the pointer leaves, or the target disappears. The
+window stays non-focusable, so such a click does not take focus from the game.
 
 The resting state is the strip:
 
@@ -187,7 +192,7 @@ skip the center. From `top-right`, left gives `top`, then `top-left`.
 While the chat is open, its status line is a drag handle. On drop, the window
 snaps to the nearest anchor (by thirds of the work area; the center cell goes
 to the nearest edge), with offsets that keep it where it was dropped. The
-strip, card and icon stay click-through, so they cannot be dragged. While a
+strip, card and icon cannot be dragged. While a
 drag is in progress, height changes from a streaming reply do not move the
 window; they apply after the drop.
 
