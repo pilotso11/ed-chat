@@ -117,7 +117,8 @@ body {
   border-radius: 50%;
   background: #ffb347;
 }
-/* Only the open chat takes the mouse, so only there is the status line a drag handle. */
+/* The open chat takes the whole window; elsewhere only a hovered chip or icon takes a click.
+   So only the open chat makes the status line a drag handle. */
 .strip.drag {
   -webkit-app-region: drag;
   cursor: move;
