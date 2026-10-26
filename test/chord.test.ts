@@ -21,7 +21,9 @@ describe("chordFromKey", () => {
     expect(chordFromKey(press({ key: "+", code: "Equal" }))).toBe("Ctrl+Alt+Plus");
   });
 
-  it("takes the digit from its position when Shift changes the character", () => {
+  it("takes a digit from its position, as Windows matches digit hotkeys", () => {
+    // AZERTY: the 1 key types "&" without Shift.
+    expect(chordFromKey(press({ key: "&", code: "Digit1" }))).toBe("Ctrl+Alt+1");
     expect(chordFromKey(press({ key: "!", code: "Digit1", shift: true }))).toBe("Ctrl+Alt+Shift+1");
     expect(chordFromKey(press({ key: "X", shift: true }))).toBe("Ctrl+Alt+Shift+X");
   });
