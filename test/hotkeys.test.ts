@@ -38,6 +38,25 @@ describe("activeBindings", () => {
       expect(names).toContain(kept);
     }
   });
+
+  it("drops named editing keys, numpad keys and AltGr+character while the overlay has focus", () => {
+    const keys = [
+      "Space",
+      "Tab",
+      "Backspace",
+      "num1",
+      "Shift+numadd",
+      "AltGr+C",
+      "F13",
+      "Ctrl+num1",
+    ];
+    const all = keys.map((accelerator) => ({
+      name: accelerator,
+      accelerator,
+      action: { type: "openChat" } as const,
+    }));
+    expect(activeBindings(all, true).map((b) => b.accelerator)).toEqual(["F13", "Ctrl+num1"]);
+  });
 });
 
 describe("bindings", () => {

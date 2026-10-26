@@ -287,7 +287,7 @@ plugin. A `pending` server counts as connecting; only absence, `failed` and
 `needs-auth` are decided at `init`. `failed` shows "⚠ ed-mcp failed to start;
 run claude mcp list", and `needs-auth` shows "⚠ ed-mcp needs authentication;
 run claude mcp list". When there is no such server, the status line shows: "⚠ ed-mcp not connected. Run:
-`claude mcp add ed-mcp -s user -- npx -y ed-mcp`". `claude mcp add` uses local
+`claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp`". `claude mcp add` uses local
 scope by default, which applies to one project folder only, so the message
 names `-s user`. Chat works without ed-mcp, but without game tools.
 

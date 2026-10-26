@@ -48,20 +48,27 @@ export function bindings(h: Settings["hotkeys"]): Binding[] {
 }
 
 const CTRL = new Set(["ctrl", "control", "cmdorctrl", "commandorcontrol"]);
+// Named keys that type or edit text in the chat input, besides single characters.
+const TYPING_KEYS = new Set(["space", "tab", "backspace", "delete", "return", "enter"]);
+const NUMPAD = /^num(\d|dec|add|sub|mult|div)$/;
 
 /**
- * True when the accelerator is a key the player could type: a character alone or with Shift,
- * or with Ctrl+Alt, which is how Windows reports AltGr.
+ * True when the accelerator is a key the player could type: a character, a numpad key or an
+ * editing key, alone or with Shift; or a character with AltGr, which Windows reports as
+ * Ctrl+Alt.
  */
 function typesText(accelerator: string): boolean {
   const parts = accelerator.split("+");
-  const key = parts.at(-1) ?? "";
-  if (key.length !== 1) return false;
+  const key = (parts.at(-1) ?? "").toLowerCase();
+  const char = key.length === 1;
+  if (!char && !TYPING_KEYS.has(key) && !NUMPAD.test(key)) return false;
   const mods = parts
     .slice(0, -1)
     .map((m) => m.toLowerCase())
     .filter((m) => m !== "shift");
   if (mods.length === 0) return true;
+  if (!char) return false;
+  if (mods.length === 1 && mods[0] === "altgr") return true;
   return mods.length === 2 && mods.includes("alt") && mods.some((m) => CTRL.has(m));
 }
 
