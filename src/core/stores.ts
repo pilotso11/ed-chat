@@ -47,6 +47,20 @@ export class SettingsStore {
     }
   }
 
+  /** The file as last read, without a BOM. */
+  get text(): string {
+    return this.lastText ?? "";
+  }
+
+  /** Sets one value in settings.json and keeps the rest of the file. */
+  async set(group: string, key: string, value: unknown): Promise<void> {
+    // Throws on a broken file, which must not be replaced with one value.
+    const raw = JSON.parse(this.text) as Record<string, unknown>;
+    const g = raw[group];
+    raw[group] = { ...(g && typeof g === "object" ? g : {}), [key]: value };
+    await writeFile(this.file, JSON.stringify(raw, null, 2) + "\n");
+  }
+
   async load(): Promise<LoadResult> {
     let text: string;
     try {

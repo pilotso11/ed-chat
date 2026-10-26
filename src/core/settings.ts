@@ -25,11 +25,12 @@ export const keyList = (k: Keys): string[] => (typeof k === "string" ? [k] : k);
 const HotkeysSchema = z.strictObject({
   scope: z.enum(["game", "always"]).default("game"),
   openChat: keys.default("Ctrl+Alt+C"),
-  toggleOverlay: keys.default("Ctrl+Alt+O"),
   toggleIcon: keys.default("`"),
+  showMore: keys.default("Ctrl+`"),
   showHistory: keys.default("Ctrl+Shift+H"),
   approve: keys.default("Ctrl+Shift+Y"),
   deny: keys.default("Ctrl+Shift+N"),
+  alwaysAllow: keys.default("Ctrl+Shift+A"),
   cancel: keys.default("Ctrl+Alt+X"),
   copyChip: chipKeys.default("Ctrl+Shift+{n}"),
   copyChipNumpad: z.boolean().default(false),
@@ -78,7 +79,10 @@ export const SettingsSchema = z.strictObject({
   startup: z.strictObject({ showKeys: z.boolean().default(true) }).prefault({}),
   safety: z.strictObject({ blockWhenInDanger: z.boolean().default(true) }).prefault({}),
   approval: z
-    .strictObject({ timeoutSeconds: z.number().int().min(5).max(3600).default(120) })
+    .strictObject({
+      timeoutSeconds: z.number().int().min(5).max(3600).default(120),
+      sound: z.boolean().default(true),
+    })
     .prefault({}),
   claude: z
     .strictObject({
@@ -92,6 +96,27 @@ export const SettingsSchema = z.strictObject({
 export type Settings = z.infer<typeof SettingsSchema>;
 
 export const DEFAULT_SETTINGS: Settings = SettingsSchema.parse({});
+
+// Settings that later releases removed. An older settings.json still holds them, and an
+// unknown key is an error, so they are dropped before the check.
+const REMOVED: [string, string][] = [["hotkeys", "toggleOverlay"]];
+
+function dropRemoved(raw: unknown): void {
+  for (const [group, key] of REMOVED) {
+    const g = (raw as Record<string, unknown> | null)?.[group];
+    if (g && typeof g === "object" && !Array.isArray(g)) delete (g as Record<string, unknown>)[key];
+  }
+}
+
+/** Whether the player's own settings.json sets this value, as opposed to the default. */
+export function setsKey(text: string, group: string, key: string): boolean {
+  try {
+    const g = (JSON.parse(text) as Record<string, unknown>)[group];
+    return !!g && typeof g === "object" && key in g;
+  } catch {
+    return false;
+  }
+}
 
 export type ParseResult = { ok: true; settings: Settings } | { ok: false; error: string };
 
@@ -107,6 +132,7 @@ export function parseSettings(text: string): ParseResult {
     const { $schema: _s, ...rest } = raw as Record<string, unknown>;
     raw = rest;
   }
+  dropRemoved(raw);
   const r = SettingsSchema.safeParse(raw);
   if (r.success) return { ok: true, settings: r.data };
   const issue = r.error.issues[0]!;

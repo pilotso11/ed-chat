@@ -50,7 +50,7 @@ import {
   type HotkeyAction,
 } from "../core/hotkeys.js";
 import { Logger } from "../core/logger.js";
-import type { Position, Settings } from "../core/settings.js";
+import { setsKey, type Position, type Settings } from "../core/settings.js";
 import { StatusWatcher, fullscreenMode } from "../core/status.js";
 import {
   HistoryStore,
@@ -60,9 +60,10 @@ import {
   savePosition,
   type SavedState,
 } from "../core/stores.js";
-import { buildView, pickNotice } from "../core/view.js";
+import { buildView, pickNotice, shortTool } from "../core/view.js";
 import { IPC } from "../shared/ipc.js";
 import {
+  answerArg,
   boolArg,
   capLines,
   chipArg,
@@ -137,7 +138,11 @@ async function main(): Promise<void> {
 
   const viewSettings = (): Settings => ({ ...settings, position });
 
+  // When the approval on screen appeared; an answer key pressed just before that is ignored.
+  let shownApproval: { id: string; at: number } | null = null;
   function render(): void {
+    const req = currentApproval(state);
+    if (req?.id !== shownApproval?.id) shownApproval = req ? { id: req.id, at: Date.now() } : null;
     const props = windowProps(state);
     applyWindow(win, props, prevProps);
     prevProps = props;
@@ -325,8 +330,17 @@ async function main(): Promise<void> {
   // Claude.
   const approval = new ApprovalServer({
     timeoutMs: settings.approval.timeoutSeconds * 1000,
-    onRequest: (request) => dispatch({ type: "approval", request }),
-    onSettled: (id) => dispatch({ type: "approvalSettled", id }),
+    onRequest: (request) => {
+      dispatch({ type: "approval", request });
+      // The player's eyes are on the game; a sound says a request is waiting.
+      if (settings.approval.sound) shell.beep();
+    },
+    onSettled: (id, outcome) => {
+      const req = state.approvals.find((r) => r.id === id);
+      dispatch({ type: "approvalSettled", id });
+      if (outcome === "timeout" && req)
+        flash("approval", `⛔ denied ${shortTool(req.toolName)}: no answer`, 6_000);
+    },
     // The message only: the request body can hold chat text.
     onError: (err) => log.log("warn", `approval request failed: ${message(err)}`),
   });
@@ -375,6 +389,36 @@ async function main(): Promise<void> {
     session.start();
     checkVersion(c.command, c.shell);
   }
+
+  // Auto mode runs most tools without asking, so the player chooses once, before Claude starts.
+  async function askPermissionMode(): Promise<void> {
+    // A broken settings.json shows its own error; the question waits for a good file.
+    if (first.error || setsKey(settingsStore.text, "claude", "permissionMode")) return;
+    const r = await dialog.showMessageBox({
+      type: "question",
+      title: "ED Chat",
+      message: "How should Claude run tools?",
+      detail:
+        "Ask me: the overlay shows each tool that Claude wants to run, and you allow or deny it " +
+        "with a hotkey.\n\nAuto: Claude decides, and runs most tools without asking, including " +
+        "commands that you ask for.\n\nYou can change this later in settings.json, " +
+        "claude.permissionMode.",
+      buttons: ["Ask me", "Auto"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    const mode = r.response === 1 ? "auto" : "default";
+    try {
+      await settingsStore.set("claude", "permissionMode", mode);
+      await settingsStore.load();
+      settings = settingsStore.settings;
+    } catch (err) {
+      log.log("warn", `settings.json: ${message(err)}`);
+    }
+  }
+  await askPermissionMode();
+
   const cmd = claudeCommand(settings);
   if (cmd) startSession(cmd);
   else dispatch({ type: "notice", key: "claude", text: noClaude() });
@@ -449,7 +493,25 @@ async function main(): Promise<void> {
   function newConversation(): void {
     session?.newSession();
     history.newSession();
+    approval.clearAllowed();
     dispatch({ type: "newSession" });
+  }
+
+  // A key that was on its way when the card appeared must not allow something unread.
+  const ANSWER_GUARD_MS = 750;
+  function answerApproval(id: string, a: "approve" | "deny" | "alwaysAllow"): void {
+    const req = state.approvals.find((r) => r.id === id);
+    if (!req) return;
+    const early = shownApproval?.id === id && Date.now() - shownApproval.at < ANSWER_GUARD_MS;
+    if (a !== "deny" && early) return;
+    approval.answer(id, a === "deny" ? "deny" : "allow");
+    if (a === "alwaysAllow") {
+      approval.allowTool(req.toolName);
+      // Requests for the same tool that already wait in the queue are allowed too.
+      for (const r of state.approvals)
+        if (r.toolName === req.toolName) approval.answer(r.id, "allow");
+      flash("approval", `✓ ${shortTool(req.toolName)} allowed until /new`, 4_000);
+    }
   }
 
   let keysTimer: NodeJS.Timeout | undefined;
@@ -519,11 +581,18 @@ async function main(): Promise<void> {
       case "showHistory":
         return dispatch({ type: "toggleHistory" });
       case "approve":
-      case "deny": {
+      case "deny":
+      case "alwaysAllow": {
         const req = currentApproval(state);
-        if (req) approval.answer(req.id, a.type === "approve" ? "allow" : "deny");
+        if (req) answerApproval(req.id, a.type);
         return;
       }
+      case "showMore":
+        if (!state.cardOpen) {
+          dispatch({ type: "showMore" });
+          return scheduleFade();
+        }
+        return dispatch({ type: "showMore" });
       case "cancel":
         if (!session?.busy) return;
         session.cancel();
@@ -586,6 +655,11 @@ async function main(): Promise<void> {
   });
   ipcMain.on(IPC.showNotices, () => noticeMenu().popup({ window: win }));
   ipcMain.on(IPC.closeKeys, hideKeys);
+  ipcMain.on(IPC.showMore, () => runAction({ type: "showMore" }, "hotkey"));
+  ipcMain.on(IPC.answerApproval, (_e, id: unknown, a: unknown) => {
+    const answer = answerArg(a);
+    if (typeof id === "string" && answer) answerApproval(id, answer);
+  });
   ipcMain.on(IPC.height, (_e, v: unknown) => {
     const h = heightArg(v);
     if (h === null) return;
@@ -664,7 +738,7 @@ async function main(): Promise<void> {
     void shell.openPath(p).then((err) => {
       if (err) log.log("warn", `open ${path.basename(p)}: ${err}`);
     });
-  const trayIcon = app.isPackaged
+  const trayIconFile = app.isPackaged
     ? path.join(process.resourcesPath, "tray.png")
     : path.join(app.getAppPath(), "resources", "tray.png");
   // A menu label treats & as a mnemonic marker.
@@ -726,11 +800,13 @@ async function main(): Promise<void> {
         checked: state.iconMode,
         click: tray({ type: "toggleIcon" }),
       },
+      // Minimized, the overlay still shows the chat and approvals, and the hotkeys still work.
       {
-        label: "Show overlay",
-        type: "checkbox",
-        checked: state.visible,
-        click: tray({ type: "toggleOverlay" }),
+        label: state.visible ? "Minimize to tray" : "Restore overlay",
+        click: () => {
+          runAction({ type: "toggleOverlay" }, "tray");
+          trayIcon.setToolTip(state.visible ? "ED Chat" : "ED Chat (minimized)");
+        },
       },
       { label: "Open settings", click: () => openPath(settingsFile) },
       { label: "Open log folder", click: () => openPath(logDir) },
@@ -739,12 +815,12 @@ async function main(): Promise<void> {
     ]);
   }
 
-  const tray = new Tray(nativeImage.createFromPath(trayIcon));
-  tray.setToolTip("ED Chat");
+  const trayIcon = new Tray(nativeImage.createFromPath(trayIconFile));
+  trayIcon.setToolTip("ED Chat");
   // Left and right click open the same menu.
-  const popTray = () => tray.popUpContextMenu(trayMenu());
-  tray.on("click", popTray);
-  tray.on("right-click", popTray);
+  const popTray = () => trayIcon.popUpContextMenu(trayMenu());
+  trayIcon.on("click", popTray);
+  trayIcon.on("right-click", popTray);
 
   screen.on("display-removed", reposition);
   screen.on("display-metrics-changed", reposition);
@@ -758,7 +834,7 @@ async function main(): Promise<void> {
   if (settings.startup.showKeys) setTimeout(showKeys, 1_000);
 
   app.on("will-quit", () => {
-    tray.destroy();
+    trayIcon.destroy();
     globalShortcut.unregisterAll();
     focus?.stop();
     status.stop();

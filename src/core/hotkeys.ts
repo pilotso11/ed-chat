@@ -5,6 +5,8 @@ export type HotkeyAction =
   | { type: "openChat" }
   | { type: "toggleOverlay" }
   | { type: "toggleIcon" }
+  | { type: "showMore" }
+  | { type: "alwaysAllow" }
   | { type: "showHistory" }
   | { type: "approve" }
   | { type: "deny" }
@@ -28,11 +30,12 @@ export function bindings(h: Settings["hotkeys"]): Binding[] {
     keyList(k).map((accelerator) => ({ name, accelerator, action }));
   return [
     ...b("openChat", h.openChat, { type: "openChat" }),
-    ...b("toggleOverlay", h.toggleOverlay, { type: "toggleOverlay" }),
     ...b("toggleIcon", h.toggleIcon, { type: "toggleIcon" }),
+    ...b("showMore", h.showMore, { type: "showMore" }),
     ...b("showHistory", h.showHistory, { type: "showHistory" }),
     ...b("approve", h.approve, { type: "approve" }),
     ...b("deny", h.deny, { type: "deny" }),
+    ...b("alwaysAllow", h.alwaysAllow, { type: "alwaysAllow" }),
     ...b("cancel", h.cancel, { type: "cancel" }),
     ...b("moveUp", h.moveUp, { type: "move", dir: "up" }),
     ...b("moveDown", h.moveDown, { type: "move", dir: "down" }),
@@ -195,10 +198,11 @@ const LABELS: [keyof Settings["hotkeys"], string][] = [
   ["openChat", "Open chat"],
   ["approve", "Allow tool"],
   ["deny", "Deny tool"],
+  ["alwaysAllow", "Always allow tool"],
   ["cancel", "Stop reply"],
+  ["showMore", "Whole reply"],
   ["showHistory", "History"],
   ["toggleIcon", "Icon mode"],
-  ["toggleOverlay", "Hide overlay"],
 ];
 
 /** The hotkey list for the keys card; failed holds the keys another app has taken. */

@@ -27,16 +27,27 @@ export interface ViewModel {
   keys: KeyRow[] | null;
   pinned: string | null;
   chips: Chip[];
-  card: { text: string; chips: Chip[] } | null;
+  card: { text: string; chips: Chip[]; full: boolean } | null;
   chat: {
     history: Turn[];
     streaming: string | null;
     chips: Chip[];
     input: boolean;
     canSend: boolean;
-    moving: boolean;
   } | null;
-  approval: { toolName: string; summary: string; approveKey: string; denyKey: string } | null;
+  approval: {
+    id: string;
+    toolName: string;
+    summary: string;
+    shell: boolean;
+    deadline: number;
+    timeoutMs: number;
+    /** "1 of 3" when more requests wait. */
+    position: string | null;
+    approveKey: string;
+    denyKey: string;
+    alwaysKey: string;
+  } | null;
   icon: { dot: boolean; danger: boolean } | null;
   ui: {
     fontSize: number;
@@ -65,7 +76,9 @@ export function statusText(s: OverlayState): string {
         : s.tool
           ? `🔧 ${shortTool(s.tool)}…`
           : s.session === "thinking"
-            ? "● thinking"
+            ? s.reply
+              ? "● receiving"
+              : "● sending"
             : s.blocked
               ? `🛡 blocked: ${shortTool(s.blocked)}`
               : "● idle";
@@ -110,7 +123,7 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
     keys: s.keys,
     pinned: settings.strip.lines === 2 ? s.pinned : null,
     chips: settings.strip.keepChips ? s.chips : [],
-    card: mode === "card" ? { text: reply.plain, chips: reply.chips } : null,
+    card: mode === "card" ? { text: reply.plain, chips: reply.chips, full: s.cardFull } : null,
     chat: open
       ? {
           history: s.history.map((t) =>
@@ -120,15 +133,20 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
           chips: currentChips(s),
           input: s.chatOpen,
           canSend: s.session !== "thinking",
-          moving: s.flags ? !s.flags.docked : false,
         }
       : null,
     approval: approval
       ? {
+          id: approval.id,
           toolName: shortTool(approval.toolName),
           summary: approval.summary,
+          shell: approval.shell,
+          deadline: approval.deadline,
+          timeoutMs: settings.approval.timeoutSeconds * 1000,
+          position: s.approvals.length > 1 ? `1 of ${s.approvals.length}` : null,
           approveKey: keyLabel(settings.hotkeys.approve),
           denyKey: keyLabel(settings.hotkeys.deny),
+          alwaysKey: keyLabel(settings.hotkeys.alwaysAllow),
         }
       : null,
     ui: {

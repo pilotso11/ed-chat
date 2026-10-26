@@ -17,6 +17,8 @@ const api: OverlayApi = {
   copyNotice: () => ipcRenderer.send(IPC.copyNotice),
   showNotices: () => ipcRenderer.send(IPC.showNotices),
   closeKeys: () => ipcRenderer.send(IPC.closeKeys),
+  showMore: () => ipcRenderer.send(IPC.showMore),
+  answerApproval: (id, answer) => ipcRenderer.send(IPC.answerApproval, id, answer),
 };
 
 contextBridge.exposeInMainWorld("overlay", api);

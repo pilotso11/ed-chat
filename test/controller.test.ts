@@ -150,7 +150,7 @@ describe("reduce", () => {
   });
 
   it("tracks approvals by id", () => {
-    const req = { id: "r1", toolName: "Bash", summary: "{}" };
+    const req = { id: "r1", toolName: "Bash", summary: "{}", shell: false, deadline: 0 };
     const s = run([{ type: "approval", request: req }]);
     expect(currentApproval(s)).toEqual(req);
     expect(currentApproval(run([{ type: "approvalSettled", id: "other" }], s))).toEqual(req);
@@ -158,8 +158,8 @@ describe("reduce", () => {
   });
 
   it("queues approvals that arrive together", () => {
-    const r1 = { id: "r1", toolName: "Bash", summary: "1" };
-    const r2 = { id: "r2", toolName: "Read", summary: "2" };
+    const r1 = { id: "r1", toolName: "Bash", summary: "1", shell: false, deadline: 0 };
+    const r2 = { id: "r2", toolName: "Read", summary: "2", shell: false, deadline: 0 };
     const s = run([
       { type: "approval", request: r1 },
       { type: "approval", request: r2 },
@@ -197,7 +197,7 @@ describe("reduce", () => {
 });
 
 describe("icon mode", () => {
-  const req = { id: "r", toolName: "Bash", summary: "" };
+  const req = { id: "r", toolName: "Bash", summary: "", shell: false, deadline: 0 };
   it("toggles with the hotkey", () => {
     expect(run([{ type: "toggleIcon" }]).iconMode).toBe(true);
     expect(run([{ type: "toggleIcon" }, { type: "toggleIcon" }]).iconMode).toBe(false);
@@ -249,7 +249,7 @@ describe("windowProps", () => {
   it("hides, but still shows a pending approval", () => {
     const hidden = run([{ type: "toggleVisible" }]);
     expect(windowProps(hidden).show).toBe(false);
-    const req = { id: "r", toolName: "Bash", summary: "" };
+    const req = { id: "r", toolName: "Bash", summary: "", shell: false, deadline: 0 };
     expect(windowProps(run([{ type: "approval", request: req }], hidden)).show).toBe(true);
   });
 });

@@ -23,6 +23,10 @@ export function boolArg(v: unknown): boolean | null {
   return typeof v === "boolean" ? v : null;
 }
 
+export function answerArg(v: unknown): "approve" | "deny" | "alwaysAllow" | null {
+  return v === "approve" || v === "deny" || v === "alwaysAllow" ? v : null;
+}
+
 export function heightArg(v: unknown): number | null {
   if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return null;
   return Math.min(v, MAX_HEIGHT);

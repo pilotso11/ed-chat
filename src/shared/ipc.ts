@@ -13,6 +13,8 @@ export const IPC = {
   copyNotice: "overlay:copyNotice",
   showNotices: "overlay:showNotices",
   closeKeys: "overlay:closeKeys",
+  showMore: "overlay:showMore",
+  answerApproval: "overlay:answerApproval",
 } as const;
 
 export interface OverlayApi {
@@ -35,4 +37,7 @@ export interface OverlayApi {
   /** List every notice in a menu. */
   showNotices(): void;
   closeKeys(): void;
+  /** Show the whole reply, or go back to the short card. */
+  showMore(): void;
+  answerApproval(id: string, answer: "approve" | "deny" | "alwaysAllow"): void;
 }

@@ -14,6 +14,8 @@ export interface OverlayState {
   chatOpen: boolean;
   historyOpen: boolean;
   cardOpen: boolean;
+  /** The card shows the whole reply, not the first card.maxLines lines. */
+  cardFull: boolean;
   session: "starting" | "idle" | "thinking" | "stopped";
   tool: string | null;
   blocked: string | null;
@@ -37,6 +39,7 @@ export const INITIAL_STATE: OverlayState = {
   chatOpen: false,
   historyOpen: false,
   cardOpen: false,
+  cardFull: false,
   session: "starting",
   tool: null,
   blocked: null,
@@ -61,6 +64,7 @@ export type Action =
   | { type: "sent"; text: string }
   | { type: "backend"; event: BackendEvent }
   | { type: "cardTimeout" }
+  | { type: "showMore" }
   | { type: "approval"; request: ApprovalRequest }
   | { type: "approvalSettled"; id: string }
   | { type: "flags"; flags: ShipFlags | null }
@@ -149,6 +153,7 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
       return {
         ...s,
         cardOpen: true,
+        cardFull: false,
         session: "thinking",
         cancelled: false,
         reply: "",
@@ -158,7 +163,13 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     case "backend":
       return onBackend(s, a.event);
     case "cardTimeout":
-      return s.session === "thinking" ? s : { ...s, cardOpen: false };
+      return s.session === "thinking" ? s : { ...s, cardOpen: false, cardFull: false };
+    // Opens the last reply in full, or switches between full and short.
+    case "showMore":
+      if (!s.reply) return s;
+      return s.cardOpen
+        ? { ...s, cardFull: !s.cardFull }
+        : { ...s, cardOpen: true, cardFull: true };
     case "approval":
       return { ...s, approvals: [...s.approvals, a.request] };
     case "approvalSettled":

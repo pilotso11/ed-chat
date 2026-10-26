@@ -34,10 +34,11 @@ Select **More info → Run anyway**. Releases are not public yet.
 | Ctrl+Alt+C | Open the chat. Enter sends and returns to the game. Esc closes. |
 | Ctrl+Shift+1…9 | Copy chip 1…9 (top-row digits). A click on a chip also copies it. |
 | Ctrl+Shift+Y / N | Allow / deny a tool that Claude asks to run |
+| Ctrl+Shift+A | Allow the tool, and allow it without asking until `/new` |
 | Ctrl+Alt+X | Stop the current reply |
+| Ctrl+` | Show the whole last reply, or go back to the short card |
 | Ctrl+Shift+H | Show or hide this session's history |
 | ` (backquote) | Switch between the full overlay and a small icon |
-| Ctrl+Alt+O | Hide or show the overlay |
 | Ctrl+Alt+Arrows | Move the overlay around the screen edge |
 | Ctrl+Alt+M | Move the overlay to the next monitor |
 
@@ -49,16 +50,22 @@ close it.
 The overlay has an orange ring icon in the notification area (system tray).
 Windows 11 may hide it under the **^** arrow; drag it to the taskbar to keep it
 in view. Click it for a menu: copy a chip, open the chat, start a new
-conversation, show the hotkeys, switch icon mode, show or hide the overlay, open
-`settings.json` or the log folder, or quit.
+conversation, show the hotkeys, switch icon mode, minimize the overlay to the
+tray or restore it, open `settings.json` or the log folder, or quit. While the
+overlay is minimized, the hotkeys still work, and the chat and approvals still
+show.
 
 In icon mode a reply, an approval or the chat shows over the icon, and the
 overlay goes back to the icon when the reply card closes. A click on the icon
 switches icon mode off. The icon shows a dot when the last reply has chips or a
 notice is waiting.
 
-A long reply shows **▾ more**; click it to see the whole reply. The card does
-not close while the pointer is on it.
+A long reply shows **▾ more**; click it, or press Ctrl+`, to see the whole
+reply. Ctrl+` also brings back the last reply after its card closed. The card
+does not close while the pointer is on it.
+
+The status line shows **● sending** until the reply starts, then
+**● receiving**.
 
 Hotkeys work only while the game or the overlay is in front, so they do not
 take keys from other apps. Away from the game the overlay shows
@@ -79,17 +86,28 @@ waiting; click it to see them all. A message with a command in it, such as
 
 ## Permissions
 
-The overlay runs Claude in auto mode by default. A classifier reviews each
-action, but it runs a command that you ask for explicitly without asking you
-first. In testing, auto mode ran `curl … | sh` when asked to, with no prompt.
-Claude also acts on text it reads, such as tool results, so be careful what you
-ask it to do.
+On first run the overlay asks how Claude should run tools, and saves the answer
+as `claude.permissionMode` in `settings.json`:
 
-For an approval before every action that your Claude Code rules do not already
-allow, set `"claude": { "permissionMode": "default" }`. The overlay then shows
-each request; answer with Ctrl+Shift+Y or Ctrl+Shift+N. To never be asked about
-ed-mcp tools, add `"mcp__ed-mcp__*"` to `permissions.allow` in
-`~/.claude/settings.json`.
+- **Ask me** (`default`): the overlay shows each tool that your Claude Code
+  rules do not already allow, and you answer it.
+- **Auto** (`auto`): a classifier reviews each action, but it runs a command
+  that you ask for explicitly without asking you first. In testing, auto mode
+  ran `curl … | sh` when asked to, with no prompt. Claude also acts on text it
+  reads, such as tool results, so be careful what you ask it to do. The status
+  line shows **AUTO** while auto mode is on.
+
+An approval card shows the tool, up to three lines of what it will do, and
+`⚠ runs a shell command` for shell tools. It plays a sound (`approval.sound`)
+and shows **1 of 3** when more requests wait. Answer with the keys or by
+clicking **Allow**, **Deny** or **Always**. **Always** allows that tool without
+asking until `/new`. A key pressed in the first moment after the card appears
+does not allow, so a key already on its way cannot approve something you have
+not read. A bar counts down to `approval.timeoutSeconds`; then the request is
+denied and the overlay shows `⛔ denied … no answer`.
+
+To never be asked about ed-mcp tools, add `"mcp__ed-mcp__*"` to
+`permissions.allow` in `~/.claude/settings.json`.
 
 ## Settings
 
@@ -126,8 +144,9 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 | `position.display` | `primary` | `primary` or a monitor number (0, 1, …) |
 | `safety.blockWhenInDanger` | `true` | Do not open the chat while in danger |
 | `approval.timeoutSeconds` | `120` | Deny a request that gets no answer |
+| `approval.sound` | `true` | Play a sound when a request arrives |
 | `claude.path` | `null` | Path to `claude`; `null` searches `PATH` |
-| `claude.permissionMode` | `auto` | `auto` or `default` (ask for everything not allowed) |
+| `claude.permissionMode` | asked on first run | `auto` or `default` (ask for everything not allowed). Without an answer the code default is `auto` |
 | `claude.extraArgs` | `[]` | More arguments for `claude` |
 | `journalDir` | `null` | The game's journal folder; `null` uses Saved Games |
 

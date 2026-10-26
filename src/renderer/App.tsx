@@ -105,9 +105,8 @@ function KeysCard({ rows }: { rows: NonNullable<ViewModel["keys"]> }) {
 function Card({ card, keyLabel }: { card: NonNullable<ViewModel["card"]>; keyLabel: string }) {
   const target = useClickTarget((over) => window.overlay.holdCard(over));
   const text = useRef<HTMLDivElement>(null);
-  const [full, setFull] = useState(false);
   const [clamped, setClamped] = useState(false);
-  useEffect(() => setFull(false), [card.text]);
+  const full = card.full;
   useLayoutEffect(() => {
     const el = text.current;
     if (el) setClamped(el.scrollHeight > el.clientHeight + 1);
@@ -118,7 +117,7 @@ function Card({ card, keyLabel }: { card: NonNullable<ViewModel["card"]>; keyLab
         {card.text}
       </div>
       {(clamped || full) && (
-        <button className="more" onClick={() => setFull(!full)}>
+        <button className="more" onClick={() => window.overlay.showMore()}>
           {full ? "▴ less" : "▾ more"}
         </button>
       )}
@@ -160,7 +159,60 @@ function Chips({ chips, keyLabel }: { chips: Chip[]; keyLabel: string }) {
   );
 }
 
-function ChatInput({ moving, canSend }: { moving: boolean; canSend: boolean }) {
+function AnswerButton({
+  id,
+  answer,
+  children,
+}: {
+  id: string;
+  answer: "approve" | "deny" | "alwaysAllow";
+  children: string;
+}) {
+  const target = useClickTarget();
+  return (
+    <button
+      className={`answer ${answer}`}
+      {...target}
+      onClick={() => window.overlay.answerApproval(id, answer)}
+    >
+      {children}
+    </button>
+  );
+}
+
+// Keyed by request id, so a new request restarts the pulse and the countdown.
+function ApprovalCard({ a }: { a: NonNullable<ViewModel["approval"]> }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(t);
+  }, []);
+  const left = Math.max(0, Math.ceil((a.deadline - now) / 1000));
+  const share = Math.min(1, Math.max(0, (a.deadline - now) / a.timeoutMs));
+  return (
+    <div className="approval">
+      <div className="head">
+        <span>
+          Claude wants to run <b>{a.toolName}</b>
+        </span>
+        {a.position && <span className="position">{a.position}</span>}
+      </div>
+      {a.shell && <div className="warn">⚠ runs a shell command</div>}
+      <div className="summary">{a.summary}</div>
+      <div className="answers">
+        <AnswerButton id={a.id} answer="approve">{`Allow · ${a.approveKey}`}</AnswerButton>
+        <AnswerButton id={a.id} answer="deny">{`Deny · ${a.denyKey}`}</AnswerButton>
+        <AnswerButton id={a.id} answer="alwaysAllow">{`Always · ${a.alwaysKey}`}</AnswerButton>
+      </div>
+      <div className="countdown" title={`Denied in ${left} s without an answer`}>
+        <div style={{ width: `${share * 100}%` }} />
+      </div>
+      <div className="hint">denied in {left} s without an answer</div>
+    </div>
+  );
+}
+
+function ChatInput({ canSend }: { canSend: boolean }) {
   const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => ref.current?.focus(), []);
@@ -180,7 +232,6 @@ function ChatInput({ moving, canSend }: { moving: boolean; canSend: boolean }) {
   };
   return (
     <div className="input">
-      {moving && <div className="warn">⚠ ship is moving</div>}
       <textarea
         ref={ref}
         rows={2}
@@ -269,17 +320,7 @@ export function App() {
         {v.mode === "strip" && <Chips chips={v.chips} keyLabel={v.ui.copyChipKey} />}
       </div>
       {v.keys && <KeysCard rows={v.keys} />}
-      {v.approval && (
-        <div className="approval">
-          <div>
-            Claude wants to run <b>{v.approval.toolName}</b>
-          </div>
-          <div className="summary">{v.approval.summary}</div>
-          <div className="keys">
-            {v.approval.approveKey} allow · {v.approval.denyKey} deny
-          </div>
-        </div>
-      )}
+      {v.approval && <ApprovalCard key={v.approval.id} a={v.approval} />}
       {v.card && <Card card={v.card} keyLabel={v.ui.copyChipKey} />}
       {v.chat && (
         <div className="chat">
@@ -292,7 +333,7 @@ export function App() {
             {v.chat.streaming !== null && <div className="assistant">{v.chat.streaming}</div>}
           </div>
           <Chips chips={v.chat.chips} keyLabel={v.ui.copyChipKey} />
-          {v.chat.input && <ChatInput moving={v.chat.moving} canSend={v.chat.canSend} />}
+          {v.chat.input && <ChatInput canSend={v.chat.canSend} />}
         </div>
       )}
     </div>

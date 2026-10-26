@@ -22,7 +22,8 @@ describe("statusText", () => {
   it.each([
     [s({}), "● starting"],
     [s({ session: "idle" }), "● idle"],
-    [s({ session: "thinking" }), "● thinking"],
+    [s({ session: "thinking" }), "● sending"],
+    [s({ session: "thinking", reply: "Go" }), "● receiving"],
     [s({ session: "thinking", tool: "mcp__ed-mcp__spansh_route" }), "🔧 spansh_route…"],
     [s({ session: "idle", blocked: "Bash" }), "🛡 blocked: Bash"],
     [s({ session: "stopped" }), "⚠ stopped"],
@@ -134,10 +135,11 @@ describe("buildView", () => {
     expect(buildView(st, DEFAULT_SETTINGS).card).toEqual({
       text: "Go Sol",
       chips: [{ n: 1, text: "Sol" }],
+      full: false,
     });
   });
 
-  it("shows the chat with history and the moving warning", () => {
+  it("shows the chat with history", () => {
     const st = run([
       ready,
       { type: "flags", flags: { docked: false, inDanger: false } },
@@ -149,7 +151,6 @@ describe("buildView", () => {
       chips: [],
       input: true,
       canSend: true,
-      moving: true,
     });
     const hist = run([ready, { type: "toggleHistory" }]);
     expect(buildView(hist, DEFAULT_SETTINGS).chat?.input).toBe(false);
@@ -212,16 +213,28 @@ describe("buildView", () => {
     const st = run([
       { type: "notice", key: "a", text: "⚠ one" },
       { type: "notice", key: "b", text: "⚠ two" },
-      { type: "approval", request: { id: "r", toolName: "mcp__x__y", summary: "{}" } },
-      { type: "approval", request: { id: "r2", toolName: "Bash", summary: "ls" } },
+      {
+        type: "approval",
+        request: { id: "r", toolName: "mcp__x__y", summary: "{}", shell: false, deadline: 0 },
+      },
+      {
+        type: "approval",
+        request: { id: "r2", toolName: "Bash", summary: "ls", shell: false, deadline: 0 },
+      },
     ]);
     const v = buildView(st, DEFAULT_SETTINGS);
     expect(v.notice).toEqual({ text: "⚠ two", command: null, more: 1 });
     expect(v.approval).toEqual({
+      id: "r",
       toolName: "y",
       summary: "{}",
+      shell: false,
+      deadline: 0,
+      timeoutMs: 120_000,
+      position: "1 of 2",
       approveKey: "Ctrl+Shift+Y",
       denyKey: "Ctrl+Shift+N",
+      alwaysKey: "Ctrl+Shift+A",
     });
   });
 });
@@ -271,5 +284,17 @@ describe("buildView icon preference", () => {
     expect(buildView(noAuto, DEFAULT_SETTINGS).auto).toBe(false);
     const manual = SettingsSchema.parse({ claude: { permissionMode: "default" } });
     expect(buildView(run([]), manual).auto).toBe(false);
+  });
+});
+
+describe("show more", () => {
+  const text = (delta: string): Action => ({ type: "backend", event: { type: "text", delta } });
+  it("opens the last reply in full after the card closed, and switches back", () => {
+    const closed = run([ready, { type: "sent", text: "a" }, text("long"), { type: "cardTimeout" }]);
+    const st = run([{ type: "showMore" }]);
+    expect(st.cardOpen).toBe(false);
+    const opened = [{ type: "showMore" } as Action].reduce(reduce, closed);
+    expect(opened).toMatchObject({ cardOpen: true, cardFull: true });
+    expect([{ type: "showMore" } as Action].reduce(reduce, opened).cardFull).toBe(false);
   });
 });
