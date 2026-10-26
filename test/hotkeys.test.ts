@@ -47,6 +47,8 @@ describe("activeBindings", () => {
       "num1",
       "Shift+numadd",
       "AltGr+C",
+      "Plus",
+      "Shift+Plus",
       "F13",
       "Ctrl+num1",
     ];

@@ -60,7 +60,8 @@ const NUMPAD = /^num(\d|dec|add|sub|mult|div)$/;
 function typesText(accelerator: string): boolean {
   const parts = accelerator.split("+");
   const key = (parts.at(-1) ?? "").toLowerCase();
-  const char = key.length === 1;
+  // "+" is the separator, so Electron names that character "Plus".
+  const char = key.length === 1 || key === "plus";
   if (!char && !TYPING_KEYS.has(key) && !NUMPAD.test(key)) return false;
   const mods = parts
     .slice(0, -1)
