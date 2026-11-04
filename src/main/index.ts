@@ -587,14 +587,11 @@ async function main(): Promise<void> {
   }
 
   // The step key shows one more each press (see nextStep). A press in the chat puts the
-  // overlay back as it was: minimized again when the first press restored it.
-  let restHidden = false;
+  // overlay back as it was (see stepRest).
   async function stepView(): Promise<void> {
     switch (nextStep(state)) {
       case "show":
-        restHidden = true;
-        dispatch({ type: "toggleVisible" });
-        dispatch({ type: "showCard" });
+        dispatch({ type: "stepShow" });
         return refreshFade();
       case "card":
         dispatch({ type: "showCard" });
@@ -602,21 +599,12 @@ async function main(): Promise<void> {
       case "full":
         dispatch({ type: "showMore" });
         return refreshFade();
-      case "chat": {
-        // From minimized, the press that closes the chat minimizes the overlay again. Only
-        // when the chat opened: in danger it does not, and the overlay stays as it was.
-        const hidden = !state.visible;
-        await runHotkey({ type: "openChat" }, "hotkey");
-        if (hidden && state.chatOpen) restHidden = true;
-        return;
-      }
+      case "chat":
+        // In danger the chat does not open, so the overlay is not marked as brought back.
+        return runHotkey({ type: "openChat", step: true }, "hotkey");
       case "rest":
         await giveFocusBack();
-        dispatch({ type: "closeChat" });
-        if (state.historyOpen) dispatch({ type: "toggleHistory" });
-        dispatch({ type: "cardTimeout" });
-        if (restHidden && state.visible) dispatch({ type: "toggleVisible" });
-        restHidden = false;
+        dispatch({ type: "stepRest" });
     }
   }
 
@@ -630,9 +618,8 @@ async function main(): Promise<void> {
       case "openChat":
         if (!canOpenChat(state, settings.safety.blockWhenInDanger)) return flash("chat", IN_DANGER);
         focus?.save(source === "tray");
-        return dispatch({ type: "openChat" });
+        return dispatch({ type: "openChat", step: a.step });
       case "toggleOverlay":
-        restHidden = false;
         return dispatch({ type: "toggleVisible" });
       case "toggleIcon":
         return dispatch({ type: "toggleIcon" });

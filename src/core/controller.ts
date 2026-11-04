@@ -32,6 +32,8 @@ export interface OverlayState {
   cancelled: boolean;
   /** The hotkey list, shown at startup and from the tray. */
   keys: KeyRow[] | null;
+  /** The step key brought back a minimized overlay; its press at rest minimizes it again. */
+  stepHidden: boolean;
 }
 
 export const INITIAL_STATE: OverlayState = {
@@ -52,13 +54,17 @@ export const INITIAL_STATE: OverlayState = {
   notices: {},
   iconMode: false,
   cancelled: false,
+  stepHidden: false,
   keys: null,
 };
 
 export type Action =
   | { type: "toggleVisible" }
   | { type: "toggleIcon" }
-  | { type: "openChat" }
+  /** step: opened by the step key, which minimizes again at rest an overlay it brought back. */
+  | { type: "openChat"; step?: boolean }
+  | { type: "stepShow" }
+  | { type: "stepRest" }
   | { type: "closeChat" }
   | { type: "toggleHistory" }
   | { type: "sent"; text: string }
@@ -140,11 +146,34 @@ function onBackend(s: OverlayState, e: BackendEvent): OverlayState {
 export function reduce(s: OverlayState, a: Action): OverlayState {
   switch (a.type) {
     case "toggleVisible":
-      return { ...s, visible: !s.visible };
+      return { ...s, visible: !s.visible, stepHidden: false };
     case "toggleIcon":
       return { ...s, iconMode: !s.iconMode, visible: true };
     case "openChat":
-      return { ...s, chatOpen: true, visible: true };
+      return {
+        ...s,
+        chatOpen: true,
+        visible: true,
+        stepHidden: s.stepHidden || (a.step === true && !s.visible),
+      };
+    // The step key's first press on a minimized overlay: the overlay and the last reply.
+    case "stepShow":
+      return s.reply
+        ? { ...s, visible: true, cardOpen: true, cardFull: false, stepHidden: true }
+        : s;
+    // The step key's press at rest: the chat, history and card close, and an overlay the step
+    // key brought back is minimized again. A reply still arriving keeps its card.
+    case "stepRest": {
+      const card = s.session === "thinking" ? {} : { cardOpen: false, cardFull: false };
+      return {
+        ...s,
+        ...card,
+        chatOpen: false,
+        historyOpen: false,
+        visible: s.stepHidden ? false : s.visible,
+        stepHidden: false,
+      };
+    }
     case "closeChat":
       return { ...s, chatOpen: false };
     case "toggleHistory":
@@ -232,8 +261,10 @@ export function nextStep(s: OverlayState): Step {
   if (s.historyOpen) return "chat";
   // With no reply yet there is nothing to show but the chat, minimized or not.
   if (!s.visible) return s.reply ? "show" : "chat";
+  // While a message is sending, no reply has arrived yet: nothing to show but the chat.
+  if (!s.reply) return "chat";
   if (s.cardOpen) return s.cardFull ? "chat" : "full";
-  return s.reply ? "card" : "chat";
+  return "card";
 }
 
 /** The approval that is shown and that the hotkeys answer; later ones wait their turn. */

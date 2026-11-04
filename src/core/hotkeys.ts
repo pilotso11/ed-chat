@@ -2,7 +2,7 @@ import type { Direction } from "./anchor.js";
 import { NUMPAD_CHIP, keyList, type Keys, type Settings } from "./settings.js";
 
 export type HotkeyAction =
-  | { type: "openChat" }
+  | { type: "openChat"; step?: boolean }
   | { type: "toggleOverlay" }
   | { type: "toggleIcon" }
   | { type: "showMore" }

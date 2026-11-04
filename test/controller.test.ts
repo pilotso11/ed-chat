@@ -329,6 +329,55 @@ describe("nextStep", () => {
     expect(nextStep(run([{ type: "openChat" }], history))).toBe("rest");
   });
 
+  it("goes to the chat while a message is sending and no reply has arrived", () => {
+    expect(nextStep(run([ready, { type: "sent", text: "a" }]))).toBe("chat");
+  });
+
+  // Walks each press the way main does: nextStep picks the step, then its action runs.
+  const press = (st: OverlayState): OverlayState => {
+    const step = nextStep(st);
+    const action: Action =
+      step === "show"
+        ? { type: "stepShow" }
+        : step === "card"
+          ? { type: "showCard" }
+          : step === "full"
+            ? { type: "showMore" }
+            : step === "chat"
+              ? { type: "openChat", step: true }
+              : { type: "stepRest" };
+    return reduce(st, action);
+  };
+
+  it("brings back a minimized overlay and minimizes it again at rest", () => {
+    let st = run([{ type: "toggleVisible" }], faded);
+    st = press(st);
+    expect(st).toMatchObject({ visible: true, cardOpen: true, cardFull: false });
+    st = press(press(st));
+    expect(st.chatOpen).toBe(true);
+    st = press(st);
+    expect(st).toMatchObject({ visible: false, chatOpen: false, cardOpen: false });
+    expect(st.stepHidden).toBe(false);
+  });
+
+  it("from minimized with no reply, opens the chat and minimizes again at rest", () => {
+    const st = press(run([ready, { type: "toggleVisible" }]));
+    expect(st).toMatchObject({ chatOpen: true, visible: true });
+    expect(press(st).visible).toBe(false);
+  });
+
+  it("leaves the overlay shown when the player restored it by hand", () => {
+    let st = run([{ type: "toggleVisible" }], faded);
+    st = press(st);
+    st = run([{ type: "toggleVisible" }, { type: "toggleVisible" }], st);
+    st = press(press(press(st)));
+    expect(st).toMatchObject({ chatOpen: false, visible: true });
+  });
+
+  it("leaves a shown overlay shown at rest", () => {
+    expect(press(run([{ type: "openChat", step: true }], faded)).visible).toBe(true);
+  });
+
   it("closes a chat that was minimized to the tray", () => {
     expect(nextStep(run([ready, { type: "openChat" }, { type: "toggleVisible" }]))).toBe("rest");
   });
