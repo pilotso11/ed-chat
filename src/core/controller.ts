@@ -68,7 +68,8 @@ export type Action =
   /** keepShown: focus did not go back to the game, so the overlay stays to say so. */
   | { type: "stepRest"; keepCard?: boolean; keepShown?: boolean }
   /** escape: the player closed the chat with Esc, which also undoes the step key's restore. */
-  | { type: "closeChat"; escape?: boolean; keepShown?: boolean }
+  /** replyAtPress: a reply was arriving when Esc was pressed (read before the focus wait). */
+  | { type: "closeChat"; escape?: boolean; keepShown?: boolean; replyAtPress?: boolean }
   | { type: "toggleHistory" }
   | { type: "sent"; text: string }
   | { type: "backend"; event: BackendEvent }
@@ -186,10 +187,14 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     // Esc is a way back to rest like the step key's last press, so it minimizes again an
     // overlay the step key brought back. Enter keeps it shown for the reply; the step key's
     // press at rest minimizes it later.
-    case "closeChat":
-      return a.escape === true && s.stepHidden && a.keepShown !== true
+    // A message sent during Esc's focus wait keeps the overlay shown for its reply, as in
+    // stepRest.
+    case "closeChat": {
+      const sentSince = s.session === "thinking" && a.replyAtPress !== true;
+      return a.escape === true && s.stepHidden && a.keepShown !== true && !sentSince
         ? { ...s, chatOpen: false, visible: false, stepHidden: false }
         : { ...s, chatOpen: false };
+    }
     case "toggleHistory":
       return { ...s, historyOpen: !s.historyOpen, visible: true };
     // The chat stays open: main closes it once focus is back with the game.

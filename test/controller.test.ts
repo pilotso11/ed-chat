@@ -464,6 +464,15 @@ describe("nextStep", () => {
         stepHidden: false,
       });
     });
+    it("Esc stays shown when a message was sent during its focus wait", () => {
+      const st = run([{ type: "sent", text: "a" }], chat());
+      expect(run([{ type: "closeChat", escape: true }], st)).toMatchObject({
+        visible: true,
+        stepHidden: true,
+      });
+      const arriving = run([{ type: "closeChat", escape: true, replyAtPress: true }], st);
+      expect(arriving).toMatchObject({ visible: false, stepHidden: false });
+    });
     it("stays shown when the message was sent after the press", () => {
       const st = run([{ type: "sent", text: "a" }, { type: "closeChat" }], chat());
       expect(run([{ type: "stepRest", keepCard: false }], st)).toMatchObject({
