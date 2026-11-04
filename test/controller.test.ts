@@ -414,6 +414,15 @@ describe("nextStep", () => {
     expect(sent).toMatchObject({ visible: true, stepHidden: true });
   });
 
+  it("brings back the short card even when the whole reply was open at minimize", () => {
+    const full = run(
+      [{ type: "showCard" }, { type: "showMore" }, { type: "toggleVisible" }],
+      faded,
+    );
+    expect(full).toMatchObject({ visible: false, cardOpen: true, cardFull: true });
+    expect(press(full)).toMatchObject({ visible: true, cardOpen: true, cardFull: false });
+  });
+
   it("maps each step to its action", () => {
     expect(stepAction(run([ready]))).toEqual({ type: "openChat", step: true });
     expect(stepAction(faded)).toEqual({ type: "showCard" });
