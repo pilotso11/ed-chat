@@ -594,7 +594,7 @@ async function main(): Promise<void> {
     switch (action.type) {
       case "openChat":
         // In danger the chat does not open, so the overlay is not marked as brought back.
-        return runHotkey({ type: "openChat", step: true }, "hotkey");
+        return runHotkey(action, "hotkey");
       case "stepRest": {
         // A refused focus leaves the overlay shown, so its "click the game" notice can be read.
         const keepShown = !(await giveFocusBack());
