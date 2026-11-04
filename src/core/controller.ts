@@ -271,6 +271,27 @@ export function nextStep(s: OverlayState): Step {
   return "card";
 }
 
+/**
+ * The action for the step key's next press, read before main waits on anything. For rest,
+ * main first gives focus back to the game, while the overlay still holds the foreground, and
+ * adds keepShown when Windows refused. keepCard is read now: a reply that ends during that
+ * wait must keep its card.
+ */
+export function stepAction(s: OverlayState): Action {
+  switch (nextStep(s)) {
+    case "show":
+      return { type: "stepShow" };
+    case "card":
+      return { type: "showCard" };
+    case "full":
+      return { type: "showMore" };
+    case "chat":
+      return { type: "openChat", step: true };
+    case "rest":
+      return { type: "stepRest", keepCard: s.session === "thinking" };
+  }
+}
+
 /** The approval that is shown and that the hotkeys answer; later ones wait their turn. */
 export function currentApproval(s: OverlayState): ApprovalRequest | null {
   return s.approvals[0] ?? null;

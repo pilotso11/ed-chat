@@ -8,6 +8,7 @@ import {
   currentChips,
   nextStep,
   reduce,
+  stepAction,
   windowProps,
   type Action,
   type OverlayState,
@@ -334,20 +335,7 @@ describe("nextStep", () => {
   });
 
   // Walks each press the way main does: nextStep picks the step, then its action runs.
-  const press = (st: OverlayState): OverlayState => {
-    const step = nextStep(st);
-    const action: Action =
-      step === "show"
-        ? { type: "stepShow" }
-        : step === "card"
-          ? { type: "showCard" }
-          : step === "full"
-            ? { type: "showMore" }
-            : step === "chat"
-              ? { type: "openChat", step: true }
-              : { type: "stepRest" };
-    return reduce(st, action);
-  };
+  const press = (st: OverlayState): OverlayState => reduce(st, stepAction(st));
 
   it("brings back a minimized overlay and minimizes it again at rest", () => {
     let st = run([{ type: "toggleVisible" }], faded);
@@ -397,6 +385,20 @@ describe("nextStep", () => {
       chatOpen: false,
       stepHidden: false,
     });
+  });
+
+  it("reads keepCard at the press, so main can wait before dispatching", () => {
+    const streaming = run([ready, { type: "sent", text: "a" }, text("part"), { type: "openChat" }]);
+    expect(stepAction(streaming)).toEqual({ type: "stepRest", keepCard: true });
+    expect(stepAction(run([{ type: "openChat" }], faded))).toEqual({
+      type: "stepRest",
+      keepCard: false,
+    });
+  });
+
+  it("keeps the card at rest while the reply is still arriving, without keepCard", () => {
+    const streaming = run([ready, { type: "sent", text: "a" }, text("part"), { type: "openChat" }]);
+    expect(run([{ type: "stepRest" }], streaming).cardOpen).toBe(true);
   });
 
   it("keeps a card whose reply was arriving at the press", () => {

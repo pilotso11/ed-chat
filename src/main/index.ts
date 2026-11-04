@@ -32,7 +32,7 @@ import {
   INITIAL_STATE,
   answerAllowed,
   canOpenChat,
-  nextStep,
+  stepAction,
   currentApproval,
   currentChips,
   reduce,
@@ -590,26 +590,19 @@ async function main(): Promise<void> {
   // The step key shows one more each press (see nextStep). A press in the chat puts the
   // overlay back as it was (see stepRest).
   async function stepView(): Promise<void> {
-    switch (nextStep(state)) {
-      case "show":
-        dispatch({ type: "stepShow" });
-        return refreshFade();
-      case "card":
-        dispatch({ type: "showCard" });
-        return refreshFade();
-      case "full":
-        dispatch({ type: "showMore" });
-        return refreshFade();
-      case "chat":
+    const action = stepAction(state);
+    switch (action.type) {
+      case "openChat":
         // In danger the chat does not open, so the overlay is not marked as brought back.
         return runHotkey({ type: "openChat", step: true }, "hotkey");
-      case "rest": {
-        // A reply that ends while focus goes back must keep its card, so look before waiting.
-        const keepCard = state.session === "thinking";
+      case "stepRest": {
         // A refused focus leaves the overlay shown, so its "click the game" notice can be read.
         const keepShown = !(await giveFocusBack());
-        return dispatch({ type: "stepRest", keepCard, keepShown });
+        return dispatch({ ...action, keepShown });
       }
+      default:
+        dispatch(action);
+        return refreshFade();
     }
   }
 
