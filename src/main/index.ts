@@ -593,8 +593,9 @@ async function main(): Promise<void> {
     switch (nextStep(state)) {
       case "show":
         restHidden = true;
+        // With no reply yet there is nothing to show but the chat, as when not minimized.
+        if (!state.reply) return runHotkey({ type: "openChat" }, "hotkey");
         dispatch({ type: "toggleVisible" });
-        if (!state.reply) return;
         dispatch({ type: "showCard" });
         return refreshFade();
       case "card":
