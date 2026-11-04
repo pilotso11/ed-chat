@@ -390,6 +390,15 @@ describe("nextStep", () => {
     expect(st).toMatchObject({ session: "thinking", chatOpen: false, cardOpen: true });
   });
 
+  it("stays shown at rest when focus did not go back to the game", () => {
+    const st = run([{ type: "openChat", step: true }], run([ready, { type: "toggleVisible" }]));
+    expect(run([{ type: "stepRest", keepShown: true }], st)).toMatchObject({
+      visible: true,
+      chatOpen: false,
+      stepHidden: false,
+    });
+  });
+
   it("keeps a card whose reply was arriving at the press", () => {
     const shown = run([{ type: "showCard" }], faded);
     expect(run([{ type: "stepRest", keepCard: true }], shown).cardOpen).toBe(true);

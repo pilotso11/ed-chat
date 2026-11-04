@@ -65,7 +65,8 @@ export type Action =
   | { type: "openChat"; step?: boolean }
   | { type: "stepShow" }
   /** keepCard: a reply was arriving at the press, so its card stays even if it ends first. */
-  | { type: "stepRest"; keepCard?: boolean }
+  /** keepShown: focus did not go back to the game, so the overlay stays to say so. */
+  | { type: "stepRest"; keepCard?: boolean; keepShown?: boolean }
   | { type: "closeChat" }
   | { type: "toggleHistory" }
   | { type: "sent"; text: string }
@@ -173,7 +174,7 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
         ...card,
         chatOpen: false,
         historyOpen: false,
-        visible: s.stepHidden ? false : s.visible,
+        visible: s.stepHidden && a.keepShown !== true ? false : s.visible,
         stepHidden: false,
       };
     }

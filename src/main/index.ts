@@ -326,11 +326,12 @@ async function main(): Promise<void> {
   }
   const focus = win32 ? new FocusManager(win32, { overlayHwnd, onChange: onForeground }) : null;
 
-  async function giveFocusBack(): Promise<void> {
-    if (focus && !(await focus.restore())) {
-      log.log("warn", "focus restore refused");
-      flash("focus", REFOCUS, 5_000);
-    }
+  /** False when Windows refused; the strip then says to click the game. */
+  async function giveFocusBack(): Promise<boolean> {
+    if (!focus || (await focus.restore())) return true;
+    log.log("warn", "focus restore refused");
+    flash("focus", REFOCUS, 5_000);
+    return false;
   }
 
   // Claude.
@@ -605,8 +606,9 @@ async function main(): Promise<void> {
       case "rest": {
         // A reply that ends while focus goes back must keep its card, so look before waiting.
         const keepCard = state.session === "thinking";
-        await giveFocusBack();
-        return dispatch({ type: "stepRest", keepCard });
+        // A refused focus leaves the overlay shown, so its "click the game" notice can be read.
+        const keepShown = !(await giveFocusBack());
+        return dispatch({ type: "stepRest", keepCard, keepShown });
       }
     }
   }
