@@ -197,13 +197,14 @@ export interface KeyRow {
   unused: string[];
 }
 
+// The step key comes first: it is the one key a player needs for replies and the chat.
 const LABELS: [keyof Settings["hotkeys"], string][] = [
-  ["openChat", "Open chat"],
+  ["showMore", "Reply → whole reply → chat"],
+  ["openChat", "Open chat directly"],
   ["approve", "Allow tool"],
   ["deny", "Deny tool"],
   ["alwaysAllow", "Always allow tool"],
   ["cancel", "Stop reply"],
-  ["showMore", "Reply, whole reply, chat"],
   ["showHistory", "History"],
   ["toggleIcon", "Icon mode"],
 ];
@@ -219,7 +220,7 @@ export function keyRows(h: Settings["hotkeys"], failed: string[]): KeyRow[] {
   const chipKeys = chipPatterns(h).flatMap((p) =>
     Array.from({ length: 9 }, (_, i) => p.replace("{n}", String(i + 1))),
   );
-  rows.splice(1, 0, {
+  rows.splice(2, 0, {
     label: "Copy chip",
     keys: chipKeyLabel(h),
     failed: taken(chipKeys),

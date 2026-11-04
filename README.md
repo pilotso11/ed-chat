@@ -31,12 +31,12 @@ Select **More info → Run anyway**. Releases are not public yet.
 
 | Key | Action |
 | --- | --- |
-| Ctrl+Alt+C | Open the chat. Enter sends and returns to the game. Esc closes. |
+| Ctrl+` | Step: the last reply, then the whole reply, then the chat; a press in the chat closes it |
+| Ctrl+Alt+C | Open the chat directly. Enter sends and returns to the game. Esc closes. |
 | Ctrl+Shift+1…9 | Copy chip 1…9 (top-row digits). A click on a chip also copies it. |
 | Ctrl+Shift+Y / N | Allow / deny a tool that Claude asks to run |
 | Ctrl+Shift+A | Allow the tool, and allow it without asking until `/new` |
 | Ctrl+Alt+X | Stop the current reply |
-| Ctrl+` | Step: the last reply, then the whole reply, then the chat; a press in the chat closes it |
 | Ctrl+Shift+H | Show or hide this session's history |
 | Ctrl+Alt+Enter | Switch between the full overlay and a small icon |
 | Ctrl+Alt+Arrows | Move the overlay around the screen edge |
