@@ -170,13 +170,17 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     case "stepRest": {
       const keep = a.keepCard === true || s.session === "thinking";
       const card = keep ? {} : { cardOpen: false, cardFull: false };
+      // A message sent after the press (Enter during the focus handoff) is a reply the player
+      // just asked for: the overlay stays shown for it, and a later rest minimizes it.
+      const sentSince = s.session === "thinking" && a.keepCard !== true;
+      const minimize = s.stepHidden && a.keepShown !== true && !sentSince;
       return {
         ...s,
         ...card,
         chatOpen: false,
         historyOpen: false,
-        visible: s.stepHidden && a.keepShown !== true ? false : s.visible,
-        stepHidden: false,
+        visible: minimize ? false : s.visible,
+        stepHidden: sentSince ? s.stepHidden : false,
       };
     }
     // Esc is a way back to rest like the step key's last press, so it minimizes again an

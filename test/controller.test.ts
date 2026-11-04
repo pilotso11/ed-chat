@@ -451,6 +451,29 @@ describe("nextStep", () => {
     expect(stepAction(run([{ type: "showCard" }], faded))).toEqual({ type: "showMore" });
   });
 
+  // A step-restored overlay with a reply arriving: the press at rest minimizes, keeping the
+  // card for later; a message sent during the focus handoff stays shown instead.
+  describe("rest on a step-restored overlay with a reply arriving", () => {
+    const chat = () => press(press(press(run([{ type: "toggleVisible" }], faded))));
+    it("minimizes, keeping the card, when the reply was arriving at the press", () => {
+      const st = run([{ type: "sent", text: "a" }, text("x")], chat());
+      expect(st).toMatchObject({ stepHidden: true, session: "thinking", chatOpen: true });
+      expect(run([{ type: "stepRest", keepCard: true }], st)).toMatchObject({
+        visible: false,
+        cardOpen: true,
+        stepHidden: false,
+      });
+    });
+    it("stays shown when the message was sent after the press", () => {
+      const st = run([{ type: "sent", text: "a" }, { type: "closeChat" }], chat());
+      expect(run([{ type: "stepRest", keepCard: false }], st)).toMatchObject({
+        visible: true,
+        cardOpen: true,
+        stepHidden: true,
+      });
+    });
+  });
+
   it("keeps a card whose reply was arriving at the press", () => {
     const shown = run([{ type: "showCard" }], faded);
     expect(run([{ type: "stepRest", keepCard: true }], shown).cardOpen).toBe(true);
