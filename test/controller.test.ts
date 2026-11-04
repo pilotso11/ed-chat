@@ -401,6 +401,26 @@ describe("nextStep", () => {
     expect(run([{ type: "stepRest" }], streaming).cardOpen).toBe(true);
   });
 
+  it("minimizes again after Esc closes a chat the step key opened from minimized", () => {
+    const st = press(run([ready, { type: "toggleVisible" }]));
+    expect(run([{ type: "closeChat", escape: true }], st)).toMatchObject({
+      chatOpen: false,
+      visible: false,
+      stepHidden: false,
+    });
+    expect(run([{ type: "closeChat", escape: true, keepShown: true }], st).visible).toBe(true);
+    // Enter sends and keeps the overlay for the reply; the step key's rest minimizes it later.
+    const sent = run([{ type: "closeChat" }], st);
+    expect(sent).toMatchObject({ visible: true, stepHidden: true });
+  });
+
+  it("maps each step to its action", () => {
+    expect(stepAction(run([ready]))).toEqual({ type: "openChat", step: true });
+    expect(stepAction(faded)).toEqual({ type: "showCard" });
+    expect(stepAction(run([{ type: "toggleVisible" }], faded))).toEqual({ type: "stepShow" });
+    expect(stepAction(run([{ type: "showCard" }], faded))).toEqual({ type: "showMore" });
+  });
+
   it("keeps a card whose reply was arriving at the press", () => {
     const shown = run([{ type: "showCard" }], faded);
     expect(run([{ type: "stepRest", keepCard: true }], shown).cardOpen).toBe(true);

@@ -67,7 +67,8 @@ export type Action =
   /** keepCard: a reply was arriving at the press, so its card stays even if it ends first. */
   /** keepShown: focus did not go back to the game, so the overlay stays to say so. */
   | { type: "stepRest"; keepCard?: boolean; keepShown?: boolean }
-  | { type: "closeChat" }
+  /** escape: the player closed the chat with Esc, which also undoes the step key's restore. */
+  | { type: "closeChat"; escape?: boolean; keepShown?: boolean }
   | { type: "toggleHistory" }
   | { type: "sent"; text: string }
   | { type: "backend"; event: BackendEvent }
@@ -178,8 +179,13 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
         stepHidden: false,
       };
     }
+    // Esc is a way back to rest like the step key's last press, so it minimizes again an
+    // overlay the step key brought back. Enter keeps it shown for the reply; the step key's
+    // press at rest minimizes it later.
     case "closeChat":
-      return { ...s, chatOpen: false };
+      return a.escape === true && s.stepHidden && a.keepShown !== true
+        ? { ...s, chatOpen: false, visible: false, stepHidden: false }
+        : { ...s, chatOpen: false };
     case "toggleHistory":
       return { ...s, historyOpen: !s.historyOpen, visible: true };
     // The chat stays open: main closes it once focus is back with the game.

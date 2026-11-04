@@ -662,7 +662,10 @@ async function main(): Promise<void> {
     return text === null ? false : send(text);
   });
   ipcMain.on(IPC.closeChat, () => {
-    void giveFocusBack().then(() => dispatch({ type: "closeChat" }));
+    // A refused focus leaves the overlay shown, so its "click the game" notice can be read.
+    void giveFocusBack().then((ok) =>
+      dispatch({ type: "closeChat", escape: true, keepShown: !ok }),
+    );
   });
   ipcMain.on(IPC.copyChip, (_e, v: unknown) => {
     const n = chipArg(v);

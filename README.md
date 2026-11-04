@@ -70,7 +70,8 @@ Ctrl+` steps through what is on screen, one press at a time:
 3. The chat.
 4. Back to rest: the chat, the history and the card close (a reply still
    arriving keeps its card), focus goes back to the game, and
-   an overlay that step 1 brought back is minimized again.
+   an overlay that step 1 brought back is minimized again. Closing the chat with
+   Esc also minimizes it again.
 
 The step follows what is on screen: after the card fades, the next press starts
 again at step 1. With no reply yet, the first press opens the chat. With the
