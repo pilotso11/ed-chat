@@ -383,6 +383,13 @@ describe("nextStep", () => {
     expect(press(st)).toMatchObject({ historyOpen: false, chatOpen: false });
   });
 
+  it("keeps the card of a reply still arriving when the chat closes", () => {
+    let st = run([ready, { type: "sent", text: "a" }, text("part"), { type: "openChat" }]);
+    expect(nextStep(st)).toBe("rest");
+    st = press(st);
+    expect(st).toMatchObject({ session: "thinking", chatOpen: false, cardOpen: true });
+  });
+
   it("keeps a card whose reply was arriving at the press", () => {
     const shown = run([{ type: "showCard" }], faded);
     expect(run([{ type: "stepRest", keepCard: true }], shown).cardOpen).toBe(true);

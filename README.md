@@ -68,7 +68,8 @@ Ctrl+` steps through what is on screen, one press at a time:
 1. The last reply's card. If the overlay is minimized, it comes back too.
 2. The whole reply.
 3. The chat.
-4. Back to rest: the chat and the card close, focus goes back to the game, and
+4. Back to rest: the chat, the history and the card close (a reply still
+   arriving keeps its card), focus goes back to the game, and
    an overlay that step 1 brought back is minimized again.
 
 The step follows what is on screen: after the card fades, the next press starts
