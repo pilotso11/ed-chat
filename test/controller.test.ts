@@ -315,6 +315,7 @@ describe("nextStep", () => {
 
   it("goes straight to the chat when there is no reply yet", () => {
     expect(nextStep(run([ready]))).toBe("chat");
+    expect(nextStep(run([ready, { type: "toggleVisible" }]))).toBe("chat");
     expect(run([{ type: "showCard" }], run([ready])).cardOpen).toBe(false);
   });
 

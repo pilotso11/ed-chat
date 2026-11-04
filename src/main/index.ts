@@ -593,8 +593,6 @@ async function main(): Promise<void> {
     switch (nextStep(state)) {
       case "show":
         restHidden = true;
-        // With no reply yet there is nothing to show but the chat, as when not minimized.
-        if (!state.reply) return runHotkey({ type: "openChat" }, "hotkey");
         dispatch({ type: "toggleVisible" });
         dispatch({ type: "showCard" });
         return refreshFade();
@@ -605,6 +603,8 @@ async function main(): Promise<void> {
         dispatch({ type: "showMore" });
         return refreshFade();
       case "chat":
+        // From minimized, the press that closes the chat minimizes the overlay again.
+        if (!state.visible) restHidden = true;
         return runHotkey({ type: "openChat" }, "hotkey");
       case "rest":
         await giveFocusBack();
