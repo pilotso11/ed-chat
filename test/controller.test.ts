@@ -414,6 +414,15 @@ describe("nextStep", () => {
     expect(sent).toMatchObject({ visible: true, stepHidden: true });
   });
 
+  it("leaves a shown overlay shown when Esc closes the chat", () => {
+    const st = run([{ type: "openChat" }], faded);
+    expect(st.stepHidden).toBe(false);
+    expect(run([{ type: "closeChat", escape: true }], st)).toMatchObject({
+      chatOpen: false,
+      visible: true,
+    });
+  });
+
   it("brings back the short card even when the whole reply was open at minimize", () => {
     const full = run(
       [{ type: "showCard" }, { type: "showMore" }, { type: "toggleVisible" }],
