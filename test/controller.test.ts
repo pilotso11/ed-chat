@@ -257,6 +257,18 @@ describe("windowProps", () => {
     expect(windowProps(run([{ type: "approval", request: req }], hidden)).show).toBe(true);
   });
 
+  it("shows a refused chat's notice while minimized to the tray", () => {
+    const hidden = run([{ type: "toggleVisible" }]);
+    const refused = run(
+      [{ type: "notice", key: "chat", text: "⛔ in danger: chat blocked" }],
+      hidden,
+    );
+    expect(windowProps(refused).show).toBe(true);
+    expect(windowProps(run([{ type: "notice", key: "chat", text: null }], refused)).show).toBe(
+      false,
+    );
+  });
+
   it("shows the hotkey list while minimized to the tray", () => {
     const hidden = run([{ type: "toggleVisible" }]);
     expect(windowProps(run([{ type: "keys", rows: [] }], hidden)).show).toBe(true);

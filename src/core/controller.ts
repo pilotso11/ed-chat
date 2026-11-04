@@ -252,8 +252,14 @@ export interface WindowProps {
 
 export function windowProps(s: OverlayState): WindowProps {
   return {
-    // Show hotkeys works while minimized to the tray, when the strip is gone.
-    show: s.visible || s.chatOpen || s.approvals.length > 0 || s.keys !== null,
+    // Show hotkeys works while minimized to the tray, when the strip is gone. A refused chat
+    // ("in danger") shows for its few seconds too, so the key does not look broken.
+    show:
+      s.visible ||
+      s.chatOpen ||
+      s.approvals.length > 0 ||
+      s.keys !== null ||
+      s.notices.chat !== undefined,
     interactive: s.chatOpen,
   };
 }
