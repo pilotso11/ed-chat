@@ -64,7 +64,8 @@ export type Action =
   /** step: opened by the step key, which minimizes again at rest an overlay it brought back. */
   | { type: "openChat"; step?: boolean }
   | { type: "stepShow" }
-  | { type: "stepRest" }
+  /** keepCard: a reply was arriving at the press, so its card stays even if it ends first. */
+  | { type: "stepRest"; keepCard?: boolean }
   | { type: "closeChat" }
   | { type: "toggleHistory" }
   | { type: "sent"; text: string }
@@ -147,8 +148,9 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
   switch (a.type) {
     case "toggleVisible":
       return { ...s, visible: !s.visible, stepHidden: false };
+    // The player chose a visible overlay, so the step key no longer minimizes it at rest.
     case "toggleIcon":
-      return { ...s, iconMode: !s.iconMode, visible: true };
+      return { ...s, iconMode: !s.iconMode, visible: true, stepHidden: false };
     case "openChat":
       return {
         ...s,
@@ -164,7 +166,8 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     // The step key's press at rest: the chat, history and card close, and an overlay the step
     // key brought back is minimized again. A reply still arriving keeps its card.
     case "stepRest": {
-      const card = s.session === "thinking" ? {} : { cardOpen: false, cardFull: false };
+      const keep = a.keepCard === true || s.session === "thinking";
+      const card = keep ? {} : { cardOpen: false, cardFull: false };
       return {
         ...s,
         ...card,

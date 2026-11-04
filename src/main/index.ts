@@ -602,9 +602,12 @@ async function main(): Promise<void> {
       case "chat":
         // In danger the chat does not open, so the overlay is not marked as brought back.
         return runHotkey({ type: "openChat", step: true }, "hotkey");
-      case "rest":
+      case "rest": {
+        // A reply that ends while focus goes back must keep its card, so look before waiting.
+        const keepCard = state.session === "thinking";
         await giveFocusBack();
-        dispatch({ type: "stepRest" });
+        return dispatch({ type: "stepRest", keepCard });
+      }
     }
   }
 

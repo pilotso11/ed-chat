@@ -378,6 +378,24 @@ describe("nextStep", () => {
     expect(press(run([{ type: "openChat", step: true }], faded)).visible).toBe(true);
   });
 
+  it("closes the history panel and the chat at rest", () => {
+    const st = run([{ type: "toggleHistory" }, { type: "openChat", step: true }], replied);
+    expect(press(st)).toMatchObject({ historyOpen: false, chatOpen: false });
+  });
+
+  it("keeps a card whose reply was arriving at the press", () => {
+    const shown = run([{ type: "showCard" }], faded);
+    expect(run([{ type: "stepRest", keepCard: true }], shown).cardOpen).toBe(true);
+    expect(run([{ type: "stepRest" }], shown).cardOpen).toBe(false);
+  });
+
+  it("does not minimize at rest after the player picks icon mode", () => {
+    let st = press(run([{ type: "toggleVisible" }], faded));
+    st = run([{ type: "toggleIcon" }], st);
+    st = press(press(press(st)));
+    expect(st).toMatchObject({ chatOpen: false, visible: true });
+  });
+
   it("closes a chat that was minimized to the tray", () => {
     expect(nextStep(run([ready, { type: "openChat" }, { type: "toggleVisible" }]))).toBe("rest");
   });
