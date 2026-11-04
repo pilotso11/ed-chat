@@ -321,4 +321,14 @@ describe("nextStep", () => {
   it("closes the chat from any state, even one opened another way", () => {
     expect(nextStep(run([ready, { type: "openChat" }]))).toBe("rest");
   });
+
+  it("closes a chat that was minimized to the tray", () => {
+    expect(nextStep(run([ready, { type: "openChat" }, { type: "toggleVisible" }]))).toBe("rest");
+  });
+
+  it("expands the card while a reply is still arriving", () => {
+    const streaming = run([ready, { type: "sent", text: "a" }, text("part")]);
+    expect(streaming).toMatchObject({ session: "thinking", cardOpen: true, cardFull: false });
+    expect(nextStep(streaming)).toBe("full");
+  });
 });
