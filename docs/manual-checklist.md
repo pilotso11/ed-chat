@@ -24,6 +24,7 @@ next to each item.
 - [ ] The fullscreen warning shows in exclusive fullscreen.
 - [ ] Hotkeys work while the game is in front, and not while another app is.
 - [ ] Ctrl+Alt+Enter switches to the icon and back, and the game does not also act on it.
+- [ ] Ctrl+` steps: the last reply, the whole reply, the chat, then back to rest with focus on the game. From minimized, the first press restores the overlay and the last press minimizes it again.
 - [ ] In icon mode, a reply expands the overlay and it stays expanded.
 - [ ] With the chat open, dragging the status line moves the overlay, and it snaps to the nearest edge or corner.
 - [ ] `style.backgroundOpacity` changes apply live, and text stays readable over a bright star.

@@ -32,6 +32,7 @@ import {
   INITIAL_STATE,
   answerAllowed,
   canOpenChat,
+  nextStep,
   currentApproval,
   currentChips,
   reduce,
@@ -579,6 +580,41 @@ async function main(): Promise<void> {
     flash("copy", `📋 copied ${chip.text}`, 2_000);
   }
 
+  // The player starts reading now, so the card gets a full fade time. A reply still arriving
+  // does not fade; its end starts the fade.
+  function refreshFade(): void {
+    if (state.session !== "thinking") scheduleFade();
+  }
+
+  // The step key shows one more each press (see nextStep). A press in the chat puts the
+  // overlay back as it was: minimized again when the first press restored it.
+  let restHidden = false;
+  async function stepView(): Promise<void> {
+    switch (nextStep(state)) {
+      case "show":
+        restHidden = true;
+        dispatch({ type: "toggleVisible" });
+        if (!state.reply) return;
+        dispatch({ type: "showCard" });
+        return refreshFade();
+      case "card":
+        dispatch({ type: "showCard" });
+        return refreshFade();
+      case "full":
+        dispatch({ type: "showMore" });
+        return refreshFade();
+      case "chat":
+        return runHotkey({ type: "openChat" }, "hotkey");
+      case "rest":
+        await giveFocusBack();
+        dispatch({ type: "closeChat" });
+        if (state.historyOpen) dispatch({ type: "toggleHistory" });
+        dispatch({ type: "cardTimeout" });
+        if (restHidden && state.visible) dispatch({ type: "toggleVisible" });
+        restHidden = false;
+    }
+  }
+
   // Hotkeys and the tray share one error path: a failed action is logged, never fatal.
   function runAction(a: HotkeyAction, source: "hotkey" | "tray"): void {
     runHotkey(a, source).catch((err) => log.log("warn", `${source} ${a.type}: ${message(err)}`));
@@ -591,6 +627,7 @@ async function main(): Promise<void> {
         focus?.save(source === "tray");
         return dispatch({ type: "openChat" });
       case "toggleOverlay":
+        restHidden = false;
         return dispatch({ type: "toggleVisible" });
       case "toggleIcon":
         return dispatch({ type: "toggleIcon" });
@@ -605,10 +642,9 @@ async function main(): Promise<void> {
       }
       case "showMore":
         dispatch({ type: "showMore" });
-        // Either way the player starts reading now, so the card gets a full fade time.
-        // A reply still arriving does not fade; its end starts the fade.
-        if (state.session !== "thinking") scheduleFade();
-        return;
+        return refreshFade();
+      case "step":
+        return stepView();
       case "cancel":
         if (!session?.busy) return;
         session.cancel();

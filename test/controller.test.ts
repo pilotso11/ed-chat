@@ -6,6 +6,7 @@ import {
   canOpenChat,
   currentApproval,
   currentChips,
+  nextStep,
   reduce,
   windowProps,
   type Action,
@@ -286,5 +287,38 @@ describe("answerAllowed", () => {
   it("does not hold back an answer to a request that is not the one just shown", () => {
     expect(answerAllowed("approve", "other", shown, 1_000)).toBe(true);
     expect(answerAllowed("approve", "r", null, 1_000)).toBe(true);
+  });
+});
+
+describe("nextStep", () => {
+  const replied = run([ready, { type: "sent", text: "a" }, text("long reply"), result()]);
+  const faded = run([{ type: "cardTimeout" }], replied);
+
+  it("walks card, whole reply, chat, then back to rest", () => {
+    expect(nextStep(faded)).toBe("card");
+    const card = run([{ type: "showCard" }], faded);
+    expect(card).toMatchObject({ cardOpen: true, cardFull: false });
+    expect(nextStep(card)).toBe("full");
+    const full = run([{ type: "showMore" }], card);
+    expect(nextStep(full)).toBe("chat");
+    expect(nextStep(run([{ type: "openChat" }], full))).toBe("rest");
+  });
+
+  it("starts again once the card has faded", () => {
+    const full = run([{ type: "showCard" }, { type: "showMore" }, { type: "cardTimeout" }], faded);
+    expect(nextStep(full)).toBe("card");
+  });
+
+  it("first shows a minimized overlay", () => {
+    expect(nextStep(run([{ type: "toggleVisible" }], faded))).toBe("show");
+  });
+
+  it("goes straight to the chat when there is no reply yet", () => {
+    expect(nextStep(run([ready]))).toBe("chat");
+    expect(run([{ type: "showCard" }], run([ready])).cardOpen).toBe(false);
+  });
+
+  it("closes the chat from any state, even one opened another way", () => {
+    expect(nextStep(run([ready, { type: "openChat" }]))).toBe("rest");
   });
 });

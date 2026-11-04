@@ -6,6 +6,7 @@ export type HotkeyAction =
   | { type: "toggleOverlay" }
   | { type: "toggleIcon" }
   | { type: "showMore" }
+  | { type: "step" }
   | { type: "alwaysAllow" }
   | { type: "showHistory" }
   | { type: "approve" }
@@ -31,7 +32,7 @@ export function bindings(h: Settings["hotkeys"]): Binding[] {
   return [
     ...b("openChat", h.openChat, { type: "openChat" }),
     ...b("toggleIcon", h.toggleIcon, { type: "toggleIcon" }),
-    ...b("showMore", h.showMore, { type: "showMore" }),
+    ...b("showMore", h.showMore, { type: "step" }),
     ...b("showHistory", h.showHistory, { type: "showHistory" }),
     ...b("approve", h.approve, { type: "approve" }),
     ...b("deny", h.deny, { type: "deny" }),
@@ -202,7 +203,7 @@ const LABELS: [keyof Settings["hotkeys"], string][] = [
   ["deny", "Deny tool"],
   ["alwaysAllow", "Always allow tool"],
   ["cancel", "Stop reply"],
-  ["showMore", "Whole reply"],
+  ["showMore", "Reply, whole reply, chat"],
   ["showHistory", "History"],
   ["toggleIcon", "Icon mode"],
 ];

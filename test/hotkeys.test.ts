@@ -118,6 +118,8 @@ describe("bindings", () => {
       action: { type: "move", dir: "left" },
     });
     expect(b.some((x) => x.name === "scope")).toBe(false);
+    // The showMore key steps through the reply, the whole reply and the chat.
+    expect(b.find((x) => x.name === "showMore")?.action).toEqual({ type: "step" });
   });
 });
 

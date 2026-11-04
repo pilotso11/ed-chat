@@ -36,7 +36,7 @@ Select **More info → Run anyway**. Releases are not public yet.
 | Ctrl+Shift+Y / N | Allow / deny a tool that Claude asks to run |
 | Ctrl+Shift+A | Allow the tool, and allow it without asking until `/new` |
 | Ctrl+Alt+X | Stop the current reply |
-| Ctrl+` | Show the whole last reply, or go back to the short card |
+| Ctrl+` | Step: the last reply, then the whole reply, then the chat; a press in the chat closes it |
 | Ctrl+Shift+H | Show or hide this session's history |
 | Ctrl+Alt+Enter | Switch between the full overlay and a small icon |
 | Ctrl+Alt+Arrows | Move the overlay around the screen edge |
@@ -60,9 +60,19 @@ overlay goes back to the icon when the reply card closes. A click on the icon
 switches icon mode off. The icon shows a dot when the last reply has chips or a
 notice is waiting.
 
-A long reply shows **▾ more**; click it, or press Ctrl+`, to see the whole
-reply. Ctrl+` also brings back the last reply after its card closed. The card
-does not close while the pointer is on it.
+A long reply shows **▾ more**; click it to see the whole reply. The card does
+not close while the pointer is on it.
+
+Ctrl+` steps through what is on screen, one press at a time:
+
+1. The last reply's card. If the overlay is minimized, it comes back too.
+2. The whole reply.
+3. The chat.
+4. Back to rest: the chat and the card close, focus goes back to the game, and
+   an overlay that step 1 brought back is minimized again.
+
+The step follows what is on screen: after the card fades, the next press starts
+again at step 1. With no reply yet, the first press opens the chat.
 
 The status line shows **● sending** until the reply starts, then
 **● receiving**.

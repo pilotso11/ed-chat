@@ -65,6 +65,7 @@ export type Action =
   | { type: "backend"; event: BackendEvent }
   | { type: "cardTimeout" }
   | { type: "showMore" }
+  | { type: "showCard" }
   | { type: "approval"; request: ApprovalRequest }
   | { type: "approvalSettled"; id: string }
   | { type: "flags"; flags: ShipFlags | null }
@@ -164,6 +165,9 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
       return onBackend(s, a.event);
     case "cardTimeout":
       return s.session === "thinking" ? s : { ...s, cardOpen: false, cardFull: false };
+    // Brings back the last reply's short card.
+    case "showCard":
+      return s.reply ? { ...s, cardOpen: true, cardFull: false, visible: true } : s;
     // Opens the last reply in full, or switches between full and short.
     case "showMore":
       if (!s.reply) return s;
@@ -213,6 +217,20 @@ export function windowProps(s: OverlayState): WindowProps {
     show: s.visible || s.chatOpen || s.approvals.length > 0 || s.keys !== null,
     interactive: s.chatOpen,
   };
+}
+
+/**
+ * What the step key (Ctrl+`) does next. Each press shows one more: the overlay, the last
+ * reply, the whole reply, then the chat. A press in the chat goes back to rest. The step
+ * follows what is on screen, so after the card fades the next press starts again.
+ */
+export type Step = "show" | "card" | "full" | "chat" | "rest";
+
+export function nextStep(s: OverlayState): Step {
+  if (s.chatOpen) return "rest";
+  if (!s.visible) return "show";
+  if (s.cardOpen) return s.cardFull ? "chat" : "full";
+  return s.reply ? "card" : "chat";
 }
 
 /** The approval that is shown and that the hotkeys answer; later ones wait their turn. */
