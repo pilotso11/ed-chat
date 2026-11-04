@@ -228,6 +228,8 @@ export type Step = "show" | "card" | "full" | "chat" | "rest";
 
 export function nextStep(s: OverlayState): Step {
   if (s.chatOpen) return "rest";
+  // The history panel is the chat without its input, so the next step adds the input.
+  if (s.historyOpen) return "chat";
   // With no reply yet there is nothing to show but the chat, minimized or not.
   if (!s.visible) return s.reply ? "show" : "chat";
   if (s.cardOpen) return s.cardFull ? "chat" : "full";

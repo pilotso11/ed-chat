@@ -72,7 +72,8 @@ Ctrl+` steps through what is on screen, one press at a time:
    an overlay that step 1 brought back is minimized again.
 
 The step follows what is on screen: after the card fades, the next press starts
-again at step 1. With no reply yet, the first press opens the chat.
+again at step 1. With no reply yet, the first press opens the chat. With the
+history open (Ctrl+Shift+H), the next press adds the input to it.
 
 The status line shows **● sending** until the reply starts, then
 **● receiving**.

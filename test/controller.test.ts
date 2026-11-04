@@ -323,6 +323,12 @@ describe("nextStep", () => {
     expect(nextStep(run([ready, { type: "openChat" }]))).toBe("rest");
   });
 
+  it("adds the input to the history panel, then closes both", () => {
+    const history = run([{ type: "toggleHistory" }], replied);
+    expect(nextStep(history)).toBe("chat");
+    expect(nextStep(run([{ type: "openChat" }], history))).toBe("rest");
+  });
+
   it("closes a chat that was minimized to the tray", () => {
     expect(nextStep(run([ready, { type: "openChat" }, { type: "toggleVisible" }]))).toBe("rest");
   });

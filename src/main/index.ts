@@ -602,10 +602,14 @@ async function main(): Promise<void> {
       case "full":
         dispatch({ type: "showMore" });
         return refreshFade();
-      case "chat":
-        // From minimized, the press that closes the chat minimizes the overlay again.
-        if (!state.visible) restHidden = true;
-        return runHotkey({ type: "openChat" }, "hotkey");
+      case "chat": {
+        // From minimized, the press that closes the chat minimizes the overlay again. Only
+        // when the chat opened: in danger it does not, and the overlay stays as it was.
+        const hidden = !state.visible;
+        await runHotkey({ type: "openChat" }, "hotkey");
+        if (hidden && state.chatOpen) restHidden = true;
+        return;
+      }
       case "rest":
         await giveFocusBack();
         dispatch({ type: "closeChat" });
