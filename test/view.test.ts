@@ -306,3 +306,19 @@ describe("show more", () => {
     expect([{ type: "showMore" } as Action].reduce(reduce, opened).cardFull).toBe(false);
   });
 });
+
+describe("refused chat in icon mode", () => {
+  it("shows the strip with the notice, then goes back to the icon", () => {
+    const icon: Action[] = [ready, { type: "toggleIcon" }];
+    expect(buildView(run(icon), DEFAULT_SETTINGS).mode).toBe("icon");
+    const refused: Action[] = [
+      ...icon,
+      { type: "notice", key: "chat", text: "⛔ in danger: chat blocked" },
+    ];
+    const v = buildView(run(refused), DEFAULT_SETTINGS);
+    expect(v.mode).toBe("strip");
+    expect(v.notice?.text).toBe("⛔ in danger: chat blocked");
+    const cleared = run([...refused, { type: "notice", key: "chat", text: null }]);
+    expect(buildView(cleared, DEFAULT_SETTINGS).mode).toBe("icon");
+  });
+});
