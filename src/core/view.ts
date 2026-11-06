@@ -3,6 +3,7 @@ import { parseChips, type Chip } from "./chips.js";
 import {
   currentApproval,
   currentChips,
+  hasAttention,
   windowProps,
   type OverlayState,
   type Turn,
@@ -113,9 +114,9 @@ export function pickNotice(notices: Record<string, string>): Notice | null {
 
 export function buildView(s: OverlayState, settings: Settings): ViewModel {
   const open = s.chatOpen || s.historyOpen;
-  // A refused chat shows the strip for its notice's few seconds, also in icon mode: the icon
-  // has no room for text, and the key must not look broken.
-  const iconRest = s.iconMode && s.notices.chat === undefined;
+  // A refused chat or focus shows the strip for its notice's few seconds, also in icon mode:
+  // the icon has no room for text, and the key must not look broken.
+  const iconRest = s.iconMode && !hasAttention(s);
   const mode = open ? "chat" : s.cardOpen ? "card" : iconRest ? "icon" : "strip";
   const reply = parseChips(s.reply);
   const scale = settings.style.fontSize / 14;

@@ -147,6 +147,30 @@ function onBackend(s: OverlayState, e: BackendEvent): OverlayState {
   }
 }
 
+/**
+ * Whether going back to rest (the step key's last press, or Esc) minimizes again an overlay
+ * the step key brought back. replyAtPress: a reply was arriving at the press. A message sent
+ * after it (Enter during the focus handoff) is a reply the player just asked for, so the
+ * overlay stays shown and a later rest minimizes it. keepShown: Windows refused focus, so the
+ * overlay stays shown for good, to say so.
+ */
+function afterRest(
+  s: OverlayState,
+  replyAtPress: boolean,
+  keepShown: boolean,
+): Pick<OverlayState, "visible" | "stepHidden"> {
+  const sentSince = s.session === "thinking" && !replyAtPress;
+  const minimize = s.stepHidden && !keepShown && !sentSince;
+  return {
+    visible: minimize ? false : s.visible,
+    stepHidden: sentSince ? s.stepHidden : false,
+  };
+}
+
+/** Notices about a key the player just pressed. They show even over the icon or while minimized. */
+export const ATTENTION_NOTICES = ["chat", "focus"];
+export const hasAttention = (s: OverlayState) => ATTENTION_NOTICES.some((k) => k in s.notices);
+
 export function reduce(s: OverlayState, a: Action): OverlayState {
   switch (a.type) {
     case "toggleVisible":
@@ -171,17 +195,12 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     case "stepRest": {
       const keep = a.keepCard === true || s.session === "thinking";
       const card = keep ? {} : { cardOpen: false, cardFull: false };
-      // A message sent after the press (Enter during the focus handoff) is a reply the player
-      // just asked for: the overlay stays shown for it, and a later rest minimizes it.
-      const sentSince = s.session === "thinking" && a.keepCard !== true;
-      const minimize = s.stepHidden && a.keepShown !== true && !sentSince;
       return {
         ...s,
         ...card,
+        ...afterRest(s, a.keepCard === true, a.keepShown === true),
         chatOpen: false,
         historyOpen: false,
-        visible: minimize ? false : s.visible,
-        stepHidden: sentSince ? s.stepHidden : false,
       };
     }
     // Esc is a way back to rest like the step key's last press, so it minimizes again an
@@ -191,13 +210,10 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     // stepRest.
     case "closeChat": {
       if (a.escape !== true) return { ...s, chatOpen: false };
-      const sentSince = s.session === "thinking" && a.replyAtPress !== true;
-      const minimize = s.stepHidden && a.keepShown !== true && !sentSince;
       return {
         ...s,
+        ...afterRest(s, a.replyAtPress === true, a.keepShown === true),
         chatOpen: false,
-        visible: minimize ? false : s.visible,
-        stepHidden: sentSince ? s.stepHidden : false,
       };
     }
     case "toggleHistory":
@@ -267,13 +283,8 @@ export interface WindowProps {
 export function windowProps(s: OverlayState): WindowProps {
   return {
     // Show hotkeys works while minimized to the tray, when the strip is gone. A refused chat
-    // ("in danger") shows for its few seconds too, so the key does not look broken.
-    show:
-      s.visible ||
-      s.chatOpen ||
-      s.approvals.length > 0 ||
-      s.keys !== null ||
-      s.notices.chat !== undefined,
+    // ("in danger") or focus shows for its few seconds too, so the key does not look broken.
+    show: s.visible || s.chatOpen || s.approvals.length > 0 || s.keys !== null || hasAttention(s),
     interactive: s.chatOpen,
   };
 }

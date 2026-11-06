@@ -192,7 +192,12 @@ describe("key lists", () => {
 
   it("lists the keys for the keys card and marks the taken ones", () => {
     const rows = keyRows(DEFAULT_SETTINGS.hotkeys, ["Ctrl+Alt+C", "Ctrl+Shift+3", "Ctrl+Alt+Up"]);
-    expect(rows[0]).toMatchObject({ label: "Reply → whole reply → chat", keys: "Ctrl+`" });
+    expect(rows[0]).toEqual({
+      label: "Reply → whole reply → chat",
+      keys: "Ctrl+`",
+      failed: [],
+      unused: [],
+    });
     expect(rows[1]).toEqual({
       label: "Open chat directly",
       keys: "Ctrl+Alt+C",

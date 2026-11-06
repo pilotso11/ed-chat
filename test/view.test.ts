@@ -321,4 +321,17 @@ describe("refused chat in icon mode", () => {
     const cleared = run([...refused, { type: "notice", key: "chat", text: null }]);
     expect(buildView(cleared, DEFAULT_SETTINGS).mode).toBe("icon");
   });
+
+  it("shows a refused focus's notice too", () => {
+    const v = buildView(
+      run([
+        ready,
+        { type: "toggleIcon" },
+        { type: "notice", key: "focus", text: "⚠ click the game to refocus" },
+      ]),
+      DEFAULT_SETTINGS,
+    );
+    expect(v.mode).toBe("strip");
+    expect(v.notice?.text).toBe("⚠ click the game to refocus");
+  });
 });
