@@ -6,6 +6,7 @@ import {
   canOpenChat,
   currentApproval,
   currentChips,
+  escapeAction,
   nextStep,
   reduce,
   stepAction,
@@ -476,6 +477,17 @@ describe("nextStep", () => {
       });
       const arriving = run([{ type: "closeChat", escape: true, replyAtPress: true }], st);
       expect(arriving).toMatchObject({ visible: false, stepHidden: false });
+    });
+    it("snapshots the press, so Enter during Esc's focus wait keeps the overlay shown", () => {
+      const st = chat();
+      const action = escapeAction(st); // read at the press
+      const later = run([{ type: "sent", text: "a" }], st); // Enter lands during the wait
+      expect(run([{ ...action, keepShown: false }], later)).toMatchObject({
+        visible: true,
+        stepHidden: true,
+      });
+      // Read after the wait instead, the same Esc would minimize the reply away.
+      expect(escapeAction(later)).toMatchObject({ replyAtPress: true });
     });
     it("stays shown when the message was sent after the press", () => {
       const st = run([{ type: "sent", text: "a" }, { type: "closeChat" }], chat());

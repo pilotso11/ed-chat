@@ -329,6 +329,14 @@ export function stepAction(s: OverlayState): Action {
   }
 }
 
+/**
+ * The action for Esc in the chat, read at the press before main waits for focus to go back.
+ * Main adds keepShown when Windows refused.
+ */
+export function escapeAction(s: OverlayState): Extract<Action, { type: "closeChat" }> {
+  return { type: "closeChat", escape: true, replyAtPress: s.session === "thinking" };
+}
+
 /** The approval that is shown and that the hotkeys answer; later ones wait their turn. */
 export function currentApproval(s: OverlayState): ApprovalRequest | null {
   return s.approvals[0] ?? null;
