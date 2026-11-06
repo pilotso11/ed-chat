@@ -420,7 +420,11 @@ describe("nextStep", () => {
       visible: false,
       stepHidden: false,
     });
-    expect(run([{ type: "closeChat", escape: true, keepShown: true }], st).visible).toBe(true);
+    // A refused focus keeps the overlay shown for good, as stepRest does.
+    expect(run([{ type: "closeChat", escape: true, keepShown: true }], st)).toMatchObject({
+      visible: true,
+      stepHidden: false,
+    });
     // Enter sends and keeps the overlay for the reply; the step key's rest minimizes it later.
     const sent = run([{ type: "closeChat" }], st);
     expect(sent).toMatchObject({ visible: true, stepHidden: true });

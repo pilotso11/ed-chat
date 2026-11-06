@@ -190,10 +190,15 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
     // A message sent during Esc's focus wait keeps the overlay shown for its reply, as in
     // stepRest.
     case "closeChat": {
+      if (a.escape !== true) return { ...s, chatOpen: false };
       const sentSince = s.session === "thinking" && a.replyAtPress !== true;
-      return a.escape === true && s.stepHidden && a.keepShown !== true && !sentSince
-        ? { ...s, chatOpen: false, visible: false, stepHidden: false }
-        : { ...s, chatOpen: false };
+      const minimize = s.stepHidden && a.keepShown !== true && !sentSince;
+      return {
+        ...s,
+        chatOpen: false,
+        visible: minimize ? false : s.visible,
+        stepHidden: sentSince ? s.stepHidden : false,
+      };
     }
     case "toggleHistory":
       return { ...s, historyOpen: !s.historyOpen, visible: true };
