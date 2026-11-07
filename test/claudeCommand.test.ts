@@ -118,4 +118,12 @@ describe("edMcpState", () => {
     expect(edMcpState([{ name: "ed-mcp", status: "needs-auth" }])).toBe("needsAuth");
     expect(edMcpState([{ name: "semble", status: "pending" }])).toBe("missing");
   });
+
+  it("is ok when one of a plugin and a claude mcp add server works", () => {
+    const plugin = { name: "plugin:elite-dangerous-mcp:ed-mcp", status: "failed" };
+    expect(edMcpState([plugin, { name: "ed-mcp", status: "pending" }])).toBe("ok");
+    expect(edMcpState([{ name: "ed-mcp", status: "connected" }, plugin])).toBe("ok");
+    expect(edMcpState([plugin, { name: "ed-mcp", status: "needs-auth" }])).toBe("needsAuth");
+    expect(edMcpState([plugin, { name: "ed-mcp", status: "failed" }])).toBe("failed");
+  });
 });

@@ -15,11 +15,25 @@ VR.
 - [Claude Code](https://claude.com/claude-code), installed and logged in. The
   overlay starts your own `claude` command and uses your login and settings.
 - Recommended: [ed-mcp](https://github.com/pilotso11/ed-mcp) for game tools.
-  Add it for your user, not one project. Windows needs `cmd /c` to run `npx`:
+  ED Chat uses the ed-mcp that your `claude` already has, with its settings.
+  Add it for your user, not one project. Windows needs `cmd /c` to run `npx`,
+  and `@latest` gets each new release:
 
   ```
-  claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp
+  claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp@latest
   ```
+
+  Every ed-mcp setting is optional. Add an `-e NAME=value` for each one that you
+  use, before the `--`. For example, a sync folder and password let ED Chat,
+  Claude Desktop and your other computers share plans and logins:
+
+  ```
+  claude mcp add ed-mcp -s user -e ED_MCP_SYNC_DIR=<folder> -e ED_MCP_SYNC_PASSWORD=<password> -- cmd /c npx -y ed-mcp@latest
+  ```
+
+  The [ed-mcp README](https://github.com/pilotso11/ed-mcp#readme) lists every
+  setting (Inara and EDSM keys, journal folder). The ed-mcp Claude Code plugin
+  also works. If you have both and one fails, ED Chat uses the one that works.
 
 ## Install
 
