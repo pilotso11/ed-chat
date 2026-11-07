@@ -84,7 +84,7 @@ const settingsFile = path.join(dataDir, "settings.json");
 
 // A command in backticks is copied when the player clicks the notice.
 const ED_MCP_MISSING =
-  "⚠ ed-mcp not connected; click to copy `claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp`";
+  "⚠ ed-mcp not connected; click to copy `claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp@latest`";
 const ED_MCP_FAILED = "⚠ ed-mcp failed to start; run `claude mcp list`";
 const ED_MCP_AUTH = "⚠ ed-mcp needs authentication; run `claude mcp list`";
 const SCOPE_GAME = "ⓘ hotkeys work while Elite is in front";

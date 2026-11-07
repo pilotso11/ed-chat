@@ -289,10 +289,11 @@ message, so the check, and the auto-mode check, happen then. They are still star
 (`pending`) at that point and their tools are not listed yet, so the check
 uses server names: `ed-mcp`, or `plugin:<plugin>:ed-mcp` for the Claude
 plugin. A `pending` server counts as connecting; only absence, `failed` and
-`needs-auth` are decided at `init`. `failed` shows "⚠ ed-mcp failed to start;
+`needs-auth` are decided at `init`. When the player has both, one server
+that is not `failed` or `needs-auth` is enough. `failed` shows "⚠ ed-mcp failed to start;
 run claude mcp list", and `needs-auth` shows "⚠ ed-mcp needs authentication;
 run claude mcp list". When there is no such server, the status line shows: "⚠ ed-mcp not connected. Run:
-`claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp`". `claude mcp add` uses local
+`claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp@latest`". `claude mcp add` uses local
 scope by default, which applies to one project folder only, so the message
 names `-s user`. Chat works without ed-mcp, but without game tools.
 
