@@ -48,5 +48,6 @@ describe("HUD_PROMPT", () => {
 
   it("tells Claude to use a working ed-mcp when another copy failed", () => {
     expect(HUD_PROMPT).toMatch(/one can fail while the other works/);
+    expect(HUD_PROMPT).toMatch(/use them, and do not say that ed-mcp failed/);
   });
 });
