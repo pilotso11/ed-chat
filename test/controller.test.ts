@@ -6,7 +6,10 @@ import {
   canOpenChat,
   currentApproval,
   currentChips,
+  escapeAction,
+  nextStep,
   reduce,
+  stepAction,
   windowProps,
   type Action,
   type OverlayState,
@@ -255,6 +258,18 @@ describe("windowProps", () => {
     expect(windowProps(run([{ type: "approval", request: req }], hidden)).show).toBe(true);
   });
 
+  it("shows a refused chat's notice while minimized to the tray", () => {
+    const hidden = run([{ type: "toggleVisible" }]);
+    const refused = run(
+      [{ type: "notice", key: "chat", text: "⛔ in danger: chat blocked" }],
+      hidden,
+    );
+    expect(windowProps(refused).show).toBe(true);
+    expect(windowProps(run([{ type: "notice", key: "chat", text: null }], refused)).show).toBe(
+      false,
+    );
+  });
+
   it("shows the hotkey list while minimized to the tray", () => {
     const hidden = run([{ type: "toggleVisible" }]);
     expect(windowProps(run([{ type: "keys", rows: [] }], hidden)).show).toBe(true);
@@ -286,5 +301,224 @@ describe("answerAllowed", () => {
   it("does not hold back an answer to a request that is not the one just shown", () => {
     expect(answerAllowed("approve", "other", shown, 1_000)).toBe(true);
     expect(answerAllowed("approve", "r", null, 1_000)).toBe(true);
+  });
+});
+
+describe("nextStep", () => {
+  const replied = run([ready, { type: "sent", text: "a" }, text("long reply"), result()]);
+  const faded = run([{ type: "cardTimeout" }], replied);
+
+  it("walks card, whole reply, chat, then back to rest", () => {
+    expect(nextStep(faded)).toBe("card");
+    const card = run([{ type: "showCard" }], faded);
+    expect(card).toMatchObject({ cardOpen: true, cardFull: false });
+    expect(nextStep(card)).toBe("full");
+    const full = run([{ type: "showMore" }], card);
+    expect(nextStep(full)).toBe("chat");
+    expect(nextStep(run([{ type: "openChat" }], full))).toBe("rest");
+  });
+
+  it("starts again once the card has faded", () => {
+    const full = run([{ type: "showCard" }, { type: "showMore" }, { type: "cardTimeout" }], faded);
+    expect(nextStep(full)).toBe("card");
+  });
+
+  it("first shows a minimized overlay", () => {
+    expect(nextStep(run([{ type: "toggleVisible" }], faded))).toBe("show");
+  });
+
+  it("goes straight to the chat when there is no reply yet", () => {
+    expect(nextStep(run([ready]))).toBe("chat");
+    expect(nextStep(run([ready, { type: "toggleVisible" }]))).toBe("chat");
+    expect(run([{ type: "showCard" }], run([ready])).cardOpen).toBe(false);
+  });
+
+  it("closes the chat from any state, even one opened another way", () => {
+    expect(nextStep(run([ready, { type: "openChat" }]))).toBe("rest");
+  });
+
+  it("adds the input to the history panel, then closes both", () => {
+    const history = run([{ type: "toggleHistory" }], replied);
+    expect(nextStep(history)).toBe("chat");
+    expect(nextStep(run([{ type: "openChat" }], history))).toBe("rest");
+  });
+
+  it("goes to the chat while a message is sending and no reply has arrived", () => {
+    expect(nextStep(run([ready, { type: "sent", text: "a" }]))).toBe("chat");
+  });
+
+  // Walks each press the way main does: nextStep picks the step, then its action runs.
+  const press = (st: OverlayState): OverlayState => reduce(st, stepAction(st));
+
+  it("brings back a minimized overlay and minimizes it again at rest", () => {
+    let st = run([{ type: "toggleVisible" }], faded);
+    st = press(st);
+    expect(st).toMatchObject({ visible: true, cardOpen: true, cardFull: false });
+    st = press(press(st));
+    expect(st.chatOpen).toBe(true);
+    st = press(st);
+    expect(st).toMatchObject({ visible: false, chatOpen: false, cardOpen: false });
+    expect(st.stepHidden).toBe(false);
+  });
+
+  it("from minimized with no reply, opens the chat and minimizes again at rest", () => {
+    const st = press(run([ready, { type: "toggleVisible" }]));
+    expect(st).toMatchObject({ chatOpen: true, visible: true });
+    expect(press(st).visible).toBe(false);
+  });
+
+  it("leaves the overlay shown when the player restored it by hand", () => {
+    let st = run([{ type: "toggleVisible" }], faded);
+    st = press(st);
+    st = run([{ type: "toggleVisible" }, { type: "toggleVisible" }], st);
+    st = press(press(press(st)));
+    expect(st).toMatchObject({ chatOpen: false, visible: true });
+  });
+
+  it("leaves a shown overlay shown at rest", () => {
+    expect(press(run([{ type: "openChat", step: true }], faded)).visible).toBe(true);
+  });
+
+  it("closes the history panel and the chat at rest", () => {
+    const st = run([{ type: "toggleHistory" }, { type: "openChat", step: true }], replied);
+    expect(press(st)).toMatchObject({ historyOpen: false, chatOpen: false });
+  });
+
+  it("keeps the card of a reply still arriving when the chat closes", () => {
+    let st = run([ready, { type: "sent", text: "a" }, text("part"), { type: "openChat" }]);
+    expect(nextStep(st)).toBe("rest");
+    st = press(st);
+    expect(st).toMatchObject({ session: "thinking", chatOpen: false, cardOpen: true });
+  });
+
+  it("stays shown at rest when focus did not go back to the game", () => {
+    const st = run([{ type: "openChat", step: true }], run([ready, { type: "toggleVisible" }]));
+    expect(run([{ type: "stepRest", keepShown: true }], st)).toMatchObject({
+      visible: true,
+      chatOpen: false,
+      stepHidden: false,
+    });
+  });
+
+  it("reads keepCard at the press, so main can wait before dispatching", () => {
+    const streaming = run([ready, { type: "sent", text: "a" }, text("part"), { type: "openChat" }]);
+    expect(stepAction(streaming)).toEqual({ type: "stepRest", keepCard: true });
+    expect(stepAction(run([{ type: "openChat" }], faded))).toEqual({
+      type: "stepRest",
+      keepCard: false,
+    });
+  });
+
+  it("keeps the card at rest while the reply is still arriving, without keepCard", () => {
+    const streaming = run([ready, { type: "sent", text: "a" }, text("part"), { type: "openChat" }]);
+    expect(run([{ type: "stepRest" }], streaming).cardOpen).toBe(true);
+  });
+
+  it("minimizes again after Esc closes a chat the step key opened from minimized", () => {
+    const st = press(run([ready, { type: "toggleVisible" }]));
+    expect(run([{ type: "closeChat", escape: true }], st)).toMatchObject({
+      chatOpen: false,
+      visible: false,
+      stepHidden: false,
+    });
+    // A refused focus keeps the overlay shown for good, as stepRest does.
+    expect(run([{ type: "closeChat", escape: true, keepShown: true }], st)).toMatchObject({
+      visible: true,
+      stepHidden: false,
+    });
+    // Enter sends and keeps the overlay for the reply; the step key's rest minimizes it later.
+    const sent = run([{ type: "closeChat" }], st);
+    expect(sent).toMatchObject({ visible: true, stepHidden: true });
+  });
+
+  it("leaves a shown overlay shown when Esc closes the chat", () => {
+    const st = run([{ type: "openChat" }], faded);
+    expect(st.stepHidden).toBe(false);
+    expect(run([{ type: "closeChat", escape: true }], st)).toMatchObject({
+      chatOpen: false,
+      visible: true,
+    });
+  });
+
+  it("brings back the short card even when the whole reply was open at minimize", () => {
+    const full = run(
+      [{ type: "showCard" }, { type: "showMore" }, { type: "toggleVisible" }],
+      faded,
+    );
+    expect(full).toMatchObject({ visible: false, cardOpen: true, cardFull: true });
+    expect(press(full)).toMatchObject({ visible: true, cardOpen: true, cardFull: false });
+  });
+
+  it("maps each step to its action", () => {
+    expect(stepAction(run([ready]))).toEqual({ type: "openChat", step: true });
+    expect(stepAction(faded)).toEqual({ type: "showCard" });
+    expect(stepAction(run([{ type: "toggleVisible" }], faded))).toEqual({ type: "stepShow" });
+    expect(stepAction(run([{ type: "showCard" }], faded))).toEqual({ type: "showMore" });
+  });
+
+  // A step-restored overlay with a reply arriving: the press at rest minimizes, keeping the
+  // card for later; a message sent during the focus handoff stays shown instead.
+  describe("rest on a step-restored overlay with a reply arriving", () => {
+    const chat = () => press(press(press(run([{ type: "toggleVisible" }], faded))));
+    it("minimizes, keeping the card, when the reply was arriving at the press", () => {
+      const st = run([{ type: "sent", text: "a" }, text("x")], chat());
+      expect(st).toMatchObject({ stepHidden: true, session: "thinking", chatOpen: true });
+      expect(run([{ type: "stepRest", keepCard: true }], st)).toMatchObject({
+        visible: false,
+        cardOpen: true,
+        stepHidden: false,
+      });
+    });
+    it("Esc stays shown when a message was sent during its focus wait", () => {
+      const st = run([{ type: "sent", text: "a" }], chat());
+      expect(run([{ type: "closeChat", escape: true }], st)).toMatchObject({
+        visible: true,
+        stepHidden: true,
+      });
+      const arriving = run([{ type: "closeChat", escape: true, replyAtPress: true }], st);
+      expect(arriving).toMatchObject({ visible: false, stepHidden: false });
+    });
+    it("snapshots the press, so Enter during Esc's focus wait keeps the overlay shown", () => {
+      const st = chat();
+      const action = escapeAction(st); // read at the press
+      const later = run([{ type: "sent", text: "a" }], st); // Enter lands during the wait
+      expect(run([{ ...action, keepShown: false }], later)).toMatchObject({
+        visible: true,
+        stepHidden: true,
+      });
+      // Read after the wait instead, the same Esc would minimize the reply away.
+      expect(escapeAction(later)).toMatchObject({ replyAtPress: true });
+    });
+    it("stays shown when the message was sent after the press", () => {
+      const st = run([{ type: "sent", text: "a" }, { type: "closeChat" }], chat());
+      expect(run([{ type: "stepRest", keepCard: false }], st)).toMatchObject({
+        visible: true,
+        cardOpen: true,
+        stepHidden: true,
+      });
+    });
+  });
+
+  it("keeps a card whose reply was arriving at the press", () => {
+    const shown = run([{ type: "showCard" }], faded);
+    expect(run([{ type: "stepRest", keepCard: true }], shown).cardOpen).toBe(true);
+    expect(run([{ type: "stepRest" }], shown).cardOpen).toBe(false);
+  });
+
+  it("does not minimize at rest after the player picks icon mode", () => {
+    let st = press(run([{ type: "toggleVisible" }], faded));
+    st = run([{ type: "toggleIcon" }], st);
+    st = press(press(press(st)));
+    expect(st).toMatchObject({ chatOpen: false, visible: true });
+  });
+
+  it("closes a chat that was minimized to the tray", () => {
+    expect(nextStep(run([ready, { type: "openChat" }, { type: "toggleVisible" }]))).toBe("rest");
+  });
+
+  it("expands the card while a reply is still arriving", () => {
+    const streaming = run([ready, { type: "sent", text: "a" }, text("part")]);
+    expect(streaming).toMatchObject({ session: "thinking", cardOpen: true, cardFull: false });
+    expect(nextStep(streaming)).toBe("full");
   });
 });

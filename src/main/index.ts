@@ -32,6 +32,8 @@ import {
   INITIAL_STATE,
   answerAllowed,
   canOpenChat,
+  escapeAction,
+  stepAction,
   currentApproval,
   currentChips,
   reduce,
@@ -325,11 +327,12 @@ async function main(): Promise<void> {
   }
   const focus = win32 ? new FocusManager(win32, { overlayHwnd, onChange: onForeground }) : null;
 
-  async function giveFocusBack(): Promise<void> {
-    if (focus && !(await focus.restore())) {
-      log.log("warn", "focus restore refused");
-      flash("focus", REFOCUS, 5_000);
-    }
+  /** False when Windows refused; the strip then says to click the game. */
+  async function giveFocusBack(): Promise<boolean> {
+    if (!focus || (await focus.restore())) return true;
+    log.log("warn", "focus restore refused");
+    flash("focus", REFOCUS, 5_000);
+    return false;
   }
 
   // Claude.
@@ -579,6 +582,31 @@ async function main(): Promise<void> {
     flash("copy", `📋 copied ${chip.text}`, 2_000);
   }
 
+  // The player starts reading now, so the card gets a full fade time. A reply still arriving
+  // does not fade; its end starts the fade.
+  function refreshFade(): void {
+    if (state.session !== "thinking") scheduleFade();
+  }
+
+  // The step key shows one more each press (see nextStep). A press in the chat puts the
+  // overlay back as it was (see stepRest).
+  async function stepView(): Promise<void> {
+    const action = stepAction(state);
+    switch (action.type) {
+      case "openChat":
+        // In danger the chat does not open, so the overlay is not marked as brought back.
+        return runHotkey(action, "hotkey");
+      case "stepRest": {
+        // A refused focus leaves the overlay shown, so its "click the game" notice can be read.
+        const keepShown = !(await giveFocusBack());
+        return dispatch({ ...action, keepShown });
+      }
+      default:
+        dispatch(action);
+        return refreshFade();
+    }
+  }
+
   // Hotkeys and the tray share one error path: a failed action is logged, never fatal.
   function runAction(a: HotkeyAction, source: "hotkey" | "tray"): void {
     runHotkey(a, source).catch((err) => log.log("warn", `${source} ${a.type}: ${message(err)}`));
@@ -589,7 +617,7 @@ async function main(): Promise<void> {
       case "openChat":
         if (!canOpenChat(state, settings.safety.blockWhenInDanger)) return flash("chat", IN_DANGER);
         focus?.save(source === "tray");
-        return dispatch({ type: "openChat" });
+        return dispatch({ type: "openChat", step: a.step });
       case "toggleOverlay":
         return dispatch({ type: "toggleVisible" });
       case "toggleIcon":
@@ -605,10 +633,9 @@ async function main(): Promise<void> {
       }
       case "showMore":
         dispatch({ type: "showMore" });
-        // Either way the player starts reading now, so the card gets a full fade time.
-        // A reply still arriving does not fade; its end starts the fade.
-        if (state.session !== "thinking") scheduleFade();
-        return;
+        return refreshFade();
+      case "step":
+        return stepView();
       case "cancel":
         if (!session?.busy) return;
         session.cancel();
@@ -636,7 +663,10 @@ async function main(): Promise<void> {
     return text === null ? false : send(text);
   });
   ipcMain.on(IPC.closeChat, () => {
-    void giveFocusBack().then(() => dispatch({ type: "closeChat" }));
+    // Read at the press, before the focus wait (see escapeAction).
+    const action = escapeAction(state);
+    // A refused focus leaves the overlay shown, so its "click the game" notice can be read.
+    void giveFocusBack().then((ok) => dispatch({ ...action, keepShown: !ok }));
   });
   ipcMain.on(IPC.copyChip, (_e, v: unknown) => {
     const n = chipArg(v);

@@ -45,12 +45,12 @@ Select **More info → Run anyway**. Releases are not public yet.
 
 | Key | Action |
 | --- | --- |
-| Ctrl+Alt+C | Open the chat. Enter sends and returns to the game. Esc closes. |
+| Ctrl+` | Step: the last reply, then the whole reply, then the chat; a press in the chat closes it |
+| Ctrl+Alt+C | Open the chat directly. Enter sends and returns to the game. Esc closes. |
 | Ctrl+Shift+1…9 | Copy chip 1…9 (top-row digits). A click on a chip also copies it. |
 | Ctrl+Shift+Y / N | Allow / deny a tool that Claude asks to run |
 | Ctrl+Shift+A | Allow the tool, and allow it without asking until `/new` |
 | Ctrl+Alt+X | Stop the current reply |
-| Ctrl+` | Show the whole last reply, or go back to the short card |
 | Ctrl+Shift+H | Show or hide this session's history |
 | Ctrl+Alt+Enter | Switch between the full overlay and a small icon |
 | Ctrl+Alt+Arrows | Move the overlay around the screen edge |
@@ -74,9 +74,22 @@ overlay goes back to the icon when the reply card closes. A click on the icon
 switches icon mode off. The icon shows a dot when the last reply has chips or a
 notice is waiting.
 
-A long reply shows **▾ more**; click it, or press Ctrl+`, to see the whole
-reply. Ctrl+` also brings back the last reply after its card closed. The card
-does not close while the pointer is on it.
+A long reply shows **▾ more**; click it to see the whole reply. The card does
+not close while the pointer is on it.
+
+Ctrl+` steps through what is on screen, one press at a time:
+
+1. The last reply's card. If the overlay is minimized, it comes back too.
+2. The whole reply.
+3. The chat.
+4. Back to rest: the chat, the history and the card close (a reply still
+   arriving keeps its card), focus goes back to the game, and
+   an overlay that step 1 brought back is minimized again. Closing the chat with
+   Esc also minimizes it again.
+
+The step follows what is on screen: after the card fades, the next press starts
+again at step 1. With no reply yet, the first press opens the chat. With the
+history open (Ctrl+Shift+H), the next press adds the input to it.
 
 The status line shows **● sending** until the reply starts, then
 **● receiving**.

@@ -118,6 +118,8 @@ describe("bindings", () => {
       action: { type: "move", dir: "left" },
     });
     expect(b.some((x) => x.name === "scope")).toBe(false);
+    // The showMore key steps through the reply, the whole reply and the chat.
+    expect(b.find((x) => x.name === "showMore")?.action).toEqual({ type: "step" });
   });
 });
 
@@ -191,12 +193,18 @@ describe("key lists", () => {
   it("lists the keys for the keys card and marks the taken ones", () => {
     const rows = keyRows(DEFAULT_SETTINGS.hotkeys, ["Ctrl+Alt+C", "Ctrl+Shift+3", "Ctrl+Alt+Up"]);
     expect(rows[0]).toEqual({
-      label: "Open chat",
+      label: "Reply → whole reply → chat",
+      keys: "Ctrl+`",
+      failed: [],
+      unused: [],
+    });
+    expect(rows[1]).toEqual({
+      label: "Open chat directly",
       keys: "Ctrl+Alt+C",
       failed: ["Ctrl+Alt+C"],
       unused: [],
     });
-    expect(rows[1]).toEqual({
+    expect(rows[2]).toEqual({
       label: "Copy chip",
       keys: "Ctrl+Shift+1–9",
       failed: ["Ctrl+Shift+3"],

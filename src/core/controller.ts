@@ -32,6 +32,8 @@ export interface OverlayState {
   cancelled: boolean;
   /** The hotkey list, shown at startup and from the tray. */
   keys: KeyRow[] | null;
+  /** The step key brought back a minimized overlay; its press at rest minimizes it again. */
+  stepHidden: boolean;
 }
 
 export const INITIAL_STATE: OverlayState = {
@@ -52,19 +54,28 @@ export const INITIAL_STATE: OverlayState = {
   notices: {},
   iconMode: false,
   cancelled: false,
+  stepHidden: false,
   keys: null,
 };
 
 export type Action =
   | { type: "toggleVisible" }
   | { type: "toggleIcon" }
-  | { type: "openChat" }
-  | { type: "closeChat" }
+  /** step: opened by the step key, which minimizes again at rest an overlay it brought back. */
+  | { type: "openChat"; step?: boolean }
+  | { type: "stepShow" }
+  /** keepCard: a reply was arriving at the press, so its card stays even if it ends first. */
+  /** keepShown: focus did not go back to the game, so the overlay stays to say so. */
+  | { type: "stepRest"; keepCard?: boolean; keepShown?: boolean }
+  /** escape: the player closed the chat with Esc, which also undoes the step key's restore. */
+  /** replyAtPress: a reply was arriving when Esc was pressed (read before the focus wait). */
+  | { type: "closeChat"; escape?: boolean; keepShown?: boolean; replyAtPress?: boolean }
   | { type: "toggleHistory" }
   | { type: "sent"; text: string }
   | { type: "backend"; event: BackendEvent }
   | { type: "cardTimeout" }
   | { type: "showMore" }
+  | { type: "showCard" }
   | { type: "approval"; request: ApprovalRequest }
   | { type: "approvalSettled"; id: string }
   | { type: "flags"; flags: ShipFlags | null }
@@ -136,16 +147,75 @@ function onBackend(s: OverlayState, e: BackendEvent): OverlayState {
   }
 }
 
+/**
+ * Whether going back to rest (the step key's last press, or Esc) minimizes again an overlay
+ * the step key brought back. replyAtPress: a reply was arriving at the press. A message sent
+ * after it (Enter during the focus handoff) is a reply the player just asked for, so the
+ * overlay stays shown and a later rest minimizes it. keepShown: Windows refused focus, so the
+ * overlay stays shown for good, to say so.
+ */
+function afterRest(
+  s: OverlayState,
+  replyAtPress: boolean,
+  keepShown: boolean,
+): Pick<OverlayState, "visible" | "stepHidden"> {
+  const sentSince = s.session === "thinking" && !replyAtPress;
+  const minimize = s.stepHidden && !keepShown && !sentSince;
+  return {
+    visible: minimize ? false : s.visible,
+    stepHidden: sentSince ? s.stepHidden : false,
+  };
+}
+
+/** Notices about a key the player just pressed. They show even over the icon or while minimized. */
+export const ATTENTION_NOTICES = ["chat", "focus"];
+export const hasAttention = (s: OverlayState) => ATTENTION_NOTICES.some((k) => k in s.notices);
+
 export function reduce(s: OverlayState, a: Action): OverlayState {
   switch (a.type) {
     case "toggleVisible":
-      return { ...s, visible: !s.visible };
+      return { ...s, visible: !s.visible, stepHidden: false };
+    // The player chose a visible overlay, so the step key no longer minimizes it at rest.
     case "toggleIcon":
-      return { ...s, iconMode: !s.iconMode, visible: true };
+      return { ...s, iconMode: !s.iconMode, visible: true, stepHidden: false };
     case "openChat":
-      return { ...s, chatOpen: true, visible: true };
-    case "closeChat":
-      return { ...s, chatOpen: false };
+      return {
+        ...s,
+        chatOpen: true,
+        visible: true,
+        stepHidden: s.stepHidden || (a.step === true && !s.visible),
+      };
+    // The step key's first press on a minimized overlay: the overlay and the last reply.
+    case "stepShow":
+      return s.reply
+        ? { ...s, visible: true, cardOpen: true, cardFull: false, stepHidden: true }
+        : s;
+    // The step key's press at rest: the chat, history and card close, and an overlay the step
+    // key brought back is minimized again. A reply still arriving keeps its card.
+    case "stepRest": {
+      const keep = a.keepCard === true || s.session === "thinking";
+      const card = keep ? {} : { cardOpen: false, cardFull: false };
+      return {
+        ...s,
+        ...card,
+        ...afterRest(s, a.keepCard === true, a.keepShown === true),
+        chatOpen: false,
+        historyOpen: false,
+      };
+    }
+    // Esc is a way back to rest like the step key's last press, so it minimizes again an
+    // overlay the step key brought back. Enter keeps it shown for the reply; the step key's
+    // press at rest minimizes it later.
+    // A message sent during Esc's focus wait keeps the overlay shown for its reply, as in
+    // stepRest.
+    case "closeChat": {
+      if (a.escape !== true) return { ...s, chatOpen: false };
+      return {
+        ...s,
+        ...afterRest(s, a.replyAtPress === true, a.keepShown === true),
+        chatOpen: false,
+      };
+    }
     case "toggleHistory":
       return { ...s, historyOpen: !s.historyOpen, visible: true };
     // The chat stays open: main closes it once focus is back with the game.
@@ -164,6 +234,9 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
       return onBackend(s, a.event);
     case "cardTimeout":
       return s.session === "thinking" ? s : { ...s, cardOpen: false, cardFull: false };
+    // Brings back the last reply's short card.
+    case "showCard":
+      return s.reply ? { ...s, cardOpen: true, cardFull: false, visible: true } : s;
     // Opens the last reply in full, or switches between full and short.
     case "showMore":
       if (!s.reply) return s;
@@ -209,10 +282,59 @@ export interface WindowProps {
 
 export function windowProps(s: OverlayState): WindowProps {
   return {
-    // Show hotkeys works while minimized to the tray, when the strip is gone.
-    show: s.visible || s.chatOpen || s.approvals.length > 0 || s.keys !== null,
+    // Show hotkeys works while minimized to the tray, when the strip is gone. A refused chat
+    // ("in danger") or focus shows for its few seconds too, so the key does not look broken.
+    show: s.visible || s.chatOpen || s.approvals.length > 0 || s.keys !== null || hasAttention(s),
     interactive: s.chatOpen,
   };
+}
+
+/**
+ * What the step key (Ctrl+`) does next. Each press shows one more: the overlay, the last
+ * reply, the whole reply, then the chat. A press in the chat goes back to rest. The step
+ * follows what is on screen, so after the card fades the next press starts again.
+ */
+export type Step = "show" | "card" | "full" | "chat" | "rest";
+
+export function nextStep(s: OverlayState): Step {
+  if (s.chatOpen) return "rest";
+  // The history panel is the chat without its input, so the next step adds the input.
+  if (s.historyOpen) return "chat";
+  // With no reply yet there is nothing to show but the chat, minimized or not.
+  if (!s.visible) return s.reply ? "show" : "chat";
+  // While a message is sending, no reply has arrived yet: nothing to show but the chat.
+  if (!s.reply) return "chat";
+  if (s.cardOpen) return s.cardFull ? "chat" : "full";
+  return "card";
+}
+
+/**
+ * The action for the step key's next press, read before main waits on anything. For rest,
+ * main first gives focus back to the game, while the overlay still holds the foreground, and
+ * adds keepShown when Windows refused. keepCard is read now: a reply that ends during that
+ * wait must keep its card.
+ */
+export function stepAction(s: OverlayState): Action {
+  switch (nextStep(s)) {
+    case "show":
+      return { type: "stepShow" };
+    case "card":
+      return { type: "showCard" };
+    case "full":
+      return { type: "showMore" };
+    case "chat":
+      return { type: "openChat", step: true };
+    case "rest":
+      return { type: "stepRest", keepCard: s.session === "thinking" };
+  }
+}
+
+/**
+ * The action for Esc in the chat, read at the press before main waits for focus to go back.
+ * Main adds keepShown when Windows refused.
+ */
+export function escapeAction(s: OverlayState): Extract<Action, { type: "closeChat" }> {
+  return { type: "closeChat", escape: true, replyAtPress: s.session === "thinking" };
 }
 
 /** The approval that is shown and that the hotkeys answer; later ones wait their turn. */
