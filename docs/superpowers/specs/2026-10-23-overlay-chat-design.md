@@ -178,6 +178,11 @@ paste in `⟦…⟧`. The renderer shows each marked name as a numbered chip and
 shows the plain name in the text. Markers work with any tool or MCP server.
 Up to 9 chips per reply get numbers.
 
+The prompt also says that a player can have two ed-mcp copies (the plugin and a
+`claude mcp add` server). Claude uses any listed ed-mcp tools and does not report
+the other copy as failed. When no ed-mcp tool is listed, it says that the game
+data tools are not available. When a call fails, it says what the tool reported.
+
 ### Position
 
 The window has 8 anchors on a 3×3 grid around the screen: `top-left`, `top`,
@@ -289,10 +294,11 @@ message, so the check, and the auto-mode check, happen then. They are still star
 (`pending`) at that point and their tools are not listed yet, so the check
 uses server names: `ed-mcp`, or `plugin:<plugin>:ed-mcp` for the Claude
 plugin. A `pending` server counts as connecting; only absence, `failed` and
-`needs-auth` are decided at `init`. `failed` shows "⚠ ed-mcp failed to start;
-run claude mcp list", and `needs-auth` shows "⚠ ed-mcp needs authentication;
-run claude mcp list". When there is no such server, the status line shows: "⚠ ed-mcp not connected. Run:
-`claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp`". `claude mcp add` uses local
+`needs-auth` are decided at `init`. When the player has both, one server
+that is not `failed` or `needs-auth` is enough. `failed` shows "⚠ ed-mcp failed to start;
+run `claude mcp list`", and `needs-auth` shows "⚠ ed-mcp needs authentication;
+run `claude mcp list`". When there is no such server, the status line shows: "⚠ ed-mcp not connected; click to copy
+`claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp@latest`". `claude mcp add` uses local
 scope by default, which applies to one project folder only, so the message
 names `-s user`. Chat works without ed-mcp, but without game tools.
 

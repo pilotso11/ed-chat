@@ -82,9 +82,11 @@ export function isOlder(a: Version, b: Version): boolean {
 export type EdMcpState = "ok" | "missing" | "failed" | "needsAuth";
 
 // Servers are still pending at init and their tools are not listed yet, so read the configured list.
-// The Claude plugin names its server plugin:<plugin>:ed-mcp.
+// The Claude plugin names its server plugin:<plugin>:ed-mcp. A player can have both, and one
+// that works is enough: a failed plugin must not hide a working claude mcp add server.
 export function edMcpState(servers: McpServerInfo[]): EdMcpState {
-  const s = servers.find((m) => m.name === "ed-mcp" || /^plugin:[^:]+:ed-mcp$/.test(m.name));
-  if (!s) return "missing";
-  return s.status === "failed" ? "failed" : s.status === "needs-auth" ? "needsAuth" : "ok";
+  const found = servers.filter((m) => m.name === "ed-mcp" || /^plugin:[^:]+:ed-mcp$/.test(m.name));
+  if (!found.length) return "missing";
+  if (found.some((m) => m.status !== "failed" && m.status !== "needs-auth")) return "ok";
+  return found.some((m) => m.status === "needs-auth") ? "needsAuth" : "failed";
 }
