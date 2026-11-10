@@ -48,9 +48,13 @@ describe("HUD_PROMPT", () => {
 
   it("tells Claude to use a working ed-mcp when another copy failed", () => {
     expect(HUD_PROMPT).toMatch(/one can fail while the other works/);
-    expect(HUD_PROMPT).toMatch(/use them, and do not say that ed-mcp failed/);
+    expect(HUD_PROMPT).toMatch(/use them, and do not report the other copy as failed/);
+  });
+
+  it("tells Claude to report ed-mcp as down when no tool is listed or a call fails", () => {
     expect(HUD_PROMPT).toMatch(
       /If none are listed, say that the game data tools are not available/,
     );
+    expect(HUD_PROMPT).toMatch(/If a call to one fails, say what it reported/);
   });
 });

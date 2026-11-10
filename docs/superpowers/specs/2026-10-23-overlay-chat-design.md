@@ -181,7 +181,7 @@ Up to 9 chips per reply get numbers.
 The prompt also says that a player can have two ed-mcp copies (the plugin and a
 `claude mcp add` server). Claude uses any listed ed-mcp tools and does not report
 the other copy as failed. When no ed-mcp tool is listed, it says that the game
-data tools are not available.
+data tools are not available. When a call fails, it says what the tool reported.
 
 ### Position
 
