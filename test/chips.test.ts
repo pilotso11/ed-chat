@@ -45,4 +45,8 @@ describe("HUD_PROMPT", () => {
     expect(HUD_PROMPT).not.toMatch(/["%^&|<>]/);
     expect(HUD_PROMPT).toContain("⟦");
   });
+
+  it("tells Claude to use a working ed-mcp when another copy failed", () => {
+    expect(HUD_PROMPT).toMatch(/one can fail while the other works/);
+  });
 });
