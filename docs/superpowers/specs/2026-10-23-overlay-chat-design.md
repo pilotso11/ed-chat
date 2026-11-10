@@ -178,6 +178,11 @@ paste in `⟦…⟧`. The renderer shows each marked name as a numbered chip and
 shows the plain name in the text. Markers work with any tool or MCP server.
 Up to 9 chips per reply get numbers.
 
+The prompt also says that a player can have two ed-mcp copies (the plugin and a
+`claude mcp add` server). Claude uses any listed ed-mcp tools and does not report
+the other copy as failed. When no ed-mcp tool is listed, it says that the game
+data tools are not available.
+
 ### Position
 
 The window has 8 anchors on a 3×3 grid around the screen: `top-left`, `top`,
