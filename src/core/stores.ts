@@ -3,6 +3,7 @@ import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises
 import path from "node:path";
 import { z } from "zod";
 import type { Turn } from "./controller.js";
+import type { SavedSession } from "./resume.js";
 import {
   DEFAULTS_FILE,
   DEFAULT_SETTINGS,
@@ -135,16 +136,31 @@ export class SettingsStore {
   }
 }
 
+/** How many turns of a resumed conversation the history view loads. */
+export const RESUME_TURNS = 200;
+
 export interface SavedState {
   position?: Position;
   positionBase?: string;
   iconMode?: boolean;
+  session?: SavedSession;
 }
 
 const SavedStateSchema = z.object({
   position: PositionSchema.optional(),
   positionBase: z.string().optional(),
   iconMode: z.boolean().optional(),
+  session: z
+    .object({
+      id: z.string().min(1),
+      lastUsed: z.string(),
+      // A bare file name: state.json must not point the history store outside its folder.
+      history: z
+        .string()
+        .regex(/^[\w.-]+\.jsonl$/)
+        .optional(),
+    })
+    .optional(),
 });
 
 // A hotkey-chosen position is kept until the player edits position in settings.json.
@@ -197,6 +213,41 @@ export class HistoryStore {
 
   newSession(): void {
     this.file = path.join(this.dir, `${this.now().toISOString().replace(/[:.]/g, "-")}.jsonl`);
+  }
+
+  /** The current file's name, or null before the first session. */
+  get fileName(): string | null {
+    return this.file ? path.basename(this.file) : null;
+  }
+
+  /**
+   * Continues an earlier file, for a resumed conversation, and returns its turns so the
+   * history view shows them. A missing or broken file starts a new one.
+   */
+  async resume(name: string): Promise<Turn[]> {
+    const file = path.join(this.dir, path.basename(name));
+    let text: string;
+    try {
+      text = await readFile(file, "utf8");
+    } catch {
+      this.newSession();
+      return [];
+    }
+    this.file = file;
+    // The file grows while the player keeps resuming; the view needs only the recent turns.
+    return text
+      .split(/\r?\n/)
+      .flatMap((line) => {
+        try {
+          const t = JSON.parse(line) as Partial<Turn>;
+          return (t.role === "user" || t.role === "assistant") && typeof t.text === "string"
+            ? [{ role: t.role, text: t.text }]
+            : [];
+        } catch {
+          return [];
+        }
+      })
+      .slice(-RESUME_TURNS);
   }
 
   async append(t: Turn): Promise<void> {

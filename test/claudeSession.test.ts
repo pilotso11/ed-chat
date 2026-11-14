@@ -8,13 +8,19 @@ const fake = path.join(import.meta.dirname, "fake-claude.mjs");
 const fixture = path.join(import.meta.dirname, "fixtures", "stream", "handwritten.jsonl");
 const sessions: ClaudeSession[] = [];
 
-async function setup(mode = "ok", command = process.execPath, extraEnv: NodeJS.ProcessEnv = {}) {
+async function setup(
+  mode = "ok",
+  command = process.execPath,
+  extraEnv: NodeJS.ProcessEnv = {},
+  resumeId: string | null = null,
+) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "ed-chat-"));
   const argsFile = path.join(dir, "args.jsonl");
   const s = new ClaudeSession({
     command,
     args: [fake, "--base"],
     cwd: dir,
+    resumeId,
     env: {
       ...process.env,
       FAKE_FIXTURE: fixture,
@@ -117,6 +123,78 @@ describe("ClaudeSession", () => {
     s.send("hi");
     await until(() => events.some((e) => e.type === "exit"));
     expect(events.find((e) => e.type === "exit")).toMatchObject({ stderrTail: ["boom"] });
+  });
+
+  it("resumes a saved conversation on the first spawn", async () => {
+    const { s, events, spawns } = await setup("ok", process.execPath, {}, "saved-1");
+    expect(s.sessionId).toBe("saved-1");
+    s.start();
+    s.send("hi");
+    await until(() => events.some((e) => e.type === "result"));
+    expect((await spawns())[0]).toEqual(["--base", "--resume", "saved-1"]);
+    expect(events.some((e) => e.type === "resumeFailed")).toBe(false);
+  });
+
+  it("starts a new conversation once when the saved one is gone, and resends the message", async () => {
+    const { s, events, spawns } = await setup("no-session", process.execPath, {}, "gone-1");
+    s.start();
+    s.send("hi");
+    await until(() => events.some((e) => e.type === "result"));
+    expect((await spawns()).map((a) => a.includes("--resume"))).toEqual([true, false]);
+    const types = events.map((e) => e.type);
+    expect(types).toContain("resumeFailed");
+    // The CLI's error result for the unknown id is not shown as a reply, and is not a crash.
+    expect(events.filter((e) => e.type === "result")).toHaveLength(1);
+    expect(events.find((e) => e.type === "result")).toMatchObject({ isError: false });
+    expect(types.some((t) => t === "exit" || t === "gaveUp")).toBe(false);
+    expect(s.sessionId).toBe("sess-1");
+  });
+
+  it("falls back once when the saved conversation is gone before any message", async () => {
+    const { s, events, spawns } = await setup("no-session", process.execPath, {}, "gone-1");
+    s.start();
+    await until(async () => (await spawns()).length === 2);
+    await until(() => events.filter((e) => e.type === "spawned").length === 2);
+    expect((await spawns()).map((a) => a.includes("--resume"))).toEqual([true, false]);
+    expect(events.filter((e) => e.type === "resumeFailed")).toEqual([
+      { type: "resumeFailed", stderrTail: ["No conversation found with session ID: gone-1"] },
+    ]);
+    expect(events.some((e) => e.type === "result" || e.type === "exit")).toBe(false);
+    expect(s.sessionId).toBeNull();
+  });
+
+  it("keeps the saved conversation when the CLI fails for another reason", async () => {
+    const { s, events, spawns } = await setup("exit-now", process.execPath, {}, "saved-1");
+    s.start();
+    await until(() => events.some((e) => e.type === "exit"));
+    expect(events.some((e) => e.type === "resumeFailed")).toBe(false);
+    expect(events.find((e) => e.type === "exit")).toMatchObject({ stderrTail: ["boom"] });
+    expect(s.sessionId).toBe("saved-1");
+    expect(await spawns()).toHaveLength(1);
+  });
+
+  it("gives up on the saved conversation after a second early exit", async () => {
+    const { s, events, spawns } = await setup("exit-now", process.execPath, {}, "saved-1");
+    s.start();
+    await until(() => events.some((e) => e.type === "exit"));
+    s.send("hi");
+    await until(() => events.some((e) => e.type === "resumeFailed"));
+    await until(async () => (await spawns()).length === 3);
+    expect((await spawns()).map((a) => a.includes("--resume"))).toEqual([true, true, false]);
+    expect(s.sessionId).toBeNull();
+  });
+
+  it("shows an error reply in a resumed conversation and is no longer busy", async () => {
+    const { s, events } = await setup("error-reply", process.execPath, {}, "saved-1");
+    s.start();
+    s.send("hi");
+    await until(() => events.some((e) => e.type === "result"));
+    expect(events.find((e) => e.type === "result")).toMatchObject({
+      isError: true,
+      text: "API down",
+    });
+    expect(s.busy).toBe(false);
+    expect(events.some((e) => e.type === "resumeFailed")).toBe(false);
   });
 
   it("newSession starts without --resume", async () => {

@@ -57,4 +57,13 @@ describe("HUD_PROMPT", () => {
     );
     expect(HUD_PROMPT).toMatch(/If a call to one fails, say what it reported/);
   });
+
+  it("tells Claude to read and save the activity, mark route stops, and read the journal with ed-mcp", () => {
+    expect(HUD_PROMPT).toMatch(/if activity_get is listed, call it/);
+    expect(HUD_PROMPT).toMatch(/save it with activity_set if it is listed/);
+    expect(HUD_PROMPT).toMatch(/mark it with plan_update_stop if it is listed/);
+    expect(HUD_PROMPT).toMatch(
+      /If ed-mcp journal tools are listed, read the game journal with them, not with shell commands/,
+    );
+  });
 });

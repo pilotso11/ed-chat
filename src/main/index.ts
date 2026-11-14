@@ -63,6 +63,7 @@ import {
   savePosition,
   type SavedState,
 } from "../core/stores.js";
+import { resumeId } from "../core/resume.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
 import { IPC } from "../shared/ipc.js";
 import {
@@ -99,6 +100,8 @@ const IN_DANGER = "⛔ in danger: chat blocked";
 const NO_AUTO = "⚠ auto mode unavailable, using manual approvals";
 const BUSY = "⚠ Claude is busy";
 const GAVE_UP = "⚠ Claude keeps stopping";
+const RESUMED = "↺ resumed your last conversation";
+const RESUME_FAILED = "ⓘ could not resume the last conversation; started a new one";
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -118,7 +121,6 @@ async function main(): Promise<void> {
   const settingsStore = new SettingsStore(settingsFile);
   const stateStore = new StateStore(path.join(dataDir, "state.json"));
   const history = new HistoryStore(path.join(dataDir, "history"));
-  history.newSession();
 
   let state: OverlayState = INITIAL_STATE;
   let prevProps: WindowProps | null = null;
@@ -132,6 +134,12 @@ async function main(): Promise<void> {
   let position: Position;
   ({ position, saved } = effectivePosition(settings.position, saved));
   state = { ...state, iconMode: saved.iconMode ?? settings.strip.startAsIcon };
+  // The conversation from the last run, used by the first session only.
+  let resumeFrom = resumeId(saved.session, new Date(), settings.claude.resumeHours);
+  const resumedTurns =
+    resumeFrom && saved.session?.history ? await history.resume(saved.session.history) : [];
+  if (!history.fileName) history.newSession();
+  state = { ...state, history: resumedTurns, resumedTurns: resumedTurns.length };
 
   const win: BrowserWindow = createOverlayWindow(
     path.join(import.meta.dirname, "../preload/index.cjs"),
@@ -386,13 +394,18 @@ async function main(): Promise<void> {
   };
 
   let session: ClaudeSession | null = null;
+  let resumePending = false;
   function startSession(c: { command: string; args: string[]; shell: boolean }): void {
     session = new ClaudeSession({
       command: c.command,
       args: c.args,
       shell: c.shell,
       cwd: workspace,
+      resumeId: resumeFrom,
     });
+    // Shown at the first ready: the CLI confirms the conversation only then.
+    resumePending = resumeFrom !== null;
+    resumeFrom = null;
     session.onEvent(onBackend);
     session.start();
     checkVersion(c.command, c.shell);
@@ -449,6 +462,10 @@ async function main(): Promise<void> {
     dispatch({ type: "backend", event: e });
     switch (e.type) {
       case "ready":
+        if (resumePending) {
+          resumePending = false;
+          flash("resume", RESUMED, 6_000);
+        }
         {
           const ed = edMcpState(e.mcpServers);
           dispatch({
@@ -478,6 +495,32 @@ async function main(): Promise<void> {
       case "result":
         appendHistory({ role: "assistant", text: state.reply });
         scheduleFade();
+        // An error reply still counts as use: the conversation exists and was used just now.
+        if (e.sessionId && history.fileName) {
+          saved = {
+            ...saved,
+            session: {
+              id: e.sessionId,
+              lastUsed: new Date().toISOString(),
+              history: history.fileName,
+            },
+          };
+          writeState();
+        }
+        break;
+      case "resumeFailed":
+        resumePending = false;
+        history.newSession();
+        // The reducer dropped the old conversation's turns; what is left is the question in
+        // flight, which the new conversation answers, so it starts the new file.
+        for (const t of state.history) appendHistory(t);
+        saved = { ...saved, session: undefined };
+        writeState();
+        flash("resume", RESUME_FAILED, 6_000);
+        log.log(
+          "info",
+          `could not resume the saved conversation: ${capLines(e.stderrTail).join(" | ")}`,
+        );
         break;
       case "exit":
       case "gaveUp":
@@ -515,6 +558,9 @@ async function main(): Promise<void> {
   function newConversation(): void {
     session?.newSession();
     history.newSession();
+    resumePending = false;
+    saved = { ...saved, session: undefined };
+    writeState();
     approval.clearAllowed();
     dispatch({ type: "newSession" });
   }

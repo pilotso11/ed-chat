@@ -23,6 +23,8 @@ export interface OverlayState {
   chips: Chip[];
   pinned: string | null;
   history: Turn[];
+  /** How many turns at the start of history came from a resumed conversation's file. */
+  resumedTurns: number;
   approvals: ApprovalRequest[];
   flags: ShipFlags | null;
   notices: Record<string, string>;
@@ -49,6 +51,7 @@ export const INITIAL_STATE: OverlayState = {
   chips: [],
   pinned: null,
   history: [],
+  resumedTurns: 0,
   approvals: [],
   flags: null,
   notices: {},
@@ -142,6 +145,9 @@ function onBackend(s: OverlayState, e: BackendEvent): OverlayState {
           ? "⚠ claude not found: install Claude Code or set claude.path"
           : `⚠ Can't start claude: ${e.message}`,
       );
+    // The earlier turns belong to the conversation that could not be resumed.
+    case "resumeFailed":
+      return { ...s, history: s.history.slice(s.resumedTurns), resumedTurns: 0 };
     case "unknown":
       return s;
   }
@@ -259,6 +265,7 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
           chips: [],
           pinned: null,
           history: [],
+          resumedTurns: 0,
           session: "starting",
           cancelled: false,
           tool: null,

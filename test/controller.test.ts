@@ -194,6 +194,25 @@ describe("reduce", () => {
     });
   });
 
+  it("shows a resumed conversation's turns, and drops them when the resume fails", () => {
+    const old = [
+      { role: "user" as const, text: "a" },
+      { role: "assistant" as const, text: "b" },
+    ];
+    const loaded = run([{ type: "sent", text: "c" }], {
+      ...INITIAL_STATE,
+      history: old,
+      resumedTurns: old.length,
+    });
+    expect(loaded.history).toEqual([...old, { role: "user", text: "c" }]);
+    const failed = run(
+      [{ type: "backend", event: { type: "resumeFailed", stderrTail: [] } }],
+      loaded,
+    );
+    expect(failed).toMatchObject({ history: [{ role: "user", text: "c" }], resumedTurns: 0 });
+    expect(run([{ type: "newSession" }], loaded).resumedTurns).toBe(0);
+  });
+
   it("returns to starting on cancel", () => {
     expect(run([ready, { type: "sent", text: "a" }, { type: "cancelled" }]).session).toBe(
       "starting",

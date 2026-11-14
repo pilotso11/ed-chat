@@ -7,7 +7,19 @@ if (process.env.FAKE_ARGS_FILE) {
   appendFileSync(process.env.FAKE_ARGS_FILE, JSON.stringify(process.argv.slice(2)) + "\n");
 }
 const mode = process.env.FAKE_MODE ?? "ok";
-if (mode === "exit-now") {
+// As the real CLI does for an unknown --resume id: an error result, then exit 1.
+if (mode === "no-session" && process.argv.includes("--resume")) {
+  const id = process.argv[process.argv.indexOf("--resume") + 1];
+  process.stdout.write(
+    JSON.stringify({
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      session_id: id,
+    }) + "\n",
+  );
+  process.stderr.write(`No conversation found with session ID: ${id}\n`, () => process.exit(1));
+} else if (mode === "exit-now") {
   process.stderr.write("boom\n");
   process.exit(1);
 }
@@ -28,6 +40,18 @@ rl.on("line", () => {
     process.exit(1);
   }
   if (mode === "hang") return;
+  if (mode === "error-reply") {
+    process.stdout.write(
+      JSON.stringify({
+        type: "result",
+        subtype: "error",
+        is_error: true,
+        result: "API down",
+        session_id: "sess-1",
+      }) + "\n",
+    );
+    return;
+  }
   for (const l of lines.slice(1)) process.stdout.write(l + "\n");
 });
 rl.on("close", () => process.exit(0));

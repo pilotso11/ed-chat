@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, defaultSettingsText } from "../src/core/settings.js";
 import {
   HistoryStore,
+  RESUME_TURNS,
   SettingsStore,
   StateStore,
   effectivePosition,
@@ -199,6 +200,16 @@ describe("StateStore", () => {
     await writeFile(file, "{");
     expect(await st.read()).toEqual({});
   });
+
+  it("keeps the saved conversation, and drops one whose history file is not a bare name", async () => {
+    const file = path.join(await tmp(), "state.json");
+    const st = new StateStore(file);
+    const session = { id: "s-1", lastUsed: "2026-11-14T20:00:00.000Z", history: "a-1.jsonl" };
+    await st.write({ session });
+    expect((await st.read()).session).toEqual(session);
+    await writeFile(file, JSON.stringify({ session: { ...session, history: "../x.jsonl" } }));
+    expect(await st.read()).toEqual({});
+  });
 });
 
 describe("HistoryStore", () => {
@@ -215,5 +226,38 @@ describe("HistoryStore", () => {
     expect(files).toEqual(["2026-10-23T10-00-00-000Z.jsonl", "2026-10-23T11-00-00-000Z.jsonl"]);
     const line = JSON.parse((await readFile(path.join(dir, files[0]!), "utf8")).trim());
     expect(line).toEqual({ at: "2026-10-23T10:00:00.000Z", role: "user", text: "a" });
+  });
+
+  it("continues an earlier file and returns its turns", async () => {
+    const dir = await tmp();
+    const h = new HistoryStore(dir, () => new Date("2026-10-23T10:00:00.000Z"));
+    h.newSession();
+    await h.append({ role: "user", text: "a" });
+    await h.append({ role: "assistant", text: "b" });
+    const name = h.fileName!;
+    const again = new HistoryStore(dir, () => new Date("2026-10-24T10:00:00.000Z"));
+    expect(await again.resume(name)).toEqual([
+      { role: "user", text: "a" },
+      { role: "assistant", text: "b" },
+    ]);
+    await again.append({ role: "user", text: "c" });
+    expect(await readdir(dir)).toEqual([name]);
+  });
+
+  it("loads only the last turns of a long file", async () => {
+    const dir = await tmp();
+    const h = new HistoryStore(dir, () => new Date("2026-10-23T10:00:00.000Z"));
+    h.newSession();
+    for (let i = 0; i < RESUME_TURNS + 5; i++) await h.append({ role: "user", text: String(i) });
+    const turns = await new HistoryStore(dir).resume(h.fileName!);
+    expect(turns).toHaveLength(RESUME_TURNS);
+    expect(turns[0]!.text).toBe("5");
+  });
+
+  it("starts a new file when the earlier one is gone", async () => {
+    const dir = await tmp();
+    const h = new HistoryStore(dir, () => new Date("2026-10-24T10:00:00.000Z"));
+    expect(await h.resume("2026-10-23T10-00-00-000Z.jsonl")).toEqual([]);
+    expect(h.fileName).toBe("2026-10-24T10-00-00-000Z.jsonl");
   });
 });

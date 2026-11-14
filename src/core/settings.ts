@@ -89,6 +89,7 @@ export const SettingsSchema = z.strictObject({
       path: z.string().min(1).nullable().default(null),
       permissionMode: z.enum(["auto", "default"]).default("auto"),
       extraArgs: z.array(z.string()).default([]),
+      resumeHours: z.number().min(0).max(720).default(12),
     })
     .prefault({}),
   journalDir: z.string().min(1).nullable().default(null),
