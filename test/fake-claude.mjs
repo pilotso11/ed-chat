@@ -40,6 +40,18 @@ rl.on("line", () => {
     process.exit(1);
   }
   if (mode === "hang") return;
+  if (mode === "error-reply") {
+    process.stdout.write(
+      JSON.stringify({
+        type: "result",
+        subtype: "error",
+        is_error: true,
+        result: "API down",
+        session_id: "sess-1",
+      }) + "\n",
+    );
+    return;
+  }
   for (const l of lines.slice(1)) process.stdout.write(l + "\n");
 });
 rl.on("close", () => process.exit(0));

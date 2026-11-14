@@ -101,7 +101,7 @@ const NO_AUTO = "⚠ auto mode unavailable, using manual approvals";
 const BUSY = "⚠ Claude is busy";
 const GAVE_UP = "⚠ Claude keeps stopping";
 const RESUMED = "↺ resumed your last conversation";
-const RESUME_FAILED = "ⓘ last conversation not found; started a new one";
+const RESUME_FAILED = "ⓘ could not resume the last conversation; started a new one";
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -495,7 +495,8 @@ async function main(): Promise<void> {
       case "result":
         appendHistory({ role: "assistant", text: state.reply });
         scheduleFade();
-        if (!e.isError && e.sessionId && history.fileName) {
+        // An error reply still counts as use: the conversation exists and was used just now.
+        if (e.sessionId && history.fileName) {
           saved = {
             ...saved,
             session: {
@@ -516,7 +517,10 @@ async function main(): Promise<void> {
         saved = { ...saved, session: undefined };
         writeState();
         flash("resume", RESUME_FAILED, 6_000);
-        log.log("info", `saved conversation not found: ${capLines(e.stderrTail).join(" | ")}`);
+        log.log(
+          "info",
+          `could not resume the saved conversation: ${capLines(e.stderrTail).join(" | ")}`,
+        );
         break;
       case "exit":
       case "gaveUp":
@@ -554,6 +558,7 @@ async function main(): Promise<void> {
   function newConversation(): void {
     session?.newSession();
     history.newSession();
+    resumePending = false;
     saved = { ...saved, session: undefined };
     writeState();
     approval.clearAllowed();

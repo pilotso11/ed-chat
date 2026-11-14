@@ -33,16 +33,20 @@ This work has three parts:
 
 ### Resume the last conversation
 
-- `state.json` gains `session: { id, lastUsed }`. ED Chat writes it on each `result` event.
+- `state.json` gains `session: { id, lastUsed }`. ED Chat writes it on each `result` event, an error reply
+  included: the conversation was used.
 - On start, if `lastUsed` is less than `claude.resumeHours` ago, the first spawn passes
   `--resume <id>`. Default 12 hours. 0 turns resume off. The setting is in the schema.
 - `/new` clears `session`.
-- If the CLI cannot resume (the conversation was deleted, or it exits before `init`), ED Chat
-  clears `session` and starts a fresh conversation once. The status line flashes
-  "ⓘ last conversation not found; started a new one".
-- A resumed start flashes "↺ resumed your last conversation".
+- When the CLI says `No conversation found`, ED Chat clears `session`, starts a fresh
+  conversation once, and resends the message in flight. Any other exit before `init` is
+  reported as a normal exit, and the next spawn tries the same conversation again; a second
+  one gives up on it in the same way. The status line flashes "ⓘ could not resume the last
+  conversation; started a new one".
+- A resumed start flashes "↺ resumed your last conversation" at the first `init`, when the
+  CLI has confirmed the conversation.
 - `session` also names the history file. A resumed start appends to that file and loads its
-  turns, so the history view (Ctrl+Shift+H) shows the conversation that Claude remembers. A failed
+  last 200 turns, so the history view (Ctrl+Shift+H) shows the conversation that Claude remembers. A failed
   resume drops those turns from the view and starts a new file.
 
 ### Prompt

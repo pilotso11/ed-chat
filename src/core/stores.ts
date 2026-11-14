@@ -136,6 +136,9 @@ export class SettingsStore {
   }
 }
 
+/** How many turns of a resumed conversation the history view loads. */
+export const RESUME_TURNS = 200;
+
 export interface SavedState {
   position?: Position;
   positionBase?: string;
@@ -231,16 +234,20 @@ export class HistoryStore {
       return [];
     }
     this.file = file;
-    return text.split(/\r?\n/).flatMap((line) => {
-      try {
-        const t = JSON.parse(line) as Partial<Turn>;
-        return (t.role === "user" || t.role === "assistant") && typeof t.text === "string"
-          ? [{ role: t.role, text: t.text }]
-          : [];
-      } catch {
-        return [];
-      }
-    });
+    // The file grows while the player keeps resuming; the view needs only the recent turns.
+    return text
+      .split(/\r?\n/)
+      .flatMap((line) => {
+        try {
+          const t = JSON.parse(line) as Partial<Turn>;
+          return (t.role === "user" || t.role === "assistant") && typeof t.text === "string"
+            ? [{ role: t.role, text: t.text }]
+            : [];
+        } catch {
+          return [];
+        }
+      })
+      .slice(-RESUME_TURNS);
   }
 
   async append(t: Turn): Promise<void> {

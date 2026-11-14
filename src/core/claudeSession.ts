@@ -51,6 +51,8 @@ export class ClaudeSession implements ClaudeBackend {
   // The message in flight, sent again when a failed resume restarts the process.
   private pending: string | null = null;
   private heldResult: SessionEvent | null = null;
+  // Exits before init while resuming that did not say the conversation is gone.
+  private earlyExits = 0;
   private cmd: { command: string; args: string[]; shell: boolean };
 
   constructor(private readonly opts: ClaudeSessionOptions) {
@@ -110,6 +112,7 @@ export class ClaudeSession implements ClaudeBackend {
     this.pending = null;
     this._sessionId = null;
     this.unconfirmed = false;
+    this.earlyExits = 0;
     this.crashes.reset();
     this.spawnChild();
   }
@@ -185,9 +188,12 @@ export class ClaudeSession implements ClaudeBackend {
       if (this.expected.has(child)) return;
       const held = this.heldResult;
       this.heldResult = null;
-      // Only the CLI's own message means the saved conversation is gone. Any other early exit
-      // is a real failure and takes the normal path, so its reason reaches the player.
-      if (this.unconfirmed && this.stderr.some((l) => NOT_FOUND.test(l))) {
+      // The CLI's own message means the saved conversation is gone. Another early exit may be
+      // a passing failure, so it takes the normal path once and the next spawn tries again;
+      // a second one gives up on the saved conversation, so a broken one cannot crash every start.
+      const notFound = this.unconfirmed && this.stderr.some((l) => NOT_FOUND.test(l));
+      if (this.unconfirmed && !notFound) this.earlyExits++;
+      if (notFound || (this.unconfirmed && this.earlyExits >= 2)) {
         // Not a crash: start a new conversation once, with the message the player sent.
         this.unconfirmed = false;
         this._sessionId = null;
@@ -214,7 +220,10 @@ export class ClaudeSession implements ClaudeBackend {
       this.heldResult = e;
       return;
     }
-    if (e.type === "ready") this.unconfirmed = false;
+    if (e.type === "ready") {
+      this.unconfirmed = false;
+      this.earlyExits = 0;
+    }
     if (e.type === "ready" && e.sessionId) this._sessionId = e.sessionId;
     if (e.type === "result") {
       this.unconfirmed = false;

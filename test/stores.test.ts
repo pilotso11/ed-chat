@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, defaultSettingsText } from "../src/core/settings.js";
 import {
   HistoryStore,
+  RESUME_TURNS,
   SettingsStore,
   StateStore,
   effectivePosition,
@@ -241,6 +242,16 @@ describe("HistoryStore", () => {
     ]);
     await again.append({ role: "user", text: "c" });
     expect(await readdir(dir)).toEqual([name]);
+  });
+
+  it("loads only the last turns of a long file", async () => {
+    const dir = await tmp();
+    const h = new HistoryStore(dir, () => new Date("2026-10-23T10:00:00.000Z"));
+    h.newSession();
+    for (let i = 0; i < RESUME_TURNS + 5; i++) await h.append({ role: "user", text: String(i) });
+    const turns = await new HistoryStore(dir).resume(h.fileName!);
+    expect(turns).toHaveLength(RESUME_TURNS);
+    expect(turns[0]!.text).toBe("5");
   });
 
   it("starts a new file when the earlier one is gone", async () => {
