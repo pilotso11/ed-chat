@@ -25,6 +25,8 @@ next to each item.
 - [ ] Hotkeys work while the game is in front, and not while another app is.
 - [ ] Ctrl+Alt+Enter switches to the icon and back, and the game does not also act on it.
 - [ ] Ctrl+` steps: the last reply, the whole reply, the chat, then back to rest with focus on the game. From minimized, the first press restores the overlay and the last press minimizes it again. With the history open (Ctrl+Shift+H), a press adds the input and the next closes both.
+- [ ] Quit ED Chat after a reply and start it again: the status line shows `↺ resumed your last conversation`, Ctrl+Shift+H shows the earlier turns, and Claude remembers them.
+- [ ] After `/new`, a restart does not resume. With `claude.resumeHours` at `0`, no restart resumes.
 - [ ] In icon mode, a reply expands the overlay and it stays expanded.
 - [ ] With the chat open, dragging the status line moves the overlay, and it snaps to the nearest edge or corner.
 - [ ] `style.backgroundOpacity` changes apply live, and text stays readable over a bright star.

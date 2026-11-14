@@ -8,13 +8,19 @@ const fake = path.join(import.meta.dirname, "fake-claude.mjs");
 const fixture = path.join(import.meta.dirname, "fixtures", "stream", "handwritten.jsonl");
 const sessions: ClaudeSession[] = [];
 
-async function setup(mode = "ok", command = process.execPath, extraEnv: NodeJS.ProcessEnv = {}) {
+async function setup(
+  mode = "ok",
+  command = process.execPath,
+  extraEnv: NodeJS.ProcessEnv = {},
+  resumeId: string | null = null,
+) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "ed-chat-"));
   const argsFile = path.join(dir, "args.jsonl");
   const s = new ClaudeSession({
     command,
     args: [fake, "--base"],
     cwd: dir,
+    resumeId,
     env: {
       ...process.env,
       FAKE_FIXTURE: fixture,
@@ -117,6 +123,31 @@ describe("ClaudeSession", () => {
     s.send("hi");
     await until(() => events.some((e) => e.type === "exit"));
     expect(events.find((e) => e.type === "exit")).toMatchObject({ stderrTail: ["boom"] });
+  });
+
+  it("resumes a saved conversation on the first spawn", async () => {
+    const { s, events, spawns } = await setup("ok", process.execPath, {}, "saved-1");
+    expect(s.sessionId).toBe("saved-1");
+    s.start();
+    s.send("hi");
+    await until(() => events.some((e) => e.type === "result"));
+    expect((await spawns())[0]).toEqual(["--base", "--resume", "saved-1"]);
+    expect(events.some((e) => e.type === "resumeFailed")).toBe(false);
+  });
+
+  it("starts a new conversation once when the saved one is gone, and resends the message", async () => {
+    const { s, events, spawns } = await setup("no-session", process.execPath, {}, "gone-1");
+    s.start();
+    s.send("hi");
+    await until(() => events.some((e) => e.type === "result"));
+    expect((await spawns()).map((a) => a.includes("--resume"))).toEqual([true, false]);
+    const types = events.map((e) => e.type);
+    expect(types).toContain("resumeFailed");
+    // The CLI's error result for the unknown id is not shown as a reply, and is not a crash.
+    expect(events.filter((e) => e.type === "result")).toHaveLength(1);
+    expect(events.find((e) => e.type === "result")).toMatchObject({ isError: false });
+    expect(types.some((t) => t === "exit" || t === "gaveUp")).toBe(false);
+    expect(s.sessionId).toBe("sess-1");
   });
 
   it("newSession starts without --resume", async () => {

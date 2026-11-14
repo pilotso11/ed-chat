@@ -58,6 +58,13 @@ Select **More info → Run anyway**. Releases are not public yet.
 
 Type `/new` in the chat to start a new conversation.
 
+When ED Chat starts within 12 hours of your last reply, it resumes that
+conversation, and the history (Ctrl+Shift+H) shows its turns. With an ed-mcp that has
+the activity tools, Claude also keeps a short note of what you are doing, for example
+scanning bios on a planet or running a massacre stack, and the route that
+you are flying. It reads the note when a conversation starts, so it knows
+after `/new` or a long break. Set `claude.resumeHours` to change the 12 hours.
+
 At startup the overlay shows its hotkeys for 15 seconds. Click the list to
 close it.
 
@@ -175,6 +182,7 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 | `claude.path` | `null` | Path to `claude`; `null` searches `PATH` |
 | `claude.permissionMode` | asked on first run | `auto` or `default` (ask for everything not allowed). Without an answer the code default is `auto` |
 | `claude.extraArgs` | `[]` | More arguments for `claude` |
+| `claude.resumeHours` | `12` | Resume the last conversation when ED Chat starts within this many hours. `0` turns it off |
 | `journalDir` | `null` | The game's journal folder; `null` uses Saved Games |
 
 With the chat open you can also drag the overlay by its status line. It snaps

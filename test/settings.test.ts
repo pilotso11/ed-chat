@@ -26,7 +26,12 @@ describe("parseSettings", () => {
       offsetY: 24,
       display: "primary",
     });
-    expect(DEFAULT_SETTINGS.claude).toEqual({ path: null, permissionMode: "auto", extraArgs: [] });
+    expect(DEFAULT_SETTINGS.claude).toEqual({
+      path: null,
+      permissionMode: "auto",
+      extraArgs: [],
+      resumeHours: 12,
+    });
   });
 
   it("keeps defaults next to a partial override", () => {

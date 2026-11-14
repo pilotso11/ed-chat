@@ -9,4 +9,10 @@ export const HUD_PROMPT = [
   "ed-mcp gives you the game data. A player can have two copies, and one can fail while the other works.",
   "If any tools with ed-mcp in their names are listed, use them, and do not report the other copy as failed.",
   "If none are listed, say that the game data tools are not available. If a call to one fails, say what it reported.",
+  // The activity note and route stops carry the player's goal across restarts and /new.
+  // Older ed-mcp versions lack these tools, so each line applies only when the tool is listed.
+  "At the start of a conversation, if activity_get is listed, call it and use the activity and its plan as context without repeating them back.",
+  "When the player starts a new activity or changes their goal, save it with activity_set if it is listed.",
+  "When the player finishes a stop on a route, mark it with plan_update_stop if it is listed.",
+  "Read the game journal with the ed-mcp journal tools, not with shell commands.",
 ].join(" ");

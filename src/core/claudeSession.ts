@@ -6,6 +6,8 @@ import { StreamParser, type SessionEvent } from "./streamJson.js";
 export type BackendEvent =
   | SessionEvent
   | { type: "spawned" }
+  // The conversation saved from the last run could not be resumed; a new one has started.
+  | { type: "resumeFailed" }
   | { type: "exit"; code: number | null; stderrTail: string[] }
   | { type: "gaveUp"; stderrTail: string[] }
   | { type: "spawnError"; message: string };
@@ -29,6 +31,8 @@ export interface ClaudeSessionOptions {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   now?: () => number;
+  /** A conversation from an earlier run, resumed with --resume. */
+  resumeId?: string | null;
 }
 
 export class ClaudeSession implements ClaudeBackend {
@@ -39,11 +43,17 @@ export class ClaudeSession implements ClaudeBackend {
   private stderr: string[] = [];
   private _busy = false;
   private _sessionId: string | null = null;
+  // The saved conversation is not yet known to exist. The CLI exits at once on an unknown id.
+  private unconfirmed: boolean;
+  // The message in flight, sent again when a failed resume restarts the process.
+  private pending: string | null = null;
   private cmd: { command: string; args: string[]; shell: boolean };
 
   constructor(private readonly opts: ClaudeSessionOptions) {
     this.cmd = { command: opts.command, args: opts.args, shell: opts.shell ?? false };
     this.crashes = new CrashTracker({ max: 3, windowMs: 60_000, now: opts.now ?? Date.now });
+    this._sessionId = opts.resumeId ?? null;
+    this.unconfirmed = this._sessionId !== null;
   }
 
   get busy(): boolean {
@@ -71,14 +81,20 @@ export class ClaudeSession implements ClaudeBackend {
   send(text: string): boolean {
     if (this._busy || this.crashes.gaveUp) return false;
     if (!this.child) this.spawnChild();
-    const message = { type: "user", message: { role: "user", content: [{ type: "text", text }] } };
-    this.child!.stdin.write(JSON.stringify(message) + "\n");
+    this.write(text);
     this._busy = true;
     return true;
   }
 
+  private write(text: string): void {
+    const message = { type: "user", message: { role: "user", content: [{ type: "text", text }] } };
+    this.pending = text;
+    this.child!.stdin.write(JSON.stringify(message) + "\n");
+  }
+
   cancel(): void {
     this._busy = false;
+    this.pending = null;
     if (!this.child) return;
     this.kill();
     this.spawnChild();
@@ -87,7 +103,9 @@ export class ClaudeSession implements ClaudeBackend {
   newSession(): void {
     this.kill();
     this._busy = false;
+    this.pending = null;
     this._sessionId = null;
+    this.unconfirmed = false;
     this.crashes.reset();
     this.spawnChild();
   }
@@ -160,6 +178,16 @@ export class ClaudeSession implements ClaudeBackend {
     child.on("close", (code) => {
       if (this.child === child) this.child = null;
       if (this.expected.has(child)) return;
+      if (this.unconfirmed) {
+        // Not a crash: start a new conversation once, with the message the player sent.
+        this.unconfirmed = false;
+        this._sessionId = null;
+        this.stderr = [];
+        this.emit({ type: "resumeFailed" });
+        this.spawnChild();
+        if (this._busy && this.pending !== null) this.write(this.pending);
+        return;
+      }
       this._busy = false;
       const stderrTail = this.stderr.slice(-5);
       this.stderr = [];
@@ -169,8 +197,13 @@ export class ClaudeSession implements ClaudeBackend {
   }
 
   private handle(e: SessionEvent): void {
+    // The CLI reports an unknown id as an error result, then exits; close starts a new one.
+    if (this.unconfirmed && e.type === "result" && e.isError) return;
+    if (e.type === "ready") this.unconfirmed = false;
     if (e.type === "ready" && e.sessionId) this._sessionId = e.sessionId;
     if (e.type === "result") {
+      this.unconfirmed = false;
+      this.pending = null;
       this._busy = false;
       if (e.sessionId) this._sessionId = e.sessionId;
     }
