@@ -394,6 +394,7 @@ async function main(): Promise<void> {
   };
 
   let session: ClaudeSession | null = null;
+  let resumePending = false;
   function startSession(c: { command: string; args: string[]; shell: boolean }): void {
     session = new ClaudeSession({
       command: c.command,
@@ -402,7 +403,8 @@ async function main(): Promise<void> {
       cwd: workspace,
       resumeId: resumeFrom,
     });
-    if (resumeFrom) flash("resume", RESUMED, 6_000);
+    // Shown at the first ready: the CLI confirms the conversation only then.
+    resumePending = resumeFrom !== null;
     resumeFrom = null;
     session.onEvent(onBackend);
     session.start();
@@ -460,6 +462,10 @@ async function main(): Promise<void> {
     dispatch({ type: "backend", event: e });
     switch (e.type) {
       case "ready":
+        if (resumePending) {
+          resumePending = false;
+          flash("resume", RESUMED, 6_000);
+        }
         {
           const ed = edMcpState(e.mcpServers);
           dispatch({
@@ -502,11 +508,15 @@ async function main(): Promise<void> {
         }
         break;
       case "resumeFailed":
+        resumePending = false;
         history.newSession();
+        // The reducer dropped the old conversation's turns; what is left is the question in
+        // flight, which the new conversation answers, so it starts the new file.
+        for (const t of state.history) appendHistory(t);
         saved = { ...saved, session: undefined };
         writeState();
         flash("resume", RESUME_FAILED, 6_000);
-        log.log("info", "saved conversation not found; started a new one");
+        log.log("info", `saved conversation not found: ${capLines(e.stderrTail).join(" | ")}`);
         break;
       case "exit":
       case "gaveUp":

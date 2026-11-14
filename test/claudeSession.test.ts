@@ -150,6 +150,29 @@ describe("ClaudeSession", () => {
     expect(s.sessionId).toBe("sess-1");
   });
 
+  it("falls back once when the saved conversation is gone before any message", async () => {
+    const { s, events, spawns } = await setup("no-session", process.execPath, {}, "gone-1");
+    s.start();
+    await until(async () => (await spawns()).length === 2);
+    await until(() => events.filter((e) => e.type === "spawned").length === 2);
+    expect((await spawns()).map((a) => a.includes("--resume"))).toEqual([true, false]);
+    expect(events.filter((e) => e.type === "resumeFailed")).toEqual([
+      { type: "resumeFailed", stderrTail: ["No conversation found with session ID: gone-1"] },
+    ]);
+    expect(events.some((e) => e.type === "result" || e.type === "exit")).toBe(false);
+    expect(s.sessionId).toBeNull();
+  });
+
+  it("keeps the saved conversation when the CLI fails for another reason", async () => {
+    const { s, events, spawns } = await setup("exit-now", process.execPath, {}, "saved-1");
+    s.start();
+    await until(() => events.some((e) => e.type === "exit"));
+    expect(events.some((e) => e.type === "resumeFailed")).toBe(false);
+    expect(events.find((e) => e.type === "exit")).toMatchObject({ stderrTail: ["boom"] });
+    expect(s.sessionId).toBe("saved-1");
+    expect(await spawns()).toHaveLength(1);
+  });
+
   it("newSession starts without --resume", async () => {
     const { s, events, spawns } = await setup();
     s.start();

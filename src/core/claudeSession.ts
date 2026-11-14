@@ -7,10 +7,13 @@ export type BackendEvent =
   | SessionEvent
   | { type: "spawned" }
   // The conversation saved from the last run could not be resumed; a new one has started.
-  | { type: "resumeFailed" }
+  | { type: "resumeFailed"; stderrTail: string[] }
   | { type: "exit"; code: number | null; stderrTail: string[] }
   | { type: "gaveUp"; stderrTail: string[] }
   | { type: "spawnError"; message: string };
+
+// What the CLI prints on stderr for a --resume id it does not know.
+const NOT_FOUND = /No conversation found/i;
 
 export interface ClaudeBackend {
   start(): void;
@@ -47,6 +50,7 @@ export class ClaudeSession implements ClaudeBackend {
   private unconfirmed: boolean;
   // The message in flight, sent again when a failed resume restarts the process.
   private pending: string | null = null;
+  private heldResult: SessionEvent | null = null;
   private cmd: { command: string; args: string[]; shell: boolean };
 
   constructor(private readonly opts: ClaudeSessionOptions) {
@@ -151,6 +155,7 @@ export class ClaudeSession implements ClaudeBackend {
     );
     this.child = child;
     this.stderr = [];
+    this.heldResult = null;
     // The CLI prints init only after the first message, so a running process already counts as idle.
     child.on("spawn", () => {
       if (this.child === child) this.emit({ type: "spawned" });
@@ -178,16 +183,22 @@ export class ClaudeSession implements ClaudeBackend {
     child.on("close", (code) => {
       if (this.child === child) this.child = null;
       if (this.expected.has(child)) return;
-      if (this.unconfirmed) {
+      const held = this.heldResult;
+      this.heldResult = null;
+      // Only the CLI's own message means the saved conversation is gone. Any other early exit
+      // is a real failure and takes the normal path, so its reason reaches the player.
+      if (this.unconfirmed && this.stderr.some((l) => NOT_FOUND.test(l))) {
         // Not a crash: start a new conversation once, with the message the player sent.
         this.unconfirmed = false;
         this._sessionId = null;
+        const stderrTail = this.stderr.slice(-5);
         this.stderr = [];
-        this.emit({ type: "resumeFailed" });
+        this.emit({ type: "resumeFailed", stderrTail });
         this.spawnChild();
         if (this._busy && this.pending !== null) this.write(this.pending);
         return;
       }
+      if (held) this.emit(held);
       this._busy = false;
       const stderrTail = this.stderr.slice(-5);
       this.stderr = [];
@@ -197,8 +208,12 @@ export class ClaudeSession implements ClaudeBackend {
   }
 
   private handle(e: SessionEvent): void {
-    // The CLI reports an unknown id as an error result, then exits; close starts a new one.
-    if (this.unconfirmed && e.type === "result" && e.isError) return;
+    // The CLI reports an unknown id as an error result, then exits. Held until close, which
+    // knows from stderr whether to drop it (a failed resume) or show it.
+    if (this.unconfirmed && e.type === "result" && e.isError) {
+      this.heldResult = e;
+      return;
+    }
     if (e.type === "ready") this.unconfirmed = false;
     if (e.type === "ready" && e.sessionId) this._sessionId = e.sessionId;
     if (e.type === "result") {

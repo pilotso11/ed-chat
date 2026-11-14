@@ -205,7 +205,10 @@ describe("reduce", () => {
       resumedTurns: old.length,
     });
     expect(loaded.history).toEqual([...old, { role: "user", text: "c" }]);
-    const failed = run([{ type: "backend", event: { type: "resumeFailed" } }], loaded);
+    const failed = run(
+      [{ type: "backend", event: { type: "resumeFailed", stderrTail: [] } }],
+      loaded,
+    );
     expect(failed).toMatchObject({ history: [{ role: "user", text: "c" }], resumedTurns: 0 });
     expect(run([{ type: "newSession" }], loaded).resumedTurns).toBe(0);
   });
