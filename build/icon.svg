@@ -2,10 +2,10 @@
   <!-- An AI chat bubble: orange outline, dark inside, transparent outside. -->
   <path
     d="M280 180 H744 A140 140 0 0 1 884 320 V560 A140 140 0 0 1 744 700 H450 L250 860 L300 700 H280 A140 140 0 0 1 140 560 V320 A140 140 0 0 1 280 180 Z"
-    fill="#11141b" stroke="#ff7a1a" stroke-width="44" stroke-linejoin="round"/>
+    fill="#11141b" stroke="#ff7a1a" stroke-width="64" stroke-linejoin="round"/>
   <!-- sparkles: the usual mark for AI -->
   <g fill="#ff7a1a">
-    <path d="M490 262 Q512 430 682 450 Q512 470 490 638 Q468 470 298 450 Q468 430 490 262 Z"/>
-    <path d="M700 268 Q708 322 762 330 Q708 338 700 392 Q692 338 638 330 Q692 322 700 268 Z"/>
+    <path d="M490 250 Q505 435 694 450 Q505 465 490 650 Q475 465 286 450 Q475 435 490 250 Z"/>
+    <path d="M704 262 Q708 326 772 332 Q708 338 704 402 Q700 338 636 332 Q700 326 704 262 Z"/>
   </g>
 </svg>
