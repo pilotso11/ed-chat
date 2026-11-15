@@ -414,3 +414,11 @@ export function currentStop(plan: Plan): number | null {
   const i = order.find((j) => plan.stops[j]!.status === "todo");
   return i ?? null;
 }
+
+/** The stops still to do, in visit order: the current stop first. */
+export function todoStops(plan: Plan | null): Plan["stops"] {
+  if (!plan) return [];
+  return visitOrder(plan)
+    .map((i) => plan.stops[i]!)
+    .filter((s) => s.status === "todo");
+}

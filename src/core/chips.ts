@@ -27,6 +27,31 @@ export function parseChips(text: string): { plain: string; chips: Chip[] } {
   return { plain, chips };
 }
 
+export interface StopTarget {
+  system: string;
+  body?: string;
+  station?: string;
+}
+
+/**
+ * Gives each chip with no target the body or station of the first route stop in its system.
+ * `stops` are the stops still to do, the current one first.
+ */
+export function withTargets(chips: Chip[], stops: StopTarget[]): Chip[] {
+  if (!stops.length) return chips;
+  return chips.map((c) => {
+    if (c.detail) return c;
+    const stop = stops.find((s) => s.system.toLowerCase() === c.text.toLowerCase());
+    let detail = stop?.station ?? stop?.body;
+    if (!detail) return c;
+    // A body name that starts with the system name shows only the rest.
+    if (detail.toLowerCase().startsWith(c.text.toLowerCase())) {
+      detail = detail.slice(c.text.length).trim() || detail;
+    }
+    return { ...c, detail };
+  });
+}
+
 /** A chip's label: the name, and the target there when there is one. */
 export const chipLabel = (c: Chip): string => (c.detail ? `${c.text} · ${c.detail}` : c.text);
 

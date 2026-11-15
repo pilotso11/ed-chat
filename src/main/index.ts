@@ -18,7 +18,7 @@ import {
 } from "electron";
 import { chooseDisplay, place, snap, step } from "../core/anchor.js";
 import { ApprovalServer } from "../core/approvalServer.js";
-import { chipLabel } from "../core/chips.js";
+import { chipLabel, withTargets, type Chip, type StopTarget } from "../core/chips.js";
 import {
   TESTED_CLI_VERSION,
   buildClaudeArgs,
@@ -72,7 +72,7 @@ import { edMcpSyncDir } from "../core/hud/edMcpConfig.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { buildHud, currentMode } from "../core/hud/hud.js";
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
-import { currentStop } from "../core/hud/panels.js";
+import { currentStop, todoStops } from "../core/hud/panels.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
 import { IPC } from "../shared/ipc.js";
 import {
@@ -169,13 +169,22 @@ async function main(): Promise<void> {
 
   // When the approval on screen appeared; an answer key pressed just before that is ignored.
   let shownApproval: { id: string; at: number } | null = null;
+  // The route stops still to do, current first: chips in their systems show the body or station.
+  let chipStops: StopTarget[] = [];
   function render(): void {
     const req = currentApproval(state);
     if (req?.id !== shownApproval?.id) shownApproval = req ? { id: req.id, at: Date.now() } : null;
     const props = windowProps(state);
     applyWindow(win, props, prevProps);
     prevProps = props;
-    win.webContents.send(IPC.view, buildView(state, viewSettings()));
+    const view = buildView(state, viewSettings());
+    const t = (c: Chip[]) => withTargets(c, chipStops);
+    win.webContents.send(IPC.view, {
+      ...view,
+      chips: t(view.chips),
+      card: view.card && { ...view.card, chips: t(view.card.chips) },
+      chat: view.chat && { ...view.chat, chips: t(view.chat.chips) },
+    });
   }
 
   // Disk writes must never take the overlay down: on Windows an antivirus or indexer can
@@ -474,6 +483,11 @@ async function main(): Promise<void> {
     hudPolling = true;
     try {
       hudData = await hudFeed.poll();
+      const stops = todoStops(hudData.plan);
+      if (JSON.stringify(stops) !== JSON.stringify(chipStops)) {
+        chipStops = stops;
+        render();
+      }
       const system = hudData.journal?.location.system ?? null;
       if (system && lastSystem && system !== lastSystem) onArrival(system);
       lastSystem = system;
@@ -814,7 +828,7 @@ async function main(): Promise<void> {
   }
 
   function copyChip(n: number): void {
-    const chips = currentChips(state);
+    const chips = withTargets(currentChips(state), chipStops);
     const chip = chips[n - 1];
     if (!chip) {
       const has = chips.length ? `the reply has ${chips.length}` : "the reply has none";
@@ -1120,7 +1134,7 @@ async function main(): Promise<void> {
 
   // Built when opened, so the chips and problems are current.
   function trayMenu(): Menu {
-    const chips = currentChips(state);
+    const chips = withTargets(currentChips(state), chipStops);
     const tray = (a: HotkeyAction) => () => runAction(a, "tray");
     return Menu.buildFromTemplate([
       ...chips.map((c) => ({
