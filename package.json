@@ -46,5 +46,8 @@
     "electron-winstaller@5.4.0": true,
     "electron@45.2.3": true,
     "koffi@3.3.7": true
+  },
+  "overrides": {
+    "minimatch@>=7 <11.0.1": "^11.0.1"
   }
 }
