@@ -16,7 +16,8 @@ EDMC stays for EDSM and EDDN uploads and for EDR. This work replaces the trackin
 
 - **A separate window.** The panel has its own anchor, offsets, display and move hotkeys, so the
   player can put it in a different corner or on another monitor from the chat.
-- **Both panels in one release.** Massacre and exploration (with exobiology) ship together.
+- **One first release.** Massacre, exploration (with exobiology) and the route breadcrumbs ship
+  together. Other modes are follow-on ideas, at the end of this spec.
 - **Mode: automatic, Claude, and a hotkey.** Journal events switch the mode. Telling Claude
   ("I'm doing massacres") sets the ed-mcp activity note, which the panel follows. A hotkey cycles
   the mode or turns the panel off. The newest of the three wins.
@@ -70,13 +71,13 @@ files.
     "width": 340,
     "fontSize": 16,
     "backgroundOpacity": 0.5,
-    "modes": { "massacre": true, "exploration": true, "exobiology": true },
+    "modes": { "massacre": true, "exploration": true, "exobiology": true, "route": true },
     "valuableMin": 500000
   }
   ```
 
 - New hotkeys: `hudToggle` (show or hide), `hudMode` (cycle auto → massacre → exploration →
-  exobiology → off → auto) and `hudMove` (a chord, so the arrow keys move the panel and not the
+  exobiology → route → off → auto), `routeNext` and `routePrev` and `hudMove` (a chord, so the arrow keys move the panel and not the
   chat). The move uses the same 3 × 3 anchor grid as the chat (`src/core/anchor.ts`).
 - The panel hides when the game is not in front, as the chat does, and when the game window is
   at the main menu (no `Flags` in `Status.json`).
@@ -162,6 +163,76 @@ EXOBIOLOGY · A 5                 3 genera
 A footer line in the exploration and exobiology panels: systems visited, bodies scanned and
 mapped, and first discoveries this session.
 
+### Route breadcrumbs
+
+The route shows as a compact trail. It has two levels:
+
+- **Plan stops**, from the active ed-mcp plan: the systems, bodies and stations of a trip
+  ("Synuefe XR-H, planet A 5 for bios, then Jameson Memorial to hand in").
+- **Jumps**, from `NavRoute.json`: the route plotted in the galaxy map to the next stop.
+
+```
+ROUTE  ✓ Shinrarta ▸ ✓ Col 285 ▸ ● Synuefe XR-H A 5 bio ▸ Jameson Mem.
+ ◂ HIP 2345 ▸ Synuefe EN-H ⛽ ▸ Synuefe XR-H     3 jumps · fuel 5
+```
+
+- Line 1 shows the plan stops. ✓ marks a stop that is done, ● the current stop. The trail shows the
+  previous stop, the current one and the next two. A long trail is shortened with `…` at the
+  ends.
+- Line 2 shows the plotted jumps: the last system, the next three, and the jumps left. ⛽ marks a
+  star that can be scooped (classes K, G, B, F, O, A and M). `fuel 5` is the number of jumps the
+  fuel in the tank allows, from `Status.json` and the last `Loadout`.
+- If there is a plan but no plotted route, only line 1 shows. If there is a plotted route and no
+  plan, only line 2 shows.
+- **As a mode:** route mode is on when the plan has an active stop or `NavRoute.json` has jumps
+  left, and no other mode is on. A jump never starts the other modes, so the route is what a
+  normal trip shows.
+- **As a footer:** when another mode is on and a route is active, line 1 shows as a single dim
+  footer under that panel. Then the player can see where they go next while they finish the
+  massacre stack or the bios.
+- On arrival at a stop's system, the next stop's system name is copied to the clipboard, ready
+  for Ctrl+V in the galaxy map (roadmap sub-project 2). The `routeNext` and `routePrev` hotkeys
+  move the current stop. They change the plan in ed-mcp, so Claude sees the change.
+
+## Mode registry
+
+Each mode is one module in `src/core/hud/modes/` with the same shape:
+
+```ts
+interface HudMode<M> {
+  id: string;
+  events: readonly string[]; // journal events the mode reads
+  triggers(e: JournalEvent, ctx: ModeContext): "start" | "end" | null;
+  model(journal: JournalView, status: StatusView): M | null; // null: nothing to show
+  render: (m: M) => PanelView; // pure; rendered by one shared component
+  footer?: (m: M) => string | null; // a one-line summary, for when another mode is on
+}
+```
+
+The mode switch, the window, the settings (`hud.modes.<id>`) and the tests take any mode in the
+registry. A new mode is one module and its tests, with no change to the panel window.
+
+## Follow-on design ideas
+
+These modes are not part of this release. They are recorded here so the mode registry is built to
+take them. Each one gets its own short spec and its own PR later.
+
+| Mode | Turns on | Shows | Live progress from |
+|---|---|---|---|
+| Ground mission | `MissionAccepted` for an on-foot mission; `ApproachSettlement` or `Disembark` at its settlement | Objective, settlement, body, item or target, count, expiry | `Backpack.json` for collect and salvage; `Bounty` and `ShipTargeted` for kill targets; otherwise only `MissionCompleted` |
+| Cargo and wing missions | `MissionAccepted` for a delivery or source mission; `CargoDepot` | Item, collected / delivered / total, destination, expiry | `CargoDepot` |
+| Colonisation | `ColonisationConstructionDepot` when docked at a construction site | Each resource still needed against what is in the hold | `ColonisationConstructionDepot`, `Cargo.json` |
+| Mining | `ProspectedAsteroid`, `LaunchDrone` (prospector) | The last asteroid's contents against a set threshold, motherlode, tons refined per hour, cargo space left, limpets | `ProspectedAsteroid`, `MiningRefined`, `Cargo.json` |
+| Combat | `FactionKillBond` or `Bounty` when no massacre mission is active | Bonds and bounties earned per faction this session, unclaimed value | `FactionKillBond`, `Bounty`, `RedeemVoucher` |
+| Materials | A plan with material needs, and `MaterialCollected` | "Need 4 more Polonium" for the active plan | `MaterialCollected`, `Materials` |
+
+For ground missions, the game does not write the objective progress of most mission types to
+the journal. The panel shows an objective card with the progress it can see, not a full quest
+tracker.
+
+Powerplay, fleet carrier fuel and Thargoid combat are left out: they are niche, or the game's own
+UI shows them well.
+
 ## Testing
 
 - ed-mcp: unit tests for `bodyValue`, the species values and the export entry (a test imports
@@ -176,12 +247,14 @@ mapped, and first discoveries this session.
 
 1. ed-mcp: the `ed-mcp/journal` export, body values and exobiology values. Release.
 2. ED Chat: the second window, `hud` settings, hotkeys and the journal tail.
-3. ED Chat: the mode rules, then the three panels.
+3. ED Chat: the mode registry and the mode rules, then the massacre, exploration, exobiology and
+   route panels.
+4. Follow-on ideas, each with its own spec: ground and cargo missions, colonisation, mining,
+   combat, materials.
 
 ## Open questions
 
 - Which source for the species values and colony ranges has a licence that allows copying
   into ed-mcp? If none does, the values are typed in from the in-game Codex.
-- Should the panel also show the next stop of the active route plan (sub-project 2 of the
-  roadmap) when no other mode is on? This spec leaves it out. The window and the mode switch
-  are built so a route mode can be added.
+- The fuel estimate needs the fuel use per jump for the ship's FSD and mass. ed-mcp has the
+  catalog for this; if it is not accurate enough, `fuel N` is left out of the first version.
