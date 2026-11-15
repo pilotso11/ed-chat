@@ -80,6 +80,8 @@ export class FocusManager {
     if (h === this.o.overlayHwnd()) return;
     const game = this.lastGame && this.w.isWindow(this.lastGame) ? this.lastGame : 0;
     this.saved = (preferGame || !h) && game ? game : h;
+    // The chat is opening again: a check still waiting from the last close must not take focus.
+    this.restored = 0;
   }
 
   private sleep(ms: number): Promise<void> {
@@ -90,6 +92,7 @@ export class FocusManager {
   async restore(): Promise<boolean> {
     const h = this.saved;
     this.saved = 0;
+    this.restored = 0;
     if (!h || !this.w.isWindow(h)) return true;
     this.restored = h;
     if (this.w.setForeground(h)) return true;
@@ -104,9 +107,12 @@ export class FocusManager {
    */
   async settle(): Promise<Settled | null> {
     const h = this.restored;
-    this.restored = 0;
-    if (!h || !this.w.isWindow(h)) return null;
+    if (!h) return null;
     await this.sleep(150);
+    // Cleared by save() when the chat opened again during the wait; leave its focus alone.
+    if (this.restored !== h) return null;
+    this.restored = 0;
+    if (!this.w.isWindow(h)) return null;
     if (this.w.foreground() === h) return { result: "ok" };
     this.w.unlockForeground();
     this.w.setForeground(h);

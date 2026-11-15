@@ -608,9 +608,9 @@ async function main(): Promise<void> {
     if (!t) return false;
     if (t === "/new") {
       newConversation();
-      await giveFocusBack();
+      const ok = await giveFocusBack();
       dispatch({ type: "closeChat" });
-      void settleFocus();
+      if (ok) void settleFocus();
       return true;
     }
     if (!session) {
@@ -626,9 +626,9 @@ async function main(): Promise<void> {
     // "sent" first, so stream events that arrive during a focus retry land on this turn.
     dispatch({ type: "sent", text: t });
     // Give focus back before the window stops being focusable, while the overlay still holds the foreground.
-    await giveFocusBack();
+    const ok = await giveFocusBack();
     dispatch({ type: "closeChat" });
-    void settleFocus();
+    if (ok) void settleFocus();
     return true;
   }
 
@@ -660,7 +660,9 @@ async function main(): Promise<void> {
       case "stepRest": {
         // A refused focus leaves the overlay shown, so its "click the game" notice can be read.
         const keepShown = !(await giveFocusBack());
-        return dispatch({ ...action, keepShown });
+        dispatch({ ...action, keepShown });
+        if (!keepShown) void settleFocus();
+        return;
       }
       default:
         dispatch(action);

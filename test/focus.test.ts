@@ -173,6 +173,69 @@ describe("FocusManager", () => {
       expect(await f.settle()).toEqual({ result: "failed", foreground: "ED Chat" });
     });
 
+    it("names another program in front, or none", async () => {
+      const a = setup();
+      await opened(a.w, a.f);
+      a.w.ignore = 2;
+      a.w.fg = 20;
+      await a.f.restore();
+      expect(await a.f.settle()).toEqual({ result: "failed", foreground: "notepad.exe" });
+
+      const b = setup();
+      await opened(b.w, b.f);
+      b.w.ignore = 2;
+      b.w.fg = 0;
+      await b.f.restore();
+      expect(await b.f.settle()).toEqual({ result: "failed", foreground: null });
+    });
+
+    it("leaves focus alone when the chat opened again during the wait", async () => {
+      const { w } = setup();
+      let wake = () => {};
+      const waiting = new Promise<void>((r) => (wake = r));
+      const f = new FocusManager(
+        {
+          foreground: () => w.fg,
+          isWindow: () => true,
+          setForeground: (h) => {
+            w.calls.push(h);
+            w.fg = h;
+            return true;
+          },
+          processName: () => null,
+          unlockForeground: () => {
+            w.unlocks++;
+          },
+        },
+        { overlayHwnd: () => 99, onChange: () => {}, sleep: () => waiting },
+      );
+      w.fg = 10;
+      f.poll();
+      f.save();
+      w.fg = 99;
+      await f.restore();
+      const check = f.settle();
+      // During the wait the player, back in the game, presses the chat hotkey again.
+      w.fg = 10;
+      f.save();
+      w.fg = 99;
+      w.calls.length = 0;
+      wake();
+      expect(await check).toBeNull();
+      expect(w.calls).toEqual([]);
+      expect(w.fg).toBe(99);
+    });
+
+    it("forgets an earlier restore when the next close restores nothing", async () => {
+      const { w, f } = setup();
+      await opened(w, f);
+      await f.restore();
+      // The next close has no saved window; its check must not act on the old one.
+      w.fg = 99;
+      await f.restore();
+      expect(await f.settle()).toBeNull();
+    });
+
     it("does nothing when nothing was restored", async () => {
       const { f } = setup();
       expect(await f.settle()).toBeNull();
