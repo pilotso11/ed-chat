@@ -123,24 +123,50 @@ export interface ExplorationTotals {
   session: { systems: number; scanned: number; mapped: number; firstDiscoveries: number };
 }
 
-/** Unsold data since the last sale or death, and this game session's counts. */
+/** Universal Cartographics does not buy data for systems this close to the station. */
+const SELL_MIN_LY = 20;
+
+/**
+ * Unsold data since the last sale or death, and this game session's counts. A sale sells all
+ * the data it can, so it clears what it lists, and also every system it could have sold but did
+ * not: only systems within 20 ly of the station stay unsold.
+ */
 export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
-  const scans = new Map<string, { system: string | null; scan: Obj; mapped: boolean }>();
+  const scans = new Map<
+    string,
+    { system: string | null; address: number | null; scan: Obj; mapped: boolean }
+  >();
+  const starPos = new Map<number, number[]>();
+  let here: number | null = null;
   let bio = 0;
   let bioCount = 0;
   const session = { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 };
   for (const e of events) {
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
+    const address = num(e.SystemAddress);
+    if (address !== null && Array.isArray(e.StarPos) && e.StarPos.length === 3) {
+      starPos.set(address, e.StarPos as number[]);
+    }
     switch (e.event) {
       case "LoadGame":
         session.systems = session.scanned = session.mapped = session.firstDiscoveries = 0;
         break;
       case "FSDJump":
         session.systems++;
+        here = address;
+        break;
+      case "Location":
+      case "CarrierJump":
+        here = address;
         break;
       case "Scan": {
         const prev = scans.get(key);
-        scans.set(key, { system: str(e.StarSystem), scan: e, mapped: prev?.mapped ?? false });
+        scans.set(key, {
+          system: str(e.StarSystem),
+          address,
+          scan: e,
+          mapped: prev?.mapped ?? false,
+        });
         if (e.ScanType === "Detailed") {
           session.scanned++;
           if (e.WasDiscovered === false) session.firstDiscoveries++;
@@ -165,8 +191,18 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
             .filter((x): x is string => typeof x === "string")
             .map((x) => x.toLowerCase()),
         );
-        for (const [k, s] of scans)
-          if (s.system && sold.has(s.system.toLowerCase())) scans.delete(k);
+        const station = here !== null ? starPos.get(here) : undefined;
+        const near = (a: number | null) => {
+          const p = a !== null ? starPos.get(a) : undefined;
+          // With no position to compare, keep the data rather than guess.
+          if (!station || !p) return true;
+          return (
+            Math.hypot(p[0]! - station[0]!, p[1]! - station[1]!, p[2]! - station[2]!) <= SELL_MIN_LY
+          );
+        };
+        for (const [k, s] of scans) {
+          if ((s.system && sold.has(s.system.toLowerCase())) || !near(s.address)) scans.delete(k);
+        }
         break;
       }
       case "ScanOrganic":

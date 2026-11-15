@@ -210,6 +210,21 @@ describe("exploration totals", () => {
     expect(sold.unsoldCartographic).toBe(283629);
   });
 
+  it("keeps only systems within 20 ly of the station after a sale", () => {
+    const jump = (id: number, pos: number[]) => ev("FSDJump", { SystemAddress: id, StarPos: pos });
+    const t = explorationTotals([
+      jump(1, [0, 0, 0]),
+      elw("A", 1),
+      jump(2, [100, 0, 0]),
+      elw("B", 2),
+      jump(3, [110, 0, 0]),
+      elw("C", 3),
+      ev("MultiSellExplorationData", { Discovered: [{ SystemName: "C" }] }),
+    ]);
+    // A was far and not sold, so it was not for sale; B is 10 ly away and held back.
+    expect(t.unsoldCartographic).toBe(283629);
+  });
+
   it("adds analysed species until sold", () => {
     const analyse = ev("ScanOrganic", {
       ScanType: "Analyse",
