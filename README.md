@@ -214,11 +214,13 @@ conversation, ED Chat still resumes it, but the history view starts empty.
 Release-please opens a release PR from the commits on `main`. Merge it to tag the
 release; the workflow then builds the installer and attaches it.
 
-Release-please uses the repository secret `RELEASE_PLEASE_TOKEN`, not
-`GITHUB_TOKEN`, so its release PR runs CI. The secret is a fine-grained token
-for this repository only, with read and write access to Contents, Pull requests
-and Issues. The token expires; when it does, the release job fails. Make a new
-token and set it with `gh secret set RELEASE_PLEASE_TOKEN`.
+Release-please acts as a GitHub App that belongs to the repository owner and is
+installed on this repository only, with read and write access to Contents, Pull
+requests and Issues. Its release PR runs CI, which a PR made with `GITHUB_TOKEN`
+does not, and GitHub signs the commits it makes. The app's ID and private key
+are the repository secrets `RELEASE_APP_ID` and `RELEASE_APP_KEY`. The key does
+not expire; to replace it, generate a new one in the app's settings and set it
+with `gh secret set RELEASE_APP_KEY < key.pem`.
 
 ## Code signing policy
 
