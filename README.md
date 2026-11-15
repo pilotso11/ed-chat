@@ -222,19 +222,10 @@ app by its Client ID, and its private key is the repository secret
 `RELEASE_APP_KEY`. The key does not expire; to replace it, generate a new one in
 the app's settings and set it with `gh secret set RELEASE_APP_KEY < key.pem`.
 
-## Code signing policy
+## Code signing
 
-Free code signing provided by [SignPath.io](https://about.signpath.io),
-certificate by [SignPath Foundation](https://signpath.org).
-
-- Committers and reviewers: [pilotso11](https://github.com/pilotso11). Every
-  change goes through a pull request and needs an approving review from a code
-  owner (see `.github/CODEOWNERS`).
-- Approvers: [pilotso11](https://github.com/pilotso11). Each signed release is
-  approved by hand.
-
-Signed files are built by the release workflow in this repository, from the
-tagged source.
+The installer on GitHub Releases is not code signed. The Microsoft Store
+package is signed by Microsoft when the Store publishes it.
 
 ## Privacy
 
