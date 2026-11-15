@@ -37,9 +37,10 @@ VR.
 
 ## Install
 
-Download `ED Chat Setup <version>.exe` from Releases and run it. The
+Download `ED Chat Setup <version>.exe` from
+[Releases](https://github.com/pilotso11/ed-chat/releases) and run it. The
 installer is not code signed yet, so Windows SmartScreen warns on first run.
-Select **More info → Run anyway**. Releases are not public yet.
+Select **More info → Run anyway**.
 
 ## Use
 
@@ -218,3 +219,22 @@ Release-please uses the repository secret `RELEASE_PLEASE_TOKEN`, not
 for this repository only, with read and write access to Contents, Pull requests
 and Issues. The token expires; when it does, the release job fails. Make a new
 token and set it with `gh secret set RELEASE_PLEASE_TOKEN`.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io),
+certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [pilotso11](https://github.com/pilotso11). Every
+  change goes through a pull request and needs an approving review from a code
+  owner (see `.github/CODEOWNERS`).
+- Approvers: [pilotso11](https://github.com/pilotso11). Each signed release is
+  approved by hand.
+
+Signed files are built by the release workflow in this repository, from the
+tagged source.
+
+## Privacy
+
+ED Chat has no telemetry. It passes your messages to the Claude Code CLI on
+your PC, which sends them to Anthropic. See [PRIVACY.md](PRIVACY.md).
