@@ -1,18 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- dark inside the hull and pods only; the rest is transparent -->
-  <path d="M512 150 L866 700 L158 700 Z" fill="#11141b"/>
-  <g fill="none" stroke="#ff7a1a" stroke-width="40" stroke-linejoin="round" stroke-linecap="round">
-    <!-- hull: a broad wedge seen from above, nose up -->
-    <path d="M512 150 L866 700 L640 700 M384 700 L158 700 L512 150"/>
-    <!-- twin engine pods at the rear -->
-    <rect x="392" y="560" width="88" height="210" rx="22" fill="#11141b"/>
-    <rect x="544" y="560" width="88" height="210" rx="22" fill="#11141b"/>
-    <!-- canopy -->
-    <path d="M512 300 L552 410 L512 470 L472 410 Z"/>
-  </g>
-  <g fill="none" stroke="#ff7a1a" stroke-width="34" stroke-linecap="round" opacity="0.5">
-    <!-- engine wash -->
-    <path d="M436 830 L436 910"/>
-    <path d="M588 830 L588 910"/>
+  <!-- An AI chat bubble: orange outline, dark inside, transparent outside. -->
+  <path
+    d="M280 180 H744 A140 140 0 0 1 884 320 V560 A140 140 0 0 1 744 700 H450 L250 860 L300 700 H280 A140 140 0 0 1 140 560 V320 A140 140 0 0 1 280 180 Z"
+    fill="#11141b" stroke="#ff7a1a" stroke-width="44" stroke-linejoin="round"/>
+  <!-- sparkles: the usual mark for AI -->
+  <g fill="#ff7a1a">
+    <path d="M490 262 Q512 430 682 450 Q512 470 490 638 Q468 470 298 450 Q468 430 490 262 Z"/>
+    <path d="M700 268 Q708 322 762 330 Q708 338 700 392 Q692 338 638 330 Q692 322 700 268 Z"/>
   </g>
 </svg>
