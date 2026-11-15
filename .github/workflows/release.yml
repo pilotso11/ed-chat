@@ -14,8 +14,12 @@ jobs:
       created: ${{ steps.rp.outputs.release_created }}
       tag: ${{ steps.rp.outputs.tag_name }}
     steps:
+      # A token of its own, so the release PR runs CI like any other PR and Actions needs
+      # no right to create or approve pull requests.
       - id: rp
         uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
   installer:
     needs: release-please
