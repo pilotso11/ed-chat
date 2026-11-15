@@ -105,6 +105,7 @@ const baseInput = (over: Partial<HudInput> = {}): HudInput => ({
   plan: null,
   hotkey: null,
   samples: new Map(),
+  known: null,
   settings: DEFAULT_SETTINGS.hud,
   now: Date.UTC(2026, 10, 15, 12),
   ...over,

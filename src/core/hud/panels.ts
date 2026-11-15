@@ -10,6 +10,7 @@ import {
   type Plan,
 } from "ed-mcp/journal";
 import type { HudModeId } from "../settings.js";
+import { isHighlight, type KnownBody } from "./known.js";
 
 export type Tone = "dim" | "good" | "warn" | "accent";
 
@@ -252,19 +253,75 @@ function totalsFooter(t: ExplorationTotals): string[] {
 
 const MAX_BODIES = 8;
 
+/**
+ * Earth-like, water and ammonia worlds and terraformables in the system, from the scans and
+ * from Spansh: green once scanned, grey before, nearest first.
+ */
+export function highlightRows(
+  system: string | null,
+  x: Exploration | null,
+  known: KnownBody[] | null,
+): HudRow[] {
+  const scanned = new Map((x?.bodies ?? []).map((b) => [b.body_id, b]));
+  type Item = { name: string; type: string | null; tf: boolean; ls: number | null; id: number };
+  const items = new Map<number, Item>();
+  for (const k of known ?? []) {
+    if (!isHighlight(k.type, k.terraformable)) continue;
+    items.set(k.bodyId, {
+      name: k.name,
+      type: k.type,
+      tf: k.terraformable,
+      ls: k.distance_ls,
+      id: k.bodyId,
+    });
+  }
+  for (const b of x?.bodies ?? []) {
+    if (!isHighlight(b.type, b.terraformable)) continue;
+    items.set(b.body_id, {
+      name: b.body,
+      type: b.type,
+      tf: b.terraformable,
+      ls: b.distance_ls,
+      id: b.body_id,
+    });
+  }
+  return [...items.values()]
+    .sort((a, b) => (a.ls ?? Infinity) - (b.ls ?? Infinity))
+    .map((i) => {
+      const b = scanned.get(i.id);
+      const value = b ? (b.value_mapped ?? b.value_scanned) : null;
+      const state = !b ? "not scanned" : b.mapped_by_you ? "mapped ✓" : "map";
+      return {
+        text: `${shortBody(i.name, system)}  ${shortType(i.type)}${i.tf && !/earthlike/i.test(i.type ?? "") ? " tf" : ""}`,
+        right: [
+          i.ls !== null ? `${Math.round(i.ls).toLocaleString("en-US")} ls` : null,
+          value ? credits(value) : null,
+          state,
+        ]
+          .filter(Boolean)
+          .join("  "),
+        tone: b ? "good" : "dim",
+      };
+    });
+}
+
 export function explorationPanel(input: {
   system: string | null;
   exploration: Exploration;
   bio: ExobiologyBody[];
   totals: ExplorationTotals;
   valuableMin: number;
+  known?: KnownBody[] | null;
 }): PanelView {
   const { system, exploration: x } = input;
   type Item = HudRow & { done: boolean; value: number };
   const items: Item[] = [];
   const scannedIds = new Set(x.bodies.map((b) => b.body_id));
+  const highlights = highlightRows(system, x, input.known ?? null);
   for (const b of x.bodies) {
     if (b.type?.endsWith(" star")) continue;
+    // Listed with the highlights instead.
+    if (isHighlight(b.type, b.terraformable)) continue;
     const bio = b.signals.filter((s) => /bio/i.test(s.type)).reduce((n, s) => n + s.count, 0);
     const geo = b.signals.filter((s) => /geo/i.test(s.type)).reduce((n, s) => n + s.count, 0);
     const value = b.value_mapped ?? b.value_scanned ?? 0;
@@ -300,9 +357,12 @@ export function explorationPanel(input: {
     });
   }
   items.sort((a, b) => Number(a.done) - Number(b.done) || b.value - a.value);
-  const rows: HudRow[] = items.slice(0, MAX_BODIES).map(({ done: _d, value: _v, ...r }) => r);
-  if (items.length > MAX_BODIES)
-    rows.push({ text: `+${items.length - MAX_BODIES} more`, tone: "dim" });
+  const room = Math.max(2, MAX_BODIES - highlights.length);
+  const rows: HudRow[] = [
+    ...highlights,
+    ...items.slice(0, room).map(({ done: _d, value: _v, ...r }) => r),
+  ];
+  if (items.length > room) rows.push({ text: `+${items.length - room} more`, tone: "dim" });
   if (!rows.length) rows.push({ text: "Nothing valuable scanned yet", tone: "dim" });
   const d = x.discovery;
   const right =
@@ -335,6 +395,8 @@ export function exobiologyPanel(input: {
   /** The player's position on the body now, and its radius in metres. */
   here: (Point & { radius: number }) | null;
   totals: ExplorationTotals;
+  /** highlightRows() for the system. */
+  highlights?: HudRow[];
 }): PanelView {
   const { body } = input;
   const rows: HudRow[] = [];
@@ -361,6 +423,10 @@ export function exobiologyPanel(input: {
     }
   }
   for (const g of body.not_started) rows.push({ text: `${g}  not started`, tone: "dim" });
+  // The system's Earth-like, water and ammonia worlds stay in view while on a planet.
+  if (input.highlights?.length) {
+    rows.push({ text: "In system", tone: "dim" }, ...input.highlights);
+  }
   return {
     mode: "exobiology",
     title: "EXOBIOLOGY",

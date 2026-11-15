@@ -9,11 +9,13 @@ import {
   type Plan,
 } from "ed-mcp/journal";
 import type { HudModeId, Settings } from "../settings.js";
+import type { KnownBody } from "./known.js";
 import { journalMode, noteMode, pickMode, type Choice } from "./mode.js";
 import {
   exobiologyPanel,
   explorationPanel,
   explorationTotals,
+  highlightRows,
   massacrePanel,
   routeRows,
   type RouteRow,
@@ -66,6 +68,8 @@ export interface HudInput {
   /** The mode chosen with the hotkey; "off" holds until the hotkey is pressed again. */
   hotkey: Choice | null;
   samples: Map<string, Point[]>;
+  /** Spansh's planets for the current system, when looked up. */
+  known: KnownBody[] | null;
   settings: Settings["hud"];
   now: number;
 }
@@ -93,6 +97,7 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
   if (address === null) return null;
   const totals = explorationTotals(j.events);
   const bio = exobiology(j.events, address, { system }).bodies;
+  const x = exploration(j.events, address);
   if (mode === "exobiology") {
     const s = input.status;
     // The body the ship is near, else the body of the newest sample in this system.
@@ -106,15 +111,23 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
         s && s.latitude !== null && s.longitude !== null && s.radius !== null
           ? { latitude: s.latitude, longitude: s.longitude, radius: s.radius }
           : null;
-      return exobiologyPanel({ system, body, samples: input.samples, here, totals });
+      return exobiologyPanel({
+        system,
+        body,
+        samples: input.samples,
+        here,
+        totals,
+        highlights: highlightRows(system, x, input.known),
+      });
     }
   }
   return explorationPanel({
     system,
-    exploration: exploration(j.events, address),
+    exploration: x,
     bio,
     totals,
     valuableMin: input.settings.valuableMin,
+    known: input.known,
   });
 }
 

@@ -70,6 +70,7 @@ import { resumeId } from "../core/resume.js";
 import { openStores } from "ed-mcp/journal";
 import { edMcpSyncDir } from "../core/hud/edMcpConfig.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
+import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import { buildHud, currentMode } from "../core/hud/hud.js";
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
 import { currentStop, todoStops } from "../core/hud/panels.js";
@@ -426,6 +427,7 @@ async function main(): Promise<void> {
       activity: null,
       plan: null,
       samples: new Map(),
+      known: null,
       ...hudData,
       hotkey: hudChoice(),
       settings: settings.hud,
@@ -460,6 +462,9 @@ async function main(): Promise<void> {
   }
 
   let hudFeed: HudFeed | null = null;
+  const knownBodies = new KnownBodies(fetchSpansh, {
+    onError: (m) => log.log("warn", `panel spansh: ${m}`),
+  });
   let hudPlans: ReturnType<typeof openStores>["plans"] | null = null;
   async function openHudFeed(): Promise<void> {
     let syncDir = settings.hud.edMcpDataDir;
@@ -473,6 +478,7 @@ async function main(): Promise<void> {
     );
     hudFeed = new HudFeed(stores, journalDir(settings), {
       onError: (what, m) => log.log("warn", `panel ${what}: ${m}`),
+      known: settings.hud.spansh ? knownBodies : undefined,
     });
     hudPlans = stores.plans;
     log.log("info", `panel data: ${syncDir ? "ed-mcp sync folder" : "ed-mcp config folder"}`);
@@ -1067,7 +1073,8 @@ async function main(): Promise<void> {
     writeState();
     if (
       journalDir(old) !== journalDir(settings) ||
-      old.hud.edMcpDataDir !== settings.hud.edMcpDataDir
+      old.hud.edMcpDataDir !== settings.hud.edMcpDataDir ||
+      old.hud.spansh !== settings.hud.spansh
     ) {
       void openHudFeed().then(pollHud, (err) => log.log("warn", `panel: ${message(err)}`));
     }

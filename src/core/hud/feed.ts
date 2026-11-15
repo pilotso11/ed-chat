@@ -1,13 +1,14 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { JournalEvent, Stores } from "ed-mcp/journal";
+import { systemAddress, type JournalEvent, type Stores } from "ed-mcp/journal";
 import type { HudInput } from "./hud.js";
 import { parseShipStatus } from "./hud.js";
+import type { KnownBodies } from "./known.js";
 import { parseNavRoute, sampleKey, type Point } from "./panels.js";
 
 export type FeedData = Pick<
   HudInput,
-  "journal" | "status" | "nav" | "activity" | "plan" | "samples"
+  "journal" | "status" | "nav" | "activity" | "plan" | "samples" | "known"
 >;
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -29,6 +30,8 @@ export class HudFeed {
     private readonly opts: {
       read?: (file: string) => Promise<string>;
       onError?: (what: string, message: string) => void;
+      /** Spansh's planets for the current system; none when the lookup is off. */
+      known?: KnownBodies;
     } = {},
   ) {}
 
@@ -59,6 +62,9 @@ export class HudFeed {
         .catch((err: unknown) => (this.error("plan", err), null));
     }
     if (journal) this.noteSamples(journal.events, status);
+    const system = journal?.location.system ?? null;
+    const address = journal && system ? systemAddress(journal.events, system) : null;
+    const known = address !== null ? (this.opts.known?.get(address) ?? null) : null;
     return {
       journal,
       status,
@@ -66,6 +72,7 @@ export class HudFeed {
       activity,
       plan,
       samples: this.samples,
+      known,
     };
   }
 

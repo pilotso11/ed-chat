@@ -132,9 +132,14 @@ front.
   Earth-like, water and ammonia worlds, terraformable planets, and bodies with
   biological or geological signals. Each shows its distance, its value and
   whether it still needs a scan or a map. ★ marks a first discovery.
+  Earth-like, water and ammonia worlds and terraformables are listed from
+  [Spansh](https://spansh.co.uk) as soon as you arrive: grey until you scan them,
+  then green.
 - **Exobiology:** on a body with biological signals, each species with its
   samples (2/3) and value, the genera not started yet, and, while you sample, the
   distance from your last sample against the minimum distance for that genus.
+  The system's Earth-like, water and ammonia worlds and terraformables stay
+  listed below.
 - **Route:** the current stop of the active ed-mcp plan (with its body or
   station, what it is for and the jumps left on the plotted route), the next
   stop, and how many stops follow. It shows under the other panels too. When you arrive in
@@ -231,6 +236,7 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 | `hud.fontSize` / `hud.backgroundOpacity` | `15` / `0.55` | Panel text size and background |
 | `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology` or `route` |
 | `hud.valuableMin` | `500000` | Bodies worth less when mapped are left off the exploration panel, unless they have signals |
+| `hud.spansh` | `true` | Look up each system's planets on Spansh when you arrive. Only the system's ID is sent |
 | `hud.edMcpDataDir` | `null` | The ed-mcp sync folder; `null` finds it in `~/.claude.json` |
 
 With the chat open you can also drag the overlay by its status line. It snaps
