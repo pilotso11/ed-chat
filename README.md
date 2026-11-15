@@ -207,3 +207,14 @@ file per conversation. When ED Chat resumes a conversation, it reads the last 20
 turns of that file back into the history view and adds new turns to the same
 file. You can open or delete the files. If you delete the file of the last
 conversation, ED Chat still resumes it, but the history view starts empty.
+
+## Releases
+
+Release-please opens a release PR from the commits on `main`. Merge it to tag the
+release; the workflow then builds the installer and attaches it.
+
+Release-please uses the repository secret `RELEASE_PLEASE_TOKEN`, not
+`GITHUB_TOKEN`, so its release PR runs CI. The secret is a fine-grained token
+for this repository only, with read and write access to Contents, Pull requests
+and Issues. The token expires; when it does, the release job fails. Make a new
+token and set it with `gh secret set RELEASE_PLEASE_TOKEN`.
