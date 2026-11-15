@@ -8,13 +8,30 @@ files:
 extraResources:
   - from: resources/tray.png
     to: tray.png
+  - from: resources/tray@2x.png
+    to: tray@2x.png
 asarUnpack:
   - node_modules/koffi/**
   - node_modules/@koromix/**
 win:
+  icon: build/icon.ico
   target:
     - target: nsis
       arch: x64
+    # For the Microsoft Store, which signs it. The identity must match Partner Center.
+    - target: appx
+      arch: x64
+appx:
+  identityName: pilotso11.ed-chat
+  publisher: CN=487CC7C3-30EC-4D28-B40A-D70D927AB5FC
+  publisherDisplayName: pilotso11
+  # The manifest's Application Id cannot contain "-", which the identity name has.
+  applicationId: EDChat
+  displayName: ED Chat
+  backgroundColor: transparent
+  languages: [en-US]
+  minVersion: 10.0.17763.0
+  maxVersionTested: 10.0.26100.0
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

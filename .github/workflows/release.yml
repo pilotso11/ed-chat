@@ -48,7 +48,7 @@ jobs:
       - run: npx electron-builder --win --publish never
       # Attach to the release release-please just created; electron-builder skips
       # publishing to a release that is already published.
-      - run: gh release upload "$TAG" dist/*.exe --clobber
+      - run: gh release upload "$TAG" dist/*.exe dist/*.appx --clobber
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -69,7 +69,7 @@ after `/new` or a long break. Set `claude.resumeHours` to change the 12 hours.
 At startup the overlay shows its hotkeys for 15 seconds. Click the list to
 close it.
 
-The overlay has an orange ring icon in the notification area (system tray).
+The overlay has an orange ship icon in the notification area (system tray).
 Windows 11 may hide it under the **^** arrow; drag it to the taskbar to keep it
 in view. Click it for a menu: copy a chip, open the chat, start a new
 conversation, show the hotkeys, switch icon mode, minimize the overlay to the
