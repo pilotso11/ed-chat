@@ -7,17 +7,27 @@ on:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    # Release-please makes every call with RELEASE_PLEASE_TOKEN, so GITHUB_TOKEN needs nothing.
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     outputs:
       created: ${{ steps.rp.outputs.release_created }}
       tag: ${{ steps.rp.outputs.tag_name }}
     steps:
+      # An empty secret would replace the action's default token and fail with a vague error.
+      - name: Check RELEASE_PLEASE_TOKEN is set
+        env:
+          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_PLEASE_TOKEN" ]; then
+            echo "::error::Set the RELEASE_PLEASE_TOKEN secret; see Releases in README.md"
+            exit 1
+          fi
       # A token of its own, so the release PR runs CI like any other PR and Actions needs
-      # no right to create or approve pull requests.
+      # no right to create or approve pull requests. Pinned to a commit, because the step
+      # sees a long-lived token.
       - id: rp
-        uses: googleapis/release-please-action@v5
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
