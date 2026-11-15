@@ -205,3 +205,14 @@ the log before you share it.
 Each session's messages are also saved in `%APPDATA%\ed-chat\history\`, one
 file per session. The overlay does not read them back; they are an archive you
 can open or delete.
+
+## Releases
+
+Release-please opens a release PR from the commits on `main`. Merge it to tag the
+release; the workflow then builds the installer and attaches it.
+
+Release-please uses the repository secret `RELEASE_PLEASE_TOKEN`, not
+`GITHUB_TOKEN`, so its release PR runs CI. The secret is a fine-grained token
+for this repository only, with read and write access to Contents, Pull requests
+and Issues. The token expires; when it does, the release job fails. Make a new
+token and set it with `gh secret set RELEASE_PLEASE_TOKEN`.
