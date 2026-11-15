@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/pilotso11/ed-chat/compare/v0.2.0...v0.2.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **deps:** override minimatch to 11.0.1 for GHSA-g3hv-75wg-m249 ([#25](https://github.com/pilotso11/ed-chat/issues/25)) ([1f53e72](https://github.com/pilotso11/ed-chat/commit/1f53e72325833694f33922eb8a835881a877aea2))
+
 ## [0.2.0](https://github.com/pilotso11/ed-chat/compare/v0.1.0...v0.2.0) (2026-11-14)
 
 
