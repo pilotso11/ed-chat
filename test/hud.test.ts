@@ -246,6 +246,29 @@ describe("route line", () => {
     );
   });
 
+  it("names the body or station, and the current stop's label", () => {
+    const p: Plan = {
+      ...plan(["done", "todo", "todo", "todo", "todo"]),
+      stops: [
+        { system: "Col 1", body: "4 d", purpose: "x", status: "done" },
+        { system: "Col 1", body: "Col 1 5 a", purpose: "x", status: "todo", label: "Nitris" },
+        { system: "Col 1", body: "6", purpose: "x", status: "todo" },
+        { system: "Shinrarta", station: "Jameson", purpose: "x", status: "todo" },
+        { system: "Col 2", body: "Col 2 A 1", purpose: "x", status: "todo" },
+      ],
+    };
+    expect(routeLine({ plan: p, nav: null, system: "Col 1" })).toBe(
+      "✓ Col 1 4 d ▸ ● Col 1 5 a (Nitris) ▸ 6 ▸ Jameson ▸ Col 2 A 1",
+    );
+    const atStation = {
+      ...p,
+      stops: p.stops.map((s, i) => (i < 3 ? { ...s, status: "done" as const } : s)),
+    };
+    expect(routeLine({ plan: atStation, nav: null, system: "Col 1" })).toBe(
+      "✓ 6 ▸ ● Jameson, Shinrarta ▸ Col 2 A 1",
+    );
+  });
+
   it("shows only the destination and jumps with no plan", () => {
     expect(routeLine({ plan: null, nav, system: "Mid" })).toBe("● Sys 1 · 1 jump");
     expect(routeLine({ plan: null, nav: null, system: "Mid" })).toBeNull();

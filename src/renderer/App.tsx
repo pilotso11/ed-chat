@@ -45,6 +45,7 @@ function ChipButton({ chip }: { chip: Chip }) {
   return (
     <button className="chip" {...target} onClick={() => window.overlay.copyChip(chip.n)}>
       <span className="keycap">{chip.n}</span> {chip.text}
+      {chip.detail && <span className="chip-detail"> · {chip.detail}</span>}
     </button>
   );
 }

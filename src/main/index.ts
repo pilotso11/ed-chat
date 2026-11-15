@@ -18,6 +18,7 @@ import {
 } from "electron";
 import { chooseDisplay, place, snap, step } from "../core/anchor.js";
 import { ApprovalServer } from "../core/approvalServer.js";
+import { chipLabel } from "../core/chips.js";
 import {
   TESTED_CLI_VERSION,
   buildClaudeArgs,
@@ -820,7 +821,7 @@ async function main(): Promise<void> {
       return flash("copy", `📋 no chip ${n}; ${has}`, 2_000);
     }
     clipboard.writeText(chip.text);
-    flash("copy", `📋 copied ${chip.text}`, 2_000);
+    flash("copy", `📋 copied ${chip.text}${chip.detail ? ` (for ${chip.detail})` : ""}`, 2_000);
   }
 
   // The player starts reading now, so the card gets a full fade time. A reply still arriving
@@ -1123,7 +1124,7 @@ async function main(): Promise<void> {
     const tray = (a: HotkeyAction) => () => runAction(a, "tray");
     return Menu.buildFromTemplate([
       ...chips.map((c) => ({
-        label: label(`Copy ${c.n}: ${c.text}`),
+        label: label(`Copy ${c.n}: ${chipLabel(c)}`),
         click: () => copyChip(c.n),
       })),
       ...(chips.length ? [{ type: "separator" as const }] : []),

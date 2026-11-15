@@ -353,11 +353,21 @@ export function parseNavRoute(text: string): NavRoute | null {
   }
 }
 
-function stopName(s: Plan["stops"][number]): string {
-  if (s.label) return s.label;
-  if (s.station) return s.station;
-  if (s.body) return `${s.system} ${s.body}`;
-  return s.system;
+type PlanStop = Plan["stops"][number];
+
+/**
+ * Where a stop is: the station, else the body, else the system. `full` adds the system to a
+ * station. A body in the same system as the stop before it drops the system name; a body name
+ * that already starts with the system name is not repeated.
+ */
+function stopPlace(s: PlanStop, prev: PlanStop | undefined, full = false): string {
+  if (s.station) return full ? `${s.station}, ${s.system}` : s.station;
+  if (!s.body) return s.system;
+  const sameSystem = prev?.system.toLowerCase() === s.system.toLowerCase();
+  if (s.body.toLowerCase().startsWith(s.system.toLowerCase())) {
+    return sameSystem ? s.body.slice(s.system.length).trim() || s.body : s.body;
+  }
+  return sameSystem ? s.body : `${s.system} ${s.body}`;
 }
 
 /** Jumps left on the plotted route from the current system; null when there is no route. */
@@ -382,9 +392,14 @@ export function routeLine(input: {
     const cur = order.findIndex((i) => plan.stops[i]!.status === "todo");
     if (cur >= 0) {
       const parts: string[] = [];
-      if (cur > 0) parts.push(`✓ ${stopName(plan.stops[order[cur - 1]!]!)}`);
-      parts.push(`● ${stopName(plan.stops[order[cur]!]!)}${jumpText}`);
-      for (const i of order.slice(cur + 1, cur + 4)) parts.push(stopName(plan.stops[i]!));
+      const at = (k: number) => plan.stops[order[k]!]!;
+      const place = (k: number) => stopPlace(at(k), k > 0 ? at(k - 1) : undefined);
+      if (cur > 0) parts.push(`✓ ${place(cur - 1)}`);
+      // The current stop names its system, and its label says what it is for.
+      const now = at(cur);
+      const label = now.label ? ` (${now.label})` : "";
+      parts.push(`● ${stopPlace(now, undefined, true)}${label}${jumpText}`);
+      for (let k = cur + 1; k < Math.min(order.length, cur + 4); k++) parts.push(place(k));
       if (order.length > cur + 4) parts.push("…");
       return parts.join(" ▸ ");
     }
