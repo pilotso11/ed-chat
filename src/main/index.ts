@@ -343,6 +343,19 @@ async function main(): Promise<void> {
     return false;
   }
 
+  /**
+   * After the chat window has closed: Windows can report the hand-back as done and still leave
+   * the game in the background, so check, retry once, and say so when it still fails.
+   */
+  async function settleFocus(): Promise<void> {
+    const r = await focus?.settle();
+    if (!r) return;
+    if (r.result === "ok") return;
+    if (r.result === "retried") return log.log("info", "focus back: needed a second try");
+    log.log("warn", `focus back failed; in front: ${r.foreground ?? "-"}`);
+    flash("focus", REFOCUS, 5_000);
+  }
+
   // Claude.
   const approval = new ApprovalServer({
     timeoutMs: settings.approval.timeoutSeconds * 1000,
@@ -597,6 +610,7 @@ async function main(): Promise<void> {
       newConversation();
       await giveFocusBack();
       dispatch({ type: "closeChat" });
+      void settleFocus();
       return true;
     }
     if (!session) {
@@ -614,6 +628,7 @@ async function main(): Promise<void> {
     // Give focus back before the window stops being focusable, while the overlay still holds the foreground.
     await giveFocusBack();
     dispatch({ type: "closeChat" });
+    void settleFocus();
     return true;
   }
 
@@ -712,7 +727,10 @@ async function main(): Promise<void> {
     // Read at the press, before the focus wait (see escapeAction).
     const action = escapeAction(state);
     // A refused focus leaves the overlay shown, so its "click the game" notice can be read.
-    void giveFocusBack().then((ok) => dispatch({ ...action, keepShown: !ok }));
+    void giveFocusBack().then((ok) => {
+      dispatch({ ...action, keepShown: !ok });
+      if (ok) void settleFocus();
+    });
   });
   ipcMain.on(IPC.copyChip, (_e, v: unknown) => {
     const n = chipArg(v);
