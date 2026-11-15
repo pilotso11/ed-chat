@@ -217,10 +217,10 @@ release; the workflow then builds the installer and attaches it.
 Release-please acts as a GitHub App that belongs to the repository owner and is
 installed on this repository only, with read and write access to Contents, Pull
 requests and Issues. Its release PR runs CI, which a PR made with `GITHUB_TOKEN`
-does not, and GitHub signs the commits it makes. The app's ID and private key
-are the repository secrets `RELEASE_APP_ID` and `RELEASE_APP_KEY`. The key does
-not expire; to replace it, generate a new one in the app's settings and set it
-with `gh secret set RELEASE_APP_KEY < key.pem`.
+does not, and GitHub signs the commits it makes. The release workflow names the
+app by its Client ID, and its private key is the repository secret
+`RELEASE_APP_KEY`. The key does not expire; to replace it, generate a new one in
+the app's settings and set it with `gh secret set RELEASE_APP_KEY < key.pem`.
 
 ## Code signing policy
 
