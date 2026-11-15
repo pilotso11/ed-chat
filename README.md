@@ -222,19 +222,12 @@ app by its Client ID, and its private key is the repository secret
 `RELEASE_APP_KEY`. The key does not expire; to replace it, generate a new one in
 the app's settings and set it with `gh secret set RELEASE_APP_KEY < key.pem`.
 
-## Code signing policy
+## Code signing
 
-Free code signing provided by [SignPath.io](https://about.signpath.io),
-certificate by [SignPath Foundation](https://signpath.org).
-
-- Committers and reviewers: [pilotso11](https://github.com/pilotso11). Every
-  change goes through a pull request and needs an approving review from a code
-  owner (see `.github/CODEOWNERS`).
-- Approvers: [pilotso11](https://github.com/pilotso11). Each signed release is
-  approved by hand.
-
-Signed files are built by the release workflow in this repository, from the
-tagged source.
+The files on GitHub Releases are not code signed. The `.exe` is the installer
+described under Install. The `.appx` is the package for the Microsoft Store and
+is not meant to be installed directly; the Store signs it when it publishes it.
+ED Chat is not in the Store yet.
 
 ## Privacy
 
