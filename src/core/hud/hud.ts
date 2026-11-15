@@ -15,7 +15,8 @@ import {
   explorationPanel,
   explorationTotals,
   massacrePanel,
-  routeLine,
+  routeRows,
+  type RouteRow,
   type NavRoute,
   type PanelView,
   type Point,
@@ -25,8 +26,8 @@ import {
 export interface HudView {
   /** The mode's panel; null shows only the route line, or nothing. */
   panel: PanelView | null;
-  /** The route breadcrumbs: the whole panel when there is no other, else its footer. */
-  route: string | null;
+  /** The route, one stop to a row: the whole panel when there is no other, else below it. */
+  route: RouteRow[] | null;
   /** While the move keys move the panel, not the chat: what to press. */
   moving: string | null;
   fontSize: number;
@@ -129,7 +130,7 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
   if (mode === "off") return { ...base, panel: null, route: null };
   const panel = mode ? panelFor(mode, input) : null;
   const route = s.modes.route
-    ? routeLine({
+    ? routeRows({
         plan: input.plan,
         nav: input.nav,
         system: input.journal?.location.system ?? null,

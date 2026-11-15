@@ -10,7 +10,7 @@ import {
   jumpsLeft,
   massacrePanel,
   parseNavRoute,
-  routeLine,
+  routeRows,
   sampleKey,
   shortBody,
   timeLeft,
@@ -240,10 +240,11 @@ describe("route line", () => {
     }),
   );
 
-  it("shows the last stop done, the current stop with jumps left, and what follows", () => {
-    expect(routeLine({ plan: plan(["done", "todo", "todo"]), nav, system: "Here" })).toBe(
-      "✓ Sys 0 ▸ ● Sys 1 A 5 · 2 jumps ▸ Sys 2",
-    );
+  it("shows the current stop with jumps left, and the next stop", () => {
+    expect(routeRows({ plan: plan(["done", "todo", "todo"]), nav, system: "Here" })).toEqual([
+      { kind: "current", text: "Sys 1 A 5", right: "2 jumps" },
+      { kind: "next", text: "Sys 2" },
+    ]);
   });
 
   it("names the body or station, and the current stop's label", () => {
@@ -257,21 +258,27 @@ describe("route line", () => {
         { system: "Col 2", body: "Col 2 A 1", purpose: "x", status: "todo" },
       ],
     };
-    expect(routeLine({ plan: p, nav: null, system: "Col 1" })).toBe(
-      "✓ Col 1 4 d ▸ ● Col 1 5 a (Nitris) ▸ 6 ▸ Jameson ▸ Col 2 A 1",
-    );
+    expect(routeRows({ plan: p, nav: null, system: "Col 1" })).toEqual([
+      { kind: "current", text: "Col 1 5 a" },
+      { kind: "label", text: "Nitris" },
+      { kind: "next", text: "6" },
+      { kind: "more", text: "+2 more stops" },
+    ]);
     const atStation = {
       ...p,
       stops: p.stops.map((s, i) => (i < 3 ? { ...s, status: "done" as const } : s)),
     };
-    expect(routeLine({ plan: atStation, nav: null, system: "Col 1" })).toBe(
-      "✓ 6 ▸ ● Jameson, Shinrarta ▸ Col 2 A 1",
-    );
+    expect(routeRows({ plan: atStation, nav: null, system: "Col 1" })).toEqual([
+      { kind: "current", text: "Jameson, Shinrarta" },
+      { kind: "next", text: "Col 2 A 1" },
+    ]);
   });
 
   it("shows only the destination and jumps with no plan", () => {
-    expect(routeLine({ plan: null, nav, system: "Mid" })).toBe("● Sys 1 · 1 jump");
-    expect(routeLine({ plan: null, nav: null, system: "Mid" })).toBeNull();
+    expect(routeRows({ plan: null, nav, system: "Mid" })).toEqual([
+      { kind: "current", text: "Sys 1", right: "1 jump" },
+    ]);
+    expect(routeRows({ plan: null, nav: null, system: "Mid" })).toBeNull();
   });
 
   it("counts jumps from where the ship is on the route", () => {

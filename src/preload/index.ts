@@ -23,7 +23,7 @@ const api: OverlayApi = {
   onHud: (cb) => {
     ipcRenderer.on(IPC.hud, (_e, v: HudView) => cb(v));
   },
-  reportHudHeight: (h) => ipcRenderer.send(IPC.hudHeight, h),
+  reportHudSize: (w, h) => ipcRenderer.send(IPC.hudSize, w, h),
 };
 
 contextBridge.exposeInMainWorld("overlay", api);

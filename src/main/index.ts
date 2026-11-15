@@ -387,7 +387,7 @@ async function main(): Promise<void> {
   }
 
   // Activity panel.
-  let hudHeight = 0;
+  let hudSize = { width: 0, height: 0 };
   let hudData: FeedData | null = null;
   let hudMoving = false;
   let hudMoveTimer: NodeJS.Timeout | undefined;
@@ -401,8 +401,10 @@ async function main(): Promise<void> {
       screen.getPrimaryDisplay(),
       hudPosition.display,
     );
-    const width = Math.round(settings.hud.width * (settings.hud.fontSize / 15));
-    const size = { width, height: Math.max(8, Math.ceil(hudHeight)) };
+    // The panel is at least hud.width wide, and grows so long names fit, up to the screen width.
+    const least = Math.round(settings.hud.width * (settings.hud.fontSize / 15));
+    const width = Math.min(display.workArea.width, Math.max(least, Math.ceil(hudSize.width)));
+    const size = { width, height: Math.max(8, Math.ceil(hudSize.height)) };
     const { x, y } = place(
       hudPosition.anchor,
       hudPosition.offsetX,
@@ -992,10 +994,11 @@ async function main(): Promise<void> {
     const answer = answerArg(a);
     if (typeof id === "string" && answer) answerApproval(id, answer);
   });
-  ipcMain.on(IPC.hudHeight, (_e, v: unknown) => {
-    const h = heightArg(v);
-    if (h === null) return;
-    hudHeight = h;
+  ipcMain.on(IPC.hudSize, (_e, w: unknown, h: unknown) => {
+    const width = heightArg(w);
+    const height = heightArg(h);
+    if (width === null || height === null) return;
+    hudSize = { width, height };
     placeHud();
   });
   hudWin.webContents.on("did-finish-load", renderHud);

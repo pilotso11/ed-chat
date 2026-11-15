@@ -378,33 +378,51 @@ export function jumpsLeft(nav: NavRoute | null, system: string | null): number |
   return left > 0 ? left : null;
 }
 
-/** One line: ✓ previous ▸ ● current · 3 jumps ▸ next ▸ … */
-export function routeLine(input: {
+export interface RouteRow {
+  /** current: the stop to fly to; label: what it is for; next: the stop after; more: the rest. */
+  kind: "current" | "label" | "next" | "more";
+  text: string;
+  right?: string;
+}
+
+/** Stops shown after the current one; the rest are counted. */
+const NEXT_STOPS = 1;
+
+/**
+ * The route, one stop to a row so long system names fit: the current stop with the jumps left,
+ * what it is for, the next stop, and how many follow.
+ */
+export function routeRows(input: {
   plan: Plan | null;
   nav: NavRoute | null;
   system: string | null;
-}): string | null {
+}): RouteRow[] | null {
   const jumps = jumpsLeft(input.nav, input.system);
-  const jumpText = jumps !== null ? ` · ${jumps} jump${jumps === 1 ? "" : "s"}` : "";
+  const right = jumps !== null ? `${jumps} jump${jumps === 1 ? "" : "s"}` : undefined;
+  const withRight = (r: RouteRow): RouteRow => (right ? { ...r, right } : r);
   const plan = input.plan;
   if (plan && plan.stops.length) {
     const order = visitOrder(plan);
     const cur = order.findIndex((i) => plan.stops[i]!.status === "todo");
     if (cur >= 0) {
-      const parts: string[] = [];
       const at = (k: number) => plan.stops[order[k]!]!;
-      const place = (k: number) => stopPlace(at(k), k > 0 ? at(k - 1) : undefined);
-      if (cur > 0) parts.push(`✓ ${place(cur - 1)}`);
-      // The current stop names its system, and its label says what it is for.
       const now = at(cur);
-      const label = now.label ? ` (${now.label})` : "";
-      parts.push(`● ${stopPlace(now, undefined, true)}${label}${jumpText}`);
-      for (let k = cur + 1; k < Math.min(order.length, cur + 4); k++) parts.push(place(k));
-      if (order.length > cur + 4) parts.push("…");
-      return parts.join(" ▸ ");
+      const rows: RouteRow[] = [
+        withRight({ kind: "current", text: stopPlace(now, undefined, true) }),
+      ];
+      if (now.label) rows.push({ kind: "label", text: now.label });
+      const last = Math.min(order.length, cur + 1 + NEXT_STOPS);
+      for (let k = cur + 1; k < last; k++) {
+        rows.push({ kind: "next", text: stopPlace(at(k), at(k - 1), true) });
+      }
+      const more = order.slice(last).filter((i) => plan.stops[i]!.status === "todo").length;
+      if (more) rows.push({ kind: "more", text: `+${more} more stop${more === 1 ? "" : "s"}` });
+      return rows;
     }
   }
-  if (input.nav && jumps !== null) return `● ${input.nav.systems.at(-1)}${jumpText}`;
+  if (input.nav && jumps !== null) {
+    return [withRight({ kind: "current", text: input.nav.systems.at(-1)! })];
+  }
   return null;
 }
 

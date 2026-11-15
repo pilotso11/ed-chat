@@ -17,7 +17,7 @@ export const IPC = {
   showMore: "overlay:showMore",
   answerApproval: "overlay:answerApproval",
   hud: "hud:view",
-  hudHeight: "hud:height",
+  hudSize: "hud:size",
 } as const;
 
 export interface OverlayApi {
@@ -43,7 +43,7 @@ export interface OverlayApi {
   /** Show the whole reply, or go back to the short card. */
   showMore(): void;
   answerApproval(id: string, answer: "approve" | "deny" | "alwaysAllow"): void;
-  /** The activity panel window: its view, and its content height. */
+  /** The activity panel window: its view, and its content size. */
   onHud(cb: (v: HudView) => void): void;
-  reportHudHeight(h: number): void;
+  reportHudSize(width: number, height: number): void;
 }

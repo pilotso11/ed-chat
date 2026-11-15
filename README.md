@@ -135,8 +135,9 @@ front.
 - **Exobiology:** on a body with biological signals, each species with its
   samples (2/3) and value, the genera not started yet, and, while you sample, the
   distance from your last sample against the minimum distance for that genus.
-- **Route:** one line with the stops of the active ed-mcp plan and the jumps left
-  on the plotted route. It shows under the other panels too. When you arrive in
+- **Route:** the current stop of the active ed-mcp plan (with its body or
+  station, what it is for and the jumps left on the plotted route), the next
+  stop, and how many stops follow. It shows under the other panels too. When you arrive in
   a stop's system, the next stop's system is copied for the galaxy map.
 
 The mode changes by itself. Accepting a massacre mission turns on massacre mode
@@ -226,7 +227,7 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 | `journalDir` | `null` | The game's journal folder; `null` uses Saved Games |
 | `hud.enabled` | `true` | Show the activity panel |
 | `hud.position` | `top-right`, 24, 120 | Where the panel sits, like `position` |
-| `hud.width` | `380` | Panel width in pixels at font size 15 |
+| `hud.width` | `380` | Least panel width in pixels at font size 15. The panel grows so long names fit |
 | `hud.fontSize` / `hud.backgroundOpacity` | `15` / `0.55` | Panel text size and background |
 | `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology` or `route` |
 | `hud.valuableMin` | `500000` | Bodies worth less when mapped are left off the exploration panel, unless they have signals |

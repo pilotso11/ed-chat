@@ -1,6 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { HudView } from "../core/hud/hud.js";
+import type { RouteRow } from "../core/hud/panels.js";
+
+const MARKS: Record<RouteRow["kind"], string> = {
+  current: "●",
+  label: "",
+  next: "▸",
+  more: "",
+};
 
 function Hud() {
   const [v, setV] = useState<HudView | null>(null);
@@ -10,14 +18,21 @@ function Hud() {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const report = () => window.overlay.reportHudHeight(el.getBoundingClientRect().height);
+    const report = () => {
+      const r = el.getBoundingClientRect();
+      window.overlay.reportHudSize(r.width, r.height);
+    };
     report();
     const ro = new ResizeObserver(report);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
   const style = v
-    ? ({ "--font": `${v.fontSize}px`, "--bg-alpha": v.backgroundOpacity } as React.CSSProperties)
+    ? ({
+        "--font": `${v.fontSize}px`,
+        "--bg-alpha": v.backgroundOpacity,
+        "--min-width": `${Math.round(v.width * (v.fontSize / 15))}px`,
+      } as React.CSSProperties)
     : undefined;
   const p = v?.panel ?? null;
   return (
@@ -53,9 +68,15 @@ function Hud() {
             </>
           )}
           {v.route && (
-            <div className={p ? "route footer" : "route"}>
-              {!p && <span className="title">ROUTE </span>}
-              {v.route}
+            <div className={p ? "route under" : "route"}>
+              {!p && <div className="title">ROUTE</div>}
+              {v.route.map((r, i) => (
+                <div key={i} className={`line stop ${r.kind}`}>
+                  <span className="mark">{MARKS[r.kind]}</span>
+                  <span className="text">{r.text}</span>
+                  {r.right && <span className="right">{r.right}</span>}
+                </div>
+              ))}
             </div>
           )}
         </div>
