@@ -165,29 +165,26 @@ mapped, and first discoveries this session.
 
 ### Route breadcrumbs
 
-The route shows as a compact trail. It has two levels:
+The route shows as one compact line. It uses two sources:
 
 - **Plan stops**, from the active ed-mcp plan: the systems, bodies and stations of a trip
   ("Synuefe XR-H, planet A 5 for bios, then Jameson Memorial to hand in").
 - **Jumps**, from `NavRoute.json`: the route plotted in the galaxy map to the next stop.
 
 ```
-ROUTE  ✓ Shinrarta ▸ ✓ Col 285 ▸ ● Synuefe XR-H A 5 bio ▸ Jameson Mem.
- ◂ HIP 2345 ▸ Synuefe EN-H ⛽ ▸ Synuefe XR-H     3 jumps · fuel 5
+ROUTE ✓ Col 285 ▸ ● Synuefe XR-H A 5 bio · 3 jumps ▸ Jameson Mem. ▸ …
 ```
 
-- Line 1 shows the plan stops. ✓ marks a stop that is done, ● the current stop. The trail shows the
-  previous stop, the current one and the next two. A long trail is shortened with `…` at the
-  ends.
-- Line 2 shows the plotted jumps: the last system, the next three, and the jumps left. ⛽ marks a
-  star that can be scooped (classes K, G, B, F, O, A and M). `fuel 5` is the number of jumps the
-  fuel in the tank allows, from `Status.json` and the last `Loadout`.
-- If there is a plan but no plotted route, only line 1 shows. If there is a plotted route and no
-  plan, only line 2 shows.
+- The line shows the previous stop, the current stop and the next stops that fit, with `…` where
+  the trail is cut. ✓ marks a stop that is done, ● the current stop.
+- The jumps left on the plotted route show after the current stop. The game's own HUD shows the
+  next jump, the star class and the fuel, so the panel does not repeat them.
+- If there is a plotted route and no plan, the line shows the destination and the jumps left:
+  `ROUTE ● Colonia · 41 jumps`.
 - **As a mode:** route mode is on when the plan has an active stop or `NavRoute.json` has jumps
   left, and no other mode is on. A jump never starts the other modes, so the route is what a
   normal trip shows.
-- **As a footer:** when another mode is on and a route is active, line 1 shows as a single dim
+- **As a footer:** when another mode is on and a route is active, the route line shows as a dim
   footer under that panel. Then the player can see where they go next while they finish the
   massacre stack or the bios.
 - On arrival at a stop's system, the next stop's system name is copied to the clipboard, ready
@@ -256,5 +253,3 @@ UI shows them well.
 
 - Which source for the species values and colony ranges has a licence that allows copying
   into ed-mcp? If none does, the values are typed in from the in-game Codex.
-- The fuel estimate needs the fuel use per jump for the ship's FSD and mass. ed-mcp has the
-  catalog for this; if it is not accurate enough, `fuel N` is left out of the first version.
