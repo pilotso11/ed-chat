@@ -22,10 +22,10 @@ win:
     - target: appx
       arch: x64
 appx:
-  identityName: pilotso11.ed-chat
+  identityName: pilotso11.EDChat
   publisher: CN=487CC7C3-30EC-4D28-B40A-D70D927AB5FC
   publisherDisplayName: pilotso11
-  # The manifest's Application Id cannot contain "-", which the identity name has.
+  # The Id inside the package; it must not contain "-".
   applicationId: EDChat
   displayName: ED Chat
   backgroundColor: transparent
