@@ -59,7 +59,7 @@ One Electron app. The main process does all Windows and CLI work. The renderer
 | StatusWatcher | Reads `Status.json` in the journal folder for the docked and in-danger flags. |
 | SettingsStore | Reads, checks and reloads `settings.json`. |
 | StateStore | Keeps state that the app writes, such as the position chosen by hotkey. |
-| HistoryStore | Saves each session's transcript as JSONL in `userData\history`. The history view shows the current session from memory; the files are an archive the app does not read. |
+| HistoryStore | Saves each conversation's transcript as JSONL in `userData\history`. The history view shows the current conversation from memory. When the app resumes a conversation, it reads the last 200 turns of that conversation's file back and adds new turns to it (see the 2026-11-14 session-memory spec). |
 
 Message flow: hotkey → FocusManager saves the game window → chat opens → Enter
 → `ClaudeSession.send()` → focus goes back to the game → the card shows the
