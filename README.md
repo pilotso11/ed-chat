@@ -224,8 +224,10 @@ the app's settings and set it with `gh secret set RELEASE_APP_KEY < key.pem`.
 
 ## Code signing
 
-The installer on GitHub Releases is not code signed. The Microsoft Store
-package is signed by Microsoft when the Store publishes it.
+The files on GitHub Releases are not code signed. The `.exe` is the installer
+described under Install. The `.appx` is the package for the Microsoft Store and
+is not meant to be installed directly; the Store signs it when it publishes it.
+ED Chat is not in the Store yet.
 
 ## Privacy
 
