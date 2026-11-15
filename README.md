@@ -202,9 +202,11 @@ Claude's replies. When the `claude` CLI stops, the log keeps its last error
 lines, cut to 160 characters each, and those can quote part of a request. Check
 the log before you share it.
 
-Each session's messages are also saved in `%APPDATA%\ed-chat\history\`, one
-file per session. The overlay does not read them back; they are an archive you
-can open or delete.
+Each conversation's messages are also saved in `%APPDATA%\ed-chat\history\`, one
+file per conversation. When ED Chat resumes a conversation, it reads the last 200
+turns of that file back into the history view and adds new turns to the same
+file. You can open or delete the files. If you delete the file of the last
+conversation, ED Chat still resumes it, but the history view starts empty.
 
 ## Releases
 
