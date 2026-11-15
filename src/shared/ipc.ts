@@ -1,3 +1,4 @@
+import type { HudView } from "../core/hud/hud.js";
 import type { ViewModel } from "../core/view.js";
 
 export const IPC = {
@@ -15,6 +16,8 @@ export const IPC = {
   closeKeys: "overlay:closeKeys",
   showMore: "overlay:showMore",
   answerApproval: "overlay:answerApproval",
+  hud: "hud:view",
+  hudHeight: "hud:height",
 } as const;
 
 export interface OverlayApi {
@@ -40,4 +43,7 @@ export interface OverlayApi {
   /** Show the whole reply, or go back to the short card. */
   showMore(): void;
   answerApproval(id: string, answer: "approve" | "deny" | "alwaysAllow"): void;
+  /** The activity panel window: its view, and its content height. */
+  onHud(cb: (v: HudView) => void): void;
+  reportHudHeight(h: number): void;
 }

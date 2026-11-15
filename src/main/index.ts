@@ -53,17 +53,25 @@ import {
   type HotkeyAction,
 } from "../core/hotkeys.js";
 import { Logger } from "../core/logger.js";
-import { setsKey, type Position, type Settings } from "../core/settings.js";
+import { HUD_MODES, keyList, setsKey, type Position, type Settings } from "../core/settings.js";
 import { StatusWatcher, fullscreenMode } from "../core/status.js";
 import {
   HistoryStore,
   SettingsStore,
   StateStore,
+  effectiveHudPosition,
   effectivePosition,
+  saveHudPosition,
   savePosition,
   type SavedState,
 } from "../core/stores.js";
 import { resumeId } from "../core/resume.js";
+import { openStores } from "ed-mcp/journal";
+import { edMcpSyncDir } from "../core/hud/edMcpConfig.js";
+import { HudFeed, type FeedData } from "../core/hud/feed.js";
+import { buildHud, currentMode } from "../core/hud/hud.js";
+import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
+import { currentStop } from "../core/hud/panels.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
 import { IPC } from "../shared/ipc.js";
 import {
@@ -146,6 +154,15 @@ async function main(): Promise<void> {
     process.env.ELECTRON_RENDERER_URL,
     path.join(import.meta.dirname, "../renderer/index.html"),
   );
+
+  // The activity panel: a second click-through window with its own place on screen.
+  const hudWin: BrowserWindow = createOverlayWindow(
+    path.join(import.meta.dirname, "../preload/index.cjs"),
+    process.env.ELECTRON_RENDERER_URL && `${process.env.ELECTRON_RENDERER_URL}/hud.html`,
+    path.join(import.meta.dirname, "../renderer/hud.html"),
+  );
+  let hudPosition: Position;
+  ({ position: hudPosition, saved } = effectiveHudPosition(settings.hud.position, saved));
 
   const viewSettings = (): Settings => ({ ...settings, position });
 
@@ -305,8 +322,11 @@ async function main(): Promise<void> {
     if (f.isGame) {
       win.setAlwaysOnTop(true, "screen-saver");
       win.moveTop();
+      hudWin.setAlwaysOnTop(true, "screen-saver");
+      hudWin.moveTop();
     }
     syncHotkeys(f);
+    renderHud();
   }
   let overlayFocused = false;
   function bindHotkeys(): void {
@@ -354,6 +374,166 @@ async function main(): Promise<void> {
     if (r.result === "retried") return log.log("info", "focus back: needed a second try");
     log.log("warn", `focus back failed; in front: ${r.foreground ?? "-"}`);
     flash("focus", REFOCUS, 5_000);
+  }
+
+  // Activity panel.
+  let hudHeight = 0;
+  let hudData: FeedData | null = null;
+  let hudMoving = false;
+  let hudMoveTimer: NodeJS.Timeout | undefined;
+  let hudShown = false;
+  let hudMode: string | null = null;
+  const HUD_MOVE_SECONDS = 15;
+
+  function placeHud(): void {
+    const display = chooseDisplay(
+      screen.getAllDisplays(),
+      screen.getPrimaryDisplay(),
+      hudPosition.display,
+    );
+    const width = Math.round(settings.hud.width * (settings.hud.fontSize / 15));
+    const size = { width, height: Math.max(8, Math.ceil(hudHeight)) };
+    const { x, y } = place(
+      hudPosition.anchor,
+      hudPosition.offsetX,
+      hudPosition.offsetY,
+      display.workArea,
+      size,
+    );
+    hudWin.setBounds({ x, y, ...size });
+  }
+
+  const hudChoice = () =>
+    saved.hudMode ? { mode: saved.hudMode.mode, at: Date.parse(saved.hudMode.at) } : null;
+
+  function renderHud(): void {
+    const input = {
+      journal: null,
+      status: null,
+      nav: null,
+      activity: null,
+      plan: null,
+      samples: new Map(),
+      ...hudData,
+      hotkey: hudChoice(),
+      settings: settings.hud,
+      now: Date.now(),
+    };
+    const k = settings.hotkeys;
+    const first = (x: Parameters<typeof keyList>[0]) => keyList(x)[0];
+    const moveHint = hudMoving
+      ? `Move panel: ${first(k.moveUp)} / ${first(k.moveDown)} / ${first(k.moveLeft)} / ${first(k.moveRight)} · monitor ${first(k.nextDisplay)}`
+      : null;
+    const view = buildHud(input, moveHint);
+    const mode = String(currentMode(input));
+    if (mode !== hudMode) {
+      hudMode = mode;
+      log.log("info", `panel mode: ${mode}`);
+    }
+    const f = focus?.current ?? null;
+    // Shown over the game only, like the hotkeys in game scope.
+    const gameUp = !f || f.isGame || f.isOverlay;
+    const show =
+      settings.hud.enabled &&
+      !saved.hudHidden &&
+      gameUp &&
+      (view.panel !== null || view.route !== null || hudMoving);
+    hudWin.webContents.send(IPC.hud, view);
+    if (show !== hudShown) {
+      hudShown = show;
+      if (show) hudWin.showInactive();
+      else hudWin.hide();
+      log.log("debug", `panel ${show ? "shown" : "hidden"} ${JSON.stringify(hudWin.getBounds())}`);
+    }
+  }
+
+  let hudFeed: HudFeed | null = null;
+  let hudPlans: ReturnType<typeof openStores>["plans"] | null = null;
+  async function openHudFeed(): Promise<void> {
+    let syncDir = settings.hud.edMcpDataDir;
+    if (!syncDir) {
+      const text = await readFile(path.join(os.homedir(), ".claude.json"), "utf8").catch(() => "");
+      syncDir = edMcpSyncDir(text);
+    }
+    const stores = openStores(
+      { ED_JOURNAL_DIR: journalDir(settings), ED_MCP_SYNC_DIR: syncDir ?? undefined },
+      { keep: HUD_EVENTS },
+    );
+    hudFeed = new HudFeed(stores, journalDir(settings), {
+      onError: (what, m) => log.log("warn", `panel ${what}: ${m}`),
+    });
+    hudPlans = stores.plans;
+    log.log("info", `panel data: ${syncDir ? "ed-mcp sync folder" : "ed-mcp config folder"}`);
+  }
+
+  let hudPolling = false;
+  let lastSystem: string | null = null;
+  async function pollHud(): Promise<void> {
+    if (hudPolling || !hudFeed || !settings.hud.enabled) return;
+    hudPolling = true;
+    try {
+      hudData = await hudFeed.poll();
+      const system = hudData.journal?.location.system ?? null;
+      if (system && lastSystem && system !== lastSystem) onArrival(system);
+      lastSystem = system;
+      renderHud();
+    } catch (err) {
+      log.log("warn", `panel: ${message(err)}`);
+    } finally {
+      hudPolling = false;
+    }
+  }
+
+  // Arriving in the current stop's system copies the next stop's system for the galaxy map.
+  function onArrival(system: string): void {
+    const plan = hudData?.plan;
+    if (!plan) return;
+    const i = currentStop(plan);
+    if (i === null || plan.stops[i]!.system.toLowerCase() !== system.toLowerCase()) return;
+    const next = plan.stops.find(
+      (s, j) => j !== i && s.status === "todo" && s.system.toLowerCase() !== system.toLowerCase(),
+    );
+    if (!next) return;
+    clipboard.writeText(next.system);
+    flash("copy", `📋 next stop copied: ${next.system}`, 4_000);
+  }
+
+  async function stepRoute(dir: 1 | -1): Promise<void> {
+    const plan = hudData?.plan;
+    if (!plan || !hudPlans) return flash("route", "ⓘ no active route plan", 3_000);
+    const i = currentStop(plan);
+    if (dir === 1) {
+      if (i === null) return flash("route", "ⓘ route finished", 3_000);
+      await hudPlans.updateStop(plan.id, { index: i }, { status: "done" });
+    } else {
+      // The last finished stop goes back to todo.
+      const done = plan.stops.map((s, j) => ({ s, j })).filter(({ s }) => s.status !== "todo");
+      const prev = done.at(-1);
+      if (!prev) return flash("route", "ⓘ at the first stop", 3_000);
+      await hudPlans.updateStop(plan.id, { index: prev.j }, { status: "todo" });
+    }
+    await pollHud();
+    const now = hudData?.plan;
+    const cur = now ? currentStop(now) : null;
+    if (now && cur !== null) {
+      clipboard.writeText(now.stops[cur]!.system);
+      flash("copy", `📋 copied ${now.stops[cur]!.system}`, 3_000);
+    }
+  }
+
+  function setHudMoving(on: boolean): void {
+    clearTimeout(hudMoveTimer);
+    hudMoving = on;
+    if (on) hudMoveTimer = setTimeout(() => setHudMoving(false), HUD_MOVE_SECONDS * 1000);
+    renderHud();
+  }
+
+  function moveHud(next: Position): void {
+    hudPosition = next;
+    saved = saveHudPosition(settings.hud.position, saved, hudPosition);
+    writeState();
+    placeHud();
+    setHudMoving(true);
   }
 
   // Claude.
@@ -707,15 +887,39 @@ async function main(): Promise<void> {
       case "copyChip":
         return copyChip(a.n);
       case "move":
+        if (hudMoving) return moveHud({ ...hudPosition, anchor: step(hudPosition.anchor, a.dir) });
         return movePosition({ ...position, anchor: step(position.anchor, a.dir) });
       case "nextDisplay": {
         const all = screen.getAllDisplays();
+        const pos = hudMoving ? hudPosition : position;
         const now =
-          position.display === "primary"
+          pos.display === "primary"
             ? all.findIndex((d) => d.id === screen.getPrimaryDisplay().id)
-            : position.display;
-        return movePosition({ ...position, display: (Math.max(0, now) + 1) % all.length });
+            : pos.display;
+        const next = { ...pos, display: (Math.max(0, now) + 1) % all.length };
+        return hudMoving ? moveHud(next) : movePosition(next);
       }
+      case "hudToggle":
+        saved = { ...saved, hudHidden: !saved.hudHidden };
+        writeState();
+        flash("hud", saved.hudHidden ? "ⓘ activity panel hidden" : "ⓘ activity panel shown", 2_000);
+        return renderHud();
+      case "hudMode": {
+        const enabled = HUD_MODES.filter((m) => settings.hud.modes[m]);
+        const next = cycleMode(saved.hudMode?.mode ?? "auto", enabled);
+        const { hudMode: _m, ...rest } = saved;
+        saved =
+          next === "auto"
+            ? { ...rest, hudHidden: false }
+            : { ...rest, hudHidden: false, hudMode: { mode: next, at: new Date().toISOString() } };
+        writeState();
+        flash("hud", `ⓘ panel: ${next}`, 2_000);
+        return renderHud();
+      }
+      case "hudMove":
+        return setHudMoving(!hudMoving);
+      case "route":
+        return stepRoute(a.dir);
     }
   }
 
@@ -773,6 +977,16 @@ async function main(): Promise<void> {
     const answer = answerArg(a);
     if (typeof id === "string" && answer) answerApproval(id, answer);
   });
+  ipcMain.on(IPC.hudHeight, (_e, v: unknown) => {
+    const h = heightArg(v);
+    if (h === null) return;
+    hudHeight = h;
+    placeHud();
+  });
+  hudWin.webContents.on("did-finish-load", renderHud);
+  hudWin.webContents.on("console-message", (e) => {
+    if (e.level === "error") log.log("warn", `panel renderer: ${e.message}`);
+  });
   ipcMain.on(IPC.height, (_e, v: unknown) => {
     const h = heightArg(v);
     if (h === null) return;
@@ -789,6 +1003,10 @@ async function main(): Promise<void> {
     dispatch({ type: "flags", flags }),
   );
   status.start();
+
+  await openHudFeed().catch((err) => log.log("warn", `panel: ${message(err)}`));
+  const hudTimer = setInterval(() => void pollHud(), 1_000);
+  void pollHud();
 
   const displayXml = path.join(
     process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"),
@@ -811,6 +1029,8 @@ async function main(): Promise<void> {
 
   // Settings, live.
   function applySettings(): void {
+    placeHud();
+    renderHud();
     bindHotkeys();
     syncHotkeys(focus?.current ?? null);
     approval.setTimeoutMs(settings.approval.timeoutSeconds * 1000);
@@ -825,7 +1045,14 @@ async function main(): Promise<void> {
     const old = settings;
     settings = settingsStore.settings;
     ({ position, saved } = effectivePosition(settings.position, saved));
+    ({ position: hudPosition, saved } = effectiveHudPosition(settings.hud.position, saved));
     writeState();
+    if (
+      journalDir(old) !== journalDir(settings) ||
+      old.hud.edMcpDataDir !== settings.hud.edMcpDataDir
+    ) {
+      void openHudFeed().then(pollHud, (err) => log.log("warn", `panel: ${message(err)}`));
+    }
     if (JSON.stringify(old.claude) !== JSON.stringify(settings.claude)) {
       const c = claudeCommand(settings);
       dispatch({ type: "notice", key: "claude", text: c ? null : noClaude() });
@@ -935,8 +1162,12 @@ async function main(): Promise<void> {
   trayIcon.on("click", popTray);
   trayIcon.on("right-click", popTray);
 
-  screen.on("display-removed", reposition);
-  screen.on("display-metrics-changed", reposition);
+  const placeAll = () => {
+    reposition();
+    placeHud();
+  };
+  screen.on("display-removed", placeAll);
+  screen.on("display-metrics-changed", placeAll);
   app.on("second-instance", () => {
     if (!state.visible) dispatch({ type: "toggleVisible" });
   });
@@ -951,6 +1182,7 @@ async function main(): Promise<void> {
     globalShortcut.unregisterAll();
     focus?.stop();
     status.stop();
+    clearInterval(hudTimer);
     settingsStore.unwatch();
     session?.stop();
     void approval.stop();

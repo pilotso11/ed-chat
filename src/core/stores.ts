@@ -7,12 +7,14 @@ import type { SavedSession } from "./resume.js";
 import {
   DEFAULTS_FILE,
   DEFAULT_SETTINGS,
+  HUD_MODES,
   PositionSchema,
   SCHEMA_FILE,
   defaultSettingsText,
   newSettingsText,
   parseSettings,
   settingsSchemaText,
+  type HudModeId,
   type Position,
   type Settings,
 } from "./settings.js";
@@ -144,12 +146,22 @@ export interface SavedState {
   positionBase?: string;
   iconMode?: boolean;
   session?: SavedSession;
+  /** The activity panel's position, chosen with the move keys, and its settings base. */
+  hudPosition?: Position;
+  hudPositionBase?: string;
+  /** The panel mode chosen with the hotkey; absent means automatic. */
+  hudMode?: { mode: HudModeId | "off"; at: string };
+  hudHidden?: boolean;
 }
 
 const SavedStateSchema = z.object({
   position: PositionSchema.optional(),
   positionBase: z.string().optional(),
   iconMode: z.boolean().optional(),
+  hudPosition: PositionSchema.optional(),
+  hudPositionBase: z.string().optional(),
+  hudMode: z.object({ mode: z.enum([...HUD_MODES, "off"]), at: z.string() }).optional(),
+  hudHidden: z.boolean().optional(),
   session: z
     .object({
       id: z.string().min(1),
@@ -181,6 +193,26 @@ export function savePosition(
   position: Position,
 ): SavedState {
   return { ...saved, position, positionBase: JSON.stringify(settingsPos) };
+}
+
+// The activity panel's position works the same way, with its own keys.
+export function effectiveHudPosition(
+  settingsPos: Position,
+  saved: SavedState,
+): { position: Position; saved: SavedState } {
+  if (saved.hudPosition && saved.hudPositionBase === JSON.stringify(settingsPos)) {
+    return { position: saved.hudPosition, saved };
+  }
+  const { hudPosition: _p, hudPositionBase: _b, ...rest } = saved;
+  return { position: settingsPos, saved: rest };
+}
+
+export function saveHudPosition(
+  settingsPos: Position,
+  saved: SavedState,
+  position: Position,
+): SavedState {
+  return { ...saved, hudPosition: position, hudPositionBase: JSON.stringify(settingsPos) };
 }
 
 export class StateStore {

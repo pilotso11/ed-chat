@@ -14,7 +14,11 @@ export type HotkeyAction =
   | { type: "cancel" }
   | { type: "copyChip"; n: number }
   | { type: "move"; dir: Direction }
-  | { type: "nextDisplay" };
+  | { type: "nextDisplay" }
+  | { type: "hudToggle" }
+  | { type: "hudMode" }
+  | { type: "hudMove" }
+  | { type: "route"; dir: 1 | -1 };
 
 export interface Binding {
   name: string;
@@ -43,6 +47,11 @@ export function bindings(h: Settings["hotkeys"]): Binding[] {
     ...b("moveLeft", h.moveLeft, { type: "move", dir: "left" }),
     ...b("moveRight", h.moveRight, { type: "move", dir: "right" }),
     ...b("nextDisplay", h.nextDisplay, { type: "nextDisplay" }),
+    ...b("hudToggle", h.hudToggle, { type: "hudToggle" }),
+    ...b("hudMode", h.hudMode, { type: "hudMode" }),
+    ...b("hudMove", h.hudMove, { type: "hudMove" }),
+    ...b("routeNext", h.routeNext, { type: "route", dir: 1 }),
+    ...b("routePrev", h.routePrev, { type: "route", dir: -1 }),
     ...chipPatterns(h).flatMap((p) =>
       Array.from({ length: 9 }, (_, i) => ({
         name: `copyChip${i + 1}`,
@@ -207,6 +216,11 @@ const LABELS: [keyof Settings["hotkeys"], string][] = [
   ["cancel", "Stop reply"],
   ["showHistory", "History"],
   ["toggleIcon", "Icon mode"],
+  ["hudToggle", "Activity panel"],
+  ["hudMode", "Panel mode"],
+  ["hudMove", "Move panel (then arrows)"],
+  ["routeNext", "Next route stop"],
+  ["routePrev", "Previous route stop"],
 ];
 
 /** The hotkey list for the keys card; failed holds the keys another app has taken. */

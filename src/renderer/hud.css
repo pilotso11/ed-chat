@@ -1,0 +1,88 @@
+html,
+body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: #f2e6d0;
+  user-select: none;
+}
+.hud {
+  font-size: var(--font, 15px);
+  line-height: 1.35;
+  /* The less background, the stronger the outline, so text stays readable over bright stars. */
+  --halo: calc(1 - var(--bg-alpha, 0.55));
+  text-shadow:
+    0 0 2px rgba(0, 0, 0, var(--halo)),
+    0 0 4px rgba(0, 0, 0, var(--halo));
+}
+.panel {
+  background: rgba(10, 12, 16, var(--bg-alpha, 0.55));
+  border: 1px solid rgba(255, 140, 0, 0.45);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+.panel.moving {
+  border: 2px dashed #ffb347;
+}
+.hint {
+  color: #ffb347;
+  font-size: 0.8em;
+}
+.head,
+.line {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+.title {
+  color: #ff8c00;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.subtitle,
+.text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.right {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.row.accent {
+  color: #ffd08a;
+}
+.row.good {
+  color: #8fe388;
+}
+.row.warn {
+  color: #ffb347;
+}
+.row.dim,
+.footer {
+  color: rgba(242, 230, 208, 0.6);
+}
+.footer {
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.route {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 1px 0 3px;
+}
+.bar > div {
+  height: 100%;
+  background: #ff8c00;
+}
+.row.good .bar > div {
+  background: #8fe388;
+}

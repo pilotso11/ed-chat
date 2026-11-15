@@ -39,18 +39,50 @@ const HotkeysSchema = z.strictObject({
   moveLeft: keys.default("Ctrl+Alt+Left"),
   moveRight: keys.default("Ctrl+Alt+Right"),
   nextDisplay: keys.default("Ctrl+Alt+M"),
+  hudToggle: keys.default("Ctrl+Alt+P"),
+  hudMode: keys.default("Ctrl+Alt+Shift+P"),
+  hudMove: keys.default("Ctrl+Alt+Home"),
+  routeNext: keys.default("Ctrl+Alt+PageDown"),
+  routePrev: keys.default("Ctrl+Alt+PageUp"),
 });
 
 // Windows turns Shift+numpad digit into End, Down and so on, so the numpad keys use Ctrl only.
 export const NUMPAD_CHIP = "Ctrl+num{n}";
 
-export const PositionSchema = z.strictObject({
-  anchor: z.enum(ANCHORS).default("bottom-left"),
-  offsetX: z.number().int().min(0).default(24),
-  offsetY: z.number().int().min(0).default(24),
-  display: z.union([z.literal("primary"), z.number().int().min(0)]).default("primary"),
-});
+const positionSchema = (anchor: Anchor, offsetY: number) =>
+  z.strictObject({
+    anchor: z.enum(ANCHORS).default(anchor),
+    offsetX: z.number().int().min(0).default(24),
+    offsetY: z.number().int().min(0).default(offsetY),
+    display: z.union([z.literal("primary"), z.number().int().min(0)]).default("primary"),
+  });
+export const PositionSchema = positionSchema("bottom-left", 24);
 export type Position = z.infer<typeof PositionSchema>;
+
+export const HUD_MODES = ["massacre", "exploration", "exobiology", "route"] as const;
+export type HudModeId = (typeof HUD_MODES)[number];
+
+const HudSchema = z.strictObject({
+  enabled: z.boolean().default(true),
+  position: positionSchema("top-right", 120).prefault({}),
+  width: z.number().int().min(200).max(1200).default(380),
+  fontSize: z.number().min(8).max(48).default(15),
+  backgroundOpacity: z.number().min(0).max(1).default(0.55),
+  modes: z
+    .strictObject({
+      massacre: z.boolean().default(true),
+      exploration: z.boolean().default(true),
+      exobiology: z.boolean().default(true),
+      route: z.boolean().default(true),
+    })
+    .prefault({}),
+  // Bodies worth less than this when mapped are left off the exploration panel, unless they
+  // have biological or geological signals.
+  valuableMin: z.number().int().min(0).default(500_000),
+  // The ed-mcp sync folder, for the activity note and plans. null: read it from the ed-mcp
+  // entry in Claude Code's ~/.claude.json, else ed-mcp's own config folder.
+  edMcpDataDir: z.string().min(1).nullable().default(null),
+});
 
 export const SettingsSchema = z.strictObject({
   hotkeys: HotkeysSchema.prefault({}),
@@ -93,6 +125,7 @@ export const SettingsSchema = z.strictObject({
     })
     .prefault({}),
   journalDir: z.string().min(1).nullable().default(null),
+  hud: HudSchema.prefault({}),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

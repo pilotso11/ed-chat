@@ -119,6 +119,45 @@ The status line shows one message at a time. **+2** after it means two more are
 waiting; click it to see them all. A message with a command in it, such as
 `run claude update`, copies the command when you click it.
 
+## Activity panel
+
+A second, smaller panel shows what matters for what you are doing. It reads the
+game journal directly and never calls Claude. It shows only while the game is in
+front.
+
+- **Massacre:** each target faction, the kills still needed for the stack, a bar
+  for each faction that gave you missions, missions ready to hand in, and the
+  next expiry.
+- **Exploration:** the discovery scan progress and the bodies worth the time:
+  Earth-like, water and ammonia worlds, terraformable planets, and bodies with
+  biological or geological signals. Each shows its distance, its value and
+  whether it still needs a scan or a map. ★ marks a first discovery.
+- **Exobiology:** on a body with biological signals, each species with its
+  samples (2/3) and value, the genera not started yet, and, while you sample, the
+  distance from your last sample against the minimum distance for that genus.
+- **Route:** one line with the stops of the active ed-mcp plan and the jumps left
+  on the plotted route. It shows under the other panels too. When you arrive in
+  a stop's system, the next stop's system is copied for the galaxy map.
+
+The mode changes by itself. Accepting a massacre mission turns on massacre mode
+until the stack is handed in. A discovery scan or a detailed scan turns on
+exploration, and five jumps with no scan turn it off again. Approaching a body
+with biological signals, or taking a sample, turns on exobiology. A jump alone
+starts nothing. Telling Claude what you are doing ("I'm doing massacres") sets
+the ed-mcp activity note, which the panel follows.
+
+| Key | Action |
+| --- | --- |
+| Ctrl+Alt+P | Show or hide the panel |
+| Ctrl+Alt+Shift+P | Mode: auto, massacre, exploration, exobiology, route, off |
+| Ctrl+Alt+Home | Move the panel: for 15 seconds the move keys move the panel, not the chat |
+| Ctrl+Alt+PageDown / PageUp | Mark the current route stop done / go back one stop, and copy the stop's system |
+
+The panel uses the same activity note and plans as ed-mcp. ED Chat finds the
+ed-mcp sync folder in Claude Code's `~/.claude.json` (it reads only
+`ED_MCP_SYNC_DIR`, never the password). Set `hud.edMcpDataDir` if it is
+somewhere else.
+
 ## Permissions
 
 On first run the overlay asks how Claude should run tools, and saves the answer
@@ -185,6 +224,13 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 | `claude.extraArgs` | `[]` | More arguments for `claude` |
 | `claude.resumeHours` | `12` | Resume the last conversation when ED Chat starts within this many hours. `0` turns it off |
 | `journalDir` | `null` | The game's journal folder; `null` uses Saved Games |
+| `hud.enabled` | `true` | Show the activity panel |
+| `hud.position` | `top-right`, 24, 120 | Where the panel sits, like `position` |
+| `hud.width` | `380` | Panel width in pixels at font size 15 |
+| `hud.fontSize` / `hud.backgroundOpacity` | `15` / `0.55` | Panel text size and background |
+| `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology` or `route` |
+| `hud.valuableMin` | `500000` | Bodies worth less when mapped are left off the exploration panel, unless they have signals |
+| `hud.edMcpDataDir` | `null` | The ed-mcp sync folder; `null` finds it in `~/.claude.json` |
 
 With the chat open you can also drag the overlay by its status line. It snaps
 to the nearest edge or corner when you let go.
