@@ -20,11 +20,37 @@ export function loadWin32(): Win32 {
     "int __stdcall QueryFullProcessImageNameW(intptr_t h, uint32_t flags, _Out_ uint8_t *name, _Inout_ uint32_t *size)",
   );
   const CloseHandle = kernel32.func("int __stdcall CloseHandle(intptr_t h)");
+  // INPUT with a MOUSEINPUT: type, then dx, dy, mouseData, dwFlags, time, dwExtraInfo.
+  const MOUSEINPUT = koffi.struct("MOUSEINPUT", {
+    dx: "int32_t",
+    dy: "int32_t",
+    mouseData: "uint32_t",
+    dwFlags: "uint32_t",
+    time: "uint32_t",
+    dwExtraInfo: "uintptr_t",
+  });
+  const INPUT = koffi.struct("INPUT", {
+    type: "uint32_t",
+    mi: MOUSEINPUT,
+    // The union in INPUT is as large as KEYBDINPUT or HARDWAREINPUT; MOUSEINPUT is the largest.
+  });
+  const SendInput = user32.func(
+    "uint32_t __stdcall SendInput(uint32_t n, INPUT *inputs, int size)",
+  );
+  const INPUT_MOUSE = 0;
 
   return {
     foreground: () => Number(GetForegroundWindow()),
     isWindow: (h) => IsWindow(h) !== 0,
     setForeground: (h) => SetForegroundWindow(h) !== 0,
+    unlockForeground() {
+      // A relative mouse move of 0 by 0: no flags, so no movement and no button.
+      const input = {
+        type: INPUT_MOUSE,
+        mi: { dx: 0, dy: 0, mouseData: 0, dwFlags: 0, time: 0, dwExtraInfo: 0 },
+      };
+      SendInput(1, input, koffi.sizeof(INPUT));
+    },
     processName(h) {
       const pid = [0];
       GetWindowThreadProcessId(h, pid);

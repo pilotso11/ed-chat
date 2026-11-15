@@ -11,6 +11,9 @@ function fakeWin32() {
     ]),
     refuse: 0,
     calls: [] as number[],
+    unlocks: 0,
+    // Windows reports success but the window stays in the background, this many times.
+    ignore: 0,
   };
   const api: Win32 = {
     foreground: () => w.fg,
@@ -21,10 +24,17 @@ function fakeWin32() {
         w.refuse--;
         return false;
       }
+      if (w.ignore > 0) {
+        w.ignore--;
+        return true;
+      }
       w.fg = h;
       return true;
     },
     processName: (h) => w.names.get(h) ?? null,
+    unlockForeground: () => {
+      w.unlocks++;
+    },
   };
   return { w, api };
 }
@@ -126,5 +136,118 @@ describe("FocusManager", () => {
     w.windows.delete(20);
     expect(await f.restore()).toBe(true);
     expect(w.calls).toEqual([]);
+  });
+
+  describe("settle", () => {
+    const opened = async (w: ReturnType<typeof fakeWin32>["w"], f: FocusManager) => {
+      w.fg = 10;
+      f.poll();
+      f.save();
+      w.fg = 99;
+    };
+
+    it("is ok when the game has focus after the chat closes", async () => {
+      const { w, f } = setup();
+      await opened(w, f);
+      expect(await f.restore()).toBe(true);
+      expect(await f.settle()).toEqual({ result: "ok" });
+      expect(w.unlocks).toBe(0);
+    });
+
+    it("unlocks and tries again when Windows reported success but kept the game behind", async () => {
+      const { w, f } = setup();
+      await opened(w, f);
+      w.ignore = 1;
+      expect(await f.restore()).toBe(true);
+      expect(w.fg).toBe(99);
+      expect(await f.settle()).toEqual({ result: "retried" });
+      expect(w.unlocks).toBe(1);
+      expect(w.fg).toBe(10);
+    });
+
+    it("names the window in front when the second try fails too", async () => {
+      const { w, f } = setup();
+      await opened(w, f);
+      w.ignore = 2;
+      await f.restore();
+      expect(await f.settle()).toEqual({ result: "failed", foreground: "ED Chat" });
+    });
+
+    it("names another program in front, or none", async () => {
+      const a = setup();
+      await opened(a.w, a.f);
+      a.w.ignore = 2;
+      a.w.fg = 20;
+      await a.f.restore();
+      expect(await a.f.settle()).toEqual({ result: "failed", foreground: "notepad.exe" });
+
+      const b = setup();
+      await opened(b.w, b.f);
+      b.w.ignore = 2;
+      b.w.fg = 0;
+      await b.f.restore();
+      expect(await b.f.settle()).toEqual({ result: "failed", foreground: null });
+    });
+
+    it("leaves focus alone when the chat opened again during the wait", async () => {
+      const { w } = setup();
+      let wake = () => {};
+      const waiting = new Promise<void>((r) => (wake = r));
+      const f = new FocusManager(
+        {
+          foreground: () => w.fg,
+          isWindow: () => true,
+          setForeground: (h) => {
+            w.calls.push(h);
+            w.fg = h;
+            return true;
+          },
+          processName: () => null,
+          unlockForeground: () => {
+            w.unlocks++;
+          },
+        },
+        { overlayHwnd: () => 99, onChange: () => {}, sleep: () => waiting },
+      );
+      w.fg = 10;
+      f.poll();
+      f.save();
+      w.fg = 99;
+      await f.restore();
+      const check = f.settle();
+      // During the wait the player, back in the game, presses the chat hotkey again.
+      w.fg = 10;
+      f.save();
+      w.fg = 99;
+      w.calls.length = 0;
+      wake();
+      expect(await check).toBeNull();
+      expect(w.calls).toEqual([]);
+      expect(w.fg).toBe(99);
+    });
+
+    it("forgets an earlier restore when the next close restores nothing", async () => {
+      const { w, f } = setup();
+      await opened(w, f);
+      await f.restore();
+      // The next close has no saved window; its check must not act on the old one.
+      w.fg = 99;
+      await f.restore();
+      expect(await f.settle()).toBeNull();
+    });
+
+    it("does nothing when nothing was restored", async () => {
+      const { f } = setup();
+      expect(await f.settle()).toBeNull();
+    });
+
+    it("unlocks before the second try when Windows refused the first", async () => {
+      const { w, f } = setup();
+      await opened(w, f);
+      w.refuse = 1;
+      expect(await f.restore()).toBe(true);
+      expect(w.unlocks).toBe(1);
+      expect(w.fg).toBe(10);
+    });
   });
 });

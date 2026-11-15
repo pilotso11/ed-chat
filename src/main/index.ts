@@ -343,6 +343,19 @@ async function main(): Promise<void> {
     return false;
   }
 
+  /**
+   * After the chat window has closed: Windows can report the hand-back as done and still leave
+   * the game in the background, so check, retry once, and say so when it still fails.
+   */
+  async function settleFocus(): Promise<void> {
+    const r = await focus?.settle();
+    if (!r) return;
+    if (r.result === "ok") return;
+    if (r.result === "retried") return log.log("info", "focus back: needed a second try");
+    log.log("warn", `focus back failed; in front: ${r.foreground ?? "-"}`);
+    flash("focus", REFOCUS, 5_000);
+  }
+
   // Claude.
   const approval = new ApprovalServer({
     timeoutMs: settings.approval.timeoutSeconds * 1000,
@@ -595,8 +608,9 @@ async function main(): Promise<void> {
     if (!t) return false;
     if (t === "/new") {
       newConversation();
-      await giveFocusBack();
+      const ok = await giveFocusBack();
       dispatch({ type: "closeChat" });
+      if (ok) void settleFocus();
       return true;
     }
     if (!session) {
@@ -612,8 +626,9 @@ async function main(): Promise<void> {
     // "sent" first, so stream events that arrive during a focus retry land on this turn.
     dispatch({ type: "sent", text: t });
     // Give focus back before the window stops being focusable, while the overlay still holds the foreground.
-    await giveFocusBack();
+    const ok = await giveFocusBack();
     dispatch({ type: "closeChat" });
+    if (ok) void settleFocus();
     return true;
   }
 
@@ -645,7 +660,9 @@ async function main(): Promise<void> {
       case "stepRest": {
         // A refused focus leaves the overlay shown, so its "click the game" notice can be read.
         const keepShown = !(await giveFocusBack());
-        return dispatch({ ...action, keepShown });
+        dispatch({ ...action, keepShown });
+        if (!keepShown) void settleFocus();
+        return;
       }
       default:
         dispatch(action);
@@ -712,7 +729,10 @@ async function main(): Promise<void> {
     // Read at the press, before the focus wait (see escapeAction).
     const action = escapeAction(state);
     // A refused focus leaves the overlay shown, so its "click the game" notice can be read.
-    void giveFocusBack().then((ok) => dispatch({ ...action, keepShown: !ok }));
+    void giveFocusBack().then((ok) => {
+      dispatch({ ...action, keepShown: !ok });
+      if (ok) void settleFocus();
+    });
   });
   ipcMain.on(IPC.copyChip, (_e, v: unknown) => {
     const n = chipArg(v);
