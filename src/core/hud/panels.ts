@@ -554,15 +554,19 @@ export function explorationPanel(input: {
     ...input.bio.map((b) => b.body_id),
     ...(known ?? []).filter((k) => k.bioSignals > 0).map((k) => k.bodyId),
   ]);
+  let geoOnly = 0;
   for (const b of x.bodies) {
     if (b.type?.endsWith(" star")) continue;
     // Listed with the highlights or the bio planets instead.
     if (isHighlight(b.type, b.terraformable) || bioIds.has(b.body_id)) continue;
     const geo = b.signals.filter((s) => /geo/i.test(s.type)).reduce((n, s) => n + s.count, 0);
     const value = b.value_mapped ?? b.value_scanned ?? 0;
-    // Bodies worth a tenth of valuableMin are listed too, so that a small HMC world worth 60k
-    // ranks above an icy moon worth 4k that has geological signals.
-    if (value < input.valuableMin / 10 && !geo) continue;
+    // Bodies not worth mapping are left off. Those with geological signals are only counted, for
+    // a player filling the codex.
+    if (value < input.valuableMin) {
+      if (geo) geoOnly++;
+      continue;
+    }
     const bits = [shortType(b.type) + (b.terraformable ? " tf" : ""), geo ? `${geo} geo` : null];
     const done = b.mapped_by_you;
     items.push({
@@ -574,7 +578,7 @@ export function explorationPanel(input: {
       ]
         .filter(Boolean)
         .join("  "),
-      tone: done ? "dim" : value >= input.valuableMin ? "accent" : undefined,
+      tone: done ? "dim" : "accent",
       done,
       value,
     });
@@ -598,7 +602,14 @@ export function explorationPanel(input: {
     ...items.slice(0, room).map(({ done: _d, value: _v, ...r }) => r),
   ];
   if (items.length > room) rows.push({ text: `+${items.length - room} more`, tone: "dim" });
-  if (!rows.length) rows.push({ text: "Nothing valuable scanned yet", tone: "dim" });
+  if (!top.length && !items.length) {
+    const all = x.discovery.all_bodies_found;
+    rows.push({ text: all ? "Nothing worth mapping" : "Nothing worth mapping yet", tone: "dim" });
+  }
+  if (geoOnly) {
+    const s = geoOnly === 1 ? "body" : "bodies";
+    rows.push({ text: `${geoOnly} ${s} with geological signals`, tone: "dim" });
+  }
   const d = x.discovery;
   // The game's body count leaves out belt clusters, which have no planet class or star type.
   const scanned = x.bodies.filter((b) => b.type !== null).length;

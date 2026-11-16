@@ -340,7 +340,7 @@ describe("bio rows", () => {
     expect(panel(null).rows[0]!.text).not.toMatch(/Not on Spansh/);
   });
 
-  it("ranks bodies by value, and counts bodies as the game does", () => {
+  it("lists only bodies worth mapping, and counts bodies as the game does", () => {
     const body = (id: number, type: string | null, value: number, geo = 0) => ({
       body: `Sys ${id}`,
       body_id: id,
@@ -378,7 +378,10 @@ describe("bio rows", () => {
       valuableMin: 500_000,
       known: null,
     });
-    expect(p.rows.map((r) => r.text)).toEqual(["2  HMC", "1  Icy · 2 geo"]);
+    expect(p.rows.map((r) => r.text)).toEqual([
+      "Nothing worth mapping",
+      "1 body with geological signals",
+    ]);
     expect(p.right).toBe("3/3 bodies ✓");
   });
 

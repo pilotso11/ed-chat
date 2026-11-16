@@ -198,9 +198,10 @@ Session: 14 jumps · 95 scanned · 10 mapped · 24 ★
   journal's `WasDiscovered`, `WasMapped` and `WasFootfalled` decide.
 - Bio planets show the likely species of each genus (marked ?) and what they are likely worth.
   They are grey before the scan, plain after it, and green with ✓ once every species is analysed.
-- Other bodies show only when worth the time: over a tenth of `hud.valuableMin` when mapped, or
-  with geological signals, most valuable first. Those over `hud.valuableMin` are highlighted. The
-  body count leaves out belt clusters, as the game's count does.
+- Other bodies show only when worth mapping: over `hud.valuableMin` when mapped, most valuable
+  first. Bodies under it with geological signals are counted on one dim line, and a system with
+  nothing to list says "Nothing worth mapping". The body count leaves out belt clusters, as the
+  game's count does.
 - ★ marks a first discovery and ×5 a first-footfall bonus. A system Spansh does not know gets
   "★ Not on Spansh: may be undiscovered" until the arrival star's scan settles it.
 - The footer shows the unsold cartographic and bio value and the session counts.
