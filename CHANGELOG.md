@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/pilotso11/ed-chat/compare/v0.3.0...v0.3.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* a bio planet's species go on their own line, which wraps ([#38](https://github.com/pilotso11/ed-chat/issues/38)) ([67babd7](https://github.com/pilotso11/ed-chat/commit/67babd75b72b199e6b54d24d376a90825e18faff))
+
 ## [0.3.0](https://github.com/pilotso11/ed-chat/compare/v0.2.1...v0.3.0) (2026-11-16)
 
 
