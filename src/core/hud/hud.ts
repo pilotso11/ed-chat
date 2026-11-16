@@ -23,6 +23,7 @@ import {
   type NavRoute,
   type PanelView,
   type Point,
+  wasFootfalled,
 } from "./panels.js";
 
 /** What the panel window shows. */
@@ -118,6 +119,7 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
         samples: input.samples,
         here,
         totals,
+        footfall: wasFootfalled(j.events, address, body.body_id),
         // Other planets worth a visit after this one.
         highlights: [
           ...highlightRows(system, x, input.known),

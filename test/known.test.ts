@@ -29,7 +29,14 @@ const dump = {
         terraformingState: "Terraformable",
       },
       { type: "Planet", name: "Sys 3", bodyId: 3, subType: "Icy body", distanceToArrival: 900 },
-      { type: "Planet", name: "Sys 4", bodyId: 4, subType: "Water world", distanceToArrival: 40 },
+      {
+        type: "Planet",
+        name: "Sys 4",
+        bodyId: 4,
+        subType: "Water world",
+        distanceToArrival: 40,
+        earthMasses: 0.5,
+      },
     ],
   },
 };
@@ -101,7 +108,8 @@ describe("highlight rows", () => {
       ],
     } as Exploration;
     expect(highlightRows("Sys", x, parseSpanshDump(dump))).toEqual([
-      { text: "4  Water world", right: "40 ls  not scanned", tone: "dim" },
+      // Before the scan, from no bonus to first discovered and first mapped.
+      { text: "4  Water world", right: "40 ls  ~524k–1.5M  not scanned", tone: "dim" },
       { text: "2  HMC tf", right: "90 ls  not scanned", tone: "dim" },
       { text: "1  Earth-like", right: "500 ls  1.0M  map", tone: "good" },
     ]);
@@ -154,7 +162,8 @@ describe("bio rows", () => {
     expect(rows).toEqual([
       {
         text: "5  2 bio · Clypeus, Bacterium",
-        right: "300 ls  ~9.4M  not scanned",
+        // Until the scan says whether anyone has landed, up to the first-footfall bonus.
+        right: "300 ls  ~9.4–47.1M  not scanned",
         tone: "dim",
       },
       { text: "7  3 bio", right: "20 ls  ?  not scanned", tone: "dim" },
@@ -210,8 +219,37 @@ describe("bio rows", () => {
       bioMin: 5_000_000,
     });
     expect(rows).toEqual([
-      { text: "8  1 bio · Stratum Tectonicas?", right: "50 ls  ~19.0M  not scanned", tone: "dim" },
+      {
+        text: "8  1 bio · Stratum Tectonicas?",
+        right: "50 ls  ~19.0–95.1M  not scanned",
+        tone: "dim",
+      },
     ]);
+  });
+
+  it("pays the first-footfall bonus once the scan says nobody has landed", () => {
+    const scan = (WasFootfalled: boolean) => [
+      {
+        event: "Scan",
+        timestamp: "2026-11-16T00:00:00Z",
+        SystemAddress: 42,
+        BodyID: 5,
+        BodyName: "Sys 5",
+        WasFootfalled,
+      },
+    ];
+    const row = (events: ReturnType<typeof scan>) =>
+      bioRows({
+        system: "Sys",
+        address: 42,
+        events,
+        exploration: null,
+        bio: [],
+        known,
+        bioMin: 5_000_000,
+      })[0]!.right;
+    expect(row(scan(false))).toMatch(/~47.1M ★/);
+    expect(row(scan(true))).toMatch(/~9\.4M(?! ★)/);
   });
 
   it("says when Spansh does not know the system", () => {
@@ -241,8 +279,8 @@ describe("bio rows", () => {
         known: k,
       });
     expect(panel([]).rows[0]).toMatchObject({
-      text: expect.stringMatching(/Not on Spansh/),
-      tone: "dim",
+      text: expect.stringMatching(/★ Not on Spansh/),
+      tone: "accent",
     });
     expect(panel(null).rows[0]!.text).not.toMatch(/Not on Spansh/);
   });

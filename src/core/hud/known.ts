@@ -7,6 +7,8 @@ export interface KnownBody {
   /** The planet class, in the journal's spelling where it differs. */
   type: string | null;
   terraformable: boolean;
+  /** In Earth masses, for the planet's value. */
+  massEM: number | null;
   distance_ls: number | null;
   /** Biological signals, and their genus journal keys when the surface was mapped. */
   bioSignals: number;
@@ -75,6 +77,7 @@ export function parseSpanshDump(json: unknown): KnownBody[] {
       type: sub ? (JOURNAL_TYPE[sub] ?? sub) : null,
       terraformable:
         b.terraformingState === "Terraformable" || b.terraformingState === "Terraforming",
+      massEM: n(b.earthMasses),
       distance_ls: typeof b.distanceToArrival === "number" ? b.distanceToArrival : null,
       ...bioOf(b.signals),
       conditions: {

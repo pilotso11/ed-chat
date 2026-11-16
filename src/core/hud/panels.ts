@@ -41,6 +41,13 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 
 /** 2.1M, 840k, 500. */
+/** A value that may or may not get a first-discovery or first-footfall bonus. */
+export function creditRange(lo: number, hi: number): string {
+  if (hi <= lo) return credits(lo);
+  if (lo >= 1e6 && hi < 1e9) return `${(lo / 1e6).toFixed(1)}–${credits(hi)}`;
+  return `${credits(lo)}–${credits(hi)}`;
+}
+
 export function credits(n: number): string {
   if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
@@ -143,6 +150,8 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
     { system: string | null; address: number | null; scan: Obj; mapped: boolean }
   >();
   const starPos = new Map<number, number[]>();
+  // Planets nobody had set foot on, where analysed species pay the first-footfall bonus.
+  const untrodden = new Set<string>();
   let here: number | null = null;
   let bio = 0;
   let bioCount = 0;
@@ -166,6 +175,8 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         here = address;
         break;
       case "Scan": {
+        if (e.WasFootfalled === false) untrodden.add(key);
+        else if (e.WasFootfalled === true) untrodden.delete(key);
         const prev = scans.get(key);
         scans.set(key, {
           system: str(e.StarSystem),
@@ -213,7 +224,9 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
       }
       case "ScanOrganic":
         if (e.ScanType === "Analyse") {
-          bio += speciesValue(String(e.Species ?? "")) ?? 0;
+          const v = speciesValue(String(e.Species ?? "")) ?? 0;
+          const first = untrodden.has(`${address}|${num(e.Body)}`);
+          bio += first ? v * FOOTFALL_BONUS : v;
           bioCount++;
         }
         break;
@@ -268,7 +281,14 @@ export function highlightRows(
   known: KnownBody[] | null,
 ): HudRow[] {
   const scanned = new Map((x?.bodies ?? []).map((b) => [b.body_id, b]));
-  type Item = { name: string; type: string | null; tf: boolean; ls: number | null; id: number };
+  type Item = {
+    name: string;
+    type: string | null;
+    tf: boolean;
+    ls: number | null;
+    id: number;
+    mass?: number | null;
+  };
   const items = new Map<number, Item>();
   for (const k of known ?? []) {
     if (!isHighlight(k.type, k.terraformable)) continue;
@@ -278,6 +298,7 @@ export function highlightRows(
       tf: k.terraformable,
       ls: k.distance_ls,
       id: k.bodyId,
+      mass: k.massEM,
     });
   }
   for (const b of x?.bodies ?? []) {
@@ -296,11 +317,30 @@ export function highlightRows(
       const b = scanned.get(i.id);
       const value = b ? (b.value_mapped ?? b.value_scanned) : null;
       const state = !b ? "not scanned" : b.mapped_by_you ? "mapped ✓" : "map";
+      // Before the scan, a planet Spansh lists may still pay first-discovery and first-mapped
+      // bonuses (data nobody has handed in), so its mapped value is a range.
+      const scan = {
+        PlanetClass: i.type,
+        MassEM: i.mass,
+        TerraformState: i.tf ? "Terraformable" : "",
+      };
+      const estimate =
+        !b && i.mass != null
+          ? creditRange(
+              bodyValue(scan, { mapped: true, efficient: true }) ?? 0,
+              bodyValue(scan, {
+                mapped: true,
+                efficient: true,
+                firstDiscovery: true,
+                firstMapped: true,
+              }) ?? 0,
+            )
+          : null;
       return {
         text: `${b?.was_discovered === false ? "★ " : ""}${shortBody(i.name, system)}  ${shortType(i.type)}${i.tf && !/earthlike/i.test(i.type ?? "") ? " tf" : ""}`,
         right: [
           i.ls !== null ? `${Math.round(i.ls).toLocaleString("en-US")} ls` : null,
-          value ? credits(value) : null,
+          value ? credits(value) : estimate ? `~${estimate}` : null,
           state,
         ]
           .filter(Boolean)
@@ -345,6 +385,23 @@ function guessGenus(
   return v ? { label: genus, likely: v.min, min: v.min, max: v.max } : null;
 }
 
+/** Vista Genomics pays five times as much for species from a planet nobody has set foot on. */
+export const FOOTFALL_BONUS = 5;
+
+/** Whether someone has set foot on the planet, from its newest Scan; null before the scan. */
+export function wasFootfalled(
+  events: JournalEvent[],
+  address: number | null,
+  bodyId: number,
+): boolean | null {
+  let v: boolean | null = null;
+  for (const e of events) {
+    if (e.event !== "Scan" || e.SystemAddress !== address || e.BodyID !== bodyId) continue;
+    if (typeof e.WasFootfalled === "boolean") v = e.WasFootfalled;
+  }
+  return v;
+}
+
 /**
  * Planets with biological signals, from the scans and from Spansh, worth at least `bioMin`:
  * by the likely species of each genus where the planet's conditions predict them, else by the
@@ -387,7 +444,11 @@ export function bioRows(input: {
     );
     const known_ = guesses.every((g) => g !== null) && guesses.length > 0;
     const sum = (f: (g: GenusGuess) => number) => guesses.reduce((n, g) => n + (g ? f(g) : 0), 0);
-    const likely = known_ ? sum((g) => g.likely) : null;
+    const footfall = wasFootfalled(input.events, address, id);
+    // Unknown until the planet is scanned: Spansh lists planets nobody has landed on too.
+    const bonus = footfall === false ? FOOTFALL_BONUS : 1;
+    const base = known_ ? sum((g) => g.likely) : null;
+    const likely = base !== null ? base * bonus : null;
     if (likely !== null && likely < input.bioMin) continue;
     const signals = j?.bio_signals ?? k?.bioSignals ?? genera.length;
     const analysed = j?.species.filter((s) => s.analysed).length ?? 0;
@@ -399,7 +460,11 @@ export function bioRows(input: {
       text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio${labels.length ? ` · ${labels.join(", ")}` : ""}`,
       right: [
         ls !== null ? `${Math.round(ls).toLocaleString("en-US")} ls` : null,
-        likely !== null ? `~${credits(likely)}` : "?",
+        likely === null
+          ? "?"
+          : footfall === null
+            ? `~${creditRange(likely, likely * FOOTFALL_BONUS)}`
+            : `~${credits(likely)}${bonus > 1 ? " ★" : ""}`,
         done ? "✓" : analysed ? `${analysed}/${signals}` : x ? null : "not scanned",
       ]
         .filter(Boolean)
@@ -470,15 +535,15 @@ export function explorationPanel(input: {
   items.sort((a, b) => Number(a.done) - Number(b.done) || b.value - a.value);
   const top = [...highlights, ...bio];
   const room = Math.max(2, MAX_BODIES - top.length);
-  // The journal's scans say whether anyone discovered the system (the arrival star is scanned
-  // on the jump). Before that, a system missing from Spansh is only a hint: not everyone
-  // uploads their scans.
+  // The journal's scans say whether anyone handed in the system's data (the arrival star is
+  // scanned on the jump). Before that, a system missing from Spansh is a good sign, though
+  // only a sign: not everyone uploads their scans.
   const discovered = x.bodies.some((b) => b.was_discovered === true);
   const undiscovered = !discovered && x.bodies.some((b) => b.was_discovered === false);
   const status: HudRow[] = undiscovered
     ? [{ text: "★ Undiscovered system", tone: "accent" }]
     : !discovered && known && !known.length
-      ? [{ text: "Not on Spansh: maybe undiscovered", tone: "dim" }]
+      ? [{ text: "★ Not on Spansh: may be undiscovered", tone: "accent" }]
       : [];
   const rows: HudRow[] = [
     ...status,
@@ -520,11 +585,14 @@ export function exobiologyPanel(input: {
   totals: ExplorationTotals;
   /** highlightRows() for the system. */
   highlights?: HudRow[];
+  /** wasFootfalled() for the body: false pays the first-footfall bonus. */
+  footfall?: boolean | null;
 }): PanelView {
   const { body } = input;
+  const bonus = input.footfall === false ? FOOTFALL_BONUS : 1;
   const rows: HudRow[] = [];
   for (const s of body.species) {
-    const value = s.value !== null ? credits(s.value) : "";
+    const value = s.value !== null ? credits(s.value * bonus) : "";
     if (s.analysed) {
       rows.push({ text: s.species, right: `✓  ${value}`, tone: "good" });
       continue;
@@ -552,7 +620,7 @@ export function exobiologyPanel(input: {
     const names = top.map((p) => p.name.replace(new RegExp(`^${g} `), "")).join(" / ");
     rows.push({
       text: top.length ? `${g}  likely ${names}` : `${g}  not started`,
-      right: top.length ? `~${credits(top[0]!.value)}` : undefined,
+      right: top.length ? `~${credits(top[0]!.value * bonus)}` : undefined,
       tone: "dim",
     });
   }
@@ -564,7 +632,7 @@ export function exobiologyPanel(input: {
     mode: "exobiology",
     title: "EXOBIOLOGY",
     subtitle: shortBody(body.body, input.system),
-    right: `${body.genera.length || body.bio_signals || 0} genera`,
+    right: `${bonus > 1 ? "★ first footfall · " : ""}${body.genera.length || body.bio_signals || 0} genera`,
     rows,
     footer: totalsFooter(input.totals).slice(0, 1),
   };

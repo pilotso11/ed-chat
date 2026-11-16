@@ -234,6 +234,19 @@ describe("exploration totals", () => {
     expect(explorationTotals([analyse])).toMatchObject({ unsoldBio: 16202800, unsoldBioCount: 1 });
     expect(explorationTotals([analyse, ev("SellOrganicData")]).unsoldBioCount).toBe(0);
   });
+
+  it("pays five times for species from a planet nobody had set foot on", () => {
+    const scan = (WasFootfalled: boolean) =>
+      ev("Scan", { SystemAddress: 7, BodyID: 3, BodyName: "Sys 3", WasFootfalled });
+    const analyse = ev("ScanOrganic", {
+      ScanType: "Analyse",
+      SystemAddress: 7,
+      Body: 3,
+      Species: "$Codex_Ent_Stratum_06_Name;",
+    });
+    expect(explorationTotals([scan(false), analyse]).unsoldBio).toBe(16202800 * 5);
+    expect(explorationTotals([scan(true), analyse]).unsoldBio).toBe(16202800);
+  });
 });
 
 describe("route line", () => {
