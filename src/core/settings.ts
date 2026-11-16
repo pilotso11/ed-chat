@@ -82,6 +82,9 @@ const HudSchema = z.strictObject({
   // Look up each system's planets on Spansh when you arrive, to call out Earth-like, water and
   // ammonia worlds and terraformables before they are scanned.
   spansh: z.boolean().default(true),
+  // Planets with biological signals worth less than this are left off the exploration panel.
+  // Before the species are known, a planet is judged by the least its genera can be worth.
+  bioMin: z.number().int().min(0).default(5_000_000),
   // The ed-mcp sync folder, for the activity note and plans. null: read it from the ed-mcp
   // entry in Claude Code's ~/.claude.json, else ed-mcp's own config folder.
   edMcpDataDir: z.string().min(1).nullable().default(null),

@@ -1,5 +1,7 @@
 import {
   bodyValue,
+  genusName,
+  genusValue,
   speciesValue,
   surfaceDistance,
   visitOrder,
@@ -292,7 +294,7 @@ export function highlightRows(
       const value = b ? (b.value_mapped ?? b.value_scanned) : null;
       const state = !b ? "not scanned" : b.mapped_by_you ? "mapped ✓" : "map";
       return {
-        text: `${shortBody(i.name, system)}  ${shortType(i.type)}${i.tf && !/earthlike/i.test(i.type ?? "") ? " tf" : ""}`,
+        text: `${b?.was_discovered === false ? "★ " : ""}${shortBody(i.name, system)}  ${shortType(i.type)}${i.tf && !/earthlike/i.test(i.type ?? "") ? " tf" : ""}`,
         right: [
           i.ls !== null ? `${Math.round(i.ls).toLocaleString("en-US")} ls` : null,
           value ? credits(value) : null,
@@ -305,35 +307,112 @@ export function highlightRows(
     });
 }
 
+/** The least and most a planet's genera can be worth before the species are known. */
+function generaWorth(genera: string[]): { min: number; max: number } | null {
+  if (!genera.length) return null;
+  let min = 0;
+  let max = 0;
+  for (const g of genera) {
+    const v = genusValue(g);
+    if (!v) return null;
+    min += v.min;
+    max += v.max;
+  }
+  return { min, max };
+}
+
+const range = (w: { min: number; max: number }) =>
+  w.min === w.max ? credits(w.min) : `${credits(w.min)}–${credits(w.max)}`;
+
+/**
+ * Planets with biological signals, from the scans and from Spansh, worth at least `bioMin`
+ * by the least their genera can be worth: green once scanned, grey before, ✓ when every
+ * species is analysed. A planet whose genera are not known yet is listed, since it may be.
+ */
+export function bioRows(input: {
+  system: string | null;
+  exploration: Exploration | null;
+  bio: ExobiologyBody[];
+  known: KnownBody[] | null;
+  bioMin: number;
+}): HudRow[] {
+  const { system } = input;
+  const scanned = new Map((input.exploration?.bodies ?? []).map((b) => [b.body_id, b]));
+  const journal = new Map(input.bio.map((b) => [b.body_id, b]));
+  const known = new Map((input.known ?? []).map((k) => [k.bodyId, k]));
+  const ids = new Set([
+    ...[...known.values()].filter((k) => k.bioSignals > 0).map((k) => k.bodyId),
+    ...input.bio.filter((b) => b.bio_signals || b.genera.length).map((b) => b.body_id),
+  ]);
+  type Item = HudRow & { worth: number; ls: number };
+  const items: Item[] = [];
+  for (const id of ids) {
+    const j = journal.get(id);
+    const k = known.get(id);
+    const x = scanned.get(id);
+    const genera = j?.genera.length ? j.genera : (k?.genera ?? []).map((g) => genusName(g) ?? g);
+    const worth = generaWorth(genera);
+    if (worth && worth.min < input.bioMin) continue;
+    const signals = j?.bio_signals ?? k?.bioSignals ?? genera.length;
+    const analysed = j?.species.filter((s) => s.analysed).length ?? 0;
+    const done = signals > 0 && analysed >= signals;
+    const name = x?.body ?? j?.body ?? k?.name ?? String(id);
+    const ls = x?.distance_ls ?? k?.distance_ls ?? null;
+    items.push({
+      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio${genera.length ? ` · ${genera.join(", ")}` : ""}`,
+      right: [
+        ls !== null ? `${Math.round(ls).toLocaleString("en-US")} ls` : null,
+        worth ? range(worth) : "?",
+        done ? "✓" : analysed ? `${analysed}/${signals}` : x ? null : "not scanned",
+      ]
+        .filter(Boolean)
+        .join("  "),
+      tone: x || done ? "good" : "dim",
+      worth: worth?.min ?? 0,
+      ls: ls ?? Infinity,
+    });
+  }
+  return items
+    .sort((a, b) => b.worth - a.worth || a.ls - b.ls)
+    .map(({ worth: _w, ls: _l, ...r }) => r);
+}
+
 export function explorationPanel(input: {
   system: string | null;
   exploration: Exploration;
   bio: ExobiologyBody[];
   totals: ExplorationTotals;
   valuableMin: number;
+  bioMin?: number;
   known?: KnownBody[] | null;
 }): PanelView {
   const { system, exploration: x } = input;
   type Item = HudRow & { done: boolean; value: number };
   const items: Item[] = [];
-  const scannedIds = new Set(x.bodies.map((b) => b.body_id));
-  const highlights = highlightRows(system, x, input.known ?? null);
+  const known = input.known ?? null;
+  const highlights = highlightRows(system, x, known);
+  const bio = bioRows({
+    system,
+    exploration: x,
+    bio: input.bio,
+    known,
+    bioMin: input.bioMin ?? 0,
+  });
+  const bioIds = new Set([
+    ...input.bio.map((b) => b.body_id),
+    ...(known ?? []).filter((k) => k.bioSignals > 0).map((k) => k.bodyId),
+  ]);
   for (const b of x.bodies) {
     if (b.type?.endsWith(" star")) continue;
-    // Listed with the highlights instead.
-    if (isHighlight(b.type, b.terraformable)) continue;
-    const bio = b.signals.filter((s) => /bio/i.test(s.type)).reduce((n, s) => n + s.count, 0);
+    // Listed with the highlights or the bio planets instead.
+    if (isHighlight(b.type, b.terraformable) || bioIds.has(b.body_id)) continue;
     const geo = b.signals.filter((s) => /geo/i.test(s.type)).reduce((n, s) => n + s.count, 0);
     const value = b.value_mapped ?? b.value_scanned ?? 0;
-    if (value < input.valuableMin && !bio && !geo) continue;
-    const bits = [
-      shortType(b.type) + (b.terraformable ? " tf" : ""),
-      bio ? `${bio} bio` : null,
-      geo ? `${geo} geo` : null,
-    ].filter(Boolean);
+    if (value < input.valuableMin && !geo) continue;
+    const bits = [shortType(b.type) + (b.terraformable ? " tf" : ""), geo ? `${geo} geo` : null];
     const done = b.mapped_by_you;
     items.push({
-      text: `${b.was_discovered === false ? "★ " : ""}${shortBody(b.body, system)}  ${bits.join(" · ")}`,
+      text: `${b.was_discovered === false ? "★ " : ""}${shortBody(b.body, system)}  ${bits.filter(Boolean).join(" · ")}`,
       right: [
         b.distance_ls !== null ? `${b.distance_ls.toLocaleString("en-US")} ls` : null,
         credits(value),
@@ -346,20 +425,15 @@ export function explorationPanel(input: {
       value,
     });
   }
-  // Bodies with biological signals from the FSS that have no detailed scan yet.
-  for (const b of input.bio) {
-    if (scannedIds.has(b.body_id) || !b.bio_signals) continue;
-    items.push({
-      text: `${shortBody(b.body, system)}  ${b.bio_signals} bio`,
-      right: "scan",
-      done: false,
-      value: 0,
-    });
-  }
   items.sort((a, b) => Number(a.done) - Number(b.done) || b.value - a.value);
-  const room = Math.max(2, MAX_BODIES - highlights.length);
+  const top = [...highlights, ...bio];
+  const room = Math.max(2, MAX_BODIES - top.length);
   const rows: HudRow[] = [
-    ...highlights,
+    // A system Spansh has never heard of may be one nobody has scanned.
+    ...(known && !known.length
+      ? [{ text: "★ Not on Spansh: may be undiscovered", tone: "accent" as const }]
+      : []),
+    ...top,
     ...items.slice(0, room).map(({ done: _d, value: _v, ...r }) => r),
   ];
   if (items.length > room) rows.push({ text: `+${items.length - room} more`, tone: "dim" });

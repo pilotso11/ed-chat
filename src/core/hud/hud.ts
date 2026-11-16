@@ -15,6 +15,7 @@ import {
   exobiologyPanel,
   explorationPanel,
   explorationTotals,
+  bioRows,
   highlightRows,
   massacrePanel,
   routeRows,
@@ -117,7 +118,17 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
         samples: input.samples,
         here,
         totals,
-        highlights: highlightRows(system, x, input.known),
+        // Other planets worth a visit after this one.
+        highlights: [
+          ...highlightRows(system, x, input.known),
+          ...bioRows({
+            system,
+            exploration: x,
+            bio: bio.filter((b) => b.body_id !== body.body_id),
+            known: input.known?.filter((k) => k.bodyId !== body.body_id) ?? null,
+            bioMin: input.settings.bioMin,
+          }),
+        ],
       });
     }
   }
@@ -127,6 +138,7 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
     bio,
     totals,
     valuableMin: input.settings.valuableMin,
+    bioMin: input.settings.bioMin,
     known: input.known,
   });
 }

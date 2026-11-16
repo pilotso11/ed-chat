@@ -6,6 +6,9 @@ export interface KnownBody {
   type: string | null;
   terraformable: boolean;
   distance_ls: number | null;
+  /** Biological signals, and their genus journal keys when the surface was mapped. */
+  bioSignals: number;
+  genera: string[];
 }
 
 // Spansh spells some planet classes differently from the journal.
@@ -22,6 +25,15 @@ export function isHighlight(type: string | null, terraformable: boolean): boolea
 }
 
 type Obj = Record<string, unknown>;
+
+function bioOf(v: unknown): { bioSignals: number; genera: string[] } {
+  const s = (v ?? {}) as { signals?: Record<string, unknown>; genuses?: unknown };
+  const n = s.signals?.["$SAA_SignalType_Biological;"];
+  const genera = Array.isArray(s.genuses)
+    ? s.genuses.filter((g): g is string => typeof g === "string")
+    : [];
+  return { bioSignals: typeof n === "number" ? n : 0, genera };
+}
 
 /** The planets in a Spansh system dump. */
 export function parseSpanshDump(json: unknown): KnownBody[] {
@@ -41,6 +53,7 @@ export function parseSpanshDump(json: unknown): KnownBody[] {
       terraformable:
         b.terraformingState === "Terraformable" || b.terraformingState === "Terraforming",
       distance_ls: typeof b.distanceToArrival === "number" ? b.distanceToArrival : null,
+      ...bioOf(b.signals),
     });
   }
   return out;
@@ -51,10 +64,11 @@ const RETRY_MS = 5 * 60_000;
 
 /**
  * Spansh's body list for each system, fetched once when first asked for. get() returns null
- * until the fetch is done, or when Spansh does not know the system.
+ * until the fetch is done, and an empty list when Spansh does not know the system, which is
+ * asked again after a while since the player's own scans may reach Spansh.
  */
 export class KnownBodies {
-  private readonly cache = new Map<number, KnownBody[] | null>();
+  private readonly cache = new Map<number, KnownBody[]>();
   private readonly failed = new Map<number, number>();
   private readonly pending = new Set<number>();
 
@@ -64,15 +78,19 @@ export class KnownBodies {
   ) {}
 
   get(address: number): KnownBody[] | null {
-    if (this.cache.has(address)) return this.cache.get(address)!;
     const now = (this.opts.now ?? Date.now)();
     const failedAt = this.failed.get(address);
+    const cached = this.cache.get(address);
+    if (cached?.length || (cached && failedAt !== undefined && now - failedAt <= RETRY_MS)) {
+      return cached;
+    }
     if (!this.pending.has(address) && (failedAt === undefined || now - failedAt > RETRY_MS)) {
       this.pending.add(address);
       void this.fetchJson(`https://spansh.co.uk/api/dump/${address}`)
         .then((j) => {
           const bodies = parseSpanshDump(j);
-          this.cache.set(address, bodies.length ? bodies : null);
+          this.cache.set(address, bodies);
+          if (!bodies.length) this.failed.set(address, now);
           // Oldest first: drop the systems visited longest ago.
           while (this.cache.size > KEEP) this.cache.delete(this.cache.keys().next().value!);
         })
@@ -82,7 +100,7 @@ export class KnownBodies {
         })
         .finally(() => this.pending.delete(address));
     }
-    return null;
+    return cached ?? null;
   }
 }
 
