@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/pilotso11/ed-chat/compare/v0.2.1...v0.3.0) (2026-11-16)
+
+
+### Features
+
+* activity panel for massacre, exploration, exobiology and route ([#36](https://github.com/pilotso11/ed-chat/issues/36)) ([27fe9ef](https://github.com/pilotso11/ed-chat/commit/27fe9efbd27fe42177a23bb1818cb37f5ad9adef))
+
+
+### Bug Fixes
+
+* check the game has focus after the chat closes, and retry ([#33](https://github.com/pilotso11/ed-chat/issues/33)) ([58f0a96](https://github.com/pilotso11/ed-chat/commit/58f0a96bffaeb5d0586156df6572a9af9ab0cf08))
+
 ## [0.2.1](https://github.com/pilotso11/ed-chat/compare/v0.2.0...v0.2.1) (2026-11-15)
 
 
