@@ -50,6 +50,16 @@ export function creditRange(lo: number, hi: number): string {
   return `${credits(lo)}–${credits(hi)}`;
 }
 
+// Scans of one body can disagree: an AutoScan on arrival can say the body was discovered,
+// mapped and walked on, and the FSS's Detailed scan a minute later say not. Someone did it if any
+// scan says so, so a true flag is kept over a newer false one.
+const VISITED = ["WasDiscovered", "WasMapped", "WasFootfalled"] as const;
+function keepVisited(prev: Obj | undefined, e: Obj): Obj {
+  if (!prev) return e;
+  const kept = VISITED.filter((k) => prev[k] === true && e[k] === false);
+  return kept.length ? { ...e, ...Object.fromEntries(kept.map((k) => [k, true])) } : e;
+}
+
 export function credits(n: number): string {
   if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
@@ -187,7 +197,7 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         scans.set(key, {
           system: str(e.StarSystem),
           address,
-          scan: e,
+          scan: keepVisited(prev?.scan, e),
           mapped: prev?.mapped ?? false,
         });
         if (e.ScanType === "Detailed") {

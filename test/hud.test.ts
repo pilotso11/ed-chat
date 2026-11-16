@@ -214,6 +214,24 @@ describe("exploration totals", () => {
     expect(sold.unsoldCartographic).toBe(283629);
   });
 
+  it("keeps a body discovered and mapped by others when a newer scan says not", () => {
+    // Seen in a journal: an AutoScan on arrival, then the FSS's Detailed scan a minute later.
+    const later = ev("Scan", {
+      ScanType: "Detailed",
+      StarSystem: "A",
+      SystemAddress: 1,
+      BodyID: 1,
+      PlanetClass: "Earthlike body",
+      MassEM: 1,
+      WasDiscovered: false,
+      WasMapped: false,
+    });
+    const map = ev("SAAScanComplete", { SystemAddress: 1, BodyID: 1 });
+    const known = explorationTotals([elw("A", 1), map]).unsoldCartographic;
+    expect(explorationTotals([elw("A", 1), later, map]).unsoldCartographic).toBe(known);
+    expect(explorationTotals([later, map]).unsoldCartographic).toBeGreaterThan(known);
+  });
+
   it("keeps only systems within 20 ly of the station after a sale", () => {
     const jump = (id: number, pos: number[]) => ev("FSDJump", { SystemAddress: id, StarPos: pos });
     const t = explorationTotals([
@@ -250,6 +268,7 @@ describe("exploration totals", () => {
     expect(explorationTotals([scan(false), analyse]).unsoldBio).toBe(16202800 * 5);
     expect(explorationTotals([scan(true), analyse]).unsoldBio).toBe(16202800);
     expect(explorationTotals([scan(true), scan(false), analyse]).unsoldBio).toBe(16202800);
+    expect(explorationTotals([scan(false), scan(true), analyse]).unsoldBio).toBe(16202800);
   });
 });
 
