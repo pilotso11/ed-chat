@@ -37,10 +37,14 @@ VR.
 
 ## Install
 
-Download `ED Chat Setup <version>.exe` from
-[Releases](https://github.com/pilotso11/ed-chat/releases) and run it. The
-installer is not code signed yet, so Windows SmartScreen warns on first run.
-Select **More info → Run anyway**.
+Install ED Chat from the
+[Microsoft Store](https://apps.microsoft.com/detail/9PL5FNGQRJX8). The Store
+signs the app and keeps it up to date.
+
+Or download `ED Chat Setup <version>.exe` from
+[Releases](https://github.com/pilotso11/ed-chat/releases) and run it. This
+installer is not code signed, so Windows SmartScreen warns on first run. Select
+**More info → Run anyway**.
 
 ## Use
 
@@ -227,7 +231,8 @@ the app's settings and set it with `gh secret set RELEASE_APP_KEY < key.pem`.
 The files on GitHub Releases are not code signed. The `.exe` is the installer
 described under Install. The `.appx` is the package for the Microsoft Store and
 is not meant to be installed directly; the Store signs it when it publishes it.
-ED Chat is not in the Store yet.
+For a signed install, use the
+[Microsoft Store](https://apps.microsoft.com/detail/9PL5FNGQRJX8).
 
 ## Privacy
 
