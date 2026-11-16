@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstLine, parseChips } from "../src/core/chips.js";
+import { chipLabel, firstLine, parseChips, withTargets } from "../src/core/chips.js";
 import { HUD_PROMPT } from "../src/core/prompt.js";
 
 describe("parseChips", () => {
@@ -26,6 +26,35 @@ describe("parseChips", () => {
 
   it("leaves an unclosed marker while a reply streams", () => {
     expect(parseChips("Go to ⟦Hip 39").plain).toBe("Go to ⟦Hip 39");
+  });
+
+  it("keeps a target after › on the chip, but copies the system", () => {
+    expect(parseChips("Land on ⟦Col 285 › 4 d⟧, then ⟦Col 285⟧.")).toEqual({
+      plain: "Land on Col 285 4 d, then Col 285.",
+      chips: [
+        { n: 1, text: "Col 285", detail: "4 d" },
+        { n: 2, text: "Col 285" },
+      ],
+    });
+    expect(chipLabel({ n: 1, text: "Col 285", detail: "4 d" })).toBe("Col 285 · 4 d");
+  });
+
+  it("takes a chip's target from the first route stop in its system", () => {
+    const chips = [
+      { n: 1, text: "Col 285" },
+      { n: 2, text: "Sol" },
+      { n: 3, text: "Col 9", detail: "kept" },
+    ];
+    const stops = [
+      { system: "col 285", body: "Col 285 4 d" },
+      { system: "Col 285", body: "5" },
+      { system: "Col 9", body: "1" },
+    ];
+    expect(withTargets(chips, stops)).toEqual([
+      { n: 1, text: "Col 285", detail: "4 d" },
+      { n: 2, text: "Sol" },
+      { n: 3, text: "Col 9", detail: "kept" },
+    ]);
   });
 
   it("drops an empty marker", () => {

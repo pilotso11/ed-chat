@@ -123,6 +123,74 @@ The status line shows one message at a time. **+2** after it means two more are
 waiting; click it to see them all. A message with a command in it, such as
 `run claude update`, copies the command when you click it.
 
+## Activity panel
+
+A second, smaller panel shows what matters for what you are doing. It reads the
+game journal directly and never calls Claude. It shows only while the game is in
+front.
+
+- **Massacre:** each target faction, the kills still needed for the stack, a bar
+  for each faction that gave you missions, missions ready to hand in, and the
+  next expiry.
+- **Exploration:** the discovery scan progress and the bodies worth the time:
+  Earth-like, water and ammonia worlds, terraformable planets, and bodies with
+  biological or geological signals. Each shows its distance, its value and
+  whether it still needs a scan or a map. ★ marks a first discovery.
+  Earth-like, water and ammonia worlds and terraformables are listed from
+  [Spansh](https://spansh.co.uk) as soon as you arrive: grey until you scan them,
+  then green. Planets with biological signals are listed the same way, with
+  the likely species of each genus (marked ?) and what they are likely worth:
+  grey before the scan, plain after, and green once every species is analysed.
+  ★ marks a first discovery and ×5 a first-footfall bonus.
+  The prediction compares the planet's atmosphere, type, temperature, gravity,
+  pressure, volcanism, star and galactic region with where Canonn has recorded
+  each species. Planets likely worth less than `hud.bioMin` are left off.
+  Before you scan a planet, its value is a range: the low end has no bonus, and
+  the high end includes the first-discovery and first-mapped bonuses, or the 5×
+  first-footfall bonus for biology. A planet listed on Spansh can still pay these
+  bonuses if nobody has handed in its data. After the scan, the game says which
+  bonuses apply. A system Spansh does not know gets ★ as a hint, since not
+  everyone uploads their scans.
+- **Exobiology:** on a body with biological signals, each species with its
+  samples (2/3) and value, the genera not started yet, and, while you sample, the
+  distance from your last sample against the minimum distance for that genus.
+  Genera not started show their likely species. The system's Earth-like,
+  water and ammonia worlds, terraformables and other bio planets stay listed
+  below.
+- **Route:** the current stop of the active ed-mcp plan (with its body or
+  station, what it is for and the jumps left on the plotted route), the next
+  stop, and how many stops follow. It shows under the other panels too. When you arrive in
+  a stop's system, the next stop's system is copied for the galaxy map.
+
+These are mock-ups with made-up systems and values, drawn in the panel's own
+style.
+
+| | |
+| --- | --- |
+| ![Exploration panel on arrival: worlds and bio planets from Spansh, grey, with value ranges](docs/images/hud-explore-arrival.png) | **On arrival.** Spansh lists the worlds and bio planets before you honk. They show grey, with value ranges, and the route shows under the panel. |
+| ![Exploration panel after scanning: scanned worlds green with their values](docs/images/hud-explore-scanned.png) | **After scanning.** Scanned worlds turn green with the game's value. Bio planets stay plain until every species is analysed. ★ marks a first discovery, ×5 a first footfall. |
+| ![Exploration panel for a system Spansh does not know](docs/images/hud-explore-unknown.png) | **A system Spansh does not know.** It may be undiscovered. |
+| ![Exobiology panel while sampling](docs/images/hud-exobiology.png) | **Sampling.** Each species with its samples and value, the distance from the last sample, the likely species of genera not started, and other worlds in the system. |
+
+The mode changes by itself. Accepting a massacre mission turns on massacre mode
+until the stack is handed in. A discovery scan or a detailed scan turns on
+exploration, and five jumps with no scan turn it off again. Approaching a body
+with biological signals, or taking a sample, turns on exobiology. A jump alone
+starts nothing. Telling Claude what you are doing ("I'm doing massacres") sets
+the ed-mcp activity note, which the panel follows.
+
+| Key | Action |
+| --- | --- |
+| Ctrl+Alt+P | Show or hide the panel |
+| Ctrl+Alt+Shift+P | Mode: auto, massacre, exploration, exobiology, route, off |
+| Ctrl+Alt+Home | Move the panel: for 15 seconds the move keys move the panel, not the chat |
+| Ctrl+Alt+PageDown / PageUp | Mark the current route stop done / go back one stop, and copy the stop's system |
+
+The panel uses the same activity note and plans as ed-mcp. ED Chat finds the
+ed-mcp sync folder in Claude Code's `~/.claude.json` (it reads only
+`ED_MCP_SYNC_DIR`, never the password). Set `hud.edMcpDataDir` if it is
+somewhere else.
+
 ## Permissions
 
 On first run the overlay asks how Claude should run tools, and saves the answer
@@ -189,6 +257,15 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 | `claude.extraArgs` | `[]` | More arguments for `claude` |
 | `claude.resumeHours` | `12` | Resume the last conversation when ED Chat starts within this many hours. `0` turns it off |
 | `journalDir` | `null` | The game's journal folder; `null` uses Saved Games |
+| `hud.enabled` | `true` | Show the activity panel |
+| `hud.position` | `top-right`, 24, 120 | Where the panel sits, like `position` |
+| `hud.width` | `380` | Least panel width in pixels at font size 15. The panel grows so long names fit |
+| `hud.fontSize` / `hud.backgroundOpacity` | `15` / `0.55` | Panel text size and background |
+| `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology` or `route` |
+| `hud.valuableMin` | `500000` | Bodies worth less when mapped are left off the exploration panel, unless they have signals |
+| `hud.bioMin` | `5000000` | Planets whose likely species are worth less than this in total are left off the exploration panel |
+| `hud.spansh` | `true` | Look up each system's planets on Spansh when you arrive. Only the system's ID is sent |
+| `hud.edMcpDataDir` | `null` | The ed-mcp sync folder; `null` finds it in `~/.claude.json` |
 
 With the chat open you can also drag the overlay by its status line. It snaps
 to the nearest edge or corner when you let go.
