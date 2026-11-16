@@ -139,7 +139,9 @@ front.
   The prediction compares the planet's atmosphere, type, temperature, gravity,
   pressure, volcanism, star and galactic region with where Canonn has recorded
   each species. Planets likely worth less than `hud.bioMin` are left off.
-  A system Spansh does not know is marked as possibly undiscovered.
+  A system Spansh does not know is marked as maybe undiscovered: only a hint,
+  since not everyone uploads their scans. Once the arrival star is scanned, the
+  game says for certain, and an undiscovered system gets a ★.
 - **Exobiology:** on a body with biological signals, each species with its
   samples (2/3) and value, the genera not started yet, and, while you sample, the
   distance from your last sample against the minimum distance for that genus.

@@ -470,11 +470,18 @@ export function explorationPanel(input: {
   items.sort((a, b) => Number(a.done) - Number(b.done) || b.value - a.value);
   const top = [...highlights, ...bio];
   const room = Math.max(2, MAX_BODIES - top.length);
+  // The journal's scans say whether anyone discovered the system (the arrival star is scanned
+  // on the jump). Before that, a system missing from Spansh is only a hint: not everyone
+  // uploads their scans.
+  const discovered = x.bodies.some((b) => b.was_discovered === true);
+  const undiscovered = !discovered && x.bodies.some((b) => b.was_discovered === false);
+  const status: HudRow[] = undiscovered
+    ? [{ text: "★ Undiscovered system", tone: "accent" }]
+    : !discovered && known && !known.length
+      ? [{ text: "Not on Spansh: maybe undiscovered", tone: "dim" }]
+      : [];
   const rows: HudRow[] = [
-    // A system Spansh has never heard of may be one nobody has scanned.
-    ...(known && !known.length
-      ? [{ text: "★ Not on Spansh: may be undiscovered", tone: "accent" as const }]
-      : []),
+    ...status,
     ...top,
     ...items.slice(0, room).map(({ done: _d, value: _v, ...r }) => r),
   ];

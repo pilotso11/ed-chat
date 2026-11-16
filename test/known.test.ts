@@ -240,7 +240,42 @@ describe("bio rows", () => {
         valuableMin: 0,
         known: k,
       });
-    expect(panel([]).rows[0]!.text).toMatch(/Not on Spansh/);
+    expect(panel([]).rows[0]).toMatchObject({
+      text: expect.stringMatching(/Not on Spansh/),
+      tone: "dim",
+    });
     expect(panel(null).rows[0]!.text).not.toMatch(/Not on Spansh/);
+  });
+
+  it("lets the journal's scans decide over Spansh", () => {
+    const star = (was_discovered: boolean) =>
+      ({
+        exploration: {
+          discovery: { body_count: null, all_bodies_found: false },
+          scanned: 1,
+          bodies: [{ body: "Sys", body_id: 0, type: "K star", was_discovered, signals: [] }],
+        } as unknown as Exploration,
+      }).exploration;
+    const totals = {
+      unsoldCartographic: 0,
+      unsoldBio: 0,
+      unsoldBioCount: 0,
+      session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+    };
+    const panel = (x: Exploration) =>
+      explorationPanel({
+        system: "Sys",
+        exploration: x,
+        bio: [],
+        totals,
+        valuableMin: 0,
+        known: [],
+      });
+    expect(panel(star(false)).rows[0]).toMatchObject({ text: "★ Undiscovered system" });
+    expect(
+      panel(star(true))
+        .rows.map((r) => r.text)
+        .join(),
+    ).not.toMatch(/Spansh|Undiscovered/);
   });
 });
