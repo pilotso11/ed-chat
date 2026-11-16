@@ -202,7 +202,8 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         });
         if (e.ScanType === "Detailed") {
           session.scanned++;
-          if (e.WasDiscovered === false) session.firstDiscoveries++;
+          // From the merged scan: an earlier scan may say someone found it first.
+          if (scans.get(key)!.scan.WasDiscovered === false) session.firstDiscoveries++;
         }
         break;
       }

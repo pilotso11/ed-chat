@@ -229,6 +229,8 @@ describe("exploration totals", () => {
     const map = ev("SAAScanComplete", { SystemAddress: 1, BodyID: 1 });
     const known = explorationTotals([elw("A", 1), map]).unsoldCartographic;
     expect(explorationTotals([elw("A", 1), later, map]).unsoldCartographic).toBe(known);
+    expect(explorationTotals([elw("A", 1), later, map]).session.firstDiscoveries).toBe(0);
+    expect(explorationTotals([later]).session.firstDiscoveries).toBe(1);
     expect(explorationTotals([later, map]).unsoldCartographic).toBeGreaterThan(known);
   });
 
