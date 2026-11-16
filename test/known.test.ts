@@ -409,6 +409,40 @@ describe("bio rows", () => {
       known: null,
     }).rows.map((r) => r.text);
     expect(rows).toEqual(["6  HMC", "5  HMC", "7  HMC"]);
+    const listed = explorationPanel({
+      system: "Sys",
+      exploration: worth,
+      bio: [],
+      totals: {
+        unsoldCartographic: 0,
+        unsoldBio: 0,
+        unsoldBioCount: 0,
+        session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+      },
+      valuableMin: 500_000,
+      known: null,
+    }).rows;
+    expect(listed[0]).toEqual({ text: "6  HMC", right: "100 ls  700k  map", tone: "accent" });
+    expect(listed[2]).toEqual({ text: "7  HMC", right: "100 ls  800k  ✓", tone: "dim" });
+    // Before all bodies are found the empty state says "yet", and two geo bodies are plural.
+    const early = explorationPanel({
+      system: "Sys",
+      exploration: {
+        discovery: { body_count: 9, all_bodies_found: false },
+        scanned: 2,
+        bodies: [body(1, "Icy body", 4_000, 2), body(3, "Icy body", 2_000, 1)],
+      } as unknown as Exploration,
+      bio: [],
+      totals: {
+        unsoldCartographic: 0,
+        unsoldBio: 0,
+        unsoldBioCount: 0,
+        session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+      },
+      valuableMin: 500_000,
+      known: null,
+    }).rows.map((r) => r.text);
+    expect(early).toEqual(["Nothing worth mapping yet", "2 bodies with geological signals"]);
     // A bio planet under hud.bioMin is not listed, but its geological signals still count.
     const bioGeo = explorationPanel({
       system: "Sys",

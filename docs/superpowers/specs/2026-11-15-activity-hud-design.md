@@ -182,7 +182,7 @@ EXPLORE  Pru Aescs NC-M d7-192          9/14 bodies
 ★ 4  Water world                 40 ls  1.5M  map
 1  Earth-like          1,210 ls  ~1.5–4.4M  not scanned
 ★ A 3  3 bio · Stratum Tectonicas?, …  820 ls  ~111M ×5  1/3
-C 2  Icy · 3 geo                   3,100 ls  62k  map
+2 bodies with geological signals
 Unsold: 7.9M cartographic · 5 bio (156M)
 Session: 14 jumps · 95 scanned · 10 mapped · 24 ★
 ```
