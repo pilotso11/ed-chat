@@ -158,6 +158,16 @@ front.
   stop, and how many stops follow. It shows under the other panels too. When you arrive in
   a stop's system, the next stop's system is copied for the galaxy map.
 
+These are mock-ups with made-up systems and values, drawn in the panel's own
+style.
+
+| | |
+| --- | --- |
+| ![Exploration panel on arrival: worlds and bio planets from Spansh, grey, with value ranges](docs/images/hud-explore-arrival.png) | **On arrival.** Spansh lists the worlds and bio planets before you honk. They show grey, with value ranges, and the route shows under the panel. |
+| ![Exploration panel after scanning: scanned worlds green with their values](docs/images/hud-explore-scanned.png) | **After scanning.** Scanned worlds turn green with the game's value. Bio planets stay plain until every species is analysed. ★ marks a first discovery, ×5 a first footfall. |
+| ![Exploration panel for a system Spansh does not know](docs/images/hud-explore-unknown.png) | **A system Spansh does not know.** It may be undiscovered. |
+| ![Exobiology panel while sampling](docs/images/hud-exobiology.png) | **Sampling.** Each species with its samples and value, the distance from the last sample, the likely species of genera not started, and other worlds in the system. |
+
 The mode changes by itself. Accepting a massacre mission turns on massacre mode
 until the stack is handed in. A discovery scan or a detailed scan turns on
 exploration, and five jumps with no scan turn it off again. Approaching a body
