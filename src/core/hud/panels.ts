@@ -173,6 +173,8 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
   // first. Counted at the end, since a later scan can say so too.
   const found = new Map<string, boolean>();
   const discovered = new Set<string>();
+  // First discoveries settled by a sale this session.
+  let firstFound = 0;
   for (const e of events) {
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     const address = num(e.SystemAddress);
@@ -183,6 +185,7 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
       case "LoadGame":
         session.systems = session.scanned = session.mapped = 0;
         found.clear();
+        firstFound = 0;
         break;
       case "FSDJump":
         session.systems++;
@@ -240,7 +243,14 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
           );
         };
         for (const [k, s] of scans) {
-          if ((s.system && sold.has(s.system.toLowerCase())) || !near(s.address)) scans.delete(k);
+          if (!((s.system && sold.has(s.system.toLowerCase())) || !near(s.address))) continue;
+          scans.delete(k);
+          // Selling tags the body as the player's, so a rescan says discovered: settle the count
+          // now.
+          if (found.has(k)) {
+            if (!discovered.has(k)) firstFound++;
+            found.delete(k);
+          }
         }
         break;
       }
@@ -274,7 +284,8 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         firstMapped: s.scan.WasMapped === false,
       }) ?? 0;
   }
-  session.firstDiscoveries = [...found.keys()].filter((k) => !discovered.has(k)).length;
+  session.firstDiscoveries =
+    firstFound + [...found.keys()].filter((k) => !discovered.has(k)).length;
   return { unsoldCartographic: carto, unsoldBio: bio, unsoldBioCount: bioCount, session };
 }
 
