@@ -5,9 +5,7 @@ import type { HudModeId } from "../settings.js";
 export const HUD_EVENTS = [
   "ApproachBody",
   "Touchdown",
-  "Liftoff",
   "LeaveBody",
-  "Disembark",
   "SellExplorationData",
   "MultiSellExplorationData",
   "NavRoute",

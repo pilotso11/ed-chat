@@ -73,7 +73,7 @@ import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import { buildHud, currentMode } from "../core/hud/hud.js";
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
-import { currentStop, todoStops } from "../core/hud/panels.js";
+import { currentStop, nextStopAfter, previousStop, todoStops } from "../core/hud/panels.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
 import { IPC } from "../shared/ipc.js";
 import {
@@ -513,10 +513,9 @@ async function main(): Promise<void> {
     if (!plan) return;
     const i = currentStop(plan);
     if (i === null || plan.stops[i]!.system.toLowerCase() !== system.toLowerCase()) return;
-    const next = plan.stops.find(
-      (s, j) => j !== i && s.status === "todo" && s.system.toLowerCase() !== system.toLowerCase(),
-    );
-    if (!next) return;
+    const j = nextStopAfter(plan, i);
+    if (j === null) return;
+    const next = plan.stops[j]!;
     clipboard.writeText(next.system);
     flash("copy", `📋 next stop copied: ${next.system}`, 4_000);
   }
@@ -529,11 +528,10 @@ async function main(): Promise<void> {
       if (i === null) return flash("route", "ⓘ route finished", 3_000);
       await hudPlans.updateStop(plan.id, { index: i }, { status: "done" });
     } else {
-      // The last finished stop goes back to todo.
-      const done = plan.stops.map((s, j) => ({ s, j })).filter(({ s }) => s.status !== "todo");
-      const prev = done.at(-1);
-      if (!prev) return flash("route", "ⓘ at the first stop", 3_000);
-      await hudPlans.updateStop(plan.id, { index: prev.j }, { status: "todo" });
+      // The stop done last before the current one, in visit order, goes back to todo.
+      const prev = previousStop(plan);
+      if (prev === null) return flash("route", "ⓘ at the first stop", 3_000);
+      await hudPlans.updateStop(plan.id, { index: prev }, { status: "todo" });
     }
     await pollHud();
     const now = hudData?.plan;

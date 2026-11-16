@@ -4,7 +4,7 @@ import { systemAddress, type JournalEvent, type Stores } from "ed-mcp/journal";
 import type { HudInput } from "./hud.js";
 import { parseShipStatus } from "./hud.js";
 import type { KnownBodies } from "./known.js";
-import { parseNavRoute, sampleKey, type Point } from "./panels.js";
+import { navRouteCleared, parseNavRoute, sampleKey, type Point } from "./panels.js";
 
 export type FeedData = Pick<
   HudInput,
@@ -68,7 +68,7 @@ export class HudFeed {
     return {
       journal,
       status,
-      nav: navText ? parseNavRoute(navText) : null,
+      nav: navText && !(journal && navRouteCleared(journal.events)) ? parseNavRoute(navText) : null,
       activity,
       plan,
       samples: this.samples,

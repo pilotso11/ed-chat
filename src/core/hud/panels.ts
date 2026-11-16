@@ -738,6 +738,34 @@ export function currentStop(plan: Plan): number | null {
   return i ?? null;
 }
 
+/** The last stop marked done before the current one, in visit order; skipped stops stay. */
+export function previousStop(plan: Plan): number | null {
+  const order = visitOrder(plan);
+  const cur = order.findIndex((j) => plan.stops[j]!.status === "todo");
+  const before = cur < 0 ? order : order.slice(0, cur);
+  const i = before.findLast((j) => plan.stops[j]!.status === "done");
+  return i ?? null;
+}
+
+/** The first stop to do after the current one, in visit order, in another system. */
+export function nextStopAfter(plan: Plan, current: number): number | null {
+  const order = visitOrder(plan);
+  const here = plan.stops[current]!.system.toLowerCase();
+  const i = order
+    .slice(order.indexOf(current) + 1)
+    .find((j) => plan.stops[j]!.status === "todo" && plan.stops[j]!.system.toLowerCase() !== here);
+  return i ?? null;
+}
+
+/** Whether the player cleared the plotted route after last plotting one: NavRoute.json stays. */
+export function navRouteCleared(events: JournalEvent[]): boolean {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i]!.event === "NavRouteClear") return true;
+    if (events[i]!.event === "NavRoute") return false;
+  }
+  return false;
+}
+
 /** The stops still to do, in visit order: the current stop first. */
 export function todoStops(plan: Plan | null): Plan["stops"] {
   if (!plan) return [];

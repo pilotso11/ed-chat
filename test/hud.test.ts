@@ -6,6 +6,9 @@ import { buildHud, currentMode, parseShipStatus, type HudInput } from "../src/co
 import { LAPSE_JUMPS, cycleMode, journalMode, noteMode, pickMode } from "../src/core/hud/mode.js";
 import {
   credits,
+  navRouteCleared,
+  nextStopAfter,
+  previousStop,
   explorationTotals,
   jumpsLeft,
   massacrePanel,
@@ -246,6 +249,47 @@ describe("exploration totals", () => {
     });
     expect(explorationTotals([scan(false), analyse]).unsoldBio).toBe(16202800 * 5);
     expect(explorationTotals([scan(true), analyse]).unsoldBio).toBe(16202800);
+  });
+});
+
+describe("route keys", () => {
+  // Listed A, B, C, D; visited C, A, B, D.
+  const plan = (statuses: ("todo" | "done" | "skipped")[]): Plan => ({
+    id: "trip",
+    name: "Trip",
+    items: [],
+    stops: statuses.map((status, i) => ({ system: "ABCD"[i]!, purpose: "go", status })),
+    route: {
+      computed_at: "",
+      from: "Here",
+      stops: ["C", "A", "B", "D"],
+      total_min: 0,
+      plotted: true,
+      stop_indexes: [[2], [0], [1], [3]],
+    },
+    created_at: "",
+    updated_at: "",
+  });
+
+  it("goes back to the stop done last in visit order, not in listing order", () => {
+    // C then A done: going back undoes A.
+    expect(previousStop(plan(["done", "todo", "done", "todo"]))).toBe(0);
+    // A skipped stop stays skipped.
+    expect(previousStop(plan(["skipped", "todo", "done", "todo"]))).toBe(2);
+    expect(previousStop(plan(["todo", "todo", "todo", "todo"]))).toBeNull();
+  });
+
+  it("copies the next stop in visit order on arrival", () => {
+    // At C, the first stop in visit order: next is A.
+    expect(nextStopAfter(plan(["todo", "todo", "todo", "todo"]), 2)).toBe(0);
+    // At A: next is B, not C, which is listed later but visited earlier.
+    expect(nextStopAfter(plan(["todo", "todo", "done", "todo"]), 0)).toBe(1);
+  });
+
+  it("forgets a route cleared in the game", () => {
+    expect(navRouteCleared([ev("NavRoute"), ev("NavRouteClear")])).toBe(true);
+    expect(navRouteCleared([ev("NavRouteClear"), ev("NavRoute")])).toBe(false);
+    expect(navRouteCleared([])).toBe(false);
   });
 });
 
