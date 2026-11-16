@@ -405,8 +405,8 @@ export function wasFootfalled(
 /**
  * Planets with biological signals, from the scans and from Spansh, worth at least `bioMin`:
  * by the likely species of each genus where the planet's conditions predict them, else by the
- * least each genus can be worth. Green once scanned, grey before, ✓ when every species is
- * analysed. A planet whose genera are not known yet is listed, since it may be worth it.
+ * least each genus can be worth. Grey before the scan, plain after, green with ✓ once every
+ * species is analysed. A planet whose genera are not known yet is listed, since it may be worth it.
  */
 export function bioRows(input: {
   system: string | null;
@@ -464,12 +464,14 @@ export function bioRows(input: {
           ? "?"
           : footfall === null
             ? `~${creditRange(likely, likely * FOOTFALL_BONUS)}`
-            : `~${credits(likely)}${bonus > 1 ? " ★" : ""}`,
+            : `~${credits(likely)}${bonus > 1 ? " ×5" : ""}`,
         done ? "✓" : analysed ? `${analysed}/${signals}` : x ? null : "not scanned",
       ]
         .filter(Boolean)
         .join("  "),
-      tone: x || done ? "good" : "dim",
+      // Green only when every species is analysed: until then the species are a guess.
+      // Plain once scanned, grey before.
+      tone: done ? "good" : x || analysed ? undefined : "dim",
       worth: likely ?? 0,
       ls: ls ?? Infinity,
     });
@@ -632,7 +634,7 @@ export function exobiologyPanel(input: {
     mode: "exobiology",
     title: "EXOBIOLOGY",
     subtitle: shortBody(body.body, input.system),
-    right: `${bonus > 1 ? "★ first footfall · " : ""}${body.genera.length || body.bio_signals || 0} genera`,
+    right: `${bonus > 1 ? "first footfall ×5 · " : ""}${body.genera.length || body.bio_signals || 0} genera`,
     rows,
     footer: totalsFooter(input.totals).slice(0, 1),
   };

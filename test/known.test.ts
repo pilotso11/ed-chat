@@ -248,8 +248,47 @@ describe("bio rows", () => {
         known,
         bioMin: 5_000_000,
       })[0]!.right;
-    expect(row(scan(false))).toMatch(/~47.1M ★/);
-    expect(row(scan(true))).toMatch(/~9\.4M(?! ★)/);
+    expect(row(scan(false))).toMatch(/~47.1M ×5/);
+    expect(row(scan(true))).toMatch(/~9\.4M(?! ×5)/);
+  });
+
+  it("is green only once every species is analysed", () => {
+    const tone = (analysed: number) =>
+      bioRows({
+        system: "Sys",
+        address: 42,
+        events: [],
+        exploration: {
+          bodies: [{ body: "Sys 5", body_id: 5, distance_ls: 300, was_discovered: true }],
+        } as unknown as Exploration,
+        bio: [
+          {
+            body: "Sys 5",
+            body_id: 5,
+            bio_signals: 2,
+            genera: ["Clypeus", "Bacterium"],
+            species: [
+              {
+                genus: "Clypeus",
+                species: "Clypeus Speculumi",
+                analysed: analysed > 0,
+                value: 16202800,
+              },
+              {
+                genus: "Bacterium",
+                species: "Bacterium Cerbrus",
+                analysed: analysed > 1,
+                value: 1689800,
+              },
+            ],
+          },
+        ] as never,
+        known: null,
+        bioMin: 0,
+      })[0]!.tone;
+    expect(tone(0)).toBeUndefined();
+    expect(tone(1)).toBeUndefined();
+    expect(tone(2)).toBe("good");
   });
 
   it("says when Spansh does not know the system", () => {

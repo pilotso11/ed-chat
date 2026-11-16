@@ -135,7 +135,9 @@ front.
   Earth-like, water and ammonia worlds and terraformables are listed from
   [Spansh](https://spansh.co.uk) as soon as you arrive: grey until you scan them,
   then green. Planets with biological signals are listed the same way, with
-  the likely species of each genus (marked ?) and what they are likely worth.
+  the likely species of each genus (marked ?) and what they are likely worth:
+  grey before the scan, plain after, and green once every species is analysed.
+  ★ marks a first discovery and ×5 a first-footfall bonus.
   The prediction compares the planet's atmosphere, type, temperature, gravity,
   pressure, volcanism, star and galactic region with where Canonn has recorded
   each species. Planets likely worth less than `hud.bioMin` are left off.
