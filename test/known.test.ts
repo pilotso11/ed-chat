@@ -340,6 +340,48 @@ describe("bio rows", () => {
     expect(panel(null).rows[0]!.text).not.toMatch(/Not on Spansh/);
   });
 
+  it("ranks bodies by value, and counts bodies as the game does", () => {
+    const body = (id: number, type: string | null, value: number, geo = 0) => ({
+      body: `Sys ${id}`,
+      body_id: id,
+      type,
+      distance_ls: 100,
+      terraformable: false,
+      was_discovered: true,
+      mapped_by_you: false,
+      signals: geo ? [{ type: "$SAA_SignalType_Geological;", count: geo }] : [],
+      value_scanned: value,
+      value_mapped: value,
+    });
+    // From a journal: small HMC worlds worth about 60k, icy moons with geological signals worth
+    // about 4k, and belt clusters, which the game does not count as bodies.
+    const x = {
+      discovery: { body_count: 3, all_bodies_found: true },
+      scanned: 4,
+      bodies: [
+        body(1, "Icy body", 4_000, 2),
+        body(2, "High metal content body", 64_588),
+        body(3, "Icy body", 2_000),
+        body(4, null, 0),
+      ],
+    } as unknown as Exploration;
+    const p = explorationPanel({
+      system: "Sys",
+      exploration: x,
+      bio: [],
+      totals: {
+        unsoldCartographic: 0,
+        unsoldBio: 0,
+        unsoldBioCount: 0,
+        session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+      },
+      valuableMin: 500_000,
+      known: null,
+    });
+    expect(p.rows.map((r) => r.text)).toEqual(["2  HMC", "1  Icy · 2 geo"]);
+    expect(p.right).toBe("3/3 bodies ✓");
+  });
+
   it("lets the journal's scans decide over Spansh", () => {
     const star = (was_discovered: boolean) =>
       ({

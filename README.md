@@ -262,7 +262,7 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 | `hud.width` | `380` | Least panel width in pixels at font size 15. The panel grows so long names fit |
 | `hud.fontSize` / `hud.backgroundOpacity` | `15` / `0.55` | Panel text size and background |
 | `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology` or `route` |
-| `hud.valuableMin` | `500000` | Bodies worth less when mapped are left off the exploration panel, unless they have signals |
+| `hud.valuableMin` | `500000` | Bodies worth this when mapped are highlighted on the exploration panel. Bodies worth a tenth of it, or with geological signals, are listed too, most valuable first |
 | `hud.bioMin` | `5000000` | Planets whose likely species are worth less than this in total are left off the exploration panel |
 | `hud.spansh` | `true` | Look up each system's planets on Spansh when you arrive. Only the system's ID is sent |
 | `hud.edMcpDataDir` | `null` | The ed-mcp sync folder; `null` finds it in `~/.claude.json` |

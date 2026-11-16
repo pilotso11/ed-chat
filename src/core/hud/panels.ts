@@ -560,7 +560,9 @@ export function explorationPanel(input: {
     if (isHighlight(b.type, b.terraformable) || bioIds.has(b.body_id)) continue;
     const geo = b.signals.filter((s) => /geo/i.test(s.type)).reduce((n, s) => n + s.count, 0);
     const value = b.value_mapped ?? b.value_scanned ?? 0;
-    if (value < input.valuableMin && !geo) continue;
+    // Bodies worth a tenth of valuableMin are listed too, so that a small HMC world worth 60k
+    // ranks above an icy moon worth 4k that has geological signals.
+    if (value < input.valuableMin / 10 && !geo) continue;
     const bits = [shortType(b.type) + (b.terraformable ? " tf" : ""), geo ? `${geo} geo` : null];
     const done = b.mapped_by_you;
     items.push({
@@ -598,8 +600,9 @@ export function explorationPanel(input: {
   if (items.length > room) rows.push({ text: `+${items.length - room} more`, tone: "dim" });
   if (!rows.length) rows.push({ text: "Nothing valuable scanned yet", tone: "dim" });
   const d = x.discovery;
-  const right =
-    d.body_count !== null ? `${x.scanned}/${d.body_count} bodies` : `${x.scanned} scanned`;
+  // The game's body count leaves out belt clusters, which have no planet class or star type.
+  const scanned = x.bodies.filter((b) => b.type !== null).length;
+  const right = d.body_count !== null ? `${scanned}/${d.body_count} bodies` : `${scanned} scanned`;
   return {
     mode: "exploration",
     title: "EXPLORE",
