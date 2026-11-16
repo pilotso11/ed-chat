@@ -474,6 +474,9 @@ export function bioRows(input: {
     const j = journal.get(id);
     const k = known.get(id);
     const x = scanned.get(id);
+    const geo = (x?.signals ?? [])
+      .filter((s) => /geo/i.test(s.type))
+      .reduce((n, s) => n + s.count, 0);
     const conditions =
       (address !== null ? scanConditions(input.events, address, id) : null) ??
       (k ? { ...k.conditions, systemAddress: address } : null);
@@ -501,7 +504,7 @@ export function bioRows(input: {
     const labels = guesses.map((g, i) => g?.label ?? genera[i]!);
     input.listed?.add(id);
     items.push({
-      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio`,
+      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio${geo ? ` · ${geo} geo` : ""}`,
       // The species can be many: on their own line, which wraps.
       ...(labels.length ? { detail: labels.join(", ") } : {}),
       right: [
@@ -555,21 +558,14 @@ export function explorationPanel(input: {
     known,
     bioMin: input.bioMin ?? 0,
   });
-  const bioIds = new Set([
-    ...input.bio.map((b) => b.body_id),
-    ...(known ?? []).filter((k) => k.bioSignals > 0).map((k) => k.bodyId),
-  ]);
   let geoOnly = 0;
   for (const b of x.bodies) {
     if (b.type?.endsWith(" star")) continue;
     // Listed with the highlights or the bio planets instead.
     const geo = b.signals.filter((s) => /geo/i.test(s.type)).reduce((n, s) => n + s.count, 0);
     if (isHighlight(b.type, b.terraformable)) continue;
-    if (bioIds.has(b.body_id)) {
-      // A bio planet under hud.bioMin is not listed, but its geological signals still count.
-      if (geo && !bioListed.has(b.body_id)) geoOnly++;
-      continue;
-    }
+    // Listed with the bio planets. One left off under hud.bioMin is judged as any other body.
+    if (bioListed.has(b.body_id)) continue;
     const value = b.value_mapped ?? b.value_scanned ?? 0;
     // Bodies not worth mapping are left off. Those with geological signals are only counted, for
     // a player filling the codex.

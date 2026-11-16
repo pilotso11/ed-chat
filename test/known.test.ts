@@ -469,6 +469,66 @@ describe("bio rows", () => {
       known: null,
     }).rows.map((r) => r.text);
     expect(bioGeo).toEqual(["Nothing worth mapping", "1 body with geological signals"]);
+    // A bio planet left off under hud.bioMin but worth valuableMin is listed as a body.
+    const rich = explorationPanel({
+      system: "Sys",
+      exploration: {
+        ...x,
+        bodies: [body(9, "High metal content body", 1_600_000, 1)],
+      } as unknown as Exploration,
+      bio: [
+        {
+          body: "Sys 9",
+          body_id: 9,
+          bio_signals: 1,
+          genera: ["Bacterium"],
+          species: [],
+          not_started: ["Bacterium"],
+          likely: [],
+        },
+      ],
+      totals: {
+        unsoldCartographic: 0,
+        unsoldBio: 0,
+        unsoldBioCount: 0,
+        session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+      },
+      valuableMin: 500_000,
+      bioMin: 5_000_000,
+      known: null,
+    }).rows.map((r) => r.text);
+    expect(rich).toEqual(["9  HMC · 1 geo"]);
+    // A listed bio planet shows its geological signals; with no body count, the header counts.
+    const listedBio = explorationPanel({
+      system: "Sys",
+      exploration: {
+        discovery: { body_count: null, all_bodies_found: false },
+        scanned: 1,
+        bodies: [body(9, "Rocky body", 4_000, 1)],
+      } as unknown as Exploration,
+      bio: [
+        {
+          body: "Sys 9",
+          body_id: 9,
+          bio_signals: 1,
+          genera: ["Bacterium"],
+          species: [],
+          not_started: ["Bacterium"],
+          likely: [],
+        },
+      ],
+      totals: {
+        unsoldCartographic: 0,
+        unsoldBio: 0,
+        unsoldBioCount: 0,
+        session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+      },
+      valuableMin: 500_000,
+      bioMin: 0,
+      known: null,
+    });
+    expect(listedBio.rows[0]!.text).toBe("9  1 bio · 1 geo");
+    expect(listedBio.right).toBe("1 scanned");
   });
 
   it("lets the journal's scans decide over Spansh", () => {
