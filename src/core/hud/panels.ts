@@ -720,11 +720,14 @@ export function routeRows(input: {
         withRight({ kind: "current", text: stopPlace(now, undefined, true) }),
       ];
       if (now.label) rows.push({ kind: "label", text: now.label });
-      const last = Math.min(order.length, cur + 1 + NEXT_STOPS);
-      for (let k = cur + 1; k < last; k++) {
-        rows.push({ kind: "next", text: stopPlace(at(k), at(k - 1), true) });
+      // Only stops still to do: stops can be finished out of order.
+      const rest = order.slice(cur + 1).filter((i) => plan.stops[i]!.status === "todo");
+      let prev = now;
+      for (const i of rest.slice(0, NEXT_STOPS)) {
+        rows.push({ kind: "next", text: stopPlace(plan.stops[i]!, prev, true) });
+        prev = plan.stops[i]!;
       }
-      const more = order.slice(last).filter((i) => plan.stops[i]!.status === "todo").length;
+      const more = rest.length - Math.min(rest.length, NEXT_STOPS);
       if (more) rows.push({ kind: "more", text: `+${more} more stop${more === 1 ? "" : "s"}` });
       return rows;
     }

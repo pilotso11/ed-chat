@@ -320,6 +320,19 @@ describe("route line", () => {
     ]);
   });
 
+  it("skips stops already done after the current one", () => {
+    const rows = routeRows({
+      plan: plan(["todo", "done", "todo", "todo"]),
+      nav: null,
+      system: "Here",
+    });
+    expect(rows!.map((r) => [r.kind, r.text])).toEqual([
+      ["current", "Sys 0"],
+      ["next", "Sys 2"],
+      ["more", "+1 more stop"],
+    ]);
+  });
+
   it("names the body or station, and the current stop's label", () => {
     const p: Plan = {
       ...plan(["done", "todo", "todo", "todo", "todo"]),
