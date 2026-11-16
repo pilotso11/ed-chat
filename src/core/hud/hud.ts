@@ -123,6 +123,8 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
           ...highlightRows(system, x, input.known),
           ...bioRows({
             system,
+            address,
+            events: j.events,
             exploration: x,
             bio: bio.filter((b) => b.body_id !== body.body_id),
             known: input.known?.filter((k) => k.bodyId !== body.body_id) ?? null,
@@ -140,6 +142,8 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
     valuableMin: input.settings.valuableMin,
     bioMin: input.settings.bioMin,
     known: input.known,
+    address,
+    events: j.events,
   });
 }
 

@@ -2,6 +2,9 @@ import {
   bodyValue,
   genusName,
   genusValue,
+  predictSpecies,
+  scanConditions,
+  type BioConditions,
   speciesValue,
   surfaceDistance,
   visitOrder,
@@ -307,36 +310,57 @@ export function highlightRows(
     });
 }
 
-/** The least and most a planet's genera can be worth before the species are known. */
-function generaWorth(genera: string[]): { min: number; max: number } | null {
-  if (!genera.length) return null;
-  let min = 0;
-  let max = 0;
-  for (const g of genera) {
-    const v = genusValue(g);
-    if (!v) return null;
-    min += v.min;
-    max += v.max;
-  }
-  return { min, max };
+/** What one genus on a planet is likely worth, and what to call it. */
+interface GenusGuess {
+  /** The species when sampled or confidently predicted, else the genus. */
+  label: string;
+  likely: number;
+  min: number;
+  max: number;
 }
 
-const range = (w: { min: number; max: number }) =>
-  w.min === w.max ? credits(w.min) : `${credits(w.min)}–${credits(w.max)}`;
+/** A species confidently predicted is named; below this likelihood the genus is shown. */
+const NAME_LIKELIHOOD = 0.6;
+
+function guessGenus(
+  genus: string,
+  sampled: ExobiologyBody["species"][number] | undefined,
+  conditions: BioConditions | null,
+): GenusGuess | null {
+  if (sampled?.value != null) {
+    const v = sampled.value;
+    return { label: sampled.species, likely: v, min: v, max: v };
+  }
+  const p = conditions ? predictSpecies(genus, conditions) : [];
+  if (p.length) {
+    const values = p.map((x) => x.value);
+    return {
+      label: p[0]!.likelihood >= NAME_LIKELIHOOD ? `${p[0]!.name}?` : genus,
+      likely: p[0]!.value,
+      min: Math.min(...values),
+      max: Math.max(...values),
+    };
+  }
+  const v = genusValue(genus);
+  return v ? { label: genus, likely: v.min, min: v.min, max: v.max } : null;
+}
 
 /**
- * Planets with biological signals, from the scans and from Spansh, worth at least `bioMin`
- * by the least their genera can be worth: green once scanned, grey before, ✓ when every
- * species is analysed. A planet whose genera are not known yet is listed, since it may be.
+ * Planets with biological signals, from the scans and from Spansh, worth at least `bioMin`:
+ * by the likely species of each genus where the planet's conditions predict them, else by the
+ * least each genus can be worth. Green once scanned, grey before, ✓ when every species is
+ * analysed. A planet whose genera are not known yet is listed, since it may be worth it.
  */
 export function bioRows(input: {
   system: string | null;
+  address: number | null;
+  events: JournalEvent[];
   exploration: Exploration | null;
   bio: ExobiologyBody[];
   known: KnownBody[] | null;
   bioMin: number;
 }): HudRow[] {
-  const { system } = input;
+  const { system, address } = input;
   const scanned = new Map((input.exploration?.bodies ?? []).map((b) => [b.body_id, b]));
   const journal = new Map(input.bio.map((b) => [b.body_id, b]));
   const known = new Map((input.known ?? []).map((k) => [k.bodyId, k]));
@@ -350,25 +374,38 @@ export function bioRows(input: {
     const j = journal.get(id);
     const k = known.get(id);
     const x = scanned.get(id);
+    const conditions =
+      (address !== null ? scanConditions(input.events, address, id) : null) ??
+      (k ? { ...k.conditions, systemAddress: address } : null);
     const genera = j?.genera.length ? j.genera : (k?.genera ?? []).map((g) => genusName(g) ?? g);
-    const worth = generaWorth(genera);
-    if (worth && worth.min < input.bioMin) continue;
+    const guesses = genera.map((g) =>
+      guessGenus(
+        g,
+        j?.species.find((s) => s.genus === g && s.analysed),
+        conditions,
+      ),
+    );
+    const known_ = guesses.every((g) => g !== null) && guesses.length > 0;
+    const sum = (f: (g: GenusGuess) => number) => guesses.reduce((n, g) => n + (g ? f(g) : 0), 0);
+    const likely = known_ ? sum((g) => g.likely) : null;
+    if (likely !== null && likely < input.bioMin) continue;
     const signals = j?.bio_signals ?? k?.bioSignals ?? genera.length;
     const analysed = j?.species.filter((s) => s.analysed).length ?? 0;
     const done = signals > 0 && analysed >= signals;
     const name = x?.body ?? j?.body ?? k?.name ?? String(id);
     const ls = x?.distance_ls ?? k?.distance_ls ?? null;
+    const labels = guesses.map((g, i) => g?.label ?? genera[i]!);
     items.push({
-      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio${genera.length ? ` · ${genera.join(", ")}` : ""}`,
+      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio${labels.length ? ` · ${labels.join(", ")}` : ""}`,
       right: [
         ls !== null ? `${Math.round(ls).toLocaleString("en-US")} ls` : null,
-        worth ? range(worth) : "?",
+        likely !== null ? `~${credits(likely)}` : "?",
         done ? "✓" : analysed ? `${analysed}/${signals}` : x ? null : "not scanned",
       ]
         .filter(Boolean)
         .join("  "),
       tone: x || done ? "good" : "dim",
-      worth: worth?.min ?? 0,
+      worth: likely ?? 0,
       ls: ls ?? Infinity,
     });
   }
@@ -385,6 +422,9 @@ export function explorationPanel(input: {
   valuableMin: number;
   bioMin?: number;
   known?: KnownBody[] | null;
+  /** For predicting species from the journal's scans. */
+  address?: number | null;
+  events?: JournalEvent[];
 }): PanelView {
   const { system, exploration: x } = input;
   type Item = HudRow & { done: boolean; value: number };
@@ -393,6 +433,8 @@ export function explorationPanel(input: {
   const highlights = highlightRows(system, x, known);
   const bio = bioRows({
     system,
+    address: input.address ?? null,
+    events: input.events ?? [],
     exploration: x,
     bio: input.bio,
     known,
@@ -496,7 +538,17 @@ export function exobiologyPanel(input: {
       });
     }
   }
-  for (const g of body.not_started) rows.push({ text: `${g}  not started`, tone: "dim" });
+  for (const g of body.not_started) {
+    // The likely species from the planet's conditions: the best, and the next when close.
+    const likely = body.likely?.find((l) => l.genus === g)?.species ?? [];
+    const top = likely.filter((p, i) => i === 0 || p.likelihood >= 0.25).slice(0, 2);
+    const names = top.map((p) => p.name.replace(new RegExp(`^${g} `), "")).join(" / ");
+    rows.push({
+      text: top.length ? `${g}  likely ${names}` : `${g}  not started`,
+      right: top.length ? `~${credits(top[0]!.value)}` : undefined,
+      tone: "dim",
+    });
+  }
   // The system's Earth-like, water and ammonia worlds stay in view while on a planet.
   if (input.highlights?.length) {
     rows.push({ text: "In system", tone: "dim" }, ...input.highlights);

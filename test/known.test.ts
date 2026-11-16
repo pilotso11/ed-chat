@@ -142,19 +142,76 @@ describe("bio rows", () => {
   });
 
   it("lists planets worth at least the threshold by their genera, and unknown ones", () => {
-    const rows = bioRows({ system: "Sys", exploration: null, bio: [], known, bioMin: 5_000_000 });
+    const rows = bioRows({
+      system: "Sys",
+      address: null,
+      events: [],
+      exploration: null,
+      bio: [],
+      known,
+      bioMin: 5_000_000,
+    });
     expect(rows).toEqual([
       {
         text: "5  2 bio · Clypeus, Bacterium",
-        right: "300 ls  9.4M–24.6M  not scanned",
+        right: "300 ls  ~9.4M  not scanned",
         tone: "dim",
       },
       { text: "7  3 bio", right: "20 ls  ?  not scanned", tone: "dim" },
     ]);
     // Fungoida alone is worth at most 3.7M, so it shows only with a lower threshold.
-    expect(bioRows({ system: "Sys", exploration: null, bio: [], known, bioMin: 0 })).toHaveLength(
-      3,
-    );
+    expect(
+      bioRows({
+        system: "Sys",
+        address: null,
+        events: [],
+        exploration: null,
+        bio: [],
+        known,
+        bioMin: 0,
+      }),
+    ).toHaveLength(3);
+  });
+
+  it("names the likely species from Spansh's planet conditions", () => {
+    const stratum = parseSpanshDump({
+      bodies: [
+        { type: "Star", name: "Sys A", bodyId: 0, subType: "F (White) Star", mainStar: true },
+        {
+          type: "Planet",
+          name: "Sys 8",
+          bodyId: 8,
+          subType: "High metal content world",
+          atmosphereType: "Thin Sulphur dioxide",
+          surfaceTemperature: 200,
+          gravity: 0.3,
+          surfacePressure: 0.01,
+          volcanismType: "No volcanism",
+          parents: [{ Star: 0 }],
+          distanceToArrival: 50,
+          signals: {
+            signals: { "$SAA_SignalType_Biological;": 1 },
+            genuses: ["$Codex_Ent_Stratum_Genus_Name;"],
+          },
+        },
+      ],
+    });
+    expect(stratum[0]!.conditions).toMatchObject({
+      atmosphere: "Thin Sulphur dioxide",
+      star: "F (White) Star",
+    });
+    const rows = bioRows({
+      system: "Sys",
+      address: null,
+      events: [],
+      exploration: null,
+      bio: [],
+      known: stratum,
+      bioMin: 5_000_000,
+    });
+    expect(rows).toEqual([
+      { text: "8  1 bio · Stratum Tectonicas?", right: "50 ls  ~19.0M  not scanned", tone: "dim" },
+    ]);
   });
 
   it("says when Spansh does not know the system", () => {

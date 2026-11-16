@@ -1,3 +1,5 @@
+import type { BioConditions } from "ed-mcp/journal";
+
 /** A planet in the current system as Spansh knows it, before the player scans it. */
 export interface KnownBody {
   name: string;
@@ -9,6 +11,8 @@ export interface KnownBody {
   /** Biological signals, and their genus journal keys when the surface was mapped. */
   bioSignals: number;
   genera: string[];
+  /** The planet's conditions for the species predictor; the system address is added on use. */
+  conditions: Omit<BioConditions, "systemAddress">;
 }
 
 // Spansh spells some planet classes differently from the journal.
@@ -35,12 +39,31 @@ function bioOf(v: unknown): { bioSignals: number; genera: string[] } {
   return { bioSignals: typeof n === "number" ? n : 0, genera };
 }
 
+function parentStar(parents: unknown, stars: Map<number, string>): string | null {
+  if (!Array.isArray(parents)) return null;
+  for (const p of parents as Obj[]) {
+    const id = p?.Star;
+    if (typeof id === "number" && stars.has(id)) return stars.get(id)!;
+  }
+  return null;
+}
+
 /** The planets in a Spansh system dump. */
 export function parseSpanshDump(json: unknown): KnownBody[] {
   const j = (json ?? {}) as { system?: { bodies?: unknown }; bodies?: unknown };
   const raw = j.system?.bodies ?? j.bodies;
   if (!Array.isArray(raw)) return [];
   const out: KnownBody[] = [];
+  // Star classes by body ID, for each planet's parent star.
+  const stars = new Map<number, string>();
+  let mainStar: string | null = null;
+  for (const b of raw as Obj[]) {
+    if (b?.type !== "Star" || typeof b.bodyId !== "number" || typeof b.subType !== "string")
+      continue;
+    stars.set(b.bodyId, b.subType);
+    if (b.mainStar === true) mainStar = b.subType;
+  }
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
   for (const b of raw as Obj[]) {
     if (b?.type !== "Planet" || typeof b.name !== "string" || typeof b.bodyId !== "number") {
       continue;
@@ -54,6 +77,15 @@ export function parseSpanshDump(json: unknown): KnownBody[] {
         b.terraformingState === "Terraformable" || b.terraformingState === "Terraforming",
       distance_ls: typeof b.distanceToArrival === "number" ? b.distanceToArrival : null,
       ...bioOf(b.signals),
+      conditions: {
+        planet: sub ? (JOURNAL_TYPE[sub] ?? sub) : null,
+        atmosphere: typeof b.atmosphereType === "string" ? b.atmosphereType : "None",
+        temperature: n(b.surfaceTemperature),
+        gravity: n(b.gravity),
+        pressure: n(b.surfacePressure),
+        volcanism: typeof b.volcanismType === "string" ? b.volcanismType : null,
+        star: parentStar(b.parents, stars) ?? mainStar,
+      },
     });
   }
   return out;
