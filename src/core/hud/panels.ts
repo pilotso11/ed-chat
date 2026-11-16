@@ -169,12 +169,13 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
   let bio = 0;
   let bioCount = 0;
   const session = { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 };
-  // Bodies scanned in detail this session, and whether any scan of each says someone found it
-  // first. Counted at the end, since a later scan can say so too.
+  // Bodies whose detailed scan this session says undiscovered. Each counts at the end unless any
+  // scan of it, in `discovered`, says someone found it first, since a later scan can say so too.
   const found = new Set<string>();
   const discovered = new Set<string>();
-  // First discoveries settled by a sale this session.
+  // First discoveries settled by a sale this session, and the bodies they were.
   let firstFound = 0;
+  const settled = new Set<string>();
   for (const e of events) {
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     const address = num(e.SystemAddress);
@@ -186,6 +187,7 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         session.systems = session.scanned = session.mapped = 0;
         found.clear();
         firstFound = 0;
+        settled.clear();
         break;
       case "FSDJump":
         session.systems++;
@@ -211,7 +213,7 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         if (e.WasDiscovered === true) discovered.add(key);
         if (e.ScanType === "Detailed") {
           session.scanned++;
-          if (e.WasDiscovered === false) found.add(key);
+          if (e.WasDiscovered === false && !settled.has(key)) found.add(key);
         }
         break;
       }
@@ -250,6 +252,7 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
           if (found.has(k)) {
             if (!discovered.has(k)) firstFound++;
             found.delete(k);
+            settled.add(k);
           }
         }
         break;

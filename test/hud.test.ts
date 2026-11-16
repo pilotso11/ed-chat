@@ -236,6 +236,8 @@ describe("exploration totals", () => {
     // Selling tags the body as the player's, so a rescan after the sale keeps the count.
     const sell = ev("SellExplorationData", { Systems: ["A"] });
     expect(explorationTotals([later, sell, elw("A", 1)]).session.firstDiscoveries).toBe(1);
+    // A body settled by a sale counts once, whatever later scans say.
+    expect(explorationTotals([later, sell, later]).session.firstDiscoveries).toBe(1);
     // A new game session starts the count again.
     expect(explorationTotals([later, ev("LoadGame")]).session.firstDiscoveries).toBe(0);
     expect(explorationTotals([later, sell, ev("LoadGame")]).session.firstDiscoveries).toBe(0);
