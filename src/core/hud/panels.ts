@@ -457,6 +457,8 @@ export function bioRows(input: {
   bio: ExobiologyBody[];
   known: KnownBody[] | null;
   bioMin: number;
+  /** Filled with the body IDs that got a row. */
+  listed?: Set<number>;
 }): HudRow[] {
   const { system, address } = input;
   const scanned = new Map((input.exploration?.bodies ?? []).map((b) => [b.body_id, b]));
@@ -497,6 +499,7 @@ export function bioRows(input: {
     const name = x?.body ?? j?.body ?? k?.name ?? String(id);
     const ls = x?.distance_ls ?? k?.distance_ls ?? null;
     const labels = guesses.map((g, i) => g?.label ?? genera[i]!);
+    input.listed?.add(id);
     items.push({
       text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio`,
       // The species can be many: on their own line, which wraps.
@@ -541,7 +544,9 @@ export function explorationPanel(input: {
   const items: Item[] = [];
   const known = input.known ?? null;
   const highlights = highlightRows(system, x, known);
+  const bioListed = new Set<number>();
   const bio = bioRows({
+    listed: bioListed,
     system,
     address: input.address ?? null,
     events: input.events ?? [],
@@ -558,8 +563,13 @@ export function explorationPanel(input: {
   for (const b of x.bodies) {
     if (b.type?.endsWith(" star")) continue;
     // Listed with the highlights or the bio planets instead.
-    if (isHighlight(b.type, b.terraformable) || bioIds.has(b.body_id)) continue;
     const geo = b.signals.filter((s) => /geo/i.test(s.type)).reduce((n, s) => n + s.count, 0);
+    if (isHighlight(b.type, b.terraformable)) continue;
+    if (bioIds.has(b.body_id)) {
+      // A bio planet under hud.bioMin is not listed, but its geological signals still count.
+      if (geo && !bioListed.has(b.body_id)) geoOnly++;
+      continue;
+    }
     const value = b.value_mapped ?? b.value_scanned ?? 0;
     // Bodies not worth mapping are left off. Those with geological signals are only counted, for
     // a player filling the codex.

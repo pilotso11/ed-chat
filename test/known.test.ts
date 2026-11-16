@@ -356,9 +356,10 @@ describe("bio rows", () => {
     // From a journal: small HMC worlds worth about 60k, icy moons with geological signals worth
     // about 4k, and belt clusters, which the game does not count as bodies.
     const x = {
-      discovery: { body_count: 3, all_bodies_found: true },
-      scanned: 4,
+      discovery: { body_count: 4, all_bodies_found: true },
+      scanned: 5,
       bodies: [
+        body(0, "M star", 0),
         body(1, "Icy body", 4_000, 2),
         body(2, "High metal content body", 64_588),
         body(3, "Icy body", 2_000),
@@ -382,7 +383,58 @@ describe("bio rows", () => {
       "Nothing worth mapping",
       "1 body with geological signals",
     ]);
-    expect(p.right).toBe("3/3 bodies ✓");
+    // Stars count, belt clusters do not.
+    expect(p.right).toBe("4/4 bodies ✓");
+    // Over the threshold: listed, most valuable first, mapped last.
+    const worth = {
+      ...x,
+      bodies: [
+        body(5, "High metal content body", 600_000),
+        body(6, "High metal content body", 700_000),
+        { ...body(7, "High metal content body", 800_000), mapped_by_you: true },
+        body(8, "Icy body", 4_000),
+      ],
+    } as unknown as Exploration;
+    const rows = explorationPanel({
+      system: "Sys",
+      exploration: worth,
+      bio: [],
+      totals: {
+        unsoldCartographic: 0,
+        unsoldBio: 0,
+        unsoldBioCount: 0,
+        session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+      },
+      valuableMin: 500_000,
+      known: null,
+    }).rows.map((r) => r.text);
+    expect(rows).toEqual(["6  HMC", "5  HMC", "7  HMC"]);
+    // A bio planet under hud.bioMin is not listed, but its geological signals still count.
+    const bioGeo = explorationPanel({
+      system: "Sys",
+      exploration: { ...x, bodies: [body(9, "Rocky body", 4_000, 1)] } as unknown as Exploration,
+      bio: [
+        {
+          body: "Sys 9",
+          body_id: 9,
+          bio_signals: 1,
+          genera: ["Bacterium"],
+          species: [],
+          not_started: ["Bacterium"],
+          likely: [],
+        },
+      ],
+      totals: {
+        unsoldCartographic: 0,
+        unsoldBio: 0,
+        unsoldBioCount: 0,
+        session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+      },
+      valuableMin: 500_000,
+      bioMin: 5_000_000,
+      known: null,
+    }).rows.map((r) => r.text);
+    expect(bioGeo).toEqual(["Nothing worth mapping", "1 body with geological signals"]);
   });
 
   it("lets the journal's scans decide over Spansh", () => {
