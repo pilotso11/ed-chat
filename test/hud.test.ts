@@ -249,6 +249,7 @@ describe("exploration totals", () => {
     });
     expect(explorationTotals([scan(false), analyse]).unsoldBio).toBe(16202800 * 5);
     expect(explorationTotals([scan(true), analyse]).unsoldBio).toBe(16202800);
+    expect(explorationTotals([scan(true), scan(false), analyse]).unsoldBio).toBe(16202800);
   });
 });
 

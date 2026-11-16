@@ -154,6 +154,7 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
   const starPos = new Map<number, number[]>();
   // Planets nobody had set foot on, where analysed species pay the first-footfall bonus.
   const untrodden = new Set<string>();
+  const trodden = new Set<string>();
   let here: number | null = null;
   let bio = 0;
   let bioCount = 0;
@@ -177,8 +178,11 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         here = address;
         break;
       case "Scan": {
-        if (e.WasFootfalled === false) untrodden.add(key);
-        else if (e.WasFootfalled === true) untrodden.delete(key);
+        // Any scan that says someone landed wins: see wasFootfalled().
+        if (e.WasFootfalled === true) {
+          trodden.add(key);
+          untrodden.delete(key);
+        } else if (e.WasFootfalled === false && !trodden.has(key)) untrodden.add(key);
         const prev = scans.get(key);
         scans.set(key, {
           system: str(e.StarSystem),
@@ -390,7 +394,11 @@ function guessGenus(
 /** Vista Genomics pays five times as much for species from a planet nobody has set foot on. */
 export const FOOTFALL_BONUS = 5;
 
-/** Whether someone has set foot on the planet, from its newest Scan; null before the scan. */
+/**
+ * Whether someone has set foot on the planet; null before a scan. Scans of one body can disagree:
+ * an AutoScan on arrival can say yes and the FSS's Detailed scan a minute later say no, so any
+ * scan that says yes wins.
+ */
 export function wasFootfalled(
   events: JournalEvent[],
   address: number | null,
@@ -399,7 +407,8 @@ export function wasFootfalled(
   let v: boolean | null = null;
   for (const e of events) {
     if (e.event !== "Scan" || e.SystemAddress !== address || e.BodyID !== bodyId) continue;
-    if (typeof e.WasFootfalled === "boolean") v = e.WasFootfalled;
+    if (e.WasFootfalled === true) return true;
+    if (e.WasFootfalled === false) v = false;
   }
   return v;
 }
