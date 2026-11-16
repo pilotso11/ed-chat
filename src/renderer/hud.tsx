@@ -53,6 +53,7 @@ function Hud() {
                     <span className="text">{r.text}</span>
                     {r.right && <span className="right">{r.right}</span>}
                   </div>
+                  {r.detail && <div className="detail">{r.detail}</div>}
                   {r.bar !== undefined && (
                     <div className="bar">
                       <div style={{ width: `${Math.round(r.bar * 100)}%` }} />

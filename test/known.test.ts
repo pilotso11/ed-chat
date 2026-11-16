@@ -161,7 +161,8 @@ describe("bio rows", () => {
     });
     expect(rows).toEqual([
       {
-        text: "5  2 bio · Clypeus, Bacterium",
+        text: "5  2 bio",
+        detail: "Clypeus, Bacterium",
         // Until the scan says whether anyone has landed, up to the first-footfall bonus.
         right: "300 ls  ~9.4–47.1M  not scanned",
         tone: "dim",
@@ -220,7 +221,8 @@ describe("bio rows", () => {
     });
     expect(rows).toEqual([
       {
-        text: "8  1 bio · Stratum Tectonicas?",
+        text: "8  1 bio",
+        detail: "Stratum Tectonicas?",
         right: "50 ls  ~19.0–95.1M  not scanned",
         tone: "dim",
       },

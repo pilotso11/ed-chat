@@ -106,3 +106,13 @@ body {
 .row.good .bar > div {
   background: #8fe388;
 }
+.detail {
+  /* Takes the panel's width without adding to it, so a long list wraps instead of widening the
+     window. */
+  width: 0;
+  min-width: 100%;
+  box-sizing: border-box;
+  padding-left: 1.5em;
+  white-space: normal;
+  font-size: 0.9em;
+}
