@@ -100,8 +100,8 @@ per body, with the first-discovery and first-mapped bonuses from the scan's `Was
   - `width` is the minimum width.
   - `modes`: a mode set to `false` is left out of the hotkey cycle, and when the journal or the
     activity note picks it, the panel hides instead of showing it.
-  - `valuableMin`: bodies worth less than this when mapped are left off the exploration panel,
-    unless they have biological or geological signals.
+  - `valuableMin`: bodies worth less than this when mapped are left off the exploration panel.
+    Those with geological signals are counted on one line. Bio planets follow `bioMin` instead.
   - `spansh`: look up the system's planets on Spansh on arrival (only the system address is
     sent).
   - `bioMin`: bio planets likely worth less than this are left off.
