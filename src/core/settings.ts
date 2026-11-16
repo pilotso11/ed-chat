@@ -76,8 +76,8 @@ const HudSchema = z.strictObject({
       route: z.boolean().default(true),
     })
     .prefault({}),
-  // Bodies worth less than this when mapped are left off the exploration panel, unless they
-  // have biological or geological signals.
+  // Bodies worth less than this when mapped are left off the exploration panel. Those with
+  // geological signals are only counted, on one line.
   valuableMin: z.number().int().min(0).default(500_000),
   // Look up each system's planets on Spansh when you arrive, to call out Earth-like, water and
   // ammonia worlds and terraformables before they are scanned.

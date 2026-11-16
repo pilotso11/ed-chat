@@ -100,8 +100,8 @@ per body, with the first-discovery and first-mapped bonuses from the scan's `Was
   - `width` is the minimum width.
   - `modes`: a mode set to `false` is left out of the hotkey cycle, and when the journal or the
     activity note picks it, the panel hides instead of showing it.
-  - `valuableMin`: bodies worth less than this when mapped are left off the exploration panel,
-    unless they have biological or geological signals.
+  - `valuableMin`: bodies worth less than this when mapped are left off the exploration panel.
+    Those with geological signals are counted on one line. Bio planets follow `bioMin` instead.
   - `spansh`: look up the system's planets on Spansh on arrival (only the system address is
     sent).
   - `bioMin`: bio planets likely worth less than this are left off.
@@ -182,7 +182,7 @@ EXPLORE  Pru Aescs NC-M d7-192          9/14 bodies
 ★ 4  Water world                 40 ls  1.5M  map
 1  Earth-like          1,210 ls  ~1.5–4.4M  not scanned
 ★ A 3  3 bio · Stratum Tectonicas?, …  820 ls  ~111M ×5  1/3
-C 2  Icy · 3 geo                   3,100 ls  62k  map
+2 bodies with geological signals
 Unsold: 7.9M cartographic · 5 bio (156M)
 Session: 14 jumps · 95 scanned · 10 mapped · 24 ★
 ```
@@ -198,8 +198,11 @@ Session: 14 jumps · 95 scanned · 10 mapped · 24 ★
   journal's `WasDiscovered`, `WasMapped` and `WasFootfalled` decide.
 - Bio planets show the likely species of each genus (marked ?) and what they are likely worth.
   They are grey before the scan, plain after it, and green with ✓ once every species is analysed.
-- Other bodies show only when worth the time: over `hud.valuableMin` when mapped, or with
-  geological signals.
+- Other bodies show only when worth mapping: over `hud.valuableMin` when mapped, most valuable
+  first, with bodies already mapped last. A bio planet left off under `hud.bioMin` is judged the
+  same way. Bodies under it with geological signals are counted on one dim line, and a system
+  with nothing to list says "Nothing worth mapping". A listed bio planet shows its geological
+  signals in its row. The body count leaves out belt clusters, as the game's count does.
 - ★ marks a first discovery and ×5 a first-footfall bonus. A system Spansh does not know gets
   "★ Not on Spansh: may be undiscovered" until the arrival star's scan settles it.
 - The footer shows the unsold cartographic and bio value and the session counts.

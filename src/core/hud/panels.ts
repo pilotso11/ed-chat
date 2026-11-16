@@ -457,6 +457,8 @@ export function bioRows(input: {
   bio: ExobiologyBody[];
   known: KnownBody[] | null;
   bioMin: number;
+  /** Filled with the body IDs that got a row. */
+  listed?: Set<number>;
 }): HudRow[] {
   const { system, address } = input;
   const scanned = new Map((input.exploration?.bodies ?? []).map((b) => [b.body_id, b]));
@@ -472,6 +474,9 @@ export function bioRows(input: {
     const j = journal.get(id);
     const k = known.get(id);
     const x = scanned.get(id);
+    const geo = (x?.signals ?? [])
+      .filter((s) => /geo/i.test(s.type))
+      .reduce((n, s) => n + s.count, 0);
     const conditions =
       (address !== null ? scanConditions(input.events, address, id) : null) ??
       (k ? { ...k.conditions, systemAddress: address } : null);
@@ -497,8 +502,9 @@ export function bioRows(input: {
     const name = x?.body ?? j?.body ?? k?.name ?? String(id);
     const ls = x?.distance_ls ?? k?.distance_ls ?? null;
     const labels = guesses.map((g, i) => g?.label ?? genera[i]!);
+    input.listed?.add(id);
     items.push({
-      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio`,
+      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio${geo ? ` · ${geo} geo` : ""}`,
       // The species can be many: on their own line, which wraps.
       ...(labels.length ? { detail: labels.join(", ") } : {}),
       right: [
@@ -541,7 +547,9 @@ export function explorationPanel(input: {
   const items: Item[] = [];
   const known = input.known ?? null;
   const highlights = highlightRows(system, x, known);
+  const bioListed = new Set<number>();
   const bio = bioRows({
+    listed: bioListed,
     system,
     address: input.address ?? null,
     events: input.events ?? [],
@@ -550,17 +558,21 @@ export function explorationPanel(input: {
     known,
     bioMin: input.bioMin ?? 0,
   });
-  const bioIds = new Set([
-    ...input.bio.map((b) => b.body_id),
-    ...(known ?? []).filter((k) => k.bioSignals > 0).map((k) => k.bodyId),
-  ]);
+  let geoOnly = 0;
   for (const b of x.bodies) {
     if (b.type?.endsWith(" star")) continue;
     // Listed with the highlights or the bio planets instead.
-    if (isHighlight(b.type, b.terraformable) || bioIds.has(b.body_id)) continue;
     const geo = b.signals.filter((s) => /geo/i.test(s.type)).reduce((n, s) => n + s.count, 0);
+    if (isHighlight(b.type, b.terraformable)) continue;
+    // Listed with the bio planets. One left off under hud.bioMin is judged as any other body.
+    if (bioListed.has(b.body_id)) continue;
     const value = b.value_mapped ?? b.value_scanned ?? 0;
-    if (value < input.valuableMin && !geo) continue;
+    // Bodies not worth mapping are left off. Those with geological signals are only counted, for
+    // a player filling the codex.
+    if (value < input.valuableMin) {
+      if (geo) geoOnly++;
+      continue;
+    }
     const bits = [shortType(b.type) + (b.terraformable ? " tf" : ""), geo ? `${geo} geo` : null];
     const done = b.mapped_by_you;
     items.push({
@@ -572,7 +584,7 @@ export function explorationPanel(input: {
       ]
         .filter(Boolean)
         .join("  "),
-      tone: done ? "dim" : value >= input.valuableMin ? "accent" : undefined,
+      tone: done ? "dim" : "accent",
       done,
       value,
     });
@@ -596,10 +608,18 @@ export function explorationPanel(input: {
     ...items.slice(0, room).map(({ done: _d, value: _v, ...r }) => r),
   ];
   if (items.length > room) rows.push({ text: `+${items.length - room} more`, tone: "dim" });
-  if (!rows.length) rows.push({ text: "Nothing valuable scanned yet", tone: "dim" });
+  if (!top.length && !items.length) {
+    const all = x.discovery.all_bodies_found;
+    rows.push({ text: all ? "Nothing worth mapping" : "Nothing worth mapping yet", tone: "dim" });
+  }
+  if (geoOnly) {
+    const s = geoOnly === 1 ? "body" : "bodies";
+    rows.push({ text: `${geoOnly} ${s} with geological signals`, tone: "dim" });
+  }
   const d = x.discovery;
-  const right =
-    d.body_count !== null ? `${x.scanned}/${d.body_count} bodies` : `${x.scanned} scanned`;
+  // The game's body count leaves out belt clusters, which have no planet class or star type.
+  const scanned = x.bodies.filter((b) => b.type !== null).length;
+  const right = d.body_count !== null ? `${scanned}/${d.body_count} bodies` : `${scanned} scanned`;
   return {
     mode: "exploration",
     title: "EXPLORE",
