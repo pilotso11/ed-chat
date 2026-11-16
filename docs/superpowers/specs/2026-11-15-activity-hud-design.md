@@ -112,8 +112,11 @@ per body, with the first-discovery and first-mapped bonuses from the scan's `Was
   - `hudMode` (Ctrl+Alt+Shift+P): cycle auto → each enabled mode → off → auto.
   - `hudMove` (Ctrl+Alt+Home): for 15 seconds the chat's move keys (Ctrl+Alt+Arrows) move the
     panel instead of the chat, on the same 3 × 3 anchor grid. The panel shows a dashed border
-    while it moves. No modifierless key is ever registered.
+    while it moves. Moving takes no key of its own beyond `hudMove`.
   - `routeNext` (Ctrl+Alt+PageDown) and `routePrev` (Ctrl+Alt+PageUp): see Route.
+  - The default keys all have a modifier. A player can set a key without one in `settings.json`.
+    As with the chat's keys, such a key is registered only while the game is in front (`game`
+    scope), and never in `always` scope.
 - The panel shows only while the game window is in front, as the chat does.
 
 ### Live data
@@ -260,6 +263,8 @@ The mode registry first sketched here was not needed. The modes are small, pure 
   rows, plus the route rows.
 - `src/core/hud/hud.ts`: picks the mode and builds the view. `src/core/hud/feed.ts` reads the
   sources, and `src/core/hud/known.ts` is the Spansh lookup.
+- `src/core/hud/edMcpConfig.ts`: finds the ed-mcp sync folder from `ED_MCP_SYNC_DIR` in Claude
+  Code's `~/.claude.json`, for `hud.edMcpDataDir` when it is null.
 - `src/renderer/hud.tsx`: one component renders any `PanelView`.
 
 A new mode is a rule in `mode.ts`, a panel function and its tests.
