@@ -6,7 +6,7 @@ import {
   parseSpanshDump,
   type KnownBody,
 } from "../src/core/hud/known.js";
-import { bioRows, explorationPanel, highlightRows } from "../src/core/hud/panels.js";
+import { bioRows, explorationPanel, highlightRows, wasFootfalled } from "../src/core/hud/panels.js";
 
 const dump = {
   system: {
@@ -252,6 +252,20 @@ describe("bio rows", () => {
       })[0]!.right;
     expect(row(scan(false))).toMatch(/~47.1M ×5/);
     expect(row(scan(true))).toMatch(/~9\.4M(?! ×5)/);
+  });
+
+  it("trusts a scan that says someone landed over a newer one that says not", () => {
+    // Seen in a journal: an AutoScan on arrival, then the FSS's Detailed scan a minute later.
+    const scan = (WasFootfalled: boolean) => ({
+      event: "Scan",
+      timestamp: "2026-11-16T00:00:00Z",
+      SystemAddress: 42,
+      BodyID: 5,
+      WasFootfalled,
+    });
+    expect(wasFootfalled([scan(true), scan(false)], 42, 5)).toBe(true);
+    expect(wasFootfalled([scan(false)], 42, 5)).toBe(false);
+    expect(wasFootfalled([], 42, 5)).toBeNull();
   });
 
   it("is green only once every species is analysed", () => {

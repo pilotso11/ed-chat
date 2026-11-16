@@ -50,6 +50,16 @@ export function creditRange(lo: number, hi: number): string {
   return `${credits(lo)}–${credits(hi)}`;
 }
 
+// Scans of one body can disagree: an AutoScan on arrival can say the body was discovered,
+// mapped and walked on, and the FSS's Detailed scan a minute later say not. Someone did it if any
+// scan says so, so a true flag is kept over a newer false one.
+const VISITED = ["WasDiscovered", "WasMapped", "WasFootfalled"] as const;
+function keepVisited(prev: Obj | undefined, e: Obj): Obj {
+  if (!prev) return e;
+  const kept = VISITED.filter((k) => prev[k] === true && e[k] === false);
+  return kept.length ? { ...e, ...Object.fromEntries(kept.map((k) => [k, true])) } : e;
+}
+
 export function credits(n: number): string {
   if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
@@ -154,10 +164,18 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
   const starPos = new Map<number, number[]>();
   // Planets nobody had set foot on, where analysed species pay the first-footfall bonus.
   const untrodden = new Set<string>();
+  const trodden = new Set<string>();
   let here: number | null = null;
   let bio = 0;
   let bioCount = 0;
   const session = { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 };
+  // Bodies whose detailed scan this session says undiscovered. Each counts at the end unless any
+  // scan of it, in `discovered`, says someone found it first, since a later scan can say so too.
+  const found = new Set<string>();
+  const discovered = new Set<string>();
+  // First discoveries settled by a sale this session, and the bodies they were.
+  let firstFound = 0;
+  const settled = new Set<string>();
   for (const e of events) {
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     const address = num(e.SystemAddress);
@@ -166,7 +184,10 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
     }
     switch (e.event) {
       case "LoadGame":
-        session.systems = session.scanned = session.mapped = session.firstDiscoveries = 0;
+        session.systems = session.scanned = session.mapped = 0;
+        found.clear();
+        firstFound = 0;
+        settled.clear();
         break;
       case "FSDJump":
         session.systems++;
@@ -177,18 +198,22 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         here = address;
         break;
       case "Scan": {
-        if (e.WasFootfalled === false) untrodden.add(key);
-        else if (e.WasFootfalled === true) untrodden.delete(key);
+        // Any scan that says someone landed wins: see wasFootfalled().
+        if (e.WasFootfalled === true) {
+          trodden.add(key);
+          untrodden.delete(key);
+        } else if (e.WasFootfalled === false && !trodden.has(key)) untrodden.add(key);
         const prev = scans.get(key);
         scans.set(key, {
           system: str(e.StarSystem),
           address,
-          scan: e,
+          scan: keepVisited(prev?.scan, e),
           mapped: prev?.mapped ?? false,
         });
+        if (e.WasDiscovered === true) discovered.add(key);
         if (e.ScanType === "Detailed") {
           session.scanned++;
-          if (e.WasDiscovered === false) session.firstDiscoveries++;
+          if (e.WasDiscovered === false && !settled.has(key)) found.add(key);
         }
         break;
       }
@@ -220,7 +245,15 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
           );
         };
         for (const [k, s] of scans) {
-          if ((s.system && sold.has(s.system.toLowerCase())) || !near(s.address)) scans.delete(k);
+          if (!((s.system && sold.has(s.system.toLowerCase())) || !near(s.address))) continue;
+          scans.delete(k);
+          // Selling tags the body as the player's, so a rescan says discovered: settle the count
+          // now.
+          if (found.has(k)) {
+            if (!discovered.has(k)) firstFound++;
+            found.delete(k);
+            settled.add(k);
+          }
         }
         break;
       }
@@ -254,6 +287,7 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         firstMapped: s.scan.WasMapped === false,
       }) ?? 0;
   }
+  session.firstDiscoveries = firstFound + [...found].filter((k) => !discovered.has(k)).length;
   return { unsoldCartographic: carto, unsoldBio: bio, unsoldBioCount: bioCount, session };
 }
 
@@ -390,7 +424,11 @@ function guessGenus(
 /** Vista Genomics pays five times as much for species from a planet nobody has set foot on. */
 export const FOOTFALL_BONUS = 5;
 
-/** Whether someone has set foot on the planet, from its newest Scan; null before the scan. */
+/**
+ * Whether someone has set foot on the planet; null before a scan. Scans of one body can disagree:
+ * an AutoScan on arrival can say yes and the FSS's Detailed scan a minute later say no, so any
+ * scan that says yes wins.
+ */
 export function wasFootfalled(
   events: JournalEvent[],
   address: number | null,
@@ -399,7 +437,8 @@ export function wasFootfalled(
   let v: boolean | null = null;
   for (const e of events) {
     if (e.event !== "Scan" || e.SystemAddress !== address || e.BodyID !== bodyId) continue;
-    if (typeof e.WasFootfalled === "boolean") v = e.WasFootfalled;
+    if (e.WasFootfalled === true) return true;
+    if (e.WasFootfalled === false) v = false;
   }
   return v;
 }
