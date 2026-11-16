@@ -24,6 +24,8 @@ export interface HudRow {
   right?: string;
   /** 0 to 1: a progress bar under the text. */
   bar?: number;
+  /** A second line under the text that wraps at the panel's width instead of widening it. */
+  detail?: string;
   tone?: Tone;
 }
 
@@ -457,7 +459,9 @@ export function bioRows(input: {
     const ls = x?.distance_ls ?? k?.distance_ls ?? null;
     const labels = guesses.map((g, i) => g?.label ?? genera[i]!);
     items.push({
-      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio${labels.length ? ` · ${labels.join(", ")}` : ""}`,
+      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio`,
+      // The species can be many: on their own line, which wraps.
+      ...(labels.length ? { detail: labels.join(", ") } : {}),
       right: [
         ls !== null ? `${Math.round(ls).toLocaleString("en-US")} ls` : null,
         likely === null
