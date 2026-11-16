@@ -169,6 +169,10 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
   let bio = 0;
   let bioCount = 0;
   const session = { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 };
+  // Bodies scanned in detail this session, and whether any scan of each says someone found it
+  // first. Counted at the end, since a later scan can say so too.
+  const found = new Map<string, boolean>();
+  const discovered = new Set<string>();
   for (const e of events) {
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     const address = num(e.SystemAddress);
@@ -177,7 +181,8 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
     }
     switch (e.event) {
       case "LoadGame":
-        session.systems = session.scanned = session.mapped = session.firstDiscoveries = 0;
+        session.systems = session.scanned = session.mapped = 0;
+        found.clear();
         break;
       case "FSDJump":
         session.systems++;
@@ -200,10 +205,10 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
           scan: keepVisited(prev?.scan, e),
           mapped: prev?.mapped ?? false,
         });
+        if (e.WasDiscovered === true) discovered.add(key);
         if (e.ScanType === "Detailed") {
           session.scanned++;
-          // From the merged scan: an earlier scan may say someone found it first.
-          if (scans.get(key)!.scan.WasDiscovered === false) session.firstDiscoveries++;
+          if (e.WasDiscovered === false) found.set(key, true);
         }
         break;
       }
@@ -269,6 +274,7 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         firstMapped: s.scan.WasMapped === false,
       }) ?? 0;
   }
+  session.firstDiscoveries = [...found.keys()].filter((k) => !discovered.has(k)).length;
   return { unsoldCartographic: carto, unsoldBio: bio, unsoldBioCount: bioCount, session };
 }
 

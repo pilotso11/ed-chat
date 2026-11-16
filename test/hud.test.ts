@@ -231,6 +231,8 @@ describe("exploration totals", () => {
     expect(explorationTotals([elw("A", 1), later, map]).unsoldCartographic).toBe(known);
     expect(explorationTotals([elw("A", 1), later, map]).session.firstDiscoveries).toBe(0);
     expect(explorationTotals([later]).session.firstDiscoveries).toBe(1);
+    // A scan saying discovered after the detailed scan undoes the count too.
+    expect(explorationTotals([later, elw("A", 1)]).session.firstDiscoveries).toBe(0);
     expect(explorationTotals([later, map]).unsoldCartographic).toBeGreaterThan(known);
   });
 
