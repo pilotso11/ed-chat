@@ -413,16 +413,22 @@ describe("HudFeed sample positions", () => {
     await feed.poll();
     expect(feed.samples.size).toBe(0);
     const s = (type: string) =>
-      ev("ScanOrganic", { ScanType: type, Body: 3, Species_Localised: "Bact", Species: "b" });
+      ev("ScanOrganic", {
+        ScanType: type,
+        SystemAddress: 7,
+        Body: 3,
+        Species_Localised: "Bact",
+        Species: "b",
+      });
     events.push(s("Log"));
     await feed.poll();
-    expect(feed.samples.get(sampleKey(3, "Bact"))).toEqual([{ latitude: 10, longitude: 20 }]);
+    expect(feed.samples.get(sampleKey(7, 3, "Bact"))).toEqual([{ latitude: 10, longitude: 20 }]);
     status = '{"Latitude":11,"Longitude":20,"PlanetRadius":1000000}';
     events.push(s("Sample"));
     await feed.poll();
-    expect(feed.samples.get(sampleKey(3, "Bact"))).toHaveLength(2);
+    expect(feed.samples.get(sampleKey(7, 3, "Bact"))).toHaveLength(2);
     events.push(s("Analyse"));
     await feed.poll();
-    expect(feed.samples.has(sampleKey(3, "Bact"))).toBe(false);
+    expect(feed.samples.has(sampleKey(7, 3, "Bact"))).toBe(false);
   });
 });

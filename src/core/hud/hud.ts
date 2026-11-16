@@ -115,6 +115,7 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
           : null;
       return exobiologyPanel({
         system,
+        address,
         body,
         samples: input.samples,
         here,

@@ -1,0 +1,123 @@
+import { describe, expect, it } from "vitest";
+import type { ExobiologyBody } from "ed-mcp/journal";
+import { exobiologyPanel, sampleKey, type Point } from "../src/core/hud/panels.js";
+
+const totals = {
+  unsoldCartographic: 0,
+  unsoldBio: 0,
+  unsoldBioCount: 0,
+  session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+};
+
+const species = (over: Partial<ExobiologyBody["species"][number]>) => ({
+  genus: "Bacterium",
+  species: "Bacterium Cerbrus",
+  variant: null,
+  samples: 1,
+  stage: "1/3",
+  analysed: false,
+  value: 1_689_800,
+  colony_m: 500,
+  ...over,
+});
+
+const body: ExobiologyBody = {
+  body: "Sys A 3",
+  body_id: 3,
+  bio_signals: 3,
+  genera: ["Bacterium", "Stratum", "Fungoida"],
+  species: [
+    species({}),
+    species({
+      genus: "Stratum",
+      species: "Stratum Tectonicas",
+      analysed: true,
+      stage: "3/3",
+      value: 19_010_800,
+    }),
+  ],
+  not_started: ["Fungoida"],
+  likely: [
+    {
+      genus: "Fungoida",
+      species: [
+        { name: "Fungoida Bullarum", value: 3_703_200, likelihood: 0.6 },
+        { name: "Fungoida Stabitis", value: 2_680_300, likelihood: 0.3 },
+        { name: "Fungoida Gelata", value: 3_330_300, likelihood: 0.1 },
+      ],
+    },
+  ],
+};
+
+// On a 1,000 km planet, 0.01° of latitude is about 175 m.
+const RADIUS = 1_000_000;
+const panel = (opts: {
+  samples?: Map<string, Point[]>;
+  here?: Point | null;
+  footfall?: boolean | null;
+  address?: number | null;
+}) =>
+  exobiologyPanel({
+    system: "Sys",
+    address: opts.address ?? 7,
+    body,
+    samples: opts.samples ?? new Map(),
+    here: opts.here ? { ...opts.here, radius: RADIUS } : null,
+    totals,
+    footfall: opts.footfall,
+  });
+
+describe("exobiology panel", () => {
+  it("shows the distance from the last sample against the colony range", () => {
+    const samples = new Map([
+      [sampleKey(7, 3, "Bacterium Cerbrus"), [{ latitude: 0, longitude: 0 }]],
+    ]);
+    const near = panel({ samples, here: { latitude: 0.01, longitude: 0 } }).rows[1]!;
+    expect(near.text).toBe("  ↔ 175 m / 500 m");
+    expect(near.tone).toBe("warn");
+    expect(near.bar).toBeCloseTo(0.35, 2);
+    const far = panel({ samples, here: { latitude: 0.04, longitude: 0 } }).rows[1]!;
+    expect(far.tone).toBe("good");
+    expect(far.bar).toBe(1);
+  });
+
+  it("ignores samples taken in another system", () => {
+    const samples = new Map([
+      [sampleKey(8, 3, "Bacterium Cerbrus"), [{ latitude: 0, longitude: 0 }]],
+    ]);
+    const rows = panel({ samples, here: { latitude: 0.01, longitude: 0 } }).rows;
+    expect(rows.some((r) => r.text.includes("↔"))).toBe(false);
+  });
+
+  it("names the likely species of a genus not started", () => {
+    const row = panel({}).rows.find((r) => r.text.startsWith("Fungoida"))!;
+    expect(row).toEqual({
+      text: "Fungoida  likely Bullarum / Stabitis",
+      right: "~3.7M",
+      tone: "dim",
+    });
+  });
+
+  it("pays five times on a first footfall", () => {
+    const p = panel({ footfall: false });
+    expect(p.right).toBe("first footfall ×5 · 3 genera");
+    expect(p.rows.find((r) => r.text === "Stratum Tectonicas")!.right).toBe("✓  95.1M");
+    expect(p.rows[0]!.right).toBe("1/3  8.4M");
+    expect(p.rows.find((r) => r.text.startsWith("Fungoida"))!.right).toBe("~18.5M");
+    expect(panel({ footfall: true }).right).toBe("3 genera");
+  });
+
+  it("asks for a restart when another species was started first", () => {
+    const abandoned = { ...body, species: [species({ abandoned: true })] };
+    const p = exobiologyPanel({
+      system: "Sys",
+      address: 7,
+      body: abandoned,
+      samples: new Map(),
+      here: null,
+      totals,
+    });
+    expect(p.rows[0]).toMatchObject({ text: "Bacterium Cerbrus", tone: "warn" });
+    expect(p.rows[0]!.right).toMatch(/^restart/);
+  });
+});

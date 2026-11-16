@@ -533,8 +533,10 @@ async function main(): Promise<void> {
       if (prev === null) return flash("route", "ⓘ at the first stop", 3_000);
       await hudPlans.updateStop(plan.id, { index: prev }, { status: "todo" });
     }
-    await pollHud();
-    const now = hudData?.plan;
+    // Read the plan back rather than through pollHud(), which skips while the timer's poll runs
+    // and would leave the plan from before the change.
+    const now = await hudPlans.get(plan.id).catch(() => null);
+    void pollHud();
     const cur = now ? currentStop(now) : null;
     if (now && cur !== null) {
       clipboard.writeText(now.stops[cur]!.system);

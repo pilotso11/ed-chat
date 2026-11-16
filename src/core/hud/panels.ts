@@ -574,11 +574,13 @@ export interface Point {
   longitude: number;
 }
 
-/** The key of a species on a body, for the sample positions. */
-export const sampleKey = (bodyId: number, species: string) => `${bodyId}|${species}`;
+/** The key of a species on a body, for the sample positions: body IDs repeat in every system. */
+export const sampleKey = (address: number | null, bodyId: number, species: string) =>
+  `${address}|${bodyId}|${species}`;
 
 export function exobiologyPanel(input: {
   system: string | null;
+  address: number | null;
   body: ExobiologyBody;
   /** Where each species was sampled, by sampleKey(), as seen live. */
   samples: Map<string, Point[]>;
@@ -604,7 +606,7 @@ export function exobiologyPanel(input: {
       continue;
     }
     rows.push({ text: s.species, right: `${s.stage}  ${value}`, tone: "accent" });
-    const points = input.samples.get(sampleKey(body.body_id, s.species)) ?? [];
+    const points = input.samples.get(sampleKey(input.address, body.body_id, s.species)) ?? [];
     if (input.here && points.length && s.colony_m !== null) {
       const here = input.here;
       const d = Math.min(...points.map((p) => surfaceDistance(p, here, here.radius)));
@@ -619,7 +621,9 @@ export function exobiologyPanel(input: {
     // The likely species from the planet's conditions: the best, and the next when close.
     const likely = body.likely?.find((l) => l.genus === g)?.species ?? [];
     const top = likely.filter((p, i) => i === 0 || p.likelihood >= 0.25).slice(0, 2);
-    const names = top.map((p) => p.name.replace(new RegExp(`^${g} `), "")).join(" / ");
+    const names = top
+      .map((p) => (p.name.startsWith(`${g} `) ? p.name.slice(g.length + 1) : p.name))
+      .join(" / ");
     rows.push({
       text: top.length ? `${g}  likely ${names}` : `${g}  not started`,
       right: top.length ? `~${credits(top[0]!.value * bonus)}` : undefined,

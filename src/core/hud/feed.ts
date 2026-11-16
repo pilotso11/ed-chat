@@ -87,7 +87,8 @@ export class HudFeed {
       const body = typeof e.Body === "number" ? e.Body : null;
       const species = typeof e.Species_Localised === "string" ? e.Species_Localised : null;
       if (body === null || !species) continue;
-      const key = sampleKey(body, species);
+      const address = typeof e.SystemAddress === "number" ? e.SystemAddress : null;
+      const key = sampleKey(address, body, species);
       if (e.ScanType === "Log") this.samples.set(key, []);
       if (e.ScanType === "Analyse") {
         this.samples.delete(key);
