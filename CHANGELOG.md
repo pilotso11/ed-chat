@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/pilotso11/ed-chat/compare/v0.3.1...v0.4.0) (2026-11-17)
+
+
+### Features
+
+* each message carries a note of the game state from the journal ([#43](https://github.com/pilotso11/ed-chat/issues/43)) ([57ad724](https://github.com/pilotso11/ed-chat/commit/57ad724b1a8b7081b4260cf7ead05e7fc48a3cdc))
+
+
+### Bug Fixes
+
+* a scan that says someone landed wins over a newer one that says not ([#40](https://github.com/pilotso11/ed-chat/issues/40)) ([4b3e0ed](https://github.com/pilotso11/ed-chat/commit/4b3e0ed51c9c0f36a03a14b7dca27341ebb8f8c0))
+* the exploration panel lists only bodies worth mapping, and counts bodies as the game does ([#42](https://github.com/pilotso11/ed-chat/issues/42)) ([a944b42](https://github.com/pilotso11/ed-chat/commit/a944b4244f43195fbe4a268b58c21d5cd7595422))
+* the panel uses ed-mcp 0.7.1, which keeps a body mapped or discovered by others when a newer scan says it was not ([#44](https://github.com/pilotso11/ed-chat/issues/44)) ([5c31b70](https://github.com/pilotso11/ed-chat/commit/5c31b70e80da13de3bee1de3a4d363a7fc047501))
+
 ## [0.3.1](https://github.com/pilotso11/ed-chat/compare/v0.3.0...v0.3.1) (2026-11-16)
 
 
