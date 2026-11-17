@@ -60,6 +60,16 @@ describe("game note", () => {
     expect(noteIsFresh(true, 0, now)).toBe(false);
   });
 
+  it("says docked even when the station is not known, and cuts long names", () => {
+    expect(gameContext({ system: "Sol", station: null, docked: true }, null, null)).toContain(
+      "Location: docked in Sol.",
+    );
+    const long = "x".repeat(500);
+    const note = gameContext({ system: long, station: null, docked: false }, null, null)!;
+    expect(note).toContain(`Location: in ${"x".repeat(160)}.`);
+    expect(note).not.toContain("x".repeat(161));
+  });
+
   it("says nothing of a nearby body when docked", () => {
     const note = gameContext(
       { system: "Sol", station: "Abraham Lincoln", docked: true },

@@ -33,7 +33,8 @@ export function gameContext(
 ): string | null {
   const lines: string[] = [];
   if (where?.system) {
-    const at = where.docked && where.station ? `docked at ${clean(where.station)} in` : "in";
+    const station = clean(where.station);
+    const at = !where.docked ? "in" : station ? `docked at ${station} in` : "docked in";
     const near = !where.docked && status?.body ? `, near ${clean(status.body)}` : "";
     lines.push(`Location: ${at} ${clean(where.system)}${near}.`);
   }
@@ -56,7 +57,8 @@ export function gameContext(
     lines.push(`Route: ${stops.join("; ")}`);
   }
   if (!lines.length) return null;
-  return `[Game now, from the journal, newer than anything earlier in the conversation:\n${lines.join("\n")}]`;
+  // The latest the journal knows, which stays true after the game closes: the ship is still there.
+  return `[Game state, the latest from the journal, newer than anything earlier in the conversation:\n${lines.join("\n")}]`;
 }
 
 /** The feed polls each second: when it has not read the game for this long, it has stopped. */
