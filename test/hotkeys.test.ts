@@ -34,15 +34,21 @@ describe("activeBindings", () => {
     const all = bindings(DEFAULT_SETTINGS.hotkeys);
     expect(activeBindings(all, false)).toHaveLength(all.length);
     const names = activeBindings(all, true).map((b) => b.name);
-    for (const gone of ["openChat", "toggleOverlay", "cancel", "nextDisplay"]) {
+    for (const gone of ["cancel", "nextDisplay", "approve", "deny", "alwaysAllow"]) {
       expect(names).not.toContain(gone);
     }
+    // The chat input reports these as real Ctrl+Alt chords, so they still work there.
+    const chords: [string, string][] = [
+      ["Ctrl+Alt+Y", "approve"],
+      ["Ctrl+Alt+N", "deny"],
+      ["Ctrl+Alt+A", "alwaysAllow"],
+    ];
+    for (const [chord, name] of chords) expect(chordBinding(all, chord)?.name).toBe(name);
     for (const kept of [
+      "openChat",
       "toggleIcon",
       "moveLeft",
       "moveUp",
-      "approve",
-      "deny",
       "showHistory",
       "copyChip1",
     ]) {
@@ -132,7 +138,7 @@ describe("HotkeyManager", () => {
     expect(live.size).toBe(0);
     expect(m.activate()).toEqual([]);
     expect(live.size).toBe(27);
-    live.get("Ctrl+Alt+C")!();
+    live.get("Ctrl+Alt+Enter")!();
     expect(ran).toEqual([{ type: "openChat" }]);
     m.deactivate();
     expect(live.size).toBe(0);
@@ -191,7 +197,11 @@ describe("key lists", () => {
   });
 
   it("lists the keys for the keys card and marks the taken ones", () => {
-    const rows = keyRows(DEFAULT_SETTINGS.hotkeys, ["Ctrl+Alt+C", "Ctrl+Shift+3", "Ctrl+Alt+Up"]);
+    const rows = keyRows(DEFAULT_SETTINGS.hotkeys, [
+      "Ctrl+Alt+Enter",
+      "Ctrl+Shift+3",
+      "Ctrl+Alt+Up",
+    ]);
     expect(rows[0]).toEqual({
       label: "Reply → whole reply → chat",
       keys: "Ctrl+`",
@@ -200,8 +210,8 @@ describe("key lists", () => {
     });
     expect(rows[1]).toEqual({
       label: "Open chat directly",
-      keys: "Ctrl+Alt+C",
-      failed: ["Ctrl+Alt+C"],
+      keys: "Ctrl+Alt+Enter",
+      failed: ["Ctrl+Alt+Enter"],
       unused: [],
     });
     expect(rows[2]).toEqual({

@@ -51,13 +51,13 @@ installer is not code signed, so Windows SmartScreen warns on first run. Select
 | Key | Action |
 | --- | --- |
 | Ctrl+` | Step: the last reply, then the whole reply, then the chat; a press in the chat closes it |
-| Ctrl+Alt+C | Open the chat directly. Enter sends and returns to the game. Esc closes. |
+| Ctrl+Alt+Enter | Open the chat directly. Enter sends and returns to the game. Esc closes. |
 | Ctrl+Shift+1…9 | Copy chip 1…9 (top-row digits). A click on a chip also copies it. |
-| Ctrl+Shift+Y / N | Allow / deny a tool that Claude asks to run |
-| Ctrl+Shift+A | Allow the tool, and allow it without asking until `/new` |
+| Ctrl+Alt+Y / N | Allow / deny a tool that Claude asks to run |
+| Ctrl+Alt+A | Allow the tool, and allow it without asking until `/new` |
 | Ctrl+Alt+X | Stop the current reply |
 | Ctrl+Shift+H | Show or hide this session's history |
-| Ctrl+Alt+Enter | Switch between the full overlay and a small icon |
+| Ctrl+Shift+Enter | Switch between the full overlay and a small icon |
 | Ctrl+Alt+Arrows | Move the overlay around the screen edge |
 | Ctrl+Alt+M | Move the overlay to the next monitor |
 
