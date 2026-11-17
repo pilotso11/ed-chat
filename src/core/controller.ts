@@ -85,7 +85,10 @@ export type Action =
   | { type: "notice"; key: string; text: string | null }
   | { type: "newSession" }
   | { type: "cancelled" }
-  | { type: "keys"; rows: KeyRow[] | null };
+  | { type: "keys"; rows: KeyRow[] | null }
+  // An answer from ED Chat itself, such as /version, shown in the reply card. replaces: update
+  // that earlier answer only if it is still the card's text.
+  | { type: "localReply"; text: string; replaces?: string };
 
 function withNotice(s: OverlayState, key: string, text: string | null): OverlayState {
   const { [key]: _old, ...rest } = s.notices;
@@ -279,6 +282,15 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
       return { ...s, session: "starting", tool: null, cancelled: true };
     case "keys":
       return { ...s, keys: a.rows };
+    // A reply still arriving keeps the card. An update changes the text only: a card the
+    // player closed, or that faded, stays closed, and shows the new text when brought back.
+    case "localReply": {
+      if (s.session === "thinking") return s;
+      const local = { reply: a.text, chips: [], pinned: firstLine(a.text) };
+      if (a.replaces === undefined)
+        return { ...s, ...local, cardOpen: true, cardFull: true, visible: true };
+      return s.reply === a.replaces ? { ...s, ...local } : s;
+    }
   }
 }
 
