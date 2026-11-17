@@ -11,6 +11,10 @@ yourself. When you send a message, ED Chat passes it to that CLI on your PC.
 The CLI sends the message to Anthropic to get Claude's reply. Anthropic's terms
 and privacy policy apply to that data, not this one.
 
+With each message, ED Chat adds a short note of the game state from your
+journal: your current system and nearby body, the station when docked, what the
+activity panel shows, and your route. It goes to Anthropic with the message.
+
 Claude Code also starts the MCP servers that you added to it, such as ed-mcp.
 Those servers can contact other services, for example EDSM, Inara, Spansh or
 Frontier, when Claude uses them to answer you. Each server's own documentation

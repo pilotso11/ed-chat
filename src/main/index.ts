@@ -71,7 +71,8 @@ import { openStores } from "ed-mcp/journal";
 import { edMcpSyncDir } from "../core/hud/edMcpConfig.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
-import { buildHud, currentMode } from "../core/hud/hud.js";
+import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
+import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
 import { currentStop, nextStopAfter, previousStop, todoStops } from "../core/hud/panels.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
@@ -390,6 +391,10 @@ async function main(): Promise<void> {
   // Activity panel.
   let hudSize = { width: 0, height: 0 };
   let hudData: FeedData | null = null;
+  // The panel's last view, for the game note sent with each message.
+  let lastHudView: HudView | null = null;
+  // When the feed last read the game, so a note is never sent from a stopped feed.
+  let hudFreshAt = 0;
   let hudMoving = false;
   let hudMoveTimer: NodeJS.Timeout | undefined;
   let hudShown = false;
@@ -439,6 +444,7 @@ async function main(): Promise<void> {
       ? `Move panel: ${first(k.moveUp)} / ${first(k.moveDown)} / ${first(k.moveLeft)} / ${first(k.moveRight)} · monitor ${first(k.nextDisplay)}`
       : null;
     const view = buildHud(input, moveHint);
+    lastHudView = view;
     const mode = String(currentMode(input));
     if (mode !== hudMode) {
       hudMode = mode;
@@ -491,6 +497,7 @@ async function main(): Promise<void> {
     hudPolling = true;
     try {
       hudData = await hudFeed.poll();
+      hudFreshAt = Date.now();
       const stops = todoStops(hudData.plan);
       if (JSON.stringify(stops) !== JSON.stringify(chipStops)) {
         chipStops = stops;
@@ -820,7 +827,10 @@ async function main(): Promise<void> {
       dispatch({ type: "notice", key: "claude", text: noClaude() });
       return false;
     }
-    if (!session.send(t)) {
+    const fresh = noteIsFresh(settings.hud.enabled, hudFreshAt, Date.now());
+    const where = fresh ? (hudData?.journal?.location ?? null) : null;
+    const note = fresh ? gameContext(where, hudData?.status ?? null, lastHudView) : null;
+    if (!session.send(withGameContext(t, note))) {
       flash("chat", session.busy ? BUSY : GAVE_UP);
       return false;
     }

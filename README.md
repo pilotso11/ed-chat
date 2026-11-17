@@ -317,3 +317,7 @@ For a signed install, use the
 
 ED Chat has no telemetry. It passes your messages to the Claude Code CLI on
 your PC, which sends them to Anthropic. See [PRIVACY.md](PRIVACY.md).
+
+Each message also carries a short note of the game state, so Claude does not
+plan from an older turn: your system and nearby body, what the activity panel
+shows, and your route. It comes from the same journal data the panel reads.
