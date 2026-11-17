@@ -118,6 +118,14 @@ While you type in the chat, the overlay leaves typing keys to the chat input,
 including AltGr letters. Ctrl+Alt hotkeys such as Ctrl+Alt+X still work there:
 use the left Ctrl and Alt keys, because AltGr types the letter.
 
+Outside the chat, Windows reports AltGr as Ctrl+Alt, so AltGr plus a letter
+presses the Ctrl+Alt hotkey for that letter. On keyboard layouts where AltGr+A,
+AltGr+N or AltGr+Y types a character, for example á on a UK keyboard, typing it
+in the game's own chat while a tool request waits answers the request. AltGr+A
+then always allows the tool until `/new`. If you type those characters in the
+game, set `hotkeys.approve`, `deny` and `alwaysAllow` to other keys, such as
+`Ctrl+Shift+Y`, `Ctrl+Shift+N` and `Ctrl+Shift+A`.
+
 If the overlay shows `⚠ 2 hotkeys not working`, another app already uses those
 keys, or `settings.json` sets the same key for two actions. The tray menu item
 **Hotkey problems** lists them. Set other keys in `settings.json`.
