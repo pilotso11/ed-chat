@@ -167,7 +167,18 @@ export class HotkeyManager {
     if (this._active) return [];
     this._active = true;
     const failed: string[] = [];
+    const failedKeys: string[] = [];
+    // Registering a key twice replaces the first action without an error, so a key set for
+    // two actions works for the first only, and the second is reported.
+    const owner = new Map<string, string>();
     for (const b of this.current) {
+      const first = owner.get(normalize(b.accelerator));
+      if (first !== undefined) {
+        failed.push(`${b.name} (${b.accelerator}): also set for ${first}`);
+        failedKeys.push(b.accelerator);
+        continue;
+      }
+      owner.set(normalize(b.accelerator), b.name);
       let ok = false;
       try {
         ok = this.reg.register(b.accelerator, () => this.run(b.action));
@@ -175,11 +186,12 @@ export class HotkeyManager {
         // Electron throws on an accelerator it cannot parse.
       }
       if (ok) this.registered.push(b.accelerator);
-      else failed.push(`${b.name} (${b.accelerator})`);
+      else {
+        failed.push(`${b.name} (${b.accelerator})`);
+        failedKeys.push(b.accelerator);
+      }
     }
-    this.failedKeys = this.current
-      .map((b) => b.accelerator)
-      .filter((a) => !this.registered.includes(a));
+    this.failedKeys = failedKeys;
     return failed;
   }
 

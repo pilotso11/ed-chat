@@ -156,6 +156,27 @@ describe("HotkeyManager", () => {
     expect([...live.keys()]).toEqual(["Ctrl+Shift+N"]);
   });
 
+  it("gives each default action its own key", () => {
+    const keys = bindings(DEFAULT_SETTINGS.hotkeys).map((b) => b.accelerator.toLowerCase());
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  // A player who kept the old toggleIcon key gets the new openChat default on the same key.
+  it("reports a key set for two actions, and keeps it for the first", () => {
+    const { reg, live } = fakeRegistrar();
+    const ran: HotkeyAction[] = [];
+    const m = new HotkeyManager(reg, (a) => ran.push(a));
+    const h = SettingsSchema.parse({ hotkeys: { toggleIcon: "Alt+Ctrl+Enter" } }).hotkeys;
+    m.setBindings(bindings(h));
+    expect(m.activate()).toEqual(["toggleIcon (Alt+Ctrl+Enter): also set for openChat"]);
+    expect(m.failedKeys).toEqual(["Alt+Ctrl+Enter"]);
+    live.get("Ctrl+Alt+Enter")!();
+    expect(ran).toEqual([{ type: "openChat" }]);
+    expect(keyRows(h, m.failedKeys).find((r) => r.label === "Icon mode")?.failed).toEqual([
+      "Alt+Ctrl+Enter",
+    ]);
+  });
+
   it("re-registers new bindings when active", () => {
     const { reg, live } = fakeRegistrar();
     const m = new HotkeyManager(reg, () => {});

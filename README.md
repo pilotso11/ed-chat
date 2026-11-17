@@ -118,9 +118,9 @@ While you type in the chat, the overlay leaves typing keys to the chat input,
 including AltGr letters. Ctrl+Alt hotkeys such as Ctrl+Alt+X still work there:
 use the left Ctrl and Alt keys, because AltGr types the letter.
 
-If the overlay shows `⚠ 2 hotkeys taken by other apps`, another app already
-uses those keys. The tray menu item **Hotkey problems** lists them. Set other
-keys in `settings.json`.
+If the overlay shows `⚠ 2 hotkeys not working`, another app already uses those
+keys, or `settings.json` sets the same key for two actions. The tray menu item
+**Hotkey problems** lists them. Set other keys in `settings.json`.
 
 The status line shows one message at a time. **+2** after it means two more are
 waiting; click it to see them all. A message with a command in it, such as

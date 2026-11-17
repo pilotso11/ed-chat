@@ -5,7 +5,7 @@ next to each item.
 
 ## Phase 0, part B (first run only; copy results to the spec's "Phase 0 results")
 
-1. Hotkeys: with the game in Borderless mode and in front, do Ctrl+Alt+C,
+1. Hotkeys: with the game in Borderless mode and in front, do Ctrl+Alt+Enter,
    Ctrl+Shift+1 and Ctrl+Alt+Left reach the overlay?
 2. Focus: after Enter, does the game have focus again (ship controls respond at
    once)?
