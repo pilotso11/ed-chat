@@ -54,7 +54,14 @@ import {
   type HotkeyAction,
 } from "../core/hotkeys.js";
 import { Logger } from "../core/logger.js";
-import { HUD_MODES, keyList, setsKey, type Position, type Settings } from "../core/settings.js";
+import {
+  HUD_MODES,
+  keyList,
+  parseSettings,
+  setsKey,
+  type Position,
+  type Settings,
+} from "../core/settings.js";
 import { StatusWatcher, fullscreenMode } from "../core/status.js";
 import {
   HistoryStore,
@@ -75,12 +82,7 @@ import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
 import { currentStop, nextStopAfter, previousStop, todoStops } from "../core/hud/panels.js";
-import {
-  describeChanges,
-  keepPlayerOnly,
-  playerOnlyChanges,
-  restorePaths,
-} from "../core/playerOnly.js";
+import { PlayerOnlyGuard } from "../core/playerOnlyGuard.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
 import { fetchLatestEdMcp, versionText, type Versions } from "../core/version.js";
 import { IPC } from "../shared/ipc.js";
@@ -147,11 +149,34 @@ async function main(): Promise<void> {
   const timers = new Map<string, NodeJS.Timeout>();
 
   const first = await settingsStore.load();
-  // The file as it was when the player-only settings now in use were applied; Undo puts
-  // them back from it. ED Chat trusts the file it starts with.
-  let trustedText = settingsStore.text;
-  let settings: Settings = settingsStore.settings;
   let saved: SavedState = await stateStore.read();
+  // A change to a player-only setting waits for the player, also across a restart: the values
+  // last applied are kept in state.json.
+  const playerOnly = new PlayerOnlyGuard(
+    {
+      fileText: () => settingsStore.text,
+      parse: (text) => {
+        const r = parseSettings(text);
+        return r.ok ? r.settings : null;
+      },
+      apply: (s) => applyNewSettings(s),
+      write: (text) => settingsStore.write(text),
+      ask: askPlayerOnly,
+      waiting: (on) =>
+        dispatch({
+          type: "notice",
+          key: "playerOnly",
+          text: on ? "⚠ settings.json: a change waits for your answer" : null,
+        }),
+      save: (values) => {
+        saved = { ...saved, playerOnly: values };
+        writeState();
+      },
+      log: (level, text) => log.log(level, text),
+    },
+    saved.playerOnly ?? null,
+  );
+  let settings: Settings = playerOnly.effective() ?? settingsStore.settings;
   let position: Position;
   ({ position, saved } = effectivePosition(settings.position, saved));
   state = { ...state, iconMode: saved.iconMode ?? settings.strip.startAsIcon };
@@ -668,10 +693,10 @@ async function main(): Promise<void> {
     });
     const mode = r.response === 1 ? "auto" : "default";
     try {
-      await settingsStore.set("claude", "permissionMode", mode);
+      // The player chose this, so the guard does not ask about it.
+      await playerOnly.playerWrite(settingsStore.textWith("claude", "permissionMode", mode));
       await settingsStore.load();
-      settings = settingsStore.settings;
-      trustedText = settingsStore.text;
+      settings = playerOnly.effective() ?? settingsStore.settings;
     } catch (err) {
       // The choice still holds for this run; the player sees that it was not saved.
       log.log("warn", `settings.json: ${message(err)}`);
@@ -779,9 +804,13 @@ async function main(): Promise<void> {
     }
   }
 
+  // Only the latest check counts: an earlier one can finish last after claude.path changes.
+  let versionCheck = 0;
   function checkVersion(command: string, shell: boolean): void {
     const file = shell ? quoteForCmd(command) : command;
+    const n = ++versionCheck;
     execFile(file, ["--version"], { shell, windowsHide: true }, (err, stdout) => {
+      if (n !== versionCheck) return;
       const v = err ? null : parseCliVersion(stdout);
       claudeVersion = v ? v.join(".") : null;
       const tested = parseCliVersion(TESTED_CLI_VERSION)!;
@@ -1123,38 +1152,20 @@ async function main(): Promise<void> {
   }
   if (first.error) dispatch({ type: "notice", key: "settings", text: first.error });
   applySettings();
-  let askingPlayerOnly = false;
-
   settingsStore.watch((r) => {
     dispatch({ type: "notice", key: "settings", text: r.error });
-    if (r.changed) onSettingsChanged();
+    if (r.changed) playerOnly.fileChanged();
   });
+  // A change made while ED Chat was closed.
+  playerOnly.check();
 
-  // Other changes apply at once; a change to a player-only setting waits for the player.
-  function onSettingsChanged(): void {
-    const next = settingsStore.settings;
-    if (!playerOnlyChanges(settings, next).length) {
-      trustedText = settingsStore.text;
-      return applyNewSettings(next);
-    }
-    applyNewSettings(keepPlayerOnly(next, settings));
-    if (!askingPlayerOnly) void askPlayerOnly();
-  }
-
-  async function askPlayerOnly(): Promise<void> {
-    askingPlayerOnly = true;
-    dispatch({
-      type: "notice",
-      key: "playerOnly",
-      text: "⚠ settings.json: a change waits for your answer",
-    });
-    const first = settingsStore.settings;
+  async function askPlayerOnly(lines: string[]): Promise<boolean> {
     const r = await dialog.showMessageBox({
       type: "warning",
       title: "ED Chat",
       message: "settings.json changed settings that only you should change.",
       detail:
-        describeChanges(settings, first, playerOnlyChanges(settings, first)).join("\n") +
+        lines.join("\n") +
         "\n\nThese settings control what Claude may run. If you did not make this change " +
         "yourself, or ask Claude for it, choose Undo.",
       buttons: ["Undo", "Apply"],
@@ -1162,28 +1173,7 @@ async function main(): Promise<void> {
       cancelId: 0,
       noLink: true,
     });
-    askingPlayerOnly = false;
-    dispatch({ type: "notice", key: "playerOnly", text: null });
-    // The file can have changed again while the question was open.
-    const next = settingsStore.settings;
-    const changed = playerOnlyChanges(settings, next);
-    if (!changed.length) return;
-    if (r.response === 1) {
-      log.log("info", `player-only settings applied: ${changed.join(", ")}`);
-      trustedText = settingsStore.text;
-      return applyNewSettings(next);
-    }
-    log.log("info", `player-only settings undone: ${changed.join(", ")}`);
-    try {
-      await settingsStore.write(restorePaths(settingsStore.text, trustedText, changed));
-    } catch (err) {
-      log.log("warn", `settings.json: ${message(err)}`);
-      dispatch({
-        type: "notice",
-        key: "playerOnly",
-        text: "⚠ settings.json: could not undo the change; it is not applied",
-      });
-    }
+    return r.response === 1;
   }
 
   function applyNewSettings(next: Settings): void {

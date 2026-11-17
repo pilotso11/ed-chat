@@ -568,7 +568,10 @@ describe("localReply updates", () => {
   it("leave a card that faded or was closed closed, and the overlay as it is", () => {
     const shown = run([ready, { type: "localReply", text: "a" }]);
     const faded = reduce(shown, { type: "cardTimeout" });
-    expect(reduce(faded, { type: "localReply", text: "b", replaces: "a" })).toBe(faded);
+    const late = reduce(faded, { type: "localReply", text: "b", replaces: "a" });
+    expect(late.cardOpen).toBe(false);
+    // Brought back, the card shows the finished answer, not "checking npm…".
+    expect(reduce(late, { type: "showCard" }).reply).toBe("b");
     const hidden = reduce(shown, { type: "toggleVisible" });
     const updated = reduce(hidden, { type: "localReply", text: "b", replaces: "a" });
     expect(updated.visible).toBe(false);

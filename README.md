@@ -244,7 +244,10 @@ limits. It does not change the settings marked player only: `claude`,
 from the tray menu, **Open settings**. ED Chat also checks: when one of these
 settings changes in the file, by your edit or Claude's, ED Chat keeps the old
 value and asks whether to apply the change. **Undo** puts the old value back in
-the file. The other changes in the same save apply at once.
+the file. The other changes in the same save apply at once. ED Chat keeps the
+values you last applied in `state.json`, so a change that is still unanswered
+when you quit, or that is made while ED Chat is closed, is asked about at the
+next start.
 
 | Key | Default | Meaning |
 | --- | --- | --- |

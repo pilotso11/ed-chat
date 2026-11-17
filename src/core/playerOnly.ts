@@ -1,8 +1,13 @@
 // The settings that only the player may change are locked in the app, not only in the prompt:
 // a change to them in settings.json waits until the player applies it. Claude can edit the
 // file, and text from the game reaches Claude, so the prompt alone is not enough.
-import type { Settings } from "./settings.js";
+//
+// The values are kept as settings.json writes them, not as parsed settings: a key that the
+// file does not set is absent, so Undo can remove it again and the default applies.
 import { PLAYER_ONLY_PATHS } from "./settingsDictionary.js";
+
+/** Each player-only setting as settings.json sets it. A setting the file leaves out is absent. */
+export type PlayerOnlyValues = Record<string, unknown>;
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => !!v && typeof v === "object" && !Array.isArray(v);
@@ -29,53 +34,55 @@ function setAt(o: Obj, path: string, value: unknown): void {
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+/** The player-only settings in settings.json text. Text that is not a JSON object sets none. */
+export function playerOnlyValues(text: string): PlayerOnlyValues {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return {};
+  }
+  const values: PlayerOnlyValues = {};
+  for (const p of PLAYER_ONLY_PATHS) {
+    const v = getAt(raw, p);
+    if (v !== undefined) values[p] = structuredClone(v);
+  }
+  return values;
+}
+
 /** The player-only settings that differ between the two. */
-export function playerOnlyChanges(from: Settings, to: Settings): string[] {
-  return PLAYER_ONLY_PATHS.filter((p) => !same(getAt(from, p), getAt(to, p)));
+export function changedPaths(from: PlayerOnlyValues, to: PlayerOnlyValues): string[] {
+  return PLAYER_ONLY_PATHS.filter((p) => !same(from[p], to[p]));
 }
 
-/** The new settings, with the player-only ones as they were. */
-export function keepPlayerOnly(next: Settings, applied: Settings): Settings {
-  const s = structuredClone(next) as unknown as Obj;
-  for (const p of PLAYER_ONLY_PATHS) setAt(s, p, getAt(applied, p));
-  return s as unknown as Settings;
+/** settings.json text with the player-only settings set to these values, the rest kept. */
+export function withValues(text: string, values: PlayerOnlyValues): string {
+  const raw = JSON.parse(text) as unknown;
+  if (!isObj(raw)) throw new Error("settings.json is not an object");
+  for (const p of PLAYER_ONLY_PATHS) setAt(raw, p, values[p]);
+  return JSON.stringify(raw, null, 2) + "\n";
 }
 
-const show = (v: unknown) => {
-  const t = v === undefined ? "(default)" : JSON.stringify(v);
-  return t.length > 80 ? t.slice(0, 79) + "…" : t;
-};
+// In full: the player decides on these values, so none of a value may be hidden.
+const show = (v: unknown) => (v === undefined ? "(default)" : JSON.stringify(v));
 
 /** One line per changed value, for the question to the player. */
-export function describeChanges(from: Settings, to: Settings, paths: string[]): string[] {
+export function describeChanges(
+  from: PlayerOnlyValues,
+  to: PlayerOnlyValues,
+  paths: string[],
+): string[] {
   return paths.flatMap((p) => {
-    const a = getAt(from, p);
-    const b = getAt(to, p);
-    if (isObj(a) && isObj(b)) {
-      const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])];
+    const a = from[p];
+    const b = to[p];
+    if (isObj(a) || isObj(b)) {
+      const x = isObj(a) ? a : {};
+      const y = isObj(b) ? b : {};
+      const keys = [...new Set([...Object.keys(x), ...Object.keys(y)])];
       return keys
-        .filter((k) => !same(a[k], b[k]))
-        .map((k) => `${p}.${k}: ${show(a[k])} → ${show(b[k])}`);
+        .filter((k) => !same(x[k], y[k]))
+        .map((k) => `${p}.${k}: ${show(x[k])} → ${show(y[k])}`);
     }
     return [`${p}: ${show(a)} → ${show(b)}`];
   });
-}
-
-/**
- * settings.json text with the given settings put back as they were in the earlier text. A
- * setting the earlier file did not set is removed, so it takes its default again.
- * A broken earlier file counts as an empty one.
- */
-export function restorePaths(text: string, earlierText: string, paths: string[]): string {
-  const raw = JSON.parse(text) as unknown;
-  let earlier: unknown;
-  try {
-    earlier = JSON.parse(earlierText);
-  } catch {
-    // ED Chat started with a broken file: the settings go back to their defaults.
-    earlier = {};
-  }
-  if (!isObj(raw)) throw new Error("settings.json is not an object");
-  for (const p of paths) setAt(raw, p, getAt(earlier, p));
-  return JSON.stringify(raw, null, 2) + "\n";
 }

@@ -34,7 +34,7 @@ export function versionText(v: Versions): string {
     v.edMcpLatest === "checking"
       ? "checking npm…"
       : v.edMcpLatest === null
-        ? "npm not reachable"
+        ? "could not read the latest from npm"
         : `latest on npm ${v.edMcpLatest}`;
   const lines = [
     `ED Chat ${v.app}`,

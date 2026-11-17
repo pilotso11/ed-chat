@@ -85,13 +85,18 @@ export class SettingsStore {
     await writeFile(this.file, text);
   }
 
-  /** Sets one value in settings.json and keeps the rest of the file. */
-  async set(group: string, key: string, value: unknown): Promise<void> {
+  /** settings.json with one value set and the rest of the file kept. */
+  textWith(group: string, key: string, value: unknown): string {
     // Throws on a broken file, which must not be replaced with one value.
     const raw = JSON.parse(this.text) as Record<string, unknown>;
     const g = raw[group];
     raw[group] = { ...(g && typeof g === "object" ? g : {}), [key]: value };
-    await writeFile(this.file, JSON.stringify(raw, null, 2) + "\n");
+    return JSON.stringify(raw, null, 2) + "\n";
+  }
+
+  /** Sets one value in settings.json and keeps the rest of the file. */
+  async set(group: string, key: string, value: unknown): Promise<void> {
+    await writeFile(this.file, this.textWith(group, key, value));
   }
 
   async load(): Promise<LoadResult> {
@@ -157,6 +162,8 @@ export interface SavedState {
   /** The panel mode chosen with the hotkey; absent means automatic. */
   hudMode?: { mode: HudModeId | "off"; at: string };
   hudHidden?: boolean;
+  /** The player-only settings as the player last applied them (see PlayerOnlyGuard). */
+  playerOnly?: Record<string, unknown>;
 }
 
 const SavedStateSchema = z.object({
@@ -167,6 +174,7 @@ const SavedStateSchema = z.object({
   hudPositionBase: z.string().optional(),
   hudMode: z.object({ mode: z.enum([...HUD_MODES, "off"]), at: z.string() }).optional(),
   hudHidden: z.boolean().optional(),
+  playerOnly: z.record(z.string(), z.unknown()).optional(),
   session: z
     .object({
       id: z.string().min(1),

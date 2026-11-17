@@ -24,7 +24,7 @@ describe("versionText", () => {
     expect(versionText({ ...base, edMcpLatest: "checking" })).toContain("checking npm…");
     const t = versionText({ app: "0.4.0", claude: null, edMcpStatus: null, edMcpLatest: null });
     expect(t).toContain("claude not found");
-    expect(t).toContain("ed-mcp for Claude: not started yet, npm not reachable");
+    expect(t).toContain("ed-mcp for Claude: not started yet, could not read the latest from npm");
   });
 
   it("shows why Claude's ed-mcp does not work", () => {
