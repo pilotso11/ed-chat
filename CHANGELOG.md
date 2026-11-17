@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/pilotso11/ed-chat/compare/v0.4.0...v0.5.0) (2026-11-17)
+
+
+### Features
+
+* /version in the chat, and Claude can show and change ED Chat's settings ([#45](https://github.com/pilotso11/ed-chat/issues/45)) ([3645176](https://github.com/pilotso11/ed-chat/commit/36451760378dccdec57edf41cab350bb645c0802))
+* new default keys for the chat, the icon and tool approvals ([#46](https://github.com/pilotso11/ed-chat/issues/46)) ([73fc4a4](https://github.com/pilotso11/ed-chat/commit/73fc4a48448dc3372a8e43d75f8658e0d79a1d48))
+
 ## [0.4.0](https://github.com/pilotso11/ed-chat/compare/v0.3.1...v0.4.0) (2026-11-17)
 
 
