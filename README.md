@@ -61,7 +61,10 @@ installer is not code signed, so Windows SmartScreen warns on first run. Select
 | Ctrl+Alt+Arrows | Move the overlay around the screen edge |
 | Ctrl+Alt+M | Move the overlay to the next monitor |
 
-Type `/new` in the chat to start a new conversation.
+Type `/new` in the chat to start a new conversation. Type `/version` to see the versions
+of ED Chat, `claude`, the ed-mcp that ED Chat carries for the activity panel and
+the latest ed-mcp on npm, which Claude's `npx ed-mcp@latest` runs. Neither
+command goes to Claude.
 
 When ED Chat starts within 12 hours of your last reply, it resumes that
 conversation, and the history (Ctrl+Shift+H) shows its turns. With an ed-mcp that has
@@ -232,6 +235,15 @@ whole file, to get the current defaults.
 
 Changes apply when you save the file. The file is plain JSON. Settings for
 `claude` apply after `/new`; the overlay shows `ⓘ claude settings apply after /new`.
+
+You can also ask Claude, for example "what is my bio threshold?" or "only show
+bio planets worth 2M or more". Claude knows where `settings.json` is and reads
+`settings.schema.json`, which describes each setting with its default and
+limits. It does not change the settings marked player only: `claude`,
+`approval`, `safety`, `journalDir` and `hud.edMcpDataDir`. Change those yourself
+from the tray menu, **Open settings**. This is an instruction to Claude, not a
+lock: a Claude edit to the file still asks for approval unless you use auto
+mode.
 
 | Key | Default | Meaning |
 | --- | --- | --- |

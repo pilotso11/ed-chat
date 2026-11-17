@@ -9,7 +9,7 @@ import {
   quoteForCmd,
   resolveClaude,
 } from "../src/core/claudeCommand.js";
-import { HUD_PROMPT } from "../src/core/prompt.js";
+import { HUD_PROMPT, settingsPrompt } from "../src/core/prompt.js";
 
 describe("CrashTracker", () => {
   it("gives up after 3 exits in 60 seconds", () => {
@@ -95,6 +95,36 @@ describe("buildClaudeArgs", () => {
       "--model",
       "m",
     ]);
+  });
+});
+
+describe("settingsPrompt", () => {
+  it("tells Claude where settings.json is", () => {
+    const file = String.raw`C:\Users\cmdr\AppData\Roaming\ed-chat\settings.json`;
+    const args = buildClaudeArgs({
+      permissionMode: "auto",
+      mcpConfigFile: "a.json",
+      extraArgs: [],
+      settingsFile: file,
+    });
+    const prompt = args[args.indexOf("--append-system-prompt") + 1]!;
+    expect(prompt.startsWith(HUD_PROMPT)).toBe(true);
+    expect(prompt).toContain(`at ${file}.`);
+    expect(prompt).toContain("readOnly");
+  });
+
+  // The prompt passes through cmd.exe when claude is a .cmd shim.
+  it("leaves out a path that cmd.exe could expand", () => {
+    const files = [
+      String.raw`C:\Users\100%\s.json`,
+      String.raw`C:\a!b\s.json`,
+      String.raw`C:\a"b\s.json`,
+    ];
+    for (const file of files) expect(settingsPrompt(file)).not.toContain(file);
+  });
+
+  it("has no double quotes or cmd metacharacters", () => {
+    expect(settingsPrompt(String.raw`C:\x\settings.json`)).not.toMatch(/["%!^&|<>]/);
   });
 });
 

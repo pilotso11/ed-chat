@@ -1,0 +1,53 @@
+import { describe, expect, it } from "vitest";
+import { BUNDLED_ED_MCP, fetchLatestEdMcp, versionText } from "../src/core/version.js";
+
+const base = { app: "0.4.0", claude: "2.1.308", edMcpStatus: "ok" as const };
+
+describe("versionText", () => {
+  it("lists ED Chat, claude and both ed-mcp copies", () => {
+    expect(versionText({ ...base, edMcpLatest: BUNDLED_ED_MCP })).toBe(
+      [
+        "ED Chat 0.4.0",
+        "claude 2.1.308",
+        `ed-mcp for Claude: added, latest on npm ${BUNDLED_ED_MCP}`,
+        `ed-mcp in ED Chat: ${BUNDLED_ED_MCP} (activity panel)`,
+      ].join("\n"),
+    );
+  });
+
+  it("says when npm has a newer ed-mcp than the one ED Chat carries", () => {
+    expect(versionText({ ...base, edMcpLatest: "99.0.0" })).toContain("newer ED Chat release");
+    expect(versionText({ ...base, edMcpLatest: "0.0.1" })).not.toContain("newer");
+  });
+
+  it("shows a lookup in progress, a failed lookup and a missing claude", () => {
+    expect(versionText({ ...base, edMcpLatest: "checking" })).toContain("checking npm…");
+    const t = versionText({ app: "0.4.0", claude: null, edMcpStatus: null, edMcpLatest: null });
+    expect(t).toContain("claude not found");
+    expect(t).toContain("ed-mcp for Claude: not started yet, npm not reachable");
+  });
+
+  it("shows why Claude's ed-mcp does not work", () => {
+    expect(versionText({ ...base, edMcpStatus: "missing", edMcpLatest: null })).toContain(
+      "not added to claude",
+    );
+  });
+});
+
+describe("fetchLatestEdMcp", () => {
+  const reply = (status: number, body: unknown) =>
+    (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+
+  it("reads the version from npm", async () => {
+    expect(await fetchLatestEdMcp(reply(200, { version: "0.7.2" }))).toBe("0.7.2");
+  });
+
+  it("gives null for an error, a bad body or no network", async () => {
+    expect(await fetchLatestEdMcp(reply(404, {}))).toBeNull();
+    expect(await fetchLatestEdMcp(reply(200, { version: "<b>" }))).toBeNull();
+    const down = (async () => {
+      throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+    expect(await fetchLatestEdMcp(down)).toBeNull();
+  });
+});

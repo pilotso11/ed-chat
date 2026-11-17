@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { HUD_PROMPT } from "./prompt.js";
+import { HUD_PROMPT, settingsPrompt } from "./prompt.js";
 import type { McpServerInfo } from "./streamJson.js";
 
 export const APPROVAL_SERVER = "ed_chat";
@@ -46,7 +46,10 @@ export function buildClaudeArgs(o: {
   permissionMode: "auto" | "default";
   mcpConfigFile: string;
   extraArgs: string[];
+  /** ED Chat's settings.json, which the player can ask Claude to show or change. */
+  settingsFile?: string;
 }): string[] {
+  const prompt = o.settingsFile ? `${HUD_PROMPT} ${settingsPrompt(o.settingsFile)}` : HUD_PROMPT;
   return [
     "-p",
     "--input-format",
@@ -58,7 +61,7 @@ export function buildClaudeArgs(o: {
     "--permission-mode",
     o.permissionMode,
     "--append-system-prompt",
-    HUD_PROMPT,
+    prompt,
     "--mcp-config",
     o.mcpConfigFile,
     "--permission-prompt-tool",

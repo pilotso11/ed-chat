@@ -541,3 +541,25 @@ describe("nextStep", () => {
     expect(nextStep(streaming)).toBe("full");
   });
 });
+
+describe("localReply", () => {
+  it("shows ED Chat's own answer in the full card, without chips", () => {
+    const s = run([ready, { type: "sent", text: "hi" }, text("⟦Sol⟧"), result()]);
+    expect(s.chips.length).toBe(1);
+    const v = reduce(s, { type: "localReply", text: "ED Chat 0.4.0" });
+    expect(v).toMatchObject({ reply: "ED Chat 0.4.0", chips: [], cardOpen: true, cardFull: true });
+    expect(v.history).toEqual(s.history);
+  });
+
+  it("does not replace a reply that is still arriving", () => {
+    const s = run([ready, { type: "sent", text: "hi" }, text("part")]);
+    expect(reduce(s, { type: "localReply", text: "ED Chat 0.4.0" })).toBe(s);
+  });
+
+  it("updates its own answer only while the card still shows it", () => {
+    const s = run([ready, { type: "localReply", text: "a" }]);
+    expect(reduce(s, { type: "localReply", text: "b", replaces: "a" }).reply).toBe("b");
+    const later = reduce(s, { type: "localReply", text: "c" });
+    expect(reduce(later, { type: "localReply", text: "b", replaces: "a" })).toBe(later);
+  });
+});

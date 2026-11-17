@@ -76,6 +76,7 @@ import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.j
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
 import { currentStop, nextStopAfter, previousStop, todoStops } from "../core/hud/panels.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
+import { fetchLatestEdMcp, versionText, type Versions } from "../core/version.js";
 import { IPC } from "../shared/ipc.js";
 import {
   answerArg,
@@ -612,12 +613,16 @@ async function main(): Promise<void> {
       permissionMode: s.claude.permissionMode,
       mcpConfigFile,
       extraArgs: s.claude.extraArgs,
+      settingsFile,
     });
     return { ...resolved, args };
   };
 
   let session: ClaudeSession | null = null;
   let resumePending = false;
+  // For /version.
+  let claudeVersion: string | null = null;
+  let edMcpStatus: Versions["edMcpStatus"] = null;
   function startSession(c: { command: string; args: string[]; shell: boolean }): void {
     session = new ClaudeSession({
       command: c.command,
@@ -691,6 +696,7 @@ async function main(): Promise<void> {
         }
         {
           const ed = edMcpState(e.mcpServers);
+          edMcpStatus = ed;
           dispatch({
             type: "notice",
             key: "edmcp",
@@ -767,6 +773,7 @@ async function main(): Promise<void> {
     const file = shell ? quoteForCmd(command) : command;
     execFile(file, ["--version"], { shell, windowsHide: true }, (err, stdout) => {
       const v = err ? null : parseCliVersion(stdout);
+      if (v) claudeVersion = v.join(".");
       const tested = parseCliVersion(TESTED_CLI_VERSION)!;
       if (v && isOlder(v, tested)) {
         dispatch({
@@ -813,11 +820,44 @@ async function main(): Promise<void> {
     dispatch({ type: "keys", rows: null });
   }
 
+  // The npm lookup is cached, so asking again does not wait on the network.
+  let edMcpLatest: { version: string | null; at: number } | null = null;
+  const LATEST_TTL_MS = 10 * 60_000;
+
+  function showVersion(): boolean {
+    if (state.session === "thinking") {
+      flash("chat", "⚠ wait for the reply, then ask for /version", 4_000);
+      return false;
+    }
+    const base: Omit<Versions, "edMcpLatest"> = {
+      app: app.getVersion(),
+      claude: claudeVersion,
+      edMcpStatus,
+    };
+    const cached = edMcpLatest && Date.now() - edMcpLatest.at < LATEST_TTL_MS ? edMcpLatest : null;
+    const first = versionText({ ...base, edMcpLatest: cached ? cached.version : "checking" });
+    dispatch({ type: "localReply", text: first });
+    scheduleFade();
+    if (!cached) {
+      void fetchLatestEdMcp().then((version) => {
+        edMcpLatest = { version, at: Date.now() };
+        dispatch({
+          type: "localReply",
+          text: versionText({ ...base, edMcpLatest: version }),
+          replaces: first,
+        });
+      });
+    }
+    return true;
+  }
+
   async function send(text: string): Promise<boolean> {
     const t = text.trim();
     if (!t) return false;
-    if (t === "/new") {
-      newConversation();
+    // ED Chat's own commands. They do not reach Claude.
+    if (t === "/new" || t === "/version") {
+      if (t === "/new") newConversation();
+      else if (!showVersion()) return false;
       const ok = await giveFocusBack();
       dispatch({ type: "closeChat" });
       if (ok) void settleFocus();

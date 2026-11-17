@@ -5,7 +5,9 @@ import {
   defaultSettingsText,
   newSettingsText,
   parseSettings,
+  settingsSchemaText,
 } from "../src/core/settings.js";
+import { PLAYER_ONLY_NOTE, SETTINGS_DICTIONARY } from "../src/core/settingsDictionary.js";
 
 describe("parseSettings", () => {
   it("fills every default from an empty object", () => {
@@ -114,5 +116,51 @@ describe("removed settings", () => {
   it("loads an older settings.json that still sets hotkeys.toggleOverlay", () => {
     const r = parseSettings('{"hotkeys":{"toggleOverlay":"Ctrl+Alt+O","openChat":"F13"}}');
     expect(r.ok && r.settings.hotkeys.openChat).toBe("F13");
+  });
+});
+
+describe("settings dictionary", () => {
+  type Node = {
+    description?: string;
+    readOnly?: boolean;
+    default?: unknown;
+    properties?: Record<string, Node>;
+  };
+  const schema = JSON.parse(settingsSchemaText()) as Node;
+  const nodes = (n: Node, where = ""): [string, Node][] =>
+    Object.entries(n.properties ?? {})
+      .filter(([k]) => k !== "$schema")
+      .flatMap(([k, c]) => {
+        const p = where ? `${where}.${k}` : k;
+        return [[p, c] as [string, Node], ...nodes(c, p)];
+      });
+  const all = nodes(schema);
+
+  // Claude reads the schema to explain and change settings, so each one needs its meaning.
+  it("describes every setting in settings.schema.json", () => {
+    expect(all.filter(([, n]) => !n.description).map(([p]) => p)).toEqual([]);
+  });
+
+  it("has no entry for a setting that does not exist", () => {
+    const paths = new Set(all.map(([p]) => p));
+    expect(Object.keys(SETTINGS_DICTIONARY).filter((p) => !paths.has(p))).toEqual([]);
+  });
+
+  it("keeps each default next to its description", () => {
+    const bio = all.find(([p]) => p === "hud.bioMin")![1];
+    expect(bio.default).toBe(5_000_000);
+    expect(bio.description).toMatch(/^Credits\./);
+  });
+
+  it("marks the settings that only the player may change", () => {
+    const readOnly = all.filter(([, n]) => n.readOnly).map(([p]) => p);
+    for (const p of ["claude", "claude.permissionMode", "claude.extraArgs", "approval.sound"])
+      expect(readOnly).toContain(p);
+    for (const p of ["journalDir", "hud.edMcpDataDir", "safety.blockWhenInDanger"])
+      expect(readOnly).toContain(p);
+    expect(readOnly).not.toContain("hud.bioMin");
+    expect(readOnly).not.toContain("hotkeys.openChat");
+    const claude = all.find(([p]) => p === "claude")![1];
+    expect(claude.description).toContain(PLAYER_ONLY_NOTE);
   });
 });
