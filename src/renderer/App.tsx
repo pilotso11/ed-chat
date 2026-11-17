@@ -91,7 +91,7 @@ function KeysCard({ rows }: { rows: NonNullable<ViewModel["keys"]> }) {
               <td>{r.label}</td>
               <td className={r.failed.length || r.unused.length ? "taken" : undefined}>
                 {r.keys}
-                {r.failed.length > 0 && ` ⚠ taken: ${r.failed.join(", ")}`}
+                {r.failed.length > 0 && ` ⚠ not working: ${r.failed.join(", ")}`}
                 {r.unused.length > 0 && ` ⚠ off in always scope: ${r.unused.join(", ")}`}
               </td>
             </tr>
