@@ -161,21 +161,27 @@ describe("HotkeyManager", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  // A player who kept the old toggleIcon key gets the new openChat default on the same key.
-  it("reports a key set for two actions, and keeps it for the first", () => {
-    const { reg, live } = fakeRegistrar();
-    const ran: HotkeyAction[] = [];
-    const m = new HotkeyManager(reg, (a) => ran.push(a));
-    const h = SettingsSchema.parse({ hotkeys: { toggleIcon: "Alt+Ctrl+Enter" } }).hotkeys;
-    m.setBindings(bindings(h));
-    expect(m.activate()).toEqual(["toggleIcon (Alt+Ctrl+Enter): also set for openChat"]);
-    expect(m.failedKeys).toEqual(["Alt+Ctrl+Enter"]);
-    live.get("Ctrl+Alt+Enter")!();
-    expect(ran).toEqual([{ type: "openChat" }]);
-    expect(keyRows(h, m.failedKeys).find((r) => r.label === "Icon mode")?.failed).toEqual([
-      "Alt+Ctrl+Enter",
-    ]);
-  });
+  // A player who kept the old toggleIcon key gets the new openChat default on the same key,
+  // written the same way (as a 0.1.0 settings.json has it) or not.
+  for (const key of ["Ctrl+Alt+Enter", "Alt+Ctrl+Enter"]) {
+    it(`reports a key set for two actions, and keeps it for the first (${key})`, () => {
+      const { reg, live } = fakeRegistrar();
+      const ran: HotkeyAction[] = [];
+      const m = new HotkeyManager(reg, (a) => ran.push(a));
+      const h = SettingsSchema.parse({ hotkeys: { toggleIcon: key } }).hotkeys;
+      m.setBindings(bindings(h));
+      expect(m.activate()).toEqual([`toggleIcon (${key}): also set for openChat`]);
+      // No other app has the key: it registered, for openChat.
+      expect(m.failedKeys).toEqual([]);
+      expect(m.duplicateKeys).toEqual([{ name: "toggleIcon", accelerator: key }]);
+      live.get("Ctrl+Alt+Enter")!();
+      expect(ran).toEqual([{ type: "openChat" }]);
+      // Only the row of the action that lost the key is marked.
+      const rows = keyRows(h, m.failedKeys, m.duplicateKeys);
+      expect(rows.find((r) => r.label === "Icon mode")?.failed).toEqual([key]);
+      expect(rows.find((r) => r.label === "Open chat directly")?.failed).toEqual([]);
+    });
+  }
 
   it("re-registers new bindings when active", () => {
     const { reg, live } = fakeRegistrar();

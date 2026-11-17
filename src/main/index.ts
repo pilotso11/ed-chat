@@ -355,7 +355,11 @@ async function main(): Promise<void> {
         ? `⚠ ${failed.length} hotkey${failed.length > 1 ? "s" : ""} not working; see tray menu`
         : null,
     });
-    if (state.keys) dispatch({ type: "keys", rows: keyRows(settings.hotkeys, hotkeys.failedKeys) });
+    if (state.keys)
+      dispatch({
+        type: "keys",
+        rows: keyRows(settings.hotkeys, hotkeys.failedKeys, hotkeys.duplicateKeys),
+      });
   }
 
   let wasGame: boolean | null = null;
@@ -851,7 +855,10 @@ async function main(): Promise<void> {
   let keysTimer: NodeJS.Timeout | undefined;
   function showKeys(): void {
     clearTimeout(keysTimer);
-    dispatch({ type: "keys", rows: keyRows(settings.hotkeys, hotkeys.failedKeys) });
+    dispatch({
+      type: "keys",
+      rows: keyRows(settings.hotkeys, hotkeys.failedKeys, hotkeys.duplicateKeys),
+    });
     keysTimer = setTimeout(() => dispatch({ type: "keys", rows: null }), KEYS_SECONDS * 1000);
   }
   function hideKeys(): void {
