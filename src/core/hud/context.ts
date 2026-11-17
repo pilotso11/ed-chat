@@ -9,6 +9,18 @@ export interface Whereabouts {
 
 const MARK: Record<string, string> = { current: "now", next: "next", label: "", more: "" };
 
+// Names from Spansh reach the panel rows. A name holding ] or a line break could end the note
+// early and add text Claude trusts, so those are replaced, and each field is kept short.
+const MAX_FIELD = 160;
+function clean(v: string | null | undefined): string | null {
+  if (!v) return null;
+  const s = v
+    .replace(/[\[\]]/g, (c) => (c === "[" ? "(" : ")"))
+    .replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ")
+    .trim();
+  return s ? s.slice(0, MAX_FIELD) : null;
+}
+
 /**
  * A short note of the game as the panel sees it now, sent with each message so Claude does not
  * plan from an older turn: where the player is, the panel's rows and the route. Null when nothing
@@ -21,18 +33,26 @@ export function gameContext(
 ): string | null {
   const lines: string[] = [];
   if (where?.system) {
-    const at = where.docked && where.station ? `docked at ${where.station} in` : "in";
-    const near = !where.docked && status?.body ? `, near ${status.body}` : "";
-    lines.push(`Location: ${at} ${where.system}${near}.`);
+    const at = where.docked && where.station ? `docked at ${clean(where.station)} in` : "in";
+    const near = !where.docked && status?.body ? `, near ${clean(status.body)}` : "";
+    lines.push(`Location: ${at} ${clean(where.system)}${near}.`);
   }
   const p = view?.panel;
   if (p) {
-    const head = [p.title, p.subtitle, p.right].filter(Boolean).join(" · ");
-    const rows = p.rows.map((r) => [r.text.trim(), r.detail, r.right].filter(Boolean).join(" · "));
-    lines.push(`Panel: ${head}`, ...rows.map((r) => `- ${r}`), ...p.footer.map((f) => `- ${f}`));
+    const head = [p.title, p.subtitle, p.right].map(clean).filter(Boolean).join(" · ");
+    const rows = p.rows.map((r) =>
+      [r.text, r.detail, r.right].map(clean).filter(Boolean).join(" · "),
+    );
+    lines.push(
+      `Panel: ${head}`,
+      ...rows.map((r) => `- ${r}`),
+      ...p.footer.map((f) => `- ${clean(f)}`),
+    );
   }
   if (view?.route?.length) {
-    const stops = view.route.map((r) => [MARK[r.kind], r.text, r.right].filter(Boolean).join(" "));
+    const stops = view.route.map((r) =>
+      [MARK[r.kind], clean(r.text), clean(r.right)].filter(Boolean).join(" "),
+    );
     lines.push(`Route: ${stops.join("; ")}`);
   }
   if (!lines.length) return null;

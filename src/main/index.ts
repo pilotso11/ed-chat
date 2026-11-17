@@ -393,6 +393,8 @@ async function main(): Promise<void> {
   let hudData: FeedData | null = null;
   // The panel's last view, for the game note sent with each message.
   let lastHudView: HudView | null = null;
+  // When the feed last read the game, so a note is never sent from a stopped feed.
+  let hudFreshAt = 0;
   let hudMoving = false;
   let hudMoveTimer: NodeJS.Timeout | undefined;
   let hudShown = false;
@@ -495,6 +497,7 @@ async function main(): Promise<void> {
     hudPolling = true;
     try {
       hudData = await hudFeed.poll();
+      hudFreshAt = Date.now();
       const stops = todoStops(hudData.plan);
       if (JSON.stringify(stops) !== JSON.stringify(chipStops)) {
         chipStops = stops;
@@ -810,6 +813,9 @@ async function main(): Promise<void> {
     dispatch({ type: "keys", rows: null });
   }
 
+  // The feed polls each second: older than this, it has stopped, and its data is not "now".
+  const NOTE_MAX_AGE_MS = 10_000;
+
   async function send(text: string): Promise<boolean> {
     const t = text.trim();
     if (!t) return false;
@@ -824,8 +830,9 @@ async function main(): Promise<void> {
       dispatch({ type: "notice", key: "claude", text: noClaude() });
       return false;
     }
-    const where = hudData?.journal?.location ?? null;
-    const note = gameContext(where, hudData?.status ?? null, lastHudView);
+    const fresh = settings.hud.enabled && Date.now() - hudFreshAt < NOTE_MAX_AGE_MS;
+    const where = fresh ? (hudData?.journal?.location ?? null) : null;
+    const note = fresh ? gameContext(where, hudData?.status ?? null, lastHudView) : null;
     if (!session.send(withGameContext(t, note))) {
       flash("chat", session.busy ? BUSY : GAVE_UP);
       return false;
