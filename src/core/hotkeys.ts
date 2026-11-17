@@ -139,12 +139,20 @@ export interface Registrar {
   unregister(accelerator: string): void;
 }
 
+/** An action whose key an earlier action already has; the earlier action keeps it. */
+export interface DuplicateKey {
+  name: string;
+  accelerator: string;
+}
+
 export class HotkeyManager {
   private current: Binding[] = [];
   private registered: string[] = [];
   private _active = false;
-  /** The accelerators that failed at the last activation. */
+  /** The accelerators that failed to register at the last activation. */
   failedKeys: string[] = [];
+  /** The actions whose key was already set for an earlier action, at the last activation. */
+  duplicateKeys: DuplicateKey[] = [];
 
   constructor(
     private readonly reg: Registrar,
@@ -167,7 +175,21 @@ export class HotkeyManager {
     if (this._active) return [];
     this._active = true;
     const failed: string[] = [];
+    const failedKeys: string[] = [];
+    const duplicateKeys: DuplicateKey[] = [];
+    // Registering a key twice replaces the first action without an error, so a key set for
+    // two actions works for the first only, and the second is reported.
+    const owner = new Map<string, string>();
     for (const b of this.current) {
+      const first = owner.get(normalize(b.accelerator));
+      // The same key twice for one action, such as a list that repeats it, is no clash.
+      if (first === b.name) continue;
+      if (first !== undefined) {
+        failed.push(`${b.name} (${b.accelerator}): also set for ${first}`);
+        duplicateKeys.push({ name: b.name, accelerator: b.accelerator });
+        continue;
+      }
+      owner.set(normalize(b.accelerator), b.name);
       let ok = false;
       try {
         ok = this.reg.register(b.accelerator, () => this.run(b.action));
@@ -175,11 +197,13 @@ export class HotkeyManager {
         // Electron throws on an accelerator it cannot parse.
       }
       if (ok) this.registered.push(b.accelerator);
-      else failed.push(`${b.name} (${b.accelerator})`);
+      else {
+        failed.push(`${b.name} (${b.accelerator})`);
+        failedKeys.push(b.accelerator);
+      }
     }
-    this.failedKeys = this.current
-      .map((b) => b.accelerator)
-      .filter((a) => !this.registered.includes(a));
+    this.failedKeys = failedKeys;
+    this.duplicateKeys = duplicateKeys;
     return failed;
   }
 
@@ -223,13 +247,24 @@ const LABELS: [keyof Settings["hotkeys"], string][] = [
   ["routePrev", "Previous route stop"],
 ];
 
-/** The hotkey list for the keys card; failed holds the keys another app has taken. */
-export function keyRows(h: Settings["hotkeys"], failed: string[]): KeyRow[] {
-  const taken = (ks: string[]) => ks.filter((k) => failed.includes(k));
+/**
+ * The hotkey list for the keys card. failed holds the keys that did not register, for
+ * example because another app has them; duplicates, the actions whose key an earlier action
+ * keeps. A duplicate marks only the row of the action that lost the key.
+ */
+export function keyRows(
+  h: Settings["hotkeys"],
+  failed: string[],
+  duplicates: DuplicateKey[] = [],
+): KeyRow[] {
+  const lost = (names: string[], k: string) =>
+    duplicates.some((d) => d.accelerator === k && names.includes(d.name));
+  const taken = (ks: string[], names: string[]) =>
+    ks.filter((k) => failed.includes(k) || lost(names, k));
   const unused = (ks: string[]) => (h.scope === "always" ? ks.filter((k) => !hasModifier(k)) : []);
   const rows: KeyRow[] = LABELS.map(([name, label]) => {
     const ks = keyList(h[name] as Keys);
-    return { label, keys: ks.join(" / "), failed: taken(ks), unused: unused(ks) };
+    return { label, keys: ks.join(" / "), failed: taken(ks, [name]), unused: unused(ks) };
   });
   const chipKeys = chipPatterns(h).flatMap((p) =>
     Array.from({ length: 9 }, (_, i) => p.replace("{n}", String(i + 1))),
@@ -237,21 +272,24 @@ export function keyRows(h: Settings["hotkeys"], failed: string[]): KeyRow[] {
   rows.splice(2, 0, {
     label: "Copy chip",
     keys: chipKeyLabel(h),
-    failed: taken(chipKeys),
+    failed: taken(
+      chipKeys,
+      Array.from({ length: 9 }, (_, i) => `copyChip${i + 1}`),
+    ),
     unused: unused(chipKeys),
   });
   const arrows = [h.moveUp, h.moveDown, h.moveLeft, h.moveRight].flatMap(keyList);
   rows.push({
     label: "Move overlay",
     keys: arrowLabel(arrows),
-    failed: taken(arrows),
+    failed: taken(arrows, ["moveUp", "moveDown", "moveLeft", "moveRight"]),
     unused: unused(arrows),
   });
   const next = keyList(h.nextDisplay);
   rows.push({
     label: "Next monitor",
     keys: next.join(" / "),
-    failed: taken(next),
+    failed: taken(next, ["nextDisplay"]),
     unused: unused(next),
   });
   return rows;

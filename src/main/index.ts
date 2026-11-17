@@ -352,10 +352,14 @@ async function main(): Promise<void> {
       type: "notice",
       key: "hotkeys",
       text: failed.length
-        ? `⚠ ${failed.length} hotkey${failed.length > 1 ? "s" : ""} taken by other apps; see tray menu`
+        ? `⚠ ${failed.length} hotkey${failed.length > 1 ? "s" : ""} not working; see tray menu`
         : null,
     });
-    if (state.keys) dispatch({ type: "keys", rows: keyRows(settings.hotkeys, hotkeys.failedKeys) });
+    if (state.keys)
+      dispatch({
+        type: "keys",
+        rows: keyRows(settings.hotkeys, hotkeys.failedKeys, hotkeys.duplicateKeys),
+      });
   }
 
   let wasGame: boolean | null = null;
@@ -851,7 +855,10 @@ async function main(): Promise<void> {
   let keysTimer: NodeJS.Timeout | undefined;
   function showKeys(): void {
     clearTimeout(keysTimer);
-    dispatch({ type: "keys", rows: keyRows(settings.hotkeys, hotkeys.failedKeys) });
+    dispatch({
+      type: "keys",
+      rows: keyRows(settings.hotkeys, hotkeys.failedKeys, hotkeys.duplicateKeys),
+    });
     keysTimer = setTimeout(() => dispatch({ type: "keys", rows: null }), KEYS_SECONDS * 1000);
   }
   function hideKeys(): void {
@@ -1228,7 +1235,9 @@ async function main(): Promise<void> {
       .showMessageBox({
         type: "warning",
         title: "ED Chat",
-        message: "Other apps already use these keys, so ED Chat could not register them.",
+        message:
+          "ED Chat could not register these keys. Another app uses them, or settings.json " +
+          "sets the same key for two actions.",
         detail:
           failedHotkeys.join("\n") +
           "\n\nSet other keys in settings.json, under hotkeys. Each setting takes one key or a list.",

@@ -116,7 +116,7 @@ describe("SettingsStore", () => {
     await new SettingsStore(path.join(dir, "settings.json")).load();
     const schema = JSON.parse(await readFile(path.join(dir, "settings.schema.json"), "utf8"));
     expect(schema.properties.$schema).toEqual({ type: "string" });
-    expect(schema.properties.hotkeys.properties.openChat.default).toBe("Ctrl+Alt+C");
+    expect(schema.properties.hotkeys.properties.openChat.default).toBe("Ctrl+Alt+Enter");
   });
 
   it("accepts a file saved with a UTF-8 BOM", async () => {

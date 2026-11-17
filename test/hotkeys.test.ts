@@ -34,15 +34,21 @@ describe("activeBindings", () => {
     const all = bindings(DEFAULT_SETTINGS.hotkeys);
     expect(activeBindings(all, false)).toHaveLength(all.length);
     const names = activeBindings(all, true).map((b) => b.name);
-    for (const gone of ["openChat", "toggleOverlay", "cancel", "nextDisplay"]) {
+    for (const gone of ["cancel", "nextDisplay", "approve", "deny", "alwaysAllow"]) {
       expect(names).not.toContain(gone);
     }
+    // The chat input reports these as real Ctrl+Alt chords, so they still work there.
+    const chords: [string, string][] = [
+      ["Ctrl+Alt+Y", "approve"],
+      ["Ctrl+Alt+N", "deny"],
+      ["Ctrl+Alt+A", "alwaysAllow"],
+    ];
+    for (const [chord, name] of chords) expect(chordBinding(all, chord)?.name).toBe(name);
     for (const kept of [
+      "openChat",
       "toggleIcon",
       "moveLeft",
       "moveUp",
-      "approve",
-      "deny",
       "showHistory",
       "copyChip1",
     ]) {
@@ -132,7 +138,7 @@ describe("HotkeyManager", () => {
     expect(live.size).toBe(0);
     expect(m.activate()).toEqual([]);
     expect(live.size).toBe(27);
-    live.get("Ctrl+Alt+C")!();
+    live.get("Ctrl+Alt+Enter")!();
     expect(ran).toEqual([{ type: "openChat" }]);
     m.deactivate();
     expect(live.size).toBe(0);
@@ -148,6 +154,61 @@ describe("HotkeyManager", () => {
     ]);
     expect(m.activate()).toEqual(["toggleOverlay (Ctrl+Shift+O)", "openChat (Bad+Key)"]);
     expect([...live.keys()]).toEqual(["Ctrl+Shift+N"]);
+  });
+
+  it("gives each default action its own key", () => {
+    const keys = bindings(DEFAULT_SETTINGS.hotkeys).map((b) => b.accelerator.toLowerCase());
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  // A player who kept the old toggleIcon key gets the new openChat default on the same key,
+  // written the same way (as a 0.1.0 settings.json has it) or not.
+  for (const key of ["Ctrl+Alt+Enter", "Alt+Ctrl+Enter"]) {
+    it(`reports a key set for two actions, and keeps it for the first (${key})`, () => {
+      const { reg, live } = fakeRegistrar();
+      const ran: HotkeyAction[] = [];
+      const m = new HotkeyManager(reg, (a) => ran.push(a));
+      const h = SettingsSchema.parse({ hotkeys: { toggleIcon: key } }).hotkeys;
+      m.setBindings(bindings(h));
+      expect(m.activate()).toEqual([`toggleIcon (${key}): also set for openChat`]);
+      // No other app has the key: it registered, for openChat.
+      expect(m.failedKeys).toEqual([]);
+      expect(m.duplicateKeys).toEqual([{ name: "toggleIcon", accelerator: key }]);
+      live.get("Ctrl+Alt+Enter")!();
+      expect(ran).toEqual([{ type: "openChat" }]);
+      // Only the row of the action that lost the key is marked.
+      const rows = keyRows(h, m.failedKeys, m.duplicateKeys);
+      expect(rows.find((r) => r.label === "Icon mode")?.failed).toEqual([key]);
+      expect(rows.find((r) => r.label === "Open chat directly")?.failed).toEqual([]);
+    });
+  }
+
+  it("does not report a key that one action lists twice", () => {
+    const { reg } = fakeRegistrar();
+    const m = new HotkeyManager(reg, () => {});
+    const h = SettingsSchema.parse({
+      hotkeys: { openChat: ["Ctrl+Alt+Enter", "Ctrl+Alt+Enter"] },
+    }).hotkeys;
+    m.setBindings(bindings(h));
+    expect(m.activate()).toEqual([]);
+    expect(m.duplicateKeys).toEqual([]);
+  });
+
+  // Each row of the keys card matches the actions behind it, chips and arrows included.
+  it.each([
+    // The chip keys register last, so the chip loses here.
+    [{ hudMode: "Ctrl+Shift+5" }, "Copy chip", "Panel mode"],
+    [{ hudToggle: "Ctrl+Alt+Up" }, "Activity panel", "Move overlay"],
+    [{ hudMove: "Ctrl+Alt+M" }, "Move panel (then arrows)", "Next monitor"],
+  ])("marks only the row that lost a shared key (%o)", (set, loser, winner) => {
+    const { reg } = fakeRegistrar();
+    const m = new HotkeyManager(reg, () => {});
+    const h = SettingsSchema.parse({ hotkeys: set }).hotkeys;
+    m.setBindings(bindings(h));
+    m.activate();
+    const rows = keyRows(h, m.failedKeys, m.duplicateKeys);
+    expect(rows.find((r) => r.label === loser)?.failed).toEqual(Object.values(set));
+    expect(rows.find((r) => r.label === winner)?.failed).toEqual([]);
   });
 
   it("re-registers new bindings when active", () => {
@@ -191,7 +252,11 @@ describe("key lists", () => {
   });
 
   it("lists the keys for the keys card and marks the taken ones", () => {
-    const rows = keyRows(DEFAULT_SETTINGS.hotkeys, ["Ctrl+Alt+C", "Ctrl+Shift+3", "Ctrl+Alt+Up"]);
+    const rows = keyRows(DEFAULT_SETTINGS.hotkeys, [
+      "Ctrl+Alt+Enter",
+      "Ctrl+Shift+3",
+      "Ctrl+Alt+Up",
+    ]);
     expect(rows[0]).toEqual({
       label: "Reply → whole reply → chat",
       keys: "Ctrl+`",
@@ -200,8 +265,8 @@ describe("key lists", () => {
     });
     expect(rows[1]).toEqual({
       label: "Open chat directly",
-      keys: "Ctrl+Alt+C",
-      failed: ["Ctrl+Alt+C"],
+      keys: "Ctrl+Alt+Enter",
+      failed: ["Ctrl+Alt+Enter"],
       unused: [],
     });
     expect(rows[2]).toEqual({

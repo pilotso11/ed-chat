@@ -232,9 +232,9 @@ describe("buildView", () => {
       deadline: 0,
       timeoutMs: 120_000,
       position: "1 of 2",
-      approveKey: "Ctrl+Shift+Y",
-      denyKey: "Ctrl+Shift+N",
-      alwaysKey: "Ctrl+Shift+A",
+      approveKey: "Ctrl+Alt+Y",
+      denyKey: "Ctrl+Alt+N",
+      alwaysKey: "Ctrl+Alt+A",
     });
   });
 });

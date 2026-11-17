@@ -25,13 +25,13 @@ export const keyList = (k: Keys): string[] => (typeof k === "string" ? [k] : k);
 // zod 4: .default() skips inner defaults, .prefault() parses them.
 const HotkeysSchema = z.strictObject({
   scope: z.enum(["game", "always"]).default("game"),
-  openChat: keys.default("Ctrl+Alt+C"),
-  toggleIcon: keys.default("Ctrl+Alt+Enter"),
+  openChat: keys.default("Ctrl+Alt+Enter"),
+  toggleIcon: keys.default("Ctrl+Shift+Enter"),
   showMore: keys.default("Ctrl+`"),
   showHistory: keys.default("Ctrl+Shift+H"),
-  approve: keys.default("Ctrl+Shift+Y"),
-  deny: keys.default("Ctrl+Shift+N"),
-  alwaysAllow: keys.default("Ctrl+Shift+A"),
+  approve: keys.default("Ctrl+Alt+Y"),
+  deny: keys.default("Ctrl+Alt+N"),
+  alwaysAllow: keys.default("Ctrl+Alt+A"),
   cancel: keys.default("Ctrl+Alt+X"),
   copyChip: chipKeys.default("Ctrl+Shift+{n}"),
   copyChipNumpad: z.boolean().default(false),

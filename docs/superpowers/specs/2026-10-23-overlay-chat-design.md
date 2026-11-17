@@ -127,7 +127,7 @@ The resting state is the strip:
 
 ### Icon mode
 
-`toggleIcon` (default Ctrl+Alt+Enter) switches the resting state between the strip and
+`toggleIcon` (default Ctrl+Shift+Enter) switches the resting state between the strip and
 an icon: a small round badge at the same anchor. The badge shows a dot when the
 last reply has chips or a notice is waiting, and ⛔ while in danger. Copy-chip
 hotkeys still work in icon mode.
@@ -218,12 +218,12 @@ explain the keys. Hotkeys use Electron accelerator syntax.
 {
   "hotkeys": {
     "scope": "game",              // "game": only while the game or overlay is in front; "always"
-    "openChat": "Ctrl+Alt+C",
+    "openChat": "Ctrl+Alt+Enter",
     "toggleOverlay": "Ctrl+Alt+O",
-    "toggleIcon": "Ctrl+Alt+Enter",
+    "toggleIcon": "Ctrl+Shift+Enter",
     "showHistory": "Ctrl+Shift+H",
-    "approve": "Ctrl+Shift+Y",
-    "deny": "Ctrl+Shift+N",
+    "approve": "Ctrl+Alt+Y",
+    "deny": "Ctrl+Alt+N",
     "cancel": "Ctrl+Alt+X",
     "copyChip": "Ctrl+Shift+{n}", // n = 1..9
     "moveUp": "Ctrl+Alt+Up",

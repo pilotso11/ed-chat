@@ -13,13 +13,13 @@ describe("parseSettings", () => {
   it("fills every default from an empty object", () => {
     const r = parseSettings("{}");
     expect(r).toEqual({ ok: true, settings: DEFAULT_SETTINGS });
-    expect(DEFAULT_SETTINGS.hotkeys.openChat).toBe("Ctrl+Alt+C");
+    expect(DEFAULT_SETTINGS.hotkeys.openChat).toBe("Ctrl+Alt+Enter");
     expect(DEFAULT_SETTINGS.hotkeys.showMore).toBe("Ctrl+`");
-    expect(DEFAULT_SETTINGS.hotkeys.alwaysAllow).toBe("Ctrl+Shift+A");
+    expect(DEFAULT_SETTINGS.hotkeys.alwaysAllow).toBe("Ctrl+Alt+A");
     expect(DEFAULT_SETTINGS.hotkeys.cancel).toBe("Ctrl+Alt+X");
     expect(DEFAULT_SETTINGS.hotkeys.scope).toBe("game");
     expect(DEFAULT_SETTINGS.strip).toEqual({ lines: 2, keepChips: true, startAsIcon: false });
-    expect(DEFAULT_SETTINGS.hotkeys.toggleIcon).toBe("Ctrl+Alt+Enter");
+    expect(DEFAULT_SETTINGS.hotkeys.toggleIcon).toBe("Ctrl+Shift+Enter");
     expect(DEFAULT_SETTINGS.style).toEqual({ fontSize: 14, backgroundOpacity: 0.78 });
     expect(DEFAULT_SETTINGS.card).toEqual({ maxLines: 4, fadeSeconds: 20, width: 420 });
     expect(DEFAULT_SETTINGS.position).toEqual({

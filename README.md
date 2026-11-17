@@ -51,13 +51,13 @@ installer is not code signed, so Windows SmartScreen warns on first run. Select
 | Key | Action |
 | --- | --- |
 | Ctrl+` | Step: the last reply, then the whole reply, then the chat; a press in the chat closes it |
-| Ctrl+Alt+C | Open the chat directly. Enter sends and returns to the game. Esc closes. |
+| Ctrl+Alt+Enter | Open the chat directly. Enter sends and returns to the game. Esc closes. |
 | Ctrl+Shift+1…9 | Copy chip 1…9 (top-row digits). A click on a chip also copies it. |
-| Ctrl+Shift+Y / N | Allow / deny a tool that Claude asks to run |
-| Ctrl+Shift+A | Allow the tool, and allow it without asking until `/new` |
+| Ctrl+Alt+Y / N | Allow / deny a tool that Claude asks to run |
+| Ctrl+Alt+A | Allow the tool, and allow it without asking until `/new` |
 | Ctrl+Alt+X | Stop the current reply |
 | Ctrl+Shift+H | Show or hide this session's history |
-| Ctrl+Alt+Enter | Switch between the full overlay and a small icon |
+| Ctrl+Shift+Enter | Switch between the full overlay and a small icon |
 | Ctrl+Alt+Arrows | Move the overlay around the screen edge |
 | Ctrl+Alt+M | Move the overlay to the next monitor |
 
@@ -118,9 +118,13 @@ While you type in the chat, the overlay leaves typing keys to the chat input,
 including AltGr letters. Ctrl+Alt hotkeys such as Ctrl+Alt+X still work there:
 use the left Ctrl and Alt keys, because AltGr types the letter.
 
-If the overlay shows `⚠ 2 hotkeys taken by other apps`, another app already
-uses those keys. The tray menu item **Hotkey problems** lists them. Set other
-keys in `settings.json`.
+Outside the chat, Windows sends AltGr as Ctrl+Alt, so AltGr+Y, N or A answers a
+waiting tool request. If that gets in your way, set `hotkeys.approve`, `deny`
+and `alwaysAllow` to other keys.
+
+If the overlay shows `⚠ 2 hotkeys not working`, another app already uses those
+keys, or `settings.json` sets the same key for two actions. The tray menu item
+**Hotkey problems** lists them. Set other keys in `settings.json`.
 
 The status line shows one message at a time. **+2** after it means two more are
 waiting; click it to see them all. A message with a command in it, such as
