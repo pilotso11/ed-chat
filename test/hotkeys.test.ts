@@ -183,6 +183,34 @@ describe("HotkeyManager", () => {
     });
   }
 
+  it("does not report a key that one action lists twice", () => {
+    const { reg } = fakeRegistrar();
+    const m = new HotkeyManager(reg, () => {});
+    const h = SettingsSchema.parse({
+      hotkeys: { openChat: ["Ctrl+Alt+Enter", "Ctrl+Alt+Enter"] },
+    }).hotkeys;
+    m.setBindings(bindings(h));
+    expect(m.activate()).toEqual([]);
+    expect(m.duplicateKeys).toEqual([]);
+  });
+
+  // Each row of the keys card matches the actions behind it, chips and arrows included.
+  it.each([
+    // The chip keys register last, so the chip loses here.
+    [{ hudMode: "Ctrl+Shift+5" }, "Copy chip", "Panel mode"],
+    [{ hudToggle: "Ctrl+Alt+Up" }, "Activity panel", "Move overlay"],
+    [{ hudMove: "Ctrl+Alt+M" }, "Move panel (then arrows)", "Next monitor"],
+  ])("marks only the row that lost a shared key (%o)", (set, loser, winner) => {
+    const { reg } = fakeRegistrar();
+    const m = new HotkeyManager(reg, () => {});
+    const h = SettingsSchema.parse({ hotkeys: set }).hotkeys;
+    m.setBindings(bindings(h));
+    m.activate();
+    const rows = keyRows(h, m.failedKeys, m.duplicateKeys);
+    expect(rows.find((r) => r.label === loser)?.failed).toEqual(Object.values(set));
+    expect(rows.find((r) => r.label === winner)?.failed).toEqual([]);
+  });
+
   it("re-registers new bindings when active", () => {
     const { reg, live } = fakeRegistrar();
     const m = new HotkeyManager(reg, () => {});

@@ -258,15 +258,15 @@ export function App() {
 
   useEffect(() => window.overlay.onView(setV), []);
 
-  // Ctrl+Alt hotkeys are not registered while the chat has focus, so AltGr can type letters.
-  // A real Ctrl+Alt chord goes to main instead. The listener is on the window, so the chord
-  // still works after a click on a chip or the history moves focus off the input.
+  // Ctrl+Alt hotkeys are not registered while the overlay has focus, so AltGr can type
+  // letters. A real Ctrl+Alt chord goes to main instead. The window gets keys only while it has
+  // focus, so the listener is always on: the approval keys also work when the overlay keeps
+  // focus with the chat closed, for example when Windows refuses to give focus back.
   const chatInput = v?.chat?.input === true;
   useEffect(() => {
-    if (!chatInput) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
       // The input handles its own Escape; this one closes the chat after a click moved focus off it.
-      if (e.key === "Escape" && !(e.target instanceof HTMLTextAreaElement)) {
+      if (chatInput && e.key === "Escape" && !(e.target instanceof HTMLTextAreaElement)) {
         e.preventDefault();
         window.overlay.closeChat();
         return;

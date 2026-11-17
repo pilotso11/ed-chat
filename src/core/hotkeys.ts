@@ -182,6 +182,8 @@ export class HotkeyManager {
     const owner = new Map<string, string>();
     for (const b of this.current) {
       const first = owner.get(normalize(b.accelerator));
+      // The same key twice for one action, such as a list that repeats it, is no clash.
+      if (first === b.name) continue;
       if (first !== undefined) {
         failed.push(`${b.name} (${b.accelerator}): also set for ${first}`);
         duplicateKeys.push({ name: b.name, accelerator: b.accelerator });
