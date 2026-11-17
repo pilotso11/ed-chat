@@ -80,6 +80,11 @@ export class SettingsStore {
     return this.lastText ?? "";
   }
 
+  /** Replaces settings.json; the watcher loads it. */
+  async write(text: string): Promise<void> {
+    await writeFile(this.file, text);
+  }
+
   /** Sets one value in settings.json and keeps the rest of the file. */
   async set(group: string, key: string, value: unknown): Promise<void> {
     // Throws on a broken file, which must not be replaced with one value.

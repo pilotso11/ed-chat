@@ -282,11 +282,15 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
       return { ...s, session: "starting", tool: null, cancelled: true };
     case "keys":
       return { ...s, keys: a.rows };
-    // A reply still arriving keeps the card.
-    case "localReply":
+    // A reply still arriving keeps the card. An update changes only a card still open: one the
+    // player closed, or that faded, stays closed.
+    case "localReply": {
       if (s.session === "thinking") return s;
-      if (a.replaces !== undefined && s.reply !== a.replaces) return s;
-      return { ...s, reply: a.text, chips: [], cardOpen: true, cardFull: true, visible: true };
+      const local = { reply: a.text, chips: [], pinned: firstLine(a.text) };
+      if (a.replaces === undefined)
+        return { ...s, ...local, cardOpen: true, cardFull: true, visible: true };
+      return s.cardOpen && s.reply === a.replaces ? { ...s, ...local } : s;
+    }
   }
 }
 

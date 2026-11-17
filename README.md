@@ -241,9 +241,10 @@ bio planets worth 2M or more". Claude knows where `settings.json` is and reads
 `settings.schema.json`, which describes each setting with its default and
 limits. It does not change the settings marked player only: `claude`,
 `approval`, `safety`, `journalDir` and `hud.edMcpDataDir`. Change those yourself
-from the tray menu, **Open settings**. This is an instruction to Claude, not a
-lock: a Claude edit to the file still asks for approval unless you use auto
-mode.
+from the tray menu, **Open settings**. ED Chat also checks: when one of these
+settings changes in the file, by your edit or Claude's, ED Chat keeps the old
+value and asks whether to apply the change. **Undo** puts the old value back in
+the file. The other changes in the same save apply at once.
 
 | Key | Default | Meaning |
 | --- | --- | --- |

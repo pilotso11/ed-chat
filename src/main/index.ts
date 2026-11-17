@@ -75,6 +75,12 @@ import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
 import { currentStop, nextStopAfter, previousStop, todoStops } from "../core/hud/panels.js";
+import {
+  describeChanges,
+  keepPlayerOnly,
+  playerOnlyChanges,
+  restorePaths,
+} from "../core/playerOnly.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
 import { fetchLatestEdMcp, versionText, type Versions } from "../core/version.js";
 import { IPC } from "../shared/ipc.js";
@@ -141,6 +147,9 @@ async function main(): Promise<void> {
   const timers = new Map<string, NodeJS.Timeout>();
 
   const first = await settingsStore.load();
+  // The file as it was when the player-only settings now in use were applied; Undo puts
+  // them back from it. ED Chat trusts the file it starts with.
+  let trustedText = settingsStore.text;
   let settings: Settings = settingsStore.settings;
   let saved: SavedState = await stateStore.read();
   let position: Position;
@@ -662,6 +671,7 @@ async function main(): Promise<void> {
       await settingsStore.set("claude", "permissionMode", mode);
       await settingsStore.load();
       settings = settingsStore.settings;
+      trustedText = settingsStore.text;
     } catch (err) {
       // The choice still holds for this run; the player sees that it was not saved.
       log.log("warn", `settings.json: ${message(err)}`);
@@ -773,7 +783,7 @@ async function main(): Promise<void> {
     const file = shell ? quoteForCmd(command) : command;
     execFile(file, ["--version"], { shell, windowsHide: true }, (err, stdout) => {
       const v = err ? null : parseCliVersion(stdout);
-      if (v) claudeVersion = v.join(".");
+      claudeVersion = v ? v.join(".") : null;
       const tested = parseCliVersion(TESTED_CLI_VERSION)!;
       if (v && isOlder(v, tested)) {
         dispatch({
@@ -1113,11 +1123,72 @@ async function main(): Promise<void> {
   }
   if (first.error) dispatch({ type: "notice", key: "settings", text: first.error });
   applySettings();
+  let askingPlayerOnly = false;
+
   settingsStore.watch((r) => {
     dispatch({ type: "notice", key: "settings", text: r.error });
-    if (!r.changed) return;
+    if (r.changed) onSettingsChanged();
+  });
+
+  // Other changes apply at once; a change to a player-only setting waits for the player.
+  function onSettingsChanged(): void {
+    const next = settingsStore.settings;
+    if (!playerOnlyChanges(settings, next).length) {
+      trustedText = settingsStore.text;
+      return applyNewSettings(next);
+    }
+    applyNewSettings(keepPlayerOnly(next, settings));
+    if (!askingPlayerOnly) void askPlayerOnly();
+  }
+
+  async function askPlayerOnly(): Promise<void> {
+    askingPlayerOnly = true;
+    dispatch({
+      type: "notice",
+      key: "playerOnly",
+      text: "⚠ settings.json: a change waits for your answer",
+    });
+    const first = settingsStore.settings;
+    const r = await dialog.showMessageBox({
+      type: "warning",
+      title: "ED Chat",
+      message: "settings.json changed settings that only you should change.",
+      detail:
+        describeChanges(settings, first, playerOnlyChanges(settings, first)).join("\n") +
+        "\n\nThese settings control what Claude may run. If you did not make this change " +
+        "yourself, or ask Claude for it, choose Undo.",
+      buttons: ["Undo", "Apply"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    askingPlayerOnly = false;
+    dispatch({ type: "notice", key: "playerOnly", text: null });
+    // The file can have changed again while the question was open.
+    const next = settingsStore.settings;
+    const changed = playerOnlyChanges(settings, next);
+    if (!changed.length) return;
+    if (r.response === 1) {
+      log.log("info", `player-only settings applied: ${changed.join(", ")}`);
+      trustedText = settingsStore.text;
+      return applyNewSettings(next);
+    }
+    log.log("info", `player-only settings undone: ${changed.join(", ")}`);
+    try {
+      await settingsStore.write(restorePaths(settingsStore.text, trustedText, changed));
+    } catch (err) {
+      log.log("warn", `settings.json: ${message(err)}`);
+      dispatch({
+        type: "notice",
+        key: "playerOnly",
+        text: "⚠ settings.json: could not undo the change; it is not applied",
+      });
+    }
+  }
+
+  function applyNewSettings(next: Settings): void {
     const old = settings;
-    settings = settingsStore.settings;
+    settings = next;
     ({ position, saved } = effectivePosition(settings.position, saved));
     ({ position: hudPosition, saved } = effectiveHudPosition(settings.hud.position, saved));
     writeState();
@@ -1131,8 +1202,11 @@ async function main(): Promise<void> {
     if (JSON.stringify(old.claude) !== JSON.stringify(settings.claude)) {
       const c = claudeCommand(settings);
       dispatch({ type: "notice", key: "claude", text: c ? null : noClaude() });
+      // /version must not report the binary that is no longer configured.
+      claudeVersion = null;
       if (c && session) {
         session.configure(c);
+        checkVersion(c.command, c.shell);
         flash("claudeSettings", "ⓘ claude settings apply after /new", 6_000);
       } else if (c && claudeStarted) startSession(c);
     }
@@ -1146,7 +1220,7 @@ async function main(): Promise<void> {
       status.start();
     }
     applySettings();
-  });
+  }
 
   // Tray: the only way to quit, since the overlay has no window frame.
   const openPath = (p: string) =>

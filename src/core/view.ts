@@ -91,7 +91,16 @@ const ALIGN = { left: "start", center: "center", right: "end" } as const;
 
 // Problems that stop the overlay working come first. Other keys are short flashes, such as
 // "copied", which show first while they last.
-const PERSISTENT = ["claude", "settings", "hotkeys", "edmcp", "mode", "version", "scope"];
+const PERSISTENT = [
+  "claude",
+  "settings",
+  "playerOnly",
+  "hotkeys",
+  "edmcp",
+  "mode",
+  "version",
+  "scope",
+];
 
 // Only notices with fixed text offer a command to copy. The claude notice quotes the CLI's
 // stderr, which text from the model can reach, so it must never hand the player a command.

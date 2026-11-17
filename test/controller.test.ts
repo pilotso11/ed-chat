@@ -563,3 +563,20 @@ describe("localReply", () => {
     expect(reduce(later, { type: "localReply", text: "b", replaces: "a" })).toBe(later);
   });
 });
+
+describe("localReply updates", () => {
+  it("leave a card that faded or was closed closed, and the overlay as it is", () => {
+    const shown = run([ready, { type: "localReply", text: "a" }]);
+    const faded = reduce(shown, { type: "cardTimeout" });
+    expect(reduce(faded, { type: "localReply", text: "b", replaces: "a" })).toBe(faded);
+    const hidden = reduce(shown, { type: "toggleVisible" });
+    const updated = reduce(hidden, { type: "localReply", text: "b", replaces: "a" });
+    expect(updated.visible).toBe(false);
+    expect(updated.reply).toBe("b");
+  });
+
+  it("puts its first line on the strip, like a reply", () => {
+    const s = run([ready, { type: "localReply", text: "ED Chat 0.4.0\nclaude 2.1.308" }]);
+    expect(s.pinned).toBe("ED Chat 0.4.0");
+  });
+});

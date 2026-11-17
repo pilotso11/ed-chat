@@ -166,3 +166,8 @@ export function annotateSchema(node: JsonSchemaNode, where = "", playerOnly = fa
     annotateSchema(child, p, only);
   }
 }
+
+/** The settings that only the player may change, each with everything under it. */
+export const PLAYER_ONLY_PATHS: string[] = Object.entries(SETTINGS_DICTIONARY)
+  .filter(([, e]) => e.playerOnly)
+  .map(([p]) => p);
