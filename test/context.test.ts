@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { gameContext, withGameContext } from "../src/core/hud/context.js";
+import {
+  NOTE_MAX_AGE_MS,
+  gameContext,
+  noteIsFresh,
+  withGameContext,
+} from "../src/core/hud/context.js";
 import type { HudView } from "../src/core/hud/hud.js";
 
 const view: HudView = {
@@ -44,6 +49,15 @@ describe("game note", () => {
     ).toContain("Location: docked at Abraham Lincoln in Sol.");
     expect(gameContext(null, null, null)).toBeNull();
     expect(withGameContext("hi", null)).toBe("hi");
+  });
+
+  it("is sent only from a running feed", () => {
+    const now = 1_000_000;
+    expect(noteIsFresh(true, now - 1_000, now)).toBe(true);
+    expect(noteIsFresh(true, now - NOTE_MAX_AGE_MS, now)).toBe(false);
+    // The panel is off, or the feed has never read the game.
+    expect(noteIsFresh(false, now - 1_000, now)).toBe(false);
+    expect(noteIsFresh(true, 0, now)).toBe(false);
   });
 
   it("says nothing of a nearby body when docked", () => {

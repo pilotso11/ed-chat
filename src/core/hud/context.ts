@@ -59,6 +59,14 @@ export function gameContext(
   return `[Game now, from the journal, newer than anything earlier in the conversation:\n${lines.join("\n")}]`;
 }
 
+/** The feed polls each second: when it has not read the game for this long, it has stopped. */
+export const NOTE_MAX_AGE_MS = 10_000;
+
+/** Whether the feed's data is fresh enough to send as now. */
+export function noteIsFresh(enabled: boolean, readAt: number, now: number): boolean {
+  return enabled && readAt > 0 && now - readAt < NOTE_MAX_AGE_MS;
+}
+
 /** The message as sent to Claude: the game note, then what the player typed. */
 export function withGameContext(text: string, context: string | null): string {
   return context ? `${context}\n\n${text}` : text;

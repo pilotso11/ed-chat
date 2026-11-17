@@ -72,7 +72,7 @@ import { edMcpSyncDir } from "../core/hud/edMcpConfig.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
-import { gameContext, withGameContext } from "../core/hud/context.js";
+import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
 import { currentStop, nextStopAfter, previousStop, todoStops } from "../core/hud/panels.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
@@ -813,9 +813,6 @@ async function main(): Promise<void> {
     dispatch({ type: "keys", rows: null });
   }
 
-  // The feed polls each second: older than this, it has stopped, and its data is not "now".
-  const NOTE_MAX_AGE_MS = 10_000;
-
   async function send(text: string): Promise<boolean> {
     const t = text.trim();
     if (!t) return false;
@@ -830,7 +827,7 @@ async function main(): Promise<void> {
       dispatch({ type: "notice", key: "claude", text: noClaude() });
       return false;
     }
-    const fresh = settings.hud.enabled && Date.now() - hudFreshAt < NOTE_MAX_AGE_MS;
+    const fresh = noteIsFresh(settings.hud.enabled, hudFreshAt, Date.now());
     const where = fresh ? (hudData?.journal?.location ?? null) : null;
     const note = fresh ? gameContext(where, hudData?.status ?? null, lastHudView) : null;
     if (!session.send(withGameContext(t, note))) {
