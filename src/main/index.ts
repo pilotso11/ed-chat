@@ -54,7 +54,14 @@ import {
   type HotkeyAction,
 } from "../core/hotkeys.js";
 import { Logger } from "../core/logger.js";
-import { HUD_MODES, keyList, setsKey, type Position, type Settings } from "../core/settings.js";
+import {
+  HUD_MODES,
+  keyList,
+  parseSettings,
+  setsKey,
+  type Position,
+  type Settings,
+} from "../core/settings.js";
 import { StatusWatcher, fullscreenMode } from "../core/status.js";
 import {
   HistoryStore,
@@ -75,7 +82,9 @@ import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
 import { currentStop, nextStopAfter, previousStop, todoStops } from "../core/hud/panels.js";
+import { PlayerOnlyGuard } from "../core/playerOnlyGuard.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
+import { fetchLatestEdMcp, versionText, type Versions } from "../core/version.js";
 import { IPC } from "../shared/ipc.js";
 import {
   answerArg,
@@ -140,8 +149,34 @@ async function main(): Promise<void> {
   const timers = new Map<string, NodeJS.Timeout>();
 
   const first = await settingsStore.load();
-  let settings: Settings = settingsStore.settings;
   let saved: SavedState = await stateStore.read();
+  // A change to a player-only setting waits for the player, also across a restart: the values
+  // last applied are kept in state.json.
+  const playerOnly = new PlayerOnlyGuard(
+    {
+      fileText: () => settingsStore.text,
+      parse: (text) => {
+        const r = parseSettings(text);
+        return r.ok ? r.settings : null;
+      },
+      apply: (s) => applyNewSettings(s),
+      write: (text) => settingsStore.write(text),
+      ask: askPlayerOnly,
+      waiting: (on) =>
+        dispatch({
+          type: "notice",
+          key: "playerOnly",
+          text: on ? "⚠ settings.json: a change waits for your answer" : null,
+        }),
+      save: (values) => {
+        saved = { ...saved, playerOnly: values };
+        writeState();
+      },
+      log: (level, text) => log.log(level, text),
+    },
+    saved.playerOnly ?? null,
+  );
+  let settings: Settings = playerOnly.effective() ?? settingsStore.settings;
   let position: Position;
   ({ position, saved } = effectivePosition(settings.position, saved));
   state = { ...state, iconMode: saved.iconMode ?? settings.strip.startAsIcon };
@@ -612,12 +647,16 @@ async function main(): Promise<void> {
       permissionMode: s.claude.permissionMode,
       mcpConfigFile,
       extraArgs: s.claude.extraArgs,
+      settingsFile,
     });
     return { ...resolved, args };
   };
 
   let session: ClaudeSession | null = null;
   let resumePending = false;
+  // For /version.
+  let claudeVersion: string | null = null;
+  let edMcpStatus: Versions["edMcpStatus"] = null;
   function startSession(c: { command: string; args: string[]; shell: boolean }): void {
     session = new ClaudeSession({
       command: c.command,
@@ -654,9 +693,10 @@ async function main(): Promise<void> {
     });
     const mode = r.response === 1 ? "auto" : "default";
     try {
-      await settingsStore.set("claude", "permissionMode", mode);
+      // The player chose this, so the guard does not ask about it.
+      await playerOnly.playerWrite(settingsStore.textWith("claude", "permissionMode", mode));
       await settingsStore.load();
-      settings = settingsStore.settings;
+      settings = playerOnly.effective() ?? settingsStore.settings;
     } catch (err) {
       // The choice still holds for this run; the player sees that it was not saved.
       log.log("warn", `settings.json: ${message(err)}`);
@@ -691,6 +731,7 @@ async function main(): Promise<void> {
         }
         {
           const ed = edMcpState(e.mcpServers);
+          edMcpStatus = ed;
           dispatch({
             type: "notice",
             key: "edmcp",
@@ -763,10 +804,15 @@ async function main(): Promise<void> {
     }
   }
 
+  // Only the latest check counts: an earlier one can finish last after claude.path changes.
+  let versionCheck = 0;
   function checkVersion(command: string, shell: boolean): void {
     const file = shell ? quoteForCmd(command) : command;
+    const n = ++versionCheck;
     execFile(file, ["--version"], { shell, windowsHide: true }, (err, stdout) => {
+      if (n !== versionCheck) return;
       const v = err ? null : parseCliVersion(stdout);
+      claudeVersion = v ? v.join(".") : null;
       const tested = parseCliVersion(TESTED_CLI_VERSION)!;
       if (v && isOlder(v, tested)) {
         dispatch({
@@ -813,11 +859,44 @@ async function main(): Promise<void> {
     dispatch({ type: "keys", rows: null });
   }
 
+  // The npm lookup is cached, so asking again does not wait on the network.
+  let edMcpLatest: { version: string | null; at: number } | null = null;
+  const LATEST_TTL_MS = 10 * 60_000;
+
+  function showVersion(): boolean {
+    if (state.session === "thinking") {
+      flash("chat", "⚠ wait for the reply, then ask for /version", 4_000);
+      return false;
+    }
+    const base: Omit<Versions, "edMcpLatest"> = {
+      app: app.getVersion(),
+      claude: claudeVersion,
+      edMcpStatus,
+    };
+    const cached = edMcpLatest && Date.now() - edMcpLatest.at < LATEST_TTL_MS ? edMcpLatest : null;
+    const first = versionText({ ...base, edMcpLatest: cached ? cached.version : "checking" });
+    dispatch({ type: "localReply", text: first });
+    scheduleFade();
+    if (!cached) {
+      void fetchLatestEdMcp().then((version) => {
+        edMcpLatest = { version, at: Date.now() };
+        dispatch({
+          type: "localReply",
+          text: versionText({ ...base, edMcpLatest: version }),
+          replaces: first,
+        });
+      });
+    }
+    return true;
+  }
+
   async function send(text: string): Promise<boolean> {
     const t = text.trim();
     if (!t) return false;
-    if (t === "/new") {
-      newConversation();
+    // ED Chat's own commands. They do not reach Claude.
+    if (t === "/new" || t === "/version") {
+      if (t === "/new") newConversation();
+      else if (!showVersion()) return false;
       const ok = await giveFocusBack();
       dispatch({ type: "closeChat" });
       if (ok) void settleFocus();
@@ -1075,9 +1154,31 @@ async function main(): Promise<void> {
   applySettings();
   settingsStore.watch((r) => {
     dispatch({ type: "notice", key: "settings", text: r.error });
-    if (!r.changed) return;
+    if (r.changed) playerOnly.fileChanged();
+  });
+  // A change made while ED Chat was closed.
+  playerOnly.check();
+
+  async function askPlayerOnly(lines: string[]): Promise<boolean> {
+    const r = await dialog.showMessageBox({
+      type: "warning",
+      title: "ED Chat",
+      message: "settings.json changed settings that only you should change.",
+      detail:
+        lines.join("\n") +
+        "\n\nThese settings control what Claude may run. If you did not make this change " +
+        "yourself, or ask Claude for it, choose Undo.",
+      buttons: ["Undo", "Apply"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    return r.response === 1;
+  }
+
+  function applyNewSettings(next: Settings): void {
     const old = settings;
-    settings = settingsStore.settings;
+    settings = next;
     ({ position, saved } = effectivePosition(settings.position, saved));
     ({ position: hudPosition, saved } = effectiveHudPosition(settings.hud.position, saved));
     writeState();
@@ -1091,8 +1192,11 @@ async function main(): Promise<void> {
     if (JSON.stringify(old.claude) !== JSON.stringify(settings.claude)) {
       const c = claudeCommand(settings);
       dispatch({ type: "notice", key: "claude", text: c ? null : noClaude() });
+      // /version must not report the binary that is no longer configured.
+      claudeVersion = null;
       if (c && session) {
         session.configure(c);
+        checkVersion(c.command, c.shell);
         flash("claudeSettings", "ⓘ claude settings apply after /new", 6_000);
       } else if (c && claudeStarted) startSession(c);
     }
@@ -1106,7 +1210,7 @@ async function main(): Promise<void> {
       status.start();
     }
     applySettings();
-  });
+  }
 
   // Tray: the only way to quit, since the overlay has no window frame.
   const openPath = (p: string) =>

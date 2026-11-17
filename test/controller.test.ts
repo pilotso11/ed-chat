@@ -541,3 +541,45 @@ describe("nextStep", () => {
     expect(nextStep(streaming)).toBe("full");
   });
 });
+
+describe("localReply", () => {
+  it("shows ED Chat's own answer in the full card, without chips", () => {
+    const s = run([ready, { type: "sent", text: "hi" }, text("⟦Sol⟧"), result()]);
+    expect(s.chips.length).toBe(1);
+    const v = reduce(s, { type: "localReply", text: "ED Chat 0.4.0" });
+    expect(v).toMatchObject({ reply: "ED Chat 0.4.0", chips: [], cardOpen: true, cardFull: true });
+    expect(v.history).toEqual(s.history);
+  });
+
+  it("does not replace a reply that is still arriving", () => {
+    const s = run([ready, { type: "sent", text: "hi" }, text("part")]);
+    expect(reduce(s, { type: "localReply", text: "ED Chat 0.4.0" })).toBe(s);
+  });
+
+  it("updates its own answer only while the card still shows it", () => {
+    const s = run([ready, { type: "localReply", text: "a" }]);
+    expect(reduce(s, { type: "localReply", text: "b", replaces: "a" }).reply).toBe("b");
+    const later = reduce(s, { type: "localReply", text: "c" });
+    expect(reduce(later, { type: "localReply", text: "b", replaces: "a" })).toBe(later);
+  });
+});
+
+describe("localReply updates", () => {
+  it("leave a card that faded or was closed closed, and the overlay as it is", () => {
+    const shown = run([ready, { type: "localReply", text: "a" }]);
+    const faded = reduce(shown, { type: "cardTimeout" });
+    const late = reduce(faded, { type: "localReply", text: "b", replaces: "a" });
+    expect(late.cardOpen).toBe(false);
+    // Brought back, the card shows the finished answer, not "checking npm…".
+    expect(reduce(late, { type: "showCard" }).reply).toBe("b");
+    const hidden = reduce(shown, { type: "toggleVisible" });
+    const updated = reduce(hidden, { type: "localReply", text: "b", replaces: "a" });
+    expect(updated.visible).toBe(false);
+    expect(updated.reply).toBe("b");
+  });
+
+  it("puts its first line on the strip, like a reply", () => {
+    const s = run([ready, { type: "localReply", text: "ED Chat 0.4.0\nclaude 2.1.308" }]);
+    expect(s.pinned).toBe("ED Chat 0.4.0");
+  });
+});

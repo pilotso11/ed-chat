@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { annotateSchema, type JsonSchemaNode } from "./settingsDictionary.js";
 
 export const ANCHORS = [
   "top-left",
@@ -196,9 +197,8 @@ export function newSettingsText(): string {
 }
 
 export function settingsSchemaText(): string {
-  const schema = z.toJSONSchema(SettingsSchema, { io: "input" }) as {
-    properties?: Record<string, unknown>;
-  };
+  const schema = z.toJSONSchema(SettingsSchema, { io: "input" }) as JsonSchemaNode;
   schema.properties = { $schema: { type: "string" }, ...schema.properties };
+  annotateSchema(schema);
   return JSON.stringify(schema, null, 2) + "\n";
 }
