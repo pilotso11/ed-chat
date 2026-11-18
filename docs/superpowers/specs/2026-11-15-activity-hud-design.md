@@ -266,8 +266,9 @@ The mode registry first sketched here was not needed. The modes are small, pure 
   rows, plus the route rows.
 - `src/core/hud/hud.ts`: picks the mode and builds the view. `src/core/hud/feed.ts` reads the
   sources, and `src/core/hud/known.ts` is the Spansh lookup.
-- `src/core/hud/edMcpConfig.ts`: finds the ed-mcp sync folder from `ED_MCP_SYNC_DIR` in Claude
-  Code's `~/.claude.json`, for `hud.edMcpDataDir` when it is null.
+- `src/core/edMcp.ts` (`syncDirOf`, formerly `src/core/hud/edMcpConfig.ts`): finds the ed-mcp
+  sync folder from `ED_MCP_SYNC_DIR` in the assistants' config, for `hud.edMcpDataDir` when it
+  is null.
 - `src/renderer/hud.tsx`: one component renders any `PanelView`.
 
 A new mode is a rule in `mode.ts`, a panel function and its tests.

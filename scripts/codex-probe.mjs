@@ -6,7 +6,7 @@
 // It reads the ed-mcp definition from ~/.claude.json (user scope, then each project) and spends
 // a few Codex turns.
 // Usage: node scripts/codex-probe.mjs <codex.exe> <outDir outside any git repo> [mode]; see USAGE.
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -235,6 +235,20 @@ async function turn(s, threadId, text) {
   return done;
 }
 
+// Stops codex and what it started. On Windows kill() stops only codex.exe, and ed-mcp under
+// cmd /c npx would keep running, so the whole tree goes, as in ED Chat's own sessions.
+function stop(s) {
+  if (s.p.exitCode !== null || s.p.signalCode !== null) return;
+  if (process.platform === "win32" && s.p.pid) {
+    spawnSync("taskkill", ["/pid", String(s.p.pid), "/T", "/F"], {
+      windowsHide: true,
+      stdio: "ignore",
+    });
+  } else {
+    s.p.kill();
+  }
+}
+
 let a = null;
 let b = null;
 try {
@@ -278,7 +292,7 @@ try {
     response: ir.error ? ir.error : "ok",
     status: (await done2).params.turn.status,
   };
-  a.p.kill();
+  stop(a);
 
   // Run 2: new process, resume by id, check memory; then a bogus id.
   b = start("run2.jsonl", cliOverrides);
@@ -302,7 +316,7 @@ try {
   summary.failure = String(e);
 } finally {
   // A failed run must not leave codex and its ed-mcp running.
-  for (const s of [a, b]) if (s && s.p.exitCode === null) s.p.kill();
+  for (const s of [a, b]) if (s) stop(s);
 }
 writeFileSync(join(out, "summary.json"), redact(JSON.stringify(summary, null, 2)));
 console.log(redact(JSON.stringify(summary, null, 2)));
