@@ -4,17 +4,25 @@
 // scrub them before they become test fixtures. ED_MCP env values longer than 8 chars are redacted.
 // It reads the ed-mcp definition from ~/.claude.json (user scope, then each project) and spends
 // a few Codex turns.
-// Usage: node scripts/codex-probe.mjs <path to codex.exe> <outDir outside the repo> [thread-config|cli-config]
+// Usage: see USAGE below.
 import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 
-const [codex, outDir, mode = "thread-config"] = process.argv.slice(2);
-if (!codex || !outDir || !["thread-config", "cli-config"].includes(mode)) {
-  console.error(
-    "Usage: node scripts/codex-probe.mjs <path to codex.exe> <outDir outside the repo> [thread-config|cli-config]",
-  );
+const MODES = ["thread-config", "cli-config"];
+const USAGE = `Usage: node scripts/codex-probe.mjs <path to codex.exe> <outDir outside the repo> [${MODES.join("|")}]`;
+const [codex, outDir, mode = MODES[0]] = process.argv.slice(2);
+if (!codex || !outDir || !MODES.includes(mode)) {
+  console.error(USAGE);
+  process.exit(2);
+}
+// The recordings hold personal data, so they must not land where git add can pick them up.
+const repo = resolve(import.meta.dirname, "..");
+const rel = relative(repo, resolve(outDir));
+if (!rel || (!rel.startsWith("..") && !isAbsolute(rel))) {
+  console.error(`outDir must be outside the repo (${repo}).`);
+  console.error(USAGE);
   process.exit(2);
 }
 mkdirSync(outDir, { recursive: true });

@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { ApprovalBroker, type ApprovalRequest, type Outcome } from "../src/core/approvals.js";
+
+const brokers: ApprovalBroker[] = [];
+// Settles what a failed test left open, so no 5-second timer outlives it.
+afterEach(() => {
+  for (const b of brokers.splice(0)) b.denyAll();
+});
 
 function broker() {
   const requests: ApprovalRequest[] = [];
@@ -10,6 +16,7 @@ function broker() {
     onSettled: (id, o) => settled.push([id, o]),
     now: () => 1_000,
   });
+  brokers.push(b);
   return { b, requests, settled };
 }
 
@@ -37,6 +44,5 @@ describe("ApprovalBroker", () => {
     expect(requests[0]).toMatchObject({ toolName: "Custom", summary: "cmd /c dir", shell: true });
     expect(requests[1]).toMatchObject({ summary: "ls", shell: false });
     expect(requests[0]!.deadline).toBe(6_000);
-    b.denyAll();
   });
 });
