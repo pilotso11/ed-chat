@@ -1,28 +1,4 @@
-export interface McpServerInfo {
-  name: string;
-  status: string;
-}
-
-export type SessionEvent =
-  | {
-      type: "ready";
-      sessionId: string | null;
-      tools: string[];
-      mcpServers: McpServerInfo[];
-      permissionMode: string | null;
-    }
-  | { type: "text"; delta: string }
-  | { type: "toolStart"; id: string; name: string }
-  | { type: "toolEnd"; id: string; name: string; isError: boolean }
-  | {
-      type: "result";
-      isError: boolean;
-      durationMs: number | null;
-      text: string | null;
-      sessionId: string | null;
-      denials: string[];
-    }
-  | { type: "unknown"; raw: unknown };
+import type { McpServerInfo, SessionEvent } from "../../backend.js";
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj | null =>

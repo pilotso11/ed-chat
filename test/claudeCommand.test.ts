@@ -4,11 +4,9 @@ import {
   APPROVAL_TOOL,
   buildClaudeArgs,
   edMcpState,
-  isOlder,
-  parseCliVersion,
-  quoteForCmd,
   resolveClaude,
-} from "../src/core/claudeCommand.js";
+} from "../src/core/backends/claude/command.js";
+import { isOlder, parseCliVersion, quoteForCmd } from "../src/core/cli.js";
 import { HUD_PROMPT, settingsPrompt } from "../src/core/prompt.js";
 
 describe("CrashTracker", () => {
@@ -59,6 +57,43 @@ describe("resolveClaude", () => {
 
   it("returns null when claude is not on PATH", () => {
     expect(resolveClaude(null, { PATH: "/usr/bin" }, "linux", has([]))).toBeNull();
+  });
+
+  const winEnv = {
+    PATH: "C:\\a",
+    USERPROFILE: "C:\\Users\\p",
+    APPDATA: "C:\\Users\\p\\AppData\\Roaming",
+  };
+
+  it("finds the native install when it is not on PATH", () => {
+    expect(
+      resolveClaude(null, winEnv, "win32", has(["C:\\Users\\p\\.local\\bin\\claude.exe"])),
+    ).toEqual({
+      command: "C:\\Users\\p\\.local\\bin\\claude.exe",
+      shell: false,
+    });
+  });
+
+  it("finds the npm shim when it is not on PATH", () => {
+    expect(
+      resolveClaude(
+        null,
+        winEnv,
+        "win32",
+        has(["C:\\Users\\p\\AppData\\Roaming\\npm\\claude.cmd"]),
+      ),
+    ).toEqual({ command: "C:\\Users\\p\\AppData\\Roaming\\npm\\claude.cmd", shell: true });
+  });
+
+  it("prefers PATH over the default install folders", () => {
+    expect(
+      resolveClaude(
+        null,
+        winEnv,
+        "win32",
+        has(["C:\\a\\claude.cmd", "C:\\Users\\p\\.local\\bin\\claude.exe"]),
+      ),
+    ).toEqual({ command: "C:\\a\\claude.cmd", shell: true });
   });
 });
 

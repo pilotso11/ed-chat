@@ -17,18 +17,17 @@ import {
   type BrowserWindow,
 } from "electron";
 import { chooseDisplay, place, snap, step } from "../core/anchor.js";
-import { ApprovalServer } from "../core/approvalServer.js";
+import type { BackendEvent } from "../core/backend.js";
+import { ApprovalServer } from "../core/backends/claude/approvalServer.js";
 import { chipLabel, withTargets, type Chip, type StopTarget } from "../core/chips.js";
 import {
   TESTED_CLI_VERSION,
   buildClaudeArgs,
   edMcpState,
-  isOlder,
-  parseCliVersion,
-  quoteForCmd,
   resolveClaude,
-} from "../core/claudeCommand.js";
-import { ClaudeSession, type BackendEvent } from "../core/claudeSession.js";
+} from "../core/backends/claude/command.js";
+import { ClaudeSession } from "../core/backends/claude/session.js";
+import { isOlder, parseCliVersion, quoteForCmd } from "../core/cli.js";
 import {
   INITIAL_STATE,
   answerAllowed,

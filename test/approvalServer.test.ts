@@ -1,12 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  ApprovalServer,
-  summarize,
-  type ApprovalRequest,
-  type Outcome,
-} from "../src/core/approvalServer.js";
+import { summarize, type ApprovalRequest, type Outcome } from "../src/core/approvals.js";
+import { ApprovalServer } from "../src/core/backends/claude/approvalServer.js";
 
 let server: ApprovalServer | undefined;
 afterEach(async () => {
@@ -116,12 +112,7 @@ describe("ApprovalServer", () => {
 
   it("cancels at once when the request is already aborted", async () => {
     const t = await setup(60_000);
-    const ask = (
-      server as unknown as {
-        ask: (n: string, i: unknown, s: AbortSignal) => Promise<string>;
-      }
-    ).ask.bind(server);
-    expect(await ask("Bash", {}, AbortSignal.abort())).toBe("cancelled");
+    expect(await server!.broker.ask("Bash", {}, { signal: AbortSignal.abort() })).toBe("cancelled");
     expect(t.requests).toEqual([]);
     expect(t.settled).toEqual([]);
   });

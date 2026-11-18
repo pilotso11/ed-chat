@@ -2,7 +2,8 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ClaudeSession, type BackendEvent } from "../src/core/claudeSession.js";
+import type { BackendEvent } from "../src/core/backend.js";
+import { ClaudeSession } from "../src/core/backends/claude/session.js";
 
 const fake = path.join(import.meta.dirname, "fake-claude.mjs");
 const fixture = path.join(import.meta.dirname, "fixtures", "stream", "handwritten.jsonl");

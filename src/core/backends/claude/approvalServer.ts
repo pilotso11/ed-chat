@@ -1,57 +1,32 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import { APPROVAL_SERVER } from "./claudeCommand.js";
+import {
+  ApprovalBroker,
+  type ApprovalBrokerOptions,
+  type ApprovalDecision,
+} from "../../approvals.js";
+import { APPROVAL_SERVER } from "./command.js";
 
-export interface ApprovalRequest {
-  id: string;
-  toolName: string;
-  summary: string;
-  /** The tool runs a shell command. */
-  shell: boolean;
-  /** When the request is denied for want of an answer, in ms since the epoch. */
-  deadline: number;
-}
-export type ApprovalDecision = "allow" | "deny";
-export type Outcome = ApprovalDecision | "timeout" | "cancelled";
-
-export interface ApprovalServerOptions {
-  timeoutMs: number;
-  onRequest: (r: ApprovalRequest) => void;
-  onSettled: (id: string, outcome: Outcome) => void;
+export interface ApprovalServerOptions extends ApprovalBrokerOptions {
   onError?: (err: unknown) => void;
-  now?: () => number;
 }
 
-const SHELL_TOOLS = ["Bash", "PowerShell"];
-
-const cut = (s: string, max: number) => (s.length > max ? s.slice(0, max - 1) + "…" : s);
-
-/** What the tool will do, short enough for three lines of the approval card. */
-export function summarize(toolName: string, input: unknown, max = 200): string {
-  const i = (input ?? {}) as Record<string, unknown>;
-  if (SHELL_TOOLS.includes(toolName) && typeof i.command === "string") return cut(i.command, max);
-  if (typeof i.file_path === "string") return cut(i.file_path, max);
-  const parts = Object.entries(i).map(
-    ([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`,
-  );
-  return cut(parts.join(", "), max);
-}
-
+/**
+ * Claude asks for approval through an MCP tool (--permission-prompt-tool). This is that MCP
+ * server, on 127.0.0.1 with a random port and token. The broker holds the player's side.
+ */
 export class ApprovalServer {
   private server?: http.Server;
   private port = 0;
   private readonly token = randomBytes(24).toString("hex");
-  private readonly pending = new Map<string, (d: Outcome) => void>();
-  private timeoutMs: number;
-  /** Tools the player allowed for the rest of this conversation. */
-  private readonly allowed = new Set<string>();
+  readonly broker: ApprovalBroker;
 
   constructor(private readonly opts: ApprovalServerOptions) {
-    this.timeoutMs = opts.timeoutMs;
+    this.broker = new ApprovalBroker(opts);
   }
 
   async start(): Promise<number> {
@@ -67,7 +42,7 @@ export class ApprovalServer {
   }
 
   async stop(): Promise<void> {
-    for (const settle of [...this.pending.values()]) settle("deny");
+    this.broker.denyAll();
     const s = this.server;
     this.server = undefined;
     if (!s) return;
@@ -76,23 +51,20 @@ export class ApprovalServer {
   }
 
   setTimeoutMs(ms: number): void {
-    this.timeoutMs = ms;
+    this.broker.setTimeoutMs(ms);
   }
 
   /** Allows this tool without asking until clearAllowed(), for example at /new. */
   allowTool(toolName: string): void {
-    this.allowed.add(toolName);
+    this.broker.allowTool(toolName);
   }
 
   clearAllowed(): void {
-    this.allowed.clear();
+    this.broker.clearAllowed();
   }
 
   answer(id: string, d: ApprovalDecision): boolean {
-    const settle = this.pending.get(id);
-    if (!settle) return false;
-    settle(d);
-    return true;
+    return this.broker.answer(id, d);
   }
 
   mcpConfig() {
@@ -145,7 +117,7 @@ export class ApprovalServer {
         },
       },
       async ({ tool_name, input }, extra) => {
-        const d = await this.ask(tool_name, input ?? {}, extra.signal);
+        const d = await this.broker.ask(tool_name, input ?? {}, { signal: extra.signal });
         const payload =
           d === "allow"
             ? { behavior: "allow", updatedInput: input ?? {} }
@@ -157,34 +129,5 @@ export class ApprovalServer {
       },
     );
     return mcp;
-  }
-
-  private ask(toolName: string, input: unknown, signal: AbortSignal): Promise<Outcome> {
-    if (signal.aborted) return Promise.resolve("cancelled");
-    if (this.allowed.has(toolName)) return Promise.resolve("allow");
-    const id = randomUUID();
-    return new Promise((resolve) => {
-      const settle = (d: Outcome) => {
-        clearTimeout(timer);
-        signal.removeEventListener("abort", onAbort);
-        if (!this.pending.delete(id)) return;
-        this.opts.onSettled(id, d);
-        resolve(d);
-      };
-      const onAbort = () => settle("cancelled");
-      // A turn must never wait forever for a player who is busy flying.
-      const timer = setTimeout(() => settle("timeout"), this.timeoutMs);
-      // The CLI may disconnect (Ctrl-C, crash, its own tool timeout) while the card is up.
-      signal.addEventListener("abort", onAbort, { once: true });
-      this.pending.set(id, settle);
-      const now = this.opts.now?.() ?? Date.now();
-      this.opts.onRequest({
-        id,
-        toolName,
-        summary: summarize(toolName, input),
-        shell: SHELL_TOOLS.includes(toolName),
-        deadline: now + this.timeoutMs,
-      });
-    });
   }
 }
