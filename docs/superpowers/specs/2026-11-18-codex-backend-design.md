@@ -2,7 +2,8 @@
 
 Date: 2026-11-18
 Status: draft. Step 0 (protocol probe) done, see "Step 0 results". Part 1 done; `findEdMcp()`
-reads only `~/.claude.json` so far, and Part 3 adds `config.toml` and the plugin lookup.
+reads only `~/.claude.json` so far, and Part 3 adds `config.toml` and the plugin lookup. Part 2
+done, not yet wired into main (Part 4); see "Notes from Part 2".
 
 ## Purpose
 
@@ -163,3 +164,25 @@ Notes from the probe:
   directory name is invalid (os error 267)".
 - The generated protocol types (`codex app-server generate-ts --out <dir>`) are the reference.
   They change between versions, so `events.ts` reads only the fields it needs.
+
+## Notes from Part 2
+
+- The approval card's text comes from `CodexSession`, not `summarize()`: the command line (with
+  its folder when that is not the workspace), or the changed files, which arrive with the
+  `fileChange` item before the request. `brokerApprover()` connects it to `ApprovalBroker`.
+- Main owns the `ApprovalBroker`; the Claude MCP approval server takes it, so both backends share
+  one queue, timeout and "allow until /new".
+- A stopped turn emits `spawned`, not `result`: the overlay goes back to idle with no reply. A
+  turn that has not ended 5 seconds after `turn/interrupt` is ended with its process, and the
+  thread resumes at the restart.
+- `ready` is emitted when the thread starts, and again at each MCP startup status. Against the
+  real CLI the first `ready` comes before any status, so Part 4 must not show "ed-mcp missing"
+  from it for Codex: whether ed-mcp is set up comes from the config lookup (Part 3).
+- Still to find out, with the real CLI: how Codex reports a Windows sandbox that is not
+  installed (elevated), for the notice in "Decisions".
+- Probe hardening deferred to Part 5, before fixtures are recorded: fail closed on any git error
+  in the outside-the-repo check, ignore inherited `GIT_*` variables, refuse a folder inside
+  `.git`; match `turn/completed` on its turn id; stop ed-mcp's processes too when a run ends
+  (`taskkill /T`); in cli-config mode, pass ed-mcp's env through codex's own environment and
+  `env_vars` rather than leaving it out; check recordings by hand for secrets in other spellings
+  (forward-slash paths, double escaping) and in ed-mcp's args.

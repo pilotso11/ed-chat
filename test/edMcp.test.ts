@@ -40,9 +40,19 @@ describe("findEdMcp", () => {
 });
 
 describe("syncDirOf", () => {
-  it("finds the first entry that names a sync folder", () => {
+  it("reads the sync folder of the ed-mcp that runs, not of another entry", () => {
     const claudeJson = JSON.stringify({
       mcpServers: { "ed-mcp": npx },
+      projects: {
+        p: { mcpServers: { "ed-mcp": { ...npx, env: { ED_MCP_SYNC_DIR: "E:/Sync" } } } },
+      },
+    });
+    expect(syncDirOf({ claudeJson })).toBeNull();
+  });
+
+  it("with no runnable entry, finds the first entry that names a sync folder", () => {
+    const claudeJson = JSON.stringify({
+      mcpServers: { "ed-mcp": { type: "http", url: "http://x" } },
       projects: { p: { mcpServers: { "ed-mcp": { env: { ED_MCP_SYNC_DIR: "E:/Sync" } } } } },
     });
     expect(syncDirOf({ claudeJson })).toBe("E:/Sync");

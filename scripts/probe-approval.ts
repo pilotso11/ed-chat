@@ -6,6 +6,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
+import { ApprovalBroker } from "../src/core/approvals.js";
 import { ApprovalServer } from "../src/core/backends/claude/approvalServer.js";
 import { buildClaudeArgs } from "../src/core/backends/claude/command.js";
 
@@ -15,14 +16,15 @@ if ((mode !== "auto" && mode !== "default") || !prompt || !out) {
   process.exit(2);
 }
 const rl = createInterface({ input: process.stdin, output: process.stderr });
-const server = new ApprovalServer({
+const broker = new ApprovalBroker({
   timeoutMs: 120_000,
   onRequest: async (r) => {
     const a = await rl.question(`\nApprove ${r.toolName} ${r.summary}? [y/N] `);
-    server.answer(r.id, a.trim().toLowerCase() === "y" ? "allow" : "deny");
+    broker.answer(r.id, a.trim().toLowerCase() === "y" ? "allow" : "deny");
   },
   onSettled: () => {},
 });
+const server = new ApprovalServer(broker);
 await server.start();
 const dir = await mkdtemp(path.join(os.tmpdir(), "ed-chat-probe-"));
 const cfg = path.join(dir, "approval-mcp.json");

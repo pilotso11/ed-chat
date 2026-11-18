@@ -7,3 +7,4 @@ test/fixtures
 package-lock.json
 .release-please-manifest.json
 docs/images/hud-mock.html
+.claude/worktrees

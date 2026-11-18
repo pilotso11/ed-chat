@@ -24,6 +24,7 @@ import {
   type AgentId,
   type BackendEvent,
 } from "../core/backend.js";
+import { ApprovalBroker } from "../core/approvals.js";
 import { ApprovalServer } from "../core/backends/claude/approvalServer.js";
 import { chipLabel, withTargets, type Chip, type StopTarget } from "../core/chips.js";
 import {
@@ -610,7 +611,8 @@ async function main(): Promise<void> {
   }
 
   // The assistant.
-  const approval = new ApprovalServer({
+  // The player's side of approvals, for either backend: the cards, the timeout, "allow until /new".
+  const approvals = new ApprovalBroker({
     timeoutMs: settings.approval.timeoutSeconds * 1000,
     onRequest: (request) => {
       dispatch({ type: "approval", request });
@@ -623,6 +625,8 @@ async function main(): Promise<void> {
       if (outcome === "timeout" && req)
         flash("approval", `⛔ denied ${shortTool(req.toolName)}: no answer`, 6_000);
     },
+  });
+  const approval = new ApprovalServer(approvals, {
     // The message only: the request body can hold chat text.
     onError: (err) => log.log("warn", `approval request failed: ${message(err)}`),
   });
@@ -839,7 +843,7 @@ async function main(): Promise<void> {
     resumePending = false;
     saved = { ...saved, session: undefined };
     writeState();
-    approval.clearAllowed();
+    approvals.clearAllowed();
     dispatch({ type: "newSession" });
   }
 
@@ -847,12 +851,12 @@ async function main(): Promise<void> {
     const req = state.approvals.find((r) => r.id === id);
     if (!req) return;
     if (!answerAllowed(a, id, shownApproval, Date.now())) return;
-    approval.answer(id, a === "deny" ? "deny" : "allow");
+    approvals.answer(id, a === "deny" ? "deny" : "allow");
     if (a === "alwaysAllow") {
-      approval.allowTool(req.toolName);
+      approvals.allowTool(req.toolName);
       // Requests for the same tool that already wait in the queue are allowed too.
       for (const r of state.approvals)
-        if (r.toolName === req.toolName) approval.answer(r.id, "allow");
+        if (r.toolName === req.toolName) approvals.answer(r.id, "allow");
       flash("approval", `✓ ${shortTool(req.toolName)} allowed until /new`, 4_000);
     }
   }
@@ -1159,7 +1163,7 @@ async function main(): Promise<void> {
     renderHud();
     bindHotkeys();
     syncHotkeys(focus?.current ?? null);
-    approval.setTimeoutMs(settings.approval.timeoutSeconds * 1000);
+    approvals.setTimeoutMs(settings.approval.timeoutSeconds * 1000);
     reposition();
     render();
   }
