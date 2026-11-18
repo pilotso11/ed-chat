@@ -10,6 +10,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { createInterface } from "node:readline";
 
 const MODES = ["thread-config", "cli-config"];
 const USAGE = `Usage: node scripts/codex-probe.mjs <path to codex.exe> <outDir outside any git repo> [${MODES.join("|")}]`;
@@ -77,22 +78,9 @@ const edToml = { command: ed.command, args: ed.args, env: ed.env };
 
 const log = (file, line) => appendFileSync(join(out, file), redact(line) + "\n");
 
-// Calls cb with each non-empty line, the last one too when the stream ends without a newline.
-// setEncoding decodes across chunks, so a character split between two chunks stays whole.
-function onLines(stream, cb) {
-  let buf = "";
-  stream.setEncoding("utf8");
-  stream.on("data", (d) => {
-    buf += d;
-    const lines = buf.split("\n");
-    buf = lines.pop();
-    for (const l of lines) if (l.trim()) cb(l.trim());
-  });
-  stream.on("end", () => {
-    if (buf.trim()) cb(buf.trim());
-    buf = "";
-  });
-}
+// readline decodes across chunks and gives the last line too when it has no newline.
+const onLines = (stream, cb) =>
+  createInterface({ input: stream, crlfDelay: Infinity }).on("line", cb);
 
 function start(file, extraArgs = []) {
   const p = spawn(codex, ["app-server", ...extraArgs], {
@@ -111,8 +99,11 @@ function start(file, extraArgs = []) {
     log(file, `!! spawn error: ${err.message}`);
     failAll(err);
   });
-  p.on("exit", (code) => failAll(new Error(`codex exited with code ${code}`)));
-  const onMessage = (line) => {
+  // close, not exit: exit can come before the last stdout line has been read.
+  p.on("close", (code) => failAll(new Error(`codex exited with code ${code}`)));
+  const onMessage = (raw) => {
+    const line = raw.trim();
+    if (!line) return;
     log(file, "<< " + line);
     let msg;
     try {
