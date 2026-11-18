@@ -1,6 +1,6 @@
 import edMcpPackage from "ed-mcp/package.json" with { type: "json" };
 import { AGENTS, type AgentId } from "./backend.js";
-import type { EdMcpState } from "./backends/claude/command.js";
+import type { EdMcpState } from "./edMcp.js";
 import { isOlder, parseCliVersion } from "./cli.js";
 
 /** The ed-mcp that ED Chat bundles for the activity panel. */

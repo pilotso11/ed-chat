@@ -30,7 +30,6 @@ import {
   TESTED_CLI_VERSION,
   buildClaudeArgs,
   claudeLookup,
-  edMcpState,
   resolveClaude,
 } from "../core/backends/claude/command.js";
 import { ClaudeSession } from "../core/backends/claude/session.js";
@@ -81,7 +80,7 @@ import {
 } from "../core/stores.js";
 import { resumeId } from "../core/resume.js";
 import { openStores } from "ed-mcp/journal";
-import { readAgentConfigs, syncDirOf } from "../core/edMcp.js";
+import { edMcpState, readAgentConfigs, syncDirOf } from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";

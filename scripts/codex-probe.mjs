@@ -1,7 +1,8 @@
 // Step 0 of the Codex backend spec (docs/superpowers/specs/2026-11-18-codex-backend-design.md).
 // Drives `codex app-server` the way ED Chat will, and records every JSON-RPC line raw.
 // The recordings hold personal data (commander name, journal paths): keep them out of git and
-// scrub them before they become test fixtures. ED_MCP env values longer than 8 chars are redacted.
+// scrub them before they become test fixtures. Every ED_MCP_SYNC_* value, and any other env
+// value longer than 8 chars, is redacted.
 // It reads the ed-mcp definition from ~/.claude.json (user scope, then each project) and spends
 // a few Codex turns.
 // Usage: node scripts/codex-probe.mjs <codex.exe> <outDir outside any git repo> [mode]; see USAGE.
@@ -64,9 +65,13 @@ if (!ed) {
   process.exit(1);
 }
 // The log lines are JSON, so each value is also redacted in its JSON-escaped form.
-const secrets = Object.values(ed.env ?? {})
-  .filter((v) => typeof v === "string" && v.length > 8)
-  .flatMap((v) => [JSON.stringify(v).slice(1, -1), v]);
+// The sync settings are secret at any length; other values only when long enough to be one
+// (a short one such as "1" would blank out unrelated text).
+const secrets = Object.entries(ed.env ?? {})
+  .filter(([k, v]) => typeof v === "string" && v && (k.startsWith("ED_MCP_SYNC_") || v.length > 8))
+  .flatMap(([, v]) => [JSON.stringify(v).slice(1, -1), v])
+  // Longest first, so a value inside another is not redacted half-way.
+  .sort((a, b) => b.length - a.length);
 const redact = (s) => secrets.reduce((acc, v) => acc.split(v).join("<redacted>"), s);
 const edToml = { command: ed.command, args: ed.args, env: ed.env };
 
@@ -163,11 +168,9 @@ const cliOverrides =
         "-c",
         `mcp_servers.ed-mcp.command=${JSON.stringify(ed.command)}`,
         "-c",
-        `mcp_servers.ed-mcp.args=${JSON.stringify(ed.args)}`,
-        ...Object.entries(ed.env ?? {}).flatMap(([k, v]) => [
-          "-c",
-          `mcp_servers.ed-mcp.env.${k}=${JSON.stringify(v)}`,
-        ]),
+        `mcp_servers.ed-mcp.args=${JSON.stringify(ed.args ?? [])}`,
+        // No env: other processes can read a command line, and it can hold
+        // ED_MCP_SYNC_PASSWORD. ed-mcp then runs with its own default data folder.
       ]
     : [];
 const threadConfig = mode === "thread-config" ? { mcp_servers: { "ed-mcp": edToml } } : undefined;

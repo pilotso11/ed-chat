@@ -4,10 +4,10 @@ import {
   APPROVAL_TOOL,
   buildClaudeArgs,
   claudeLookup,
-  edMcpState,
   resolveClaude,
 } from "../src/core/backends/claude/command.js";
 import { AGENTS, notFoundText } from "../src/core/backend.js";
+import { edMcpState } from "../src/core/edMcp.js";
 import { isOlder, lookedIn, parseCliVersion, quoteForCmd } from "../src/core/cli.js";
 import { HUD_PROMPT, settingsPrompt } from "../src/core/prompt.js";
 

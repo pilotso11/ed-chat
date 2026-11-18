@@ -4,6 +4,7 @@
 import os from "node:os";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
+import type { McpServerInfo } from "./backend.js";
 
 export type EdMcpSource = "claudeUser" | "claudeProject";
 
@@ -87,4 +88,16 @@ export function syncDirOf(c: AgentConfigs): string | null {
 export async function readAgentConfigs(home: string = os.homedir()): Promise<AgentConfigs> {
   const read = (p: string) => readFile(p, "utf8").catch(() => undefined);
   return { claudeJson: await read(path.join(home, ".claude.json")) };
+}
+
+export type EdMcpState = "ok" | "missing" | "failed" | "needsAuth";
+
+// Servers are still pending at init and their tools are not listed yet, so read the configured list.
+// Claude's plugin names its server plugin:<plugin>:ed-mcp; Codex has only ed-mcp. A player can have both, and one
+// that works is enough: a failed plugin must not hide a working claude mcp add server.
+export function edMcpState(servers: McpServerInfo[]): EdMcpState {
+  const found = servers.filter((m) => m.name === "ed-mcp" || /^plugin:[^:]+:ed-mcp$/.test(m.name));
+  if (!found.length) return "missing";
+  if (found.some((m) => m.status !== "failed" && m.status !== "needs-auth")) return "ok";
+  return found.some((m) => m.status === "needs-auth") ? "needsAuth" : "failed";
 }
