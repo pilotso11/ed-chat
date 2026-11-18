@@ -77,12 +77,28 @@ const edToml = { command: ed.command, args: ed.args, env: ed.env };
 
 const log = (file, line) => appendFileSync(join(out, file), redact(line) + "\n");
 
+// Calls cb with each non-empty line, the last one too when the stream ends without a newline.
+// setEncoding decodes across chunks, so a character split between two chunks stays whole.
+function onLines(stream, cb) {
+  let buf = "";
+  stream.setEncoding("utf8");
+  stream.on("data", (d) => {
+    buf += d;
+    const lines = buf.split("\n");
+    buf = lines.pop();
+    for (const l of lines) if (l.trim()) cb(l.trim());
+  });
+  stream.on("end", () => {
+    if (buf.trim()) cb(buf.trim());
+    buf = "";
+  });
+}
+
 function start(file, extraArgs = []) {
   const p = spawn(codex, ["app-server", ...extraArgs], {
     cwd: work,
     stdio: ["pipe", "pipe", "pipe"],
   });
-  let buf = "";
   let nextId = 1;
   const pending = new Map();
   const listeners = [];
@@ -96,42 +112,26 @@ function start(file, extraArgs = []) {
     failAll(err);
   });
   p.on("exit", (code) => failAll(new Error(`codex exited with code ${code}`)));
-  p.stdout.on("data", (d) => {
-    buf += d.toString("utf8");
-    let i;
-    while ((i = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, i).trim();
-      buf = buf.slice(i + 1);
-      if (!line) continue;
-      log(file, "<< " + line);
-      let msg;
-      try {
-        msg = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      if (msg.id !== undefined && msg.method === undefined && pending.has(msg.id)) {
-        pending.get(msg.id).resolve(msg);
-        pending.delete(msg.id);
-      } else {
-        // A copy: a listener that is done removes itself while the loop runs.
-        for (const l of [...listeners]) l(msg);
-      }
+  const onMessage = (line) => {
+    log(file, "<< " + line);
+    let msg;
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      return;
     }
-  });
+    if (msg.id !== undefined && msg.method === undefined && pending.has(msg.id)) {
+      pending.get(msg.id).resolve(msg);
+      pending.delete(msg.id);
+    } else {
+      // A copy: a listener that is done removes itself while the loop runs.
+      for (const l of [...listeners]) l(msg);
+    }
+  };
+  onLines(p.stdout, onMessage);
   // By whole lines, like stdout: a secret split across two chunks would not be redacted.
-  let errBuf = "";
   const errFile = file.replace(".jsonl", ".stderr.txt");
-  p.stderr.on("data", (d) => {
-    errBuf += d.toString("utf8");
-    const lines = errBuf.split("\n");
-    errBuf = lines.pop();
-    for (const l of lines) log(errFile, l);
-  });
-  p.stderr.on("end", () => {
-    if (errBuf) log(errFile, errBuf);
-    errBuf = "";
-  });
+  onLines(p.stderr, (line) => log(errFile, line));
   const send = (obj) => {
     const s = JSON.stringify(obj);
     log(file, ">> " + s);
