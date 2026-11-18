@@ -1,7 +1,8 @@
 # Codex as an alternative to Claude
 
 Date: 2026-11-18
-Status: draft. Step 0 (protocol probe) done, see "Step 0 results".
+Status: draft. Step 0 (protocol probe) done, see "Step 0 results". Part 1 done; `findEdMcp()`
+reads only `~/.claude.json` so far, and Part 3 adds `config.toml` and the plugin lookup.
 
 ## Purpose
 

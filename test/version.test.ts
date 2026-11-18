@@ -34,6 +34,14 @@ describe("versionText", () => {
   });
 });
 
+describe("versionText for the active assistant", () => {
+  it("names the CLI and assistant that runs", () => {
+    const t = versionText({ ...base, agent: "claude", edMcpLatest: null });
+    expect(t).toContain("claude 2.1.308");
+    expect(t).toContain("ed-mcp for Claude: added");
+  });
+});
+
 describe("fetchLatestEdMcp", () => {
   const reply = (status: number, body: unknown) =>
     (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { JournalEvent, Plan } from "ed-mcp/journal";
-import { edMcpSyncDir } from "../src/core/hud/edMcpConfig.js";
+import { edMcpSyncDir } from "../src/core/edMcp.js";
 import { HudFeed } from "../src/core/hud/feed.js";
 import { buildHud, currentMode, parseShipStatus, type HudInput } from "../src/core/hud/hud.js";
 import { LAPSE_JUMPS, cycleMode, journalMode, noteMode, pickMode } from "../src/core/hud/mode.js";

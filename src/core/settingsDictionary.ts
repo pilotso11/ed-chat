@@ -1,18 +1,18 @@
 // What each setting does, written into settings.schema.json with the types, limits and
-// defaults that come from the schema itself. Editors show it on hover, and Claude reads it
+// defaults that come from the schema itself. Editors show it on hover, and the assistant reads it
 // to show or change settings for the player.
 
 export interface SettingEntry {
   text: string;
   /**
-   * Claude must not change this setting or any setting under it. These control what Claude
+   * The assistant must not change this setting or any setting under it. These control what it
    * may do, or where ED Chat reads files from; the player changes them from the tray menu.
    */
   playerOnly?: true;
 }
 
 export const PLAYER_ONLY_NOTE =
-  "Player only: Claude must not change this. The player changes it in settings.json, from the tray menu, Open settings.";
+  "Player only: the assistant must not change this. The player changes it in settings.json, from the tray menu, Open settings.";
 
 const position = (what: string, prefix: string): Record<string, SettingEntry> => ({
   [prefix]: { text: `Where ${what} sits on the screen.` },
@@ -39,8 +39,8 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
     text: "The step key: each press shows the reply, then the whole reply, then the chat.",
   },
   "hotkeys.showHistory": { text: "Opens the conversation history." },
-  "hotkeys.approve": { text: "Allows the tool that Claude asks to run." },
-  "hotkeys.deny": { text: "Denies the tool that Claude asks to run." },
+  "hotkeys.approve": { text: "Allows the tool that the assistant asks to run." },
+  "hotkeys.deny": { text: "Denies the tool that the assistant asks to run." },
   "hotkeys.alwaysAllow": {
     text: "Allows the tool, and the same tool again without asking until /new.",
   },
@@ -93,12 +93,12 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   safety: { text: "Safety while flying.", playerOnly: true },
   "safety.blockWhenInDanger": { text: "Do not open the chat while the ship is in danger." },
 
-  approval: { text: "Requests from Claude to run a tool.", playerOnly: true },
+  approval: { text: "Requests from the assistant to run a tool.", playerOnly: true },
   "approval.timeoutSeconds": { text: "Seconds before a request with no answer is denied." },
   "approval.sound": { text: "Play a sound when a request arrives." },
 
   claude: { text: "How ED Chat starts the claude CLI.", playerOnly: true },
-  "claude.path": { text: "Path to claude. null searches PATH." },
+  "claude.path": { text: "Path to claude. null searches PATH, then the default install folders." },
   "claude.permissionMode": {
     text: "auto: Claude runs most tools without asking. default: ask for each tool.",
   },

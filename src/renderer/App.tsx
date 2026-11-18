@@ -183,7 +183,13 @@ function AnswerButton({
 }
 
 // Keyed by request id, so a new request restarts the pulse and the countdown.
-function ApprovalCard({ a }: { a: NonNullable<ViewModel["approval"]> }) {
+function ApprovalCard({
+  a,
+  agentName,
+}: {
+  a: NonNullable<ViewModel["approval"]>;
+  agentName: string;
+}) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1_000);
@@ -195,7 +201,7 @@ function ApprovalCard({ a }: { a: NonNullable<ViewModel["approval"]> }) {
     <div className="approval">
       <div className="head">
         <span>
-          Claude wants to run <b>{a.toolName}</b>
+          {agentName} wants to run <b>{a.toolName}</b>
         </span>
         {a.position && <span className="position">{a.position}</span>}
       </div>
@@ -214,7 +220,7 @@ function ApprovalCard({ a }: { a: NonNullable<ViewModel["approval"]> }) {
   );
 }
 
-function ChatInput({ canSend }: { canSend: boolean }) {
+function ChatInput({ canSend, agentName }: { canSend: boolean; agentName: string }) {
   const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => ref.current?.focus(), []);
@@ -238,7 +244,7 @@ function ChatInput({ canSend }: { canSend: boolean }) {
         ref={ref}
         rows={2}
         value={text}
-        placeholder={canSend ? undefined : "Claude is replying…"}
+        placeholder={canSend ? undefined : `${agentName} is replying…`}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={onKey}
       />
@@ -317,7 +323,7 @@ export function App() {
           <span className="state">
             {v.status}
             {v.auto && (
-              <span className="badge" title="Claude runs most tools without asking">
+              <span className="badge" title={`${v.agentName} runs most tools without asking`}>
                 AUTO
               </span>
             )}
@@ -328,7 +334,7 @@ export function App() {
         {v.mode === "strip" && <Chips chips={v.chips} keyLabel={v.ui.copyChipKey} />}
       </div>
       {v.keys && <KeysCard rows={v.keys} />}
-      {v.approval && <ApprovalCard key={v.approval.id} a={v.approval} />}
+      {v.approval && <ApprovalCard key={v.approval.id} a={v.approval} agentName={v.agentName} />}
       {v.card && <Card card={v.card} keyLabel={v.ui.copyChipKey} />}
       {v.chat && (
         <div className="chat">
@@ -341,7 +347,7 @@ export function App() {
             {v.chat.streaming !== null && <div className="assistant">{v.chat.streaming}</div>}
           </div>
           <Chips chips={v.chat.chips} keyLabel={v.ui.copyChipKey} />
-          {v.chat.input && <ChatInput canSend={v.chat.canSend} />}
+          {v.chat.input && <ChatInput canSend={v.chat.canSend} agentName={v.agentName} />}
         </div>
       )}
     </div>

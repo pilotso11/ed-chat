@@ -1,5 +1,6 @@
 import { column, growsUp } from "./anchor.js";
 import { parseChips, type Chip } from "./chips.js";
+import { AGENTS } from "./backend.js";
 import {
   currentApproval,
   currentChips,
@@ -21,6 +22,8 @@ export interface Notice {
 
 export interface ViewModel {
   show: boolean;
+  /** The assistant's name: "Claude wants to run". */
+  agentName: string;
   mode: "icon" | "strip" | "card" | "chat";
   status: string;
   auto: boolean;
@@ -132,6 +135,7 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
   const approval = currentApproval(s);
   return {
     show: windowProps(s).show,
+    agentName: AGENTS[s.agent].name,
     mode,
     icon:
       mode === "icon"

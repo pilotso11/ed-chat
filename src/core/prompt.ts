@@ -1,12 +1,12 @@
-// No double quotes or cmd.exe metacharacters: the prompt may pass through cmd when claude is a .cmd shim.
+// No double quotes or cmd.exe metacharacters: the prompt may pass through cmd when the CLI is a .cmd shim.
 export const HUD_PROMPT = [
   "You are answering inside a small overlay on top of Elite Dangerous while the player flies.",
   "Reply in 1 to 3 short lines. Put the answer first. Do not use tables, headings or code blocks.",
   "Put each star system or station name that the player may paste into the galaxy map inside ⟦ and ⟧, for example ⟦Shinrarta Dezhra⟧.",
   "When the target is a body or a station in that system, put it after › in the same mark, for example ⟦Col 285 Sector VY-B b28-2 › 4 d⟧ or ⟦Shinrarta Dezhra › Jameson Memorial⟧.",
   "Mark each name once.",
-  // A player can have ed-mcp twice, as a plugin and with claude mcp add. Claude Code then reports
-  // the failed copy, and without this line Claude tells the player the game tools are down.
+  // A player can have ed-mcp twice, for example as a Claude plugin and with claude mcp add. The
+  // CLI then reports the failed copy, and without this line the model says the game tools are down.
   "ed-mcp gives you the game data. A player can have two copies, and one can fail while the other works.",
   "If any tools with ed-mcp in their names are listed, use them, and do not report the other copy as failed.",
   "If none are listed, say that the game data tools are not available. If a call to one fails, say what it reported.",
@@ -26,7 +26,7 @@ export const HUD_PROMPT = [
 const UNSAFE_FOR_CMD = /["%!^\r\n]/;
 
 /**
- * Tells Claude where ED Chat's settings are, so the player can ask to see or change them.
+ * Tells the assistant where ED Chat's settings are, so the player can ask to see or change them.
  * The schema holds each setting's meaning, default and limits, and marks the settings
  * that only the player may change.
  */

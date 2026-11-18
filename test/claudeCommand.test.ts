@@ -3,10 +3,12 @@ import { CrashTracker } from "../src/core/crashTracker.js";
 import {
   APPROVAL_TOOL,
   buildClaudeArgs,
+  claudeLookup,
   edMcpState,
   resolveClaude,
 } from "../src/core/backends/claude/command.js";
-import { isOlder, parseCliVersion, quoteForCmd } from "../src/core/cli.js";
+import { AGENTS, notFoundText } from "../src/core/backend.js";
+import { isOlder, lookedIn, parseCliVersion, quoteForCmd } from "../src/core/cli.js";
 import { HUD_PROMPT, settingsPrompt } from "../src/core/prompt.js";
 
 describe("CrashTracker", () => {
@@ -190,5 +192,24 @@ describe("edMcpState", () => {
     expect(edMcpState([{ name: "ed-mcp", status: "connected" }, plugin])).toBe("ok");
     expect(edMcpState([plugin, { name: "ed-mcp", status: "needs-auth" }])).toBe("needsAuth");
     expect(edMcpState([plugin, { name: "ed-mcp", status: "failed" }])).toBe("failed");
+  });
+});
+
+describe("lookedIn", () => {
+  const env = { USERPROFILE: "C:\\Users\\p", APPDATA: "C:\\Users\\p\\AppData\\Roaming" };
+  it("lists PATH and the default install folders, with the home folder as ~", () => {
+    expect(lookedIn(claudeLookup(env, "win32"), null, env)).toEqual([
+      "PATH",
+      "~\\.local\\bin\\claude.exe",
+      "~\\AppData\\Roaming\\npm\\claude.cmd",
+    ]);
+  });
+  it("lists only the configured path when there is one", () => {
+    expect(lookedIn(claudeLookup(env, "win32"), "D:\\c.exe", env)).toEqual(["D:\\c.exe"]);
+  });
+  it("goes in the not-found notice", () => {
+    expect(notFoundText(AGENTS.claude, ["PATH", "~\\x"])).toBe(
+      "⚠ claude not found in PATH, ~\\x: install Claude Code or set claude.path",
+    );
   });
 });

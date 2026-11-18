@@ -17,17 +17,24 @@ import {
   type BrowserWindow,
 } from "electron";
 import { chooseDisplay, place, snap, step } from "../core/anchor.js";
-import type { BackendEvent } from "../core/backend.js";
+import {
+  AGENTS,
+  notFoundText,
+  type AgentBackend,
+  type AgentId,
+  type BackendEvent,
+} from "../core/backend.js";
 import { ApprovalServer } from "../core/backends/claude/approvalServer.js";
 import { chipLabel, withTargets, type Chip, type StopTarget } from "../core/chips.js";
 import {
   TESTED_CLI_VERSION,
   buildClaudeArgs,
+  claudeLookup,
   edMcpState,
   resolveClaude,
 } from "../core/backends/claude/command.js";
 import { ClaudeSession } from "../core/backends/claude/session.js";
-import { isOlder, parseCliVersion, quoteForCmd } from "../core/cli.js";
+import { isOlder, lookedIn, parseCliVersion, quoteForCmd } from "../core/cli.js";
 import {
   INITIAL_STATE,
   answerAllowed,
@@ -74,7 +81,7 @@ import {
 } from "../core/stores.js";
 import { resumeId } from "../core/resume.js";
 import { openStores } from "ed-mcp/journal";
-import { edMcpSyncDir } from "../core/hud/edMcpConfig.js";
+import { readAgentConfigs, syncDirOf } from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
@@ -104,21 +111,23 @@ const logDir = path.join(dataDir, "logs");
 const log = new Logger(path.join(logDir, "overlay.log"));
 const settingsFile = path.join(dataDir, "settings.json");
 
+// The assistant that runs. Part 4 of the Codex spec makes this a setting.
+const agentId: AgentId = "claude";
+const agent = AGENTS[agentId];
+
 // A command in backticks is copied when the player clicks the notice.
-const ED_MCP_MISSING =
-  "⚠ ed-mcp not connected; click to copy `claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp@latest`";
-const ED_MCP_FAILED = "⚠ ed-mcp failed to start; run `claude mcp list`";
-const ED_MCP_AUTH = "⚠ ed-mcp needs authentication; run `claude mcp list`";
+const ED_MCP_MISSING = `⚠ ed-mcp not connected; click to copy \`${agent.mcpAddCommand}\``;
+const ED_MCP_FAILED = `⚠ ed-mcp failed to start; run \`${agent.mcpListCommand}\``;
+const ED_MCP_AUTH = `⚠ ed-mcp needs authentication; run \`${agent.mcpListCommand}\``;
 const SCOPE_GAME = "ⓘ hotkeys work while Elite is in front";
 const COMMAND_COPIED = "📋 copied; paste it in a terminal";
 const KEYS_SECONDS = 15;
 const FULLSCREEN = "⚠ Elite is in fullscreen; switch to Borderless to see the overlay";
-const NO_CLAUDE = "⚠ claude not found: install Claude Code or set claude.path";
 const REFOCUS = "⚠ click the game to refocus";
 const IN_DANGER = "⛔ in danger: chat blocked";
 const NO_AUTO = "⚠ auto mode unavailable, using manual approvals";
-const BUSY = "⚠ Claude is busy";
-const GAVE_UP = "⚠ Claude keeps stopping";
+const BUSY = `⚠ ${agent.name} is busy`;
+const GAVE_UP = `⚠ ${agent.name} keeps stopping`;
 const RESUMED = "↺ resumed your last conversation";
 const RESUME_FAILED = "ⓘ could not resume the last conversation; started a new one";
 
@@ -512,10 +521,7 @@ async function main(): Promise<void> {
   let hudPlans: ReturnType<typeof openStores>["plans"] | null = null;
   async function openHudFeed(): Promise<void> {
     let syncDir = settings.hud.edMcpDataDir;
-    if (!syncDir) {
-      const text = await readFile(path.join(os.homedir(), ".claude.json"), "utf8").catch(() => "");
-      syncDir = edMcpSyncDir(text);
-    }
+    if (!syncDir) syncDir = syncDirOf(await readAgentConfigs());
     const stores = openStores(
       { ED_JOURNAL_DIR: journalDir(settings), ED_MCP_SYNC_DIR: syncDir ?? undefined },
       { keep: HUD_EVENTS },
@@ -604,7 +610,7 @@ async function main(): Promise<void> {
     setHudMoving(true);
   }
 
-  // Claude.
+  // The assistant.
   const approval = new ApprovalServer({
     timeoutMs: settings.approval.timeoutSeconds * 1000,
     onRequest: (request) => {
@@ -623,27 +629,28 @@ async function main(): Promise<void> {
   });
   const mcpConfigFile = path.join(dataDir, "approval-mcp.json");
   const workspace = path.join(dataDir, "workspace");
-  // Without the approval server Claude cannot ask for permission, so the overlay runs without Claude.
-  let claudeBlocked: string | null = null;
+  // Without the approval server the assistant cannot ask for permission, so the overlay runs without it.
+  let agentBlocked: string | null = null;
   try {
     await approval.start();
   } catch (err) {
     log.log("warn", `approval server: ${message(err)}`);
-    claudeBlocked = `⚠ Can't start the approval server: ${message(err)}`;
+    agentBlocked = `⚠ Can't start the approval server: ${message(err)}`;
   }
-  if (!claudeBlocked) {
+  if (!agentBlocked) {
     try {
       await writeFile(mcpConfigFile, JSON.stringify(approval.mcpConfig()));
       await mkdir(workspace, { recursive: true });
     } catch (err) {
       log.log("warn", `data folder: ${message(err)}`);
-      claudeBlocked = `⚠ Can't write to ${dataDir}: ${message(err)}`;
+      agentBlocked = `⚠ Can't write to ${dataDir}: ${message(err)}`;
     }
   }
-  const noClaude = () => claudeBlocked ?? NO_CLAUDE;
+  const notFound = () =>
+    agentBlocked ?? notFoundText(agent, lookedIn(claudeLookup(), settings.claude.path));
 
-  const claudeCommand = (s: Settings) => {
-    if (claudeBlocked) return null;
+  const agentCommand = (s: Settings) => {
+    if (agentBlocked) return null;
     const resolved = resolveClaude(s.claude.path);
     if (!resolved) return null;
     const args = buildClaudeArgs({
@@ -655,10 +662,10 @@ async function main(): Promise<void> {
     return { ...resolved, args };
   };
 
-  let session: ClaudeSession | null = null;
+  let session: AgentBackend | null = null;
   let resumePending = false;
   // For /version.
-  let claudeVersion: string | null = null;
+  let cliVersion: string | null = null;
   let edMcpStatus: Versions["edMcpStatus"] = null;
   function startSession(c: { command: string; args: string[]; shell: boolean }): void {
     session = new ClaudeSession({
@@ -676,19 +683,19 @@ async function main(): Promise<void> {
     checkVersion(c.command, c.shell);
   }
 
-  // Auto mode runs most tools without asking, so the player chooses once, before Claude starts.
+  // Auto mode runs most tools without asking, so the player chooses once, before the assistant starts.
   async function askPermissionMode(): Promise<void> {
     // A broken settings.json shows its own error; the question waits for a good file.
-    if (settingsStore.broken || setsKey(settingsStore.text, "claude", "permissionMode")) return;
+    if (settingsStore.broken || setsKey(settingsStore.text, agentId, "permissionMode")) return;
     const r = await dialog.showMessageBox({
       type: "question",
       title: "ED Chat",
-      message: "How should Claude run tools?",
+      message: `How should ${agent.name} run tools?`,
       detail:
-        "Ask me: the overlay shows each tool that Claude wants to run, and you allow or deny it " +
-        "with a hotkey.\n\nAuto: Claude decides, and runs most tools without asking, including " +
-        "commands that you ask for.\n\nYou can change this later in settings.json, " +
-        "claude.permissionMode.",
+        `Ask me: the overlay shows each tool that ${agent.name} wants to run, and you allow or ` +
+        `deny it with a hotkey.\n\nAuto: ${agent.name} decides, and runs most tools without ` +
+        "asking, including commands that you ask for.\n\nYou can change this later in " +
+        `settings.json, ${agentId}.permissionMode.`,
       buttons: ["Ask me", "Auto"],
       defaultId: 0,
       cancelId: 0,
@@ -697,7 +704,7 @@ async function main(): Promise<void> {
     const mode = r.response === 1 ? "auto" : "default";
     try {
       // The player chose this, so the guard does not ask about it.
-      await playerOnly.playerWrite(settingsStore.textWith("claude", "permissionMode", mode));
+      await playerOnly.playerWrite(settingsStore.textWith(agentId, "permissionMode", mode));
       await settingsStore.load();
       settings = playerOnly.effective() ?? settingsStore.settings;
     } catch (err) {
@@ -713,15 +720,15 @@ async function main(): Promise<void> {
   }
   // Runs after the tray exists: the question can open behind a fullscreen game, and the tray is
   // how the player quits. Settings reloads start no session before the answer.
-  let claudeStarted = false;
-  async function startClaude(): Promise<void> {
+  let agentStarted = false;
+  async function startAgent(): Promise<void> {
     await askPermissionMode();
-    claudeStarted = true;
-    const cmd = claudeCommand(settings);
-    log.log("info", `started; claude ${cmd ? cmd.command : "not found"}`);
+    agentStarted = true;
+    const cmd = agentCommand(settings);
+    log.log("info", `started; ${agent.cli} ${cmd ? cmd.command : "not found"}`);
     if (session) return;
     if (cmd) startSession(cmd);
-    else dispatch({ type: "notice", key: "claude", text: noClaude() });
+    else dispatch({ type: "notice", key: "claude", text: notFound() });
   }
 
   function onBackend(e: BackendEvent): void {
@@ -793,11 +800,11 @@ async function main(): Promise<void> {
       case "gaveUp":
         scheduleFade();
         // stderr is kept for diagnosis; capped because it can quote request content.
-        log.log("warn", `claude ${e.type}: ${capLines(e.stderrTail).join(" | ")}`);
+        log.log("warn", `${agent.cli} ${e.type}: ${capLines(e.stderrTail).join(" | ")}`);
         break;
       case "spawnError":
         scheduleFade();
-        log.log("warn", `claude spawn error: ${e.message}`);
+        log.log("warn", `${agent.cli} spawn error: ${e.message}`);
         break;
       case "unknown": {
         const d = describeUnknown(e.raw);
@@ -807,7 +814,7 @@ async function main(): Promise<void> {
     }
   }
 
-  // Only the latest check counts: an earlier one can finish last after claude.path changes.
+  // Only the latest check counts: an earlier one can finish last after the CLI path changes.
   let versionCheck = 0;
   function checkVersion(command: string, shell: boolean): void {
     const file = shell ? quoteForCmd(command) : command;
@@ -815,13 +822,13 @@ async function main(): Promise<void> {
     execFile(file, ["--version"], { shell, windowsHide: true }, (err, stdout) => {
       if (n !== versionCheck) return;
       const v = err ? null : parseCliVersion(stdout);
-      claudeVersion = v ? v.join(".") : null;
+      cliVersion = v ? v.join(".") : null;
       const tested = parseCliVersion(TESTED_CLI_VERSION)!;
       if (v && isOlder(v, tested)) {
         dispatch({
           type: "notice",
           key: "version",
-          text: `⚠ claude ${v.join(".")} is older than ${TESTED_CLI_VERSION}; run \`claude update\``,
+          text: `⚠ ${agent.cli} ${v.join(".")} is older than ${TESTED_CLI_VERSION}; run \`${agent.updateCommand}\``,
         });
       }
     });
@@ -876,7 +883,8 @@ async function main(): Promise<void> {
     }
     const base: Omit<Versions, "edMcpLatest"> = {
       app: app.getVersion(),
-      claude: claudeVersion,
+      agent: agentId,
+      [agentId]: cliVersion,
       edMcpStatus,
     };
     const cached = edMcpLatest && Date.now() - edMcpLatest.at < LATEST_TTL_MS ? edMcpLatest : null;
@@ -899,7 +907,7 @@ async function main(): Promise<void> {
   async function send(text: string): Promise<boolean> {
     const t = text.trim();
     if (!t) return false;
-    // ED Chat's own commands. They do not reach Claude.
+    // ED Chat's own commands. They do not reach the assistant.
     if (t === "/new" || t === "/version") {
       if (t === "/new") newConversation();
       else if (!showVersion()) return false;
@@ -909,7 +917,7 @@ async function main(): Promise<void> {
       return true;
     }
     if (!session) {
-      dispatch({ type: "notice", key: "claude", text: noClaude() });
+      dispatch({ type: "notice", key: "claude", text: notFound() });
       return false;
     }
     const fresh = noteIsFresh(settings.hud.enabled, hudFreshAt, Date.now());
@@ -1172,8 +1180,8 @@ async function main(): Promise<void> {
       message: "settings.json changed settings that only you should change.",
       detail:
         lines.join("\n") +
-        "\n\nThese settings control what Claude may run. If you did not make this change " +
-        "yourself, or ask Claude for it, choose Undo.",
+        `\n\nThese settings control what ${agent.name} may run. If you did not make this ` +
+        `change yourself, or ask ${agent.name} for it, choose Undo.`,
       buttons: ["Undo", "Apply"],
       defaultId: 0,
       cancelId: 0,
@@ -1196,15 +1204,15 @@ async function main(): Promise<void> {
       void openHudFeed().then(pollHud, (err) => log.log("warn", `panel: ${message(err)}`));
     }
     if (JSON.stringify(old.claude) !== JSON.stringify(settings.claude)) {
-      const c = claudeCommand(settings);
-      dispatch({ type: "notice", key: "claude", text: c ? null : noClaude() });
+      const c = agentCommand(settings);
+      dispatch({ type: "notice", key: "claude", text: c ? null : notFound() });
       // /version must not report the binary that is no longer configured.
-      claudeVersion = null;
+      cliVersion = null;
       if (c && session) {
         session.configure(c);
         checkVersion(c.command, c.shell);
-        flash("claudeSettings", "ⓘ claude settings apply after /new", 6_000);
-      } else if (c && claudeStarted) startSession(c);
+        flash("agentSettings", `ⓘ ${agent.cli} settings apply after /new`, 6_000);
+      } else if (c && agentStarted) startSession(c);
     }
     if (journalDir(old) !== journalDir(settings)) {
       status.stop();
@@ -1320,7 +1328,7 @@ async function main(): Promise<void> {
   });
   focus?.start();
   render();
-  startClaude().catch((err) => log.log("warn", `claude start: ${message(err)}`));
+  startAgent().catch((err) => log.log("warn", `${agent.cli} start: ${message(err)}`));
   // After the first foreground check, so the list shows which keys other apps hold.
   if (settings.startup.showKeys) setTimeout(showKeys, 1_000);
 

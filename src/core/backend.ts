@@ -66,8 +66,27 @@ export interface AgentInfo {
   product: string;
   /** The setting that points ED Chat at the CLI. */
   pathSetting: string;
+  /** Adds ed-mcp for every project. The ed-mcp notice copies it. */
+  mcpAddCommand: string;
+  /** Shows each MCP server and why it failed. */
+  mcpListCommand: string;
+  /** Updates the CLI. */
+  updateCommand: string;
 }
 
 export const AGENTS: Record<AgentId, AgentInfo> = {
-  claude: { name: "Claude", cli: "claude", product: "Claude Code", pathSetting: "claude.path" },
+  claude: {
+    name: "Claude",
+    cli: "claude",
+    product: "Claude Code",
+    pathSetting: "claude.path",
+    mcpAddCommand: "claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp@latest",
+    mcpListCommand: "claude mcp list",
+    updateCommand: "claude update",
+  },
 };
+
+/** The CLI cannot be found, or a spawn reported ENOENT. looked: the places searched. */
+export const notFoundText = (a: AgentInfo, looked: string[] = []) =>
+  `⚠ ${a.cli} not found${looked.length ? ` in ${looked.join(", ")}` : ""}: ` +
+  `install ${a.product} or set ${a.pathSetting}`;

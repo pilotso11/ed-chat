@@ -43,6 +43,22 @@ export function resolveCli(
   return null;
 }
 
+/**
+ * Where resolveCli looked, for the "not found" notice: the configured path alone, or PATH and
+ * each default install location, with the home folder shortened to ~.
+ */
+export function lookedIn(
+  lookup: CliLookup,
+  configured: string | null,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  if (configured) return [configured];
+  const home = env.USERPROFILE ?? env.HOME;
+  const short = (p: string) =>
+    home && p.toLowerCase().startsWith(home.toLowerCase()) ? `~${p.slice(home.length)}` : p;
+  return ["PATH", ...(lookup.defaultPaths ?? []).map(short)];
+}
+
 export function quoteForCmd(arg: string): string {
   return `"${arg.replace(/"/g, '""')}"`;
 }

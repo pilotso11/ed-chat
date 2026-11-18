@@ -1,6 +1,6 @@
 import type { ApprovalRequest } from "./approvals.js";
 import { firstLine, parseChips, type Chip } from "./chips.js";
-import { AGENTS, type AgentId, type BackendEvent } from "./backend.js";
+import { AGENTS, notFoundText, type AgentId, type BackendEvent } from "./backend.js";
 import type { KeyRow } from "./hotkeys.js";
 import type { ShipFlags } from "./status.js";
 
@@ -151,7 +151,7 @@ function onBackend(s: OverlayState, e: BackendEvent): OverlayState {
         { ...s, session: "stopped", tool: null },
         "claude",
         e.message.includes("ENOENT")
-          ? `⚠ ${agent.cli} not found: install ${agent.product} or set ${agent.pathSetting}`
+          ? notFoundText(agent)
           : `⚠ Can't start ${agent.cli}: ${e.message}`,
       );
     // The earlier turns belong to the conversation that could not be resumed.

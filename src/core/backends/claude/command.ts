@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { McpServerInfo } from "../../backend.js";
-import { resolveCli, type ResolvedCommand } from "../../cli.js";
+import { resolveCli, type CliLookup, type ResolvedCommand } from "../../cli.js";
 import { HUD_PROMPT, settingsPrompt } from "../../prompt.js";
 
 export const APPROVAL_SERVER = "ed_chat";
@@ -16,19 +16,25 @@ const win32 = path.win32;
  * claude.exe from the native installer, or the claude.cmd shim from npm, which needs a shell.
  * Both installers can leave PATH alone, so their default folders are tried after PATH.
  */
+export function claudeLookup(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): CliLookup {
+  const win = platform === "win32";
+  const defaultPaths: string[] = [];
+  if (win && env.USERPROFILE)
+    defaultPaths.push(win32.join(env.USERPROFILE, ".local", "bin", "claude.exe"));
+  if (win && env.APPDATA) defaultPaths.push(win32.join(env.APPDATA, "npm", "claude.cmd"));
+  return { names: win ? ["claude.exe", "claude.cmd"] : ["claude"], defaultPaths };
+}
+
 export function resolveClaude(
   configured: string | null,
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
   exists: (p: string) => boolean = existsSync,
 ): ResolvedCommand | null {
-  const win = platform === "win32";
-  const defaultPaths: string[] = [];
-  if (win && env.USERPROFILE)
-    defaultPaths.push(win32.join(env.USERPROFILE, ".local", "bin", "claude.exe"));
-  if (win && env.APPDATA) defaultPaths.push(win32.join(env.APPDATA, "npm", "claude.cmd"));
-  const names = win ? ["claude.exe", "claude.cmd"] : ["claude"];
-  return resolveCli({ names, defaultPaths }, configured, env, platform, exists);
+  return resolveCli(claudeLookup(env, platform), configured, env, platform, exists);
 }
 
 export function buildClaudeArgs(o: {
