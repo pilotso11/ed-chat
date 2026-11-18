@@ -37,12 +37,16 @@ describe("ApprovalBroker", () => {
     expect(b.answer(requests[0]!.id, "allow")).toBe(false);
   });
 
-  it("uses the summary and shell that the backend gives", () => {
+  it("uses the summary and shell that the backend gives", async () => {
     const { b, requests } = broker();
-    void b.ask("Custom", { x: 1 }, { summary: "cmd /c dir", shell: true });
-    void b.ask("Bash", { command: "ls" }, { shell: false });
+    const one = b.ask("Custom", { x: 1 }, { summary: "cmd /c dir", shell: true });
+    const two = b.ask("Bash", { command: "ls" }, { shell: false });
     expect(requests[0]).toMatchObject({ toolName: "Custom", summary: "cmd /c dir", shell: true });
     expect(requests[1]).toMatchObject({ summary: "ls", shell: false });
     expect(requests[0]!.deadline).toBe(6_000);
+    b.answer(requests[0]!.id, "allow");
+    b.answer(requests[1]!.id, "deny");
+    expect(await one).toBe("allow");
+    expect(await two).toBe("deny");
   });
 });

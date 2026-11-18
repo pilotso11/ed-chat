@@ -4,11 +4,11 @@
 // scrub them before they become test fixtures. ED_MCP env values longer than 8 chars are redacted.
 // It reads the ed-mcp definition from ~/.claude.json (user scope, then each project) and spends
 // a few Codex turns.
-// Usage: see USAGE below.
+// Usage: node scripts/codex-probe.mjs <codex.exe> <outDir outside the repo> [mode]; see USAGE.
 import { spawn } from "node:child_process";
-import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, appendFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const MODES = ["thread-config", "cli-config"];
 const USAGE = `Usage: node scripts/codex-probe.mjs <path to codex.exe> <outDir outside the repo> [${MODES.join("|")}]`;
@@ -18,14 +18,17 @@ if (!codex || !outDir || !MODES.includes(mode)) {
   process.exit(2);
 }
 // The recordings hold personal data, so they must not land where git add can pick them up.
-const repo = resolve(import.meta.dirname, "..");
-const rel = relative(repo, resolve(outDir));
-if (!rel || (!rel.startsWith("..") && !isAbsolute(rel))) {
+// Both paths are compared as real paths, so a junction, subst drive or short name cannot hide
+// the repo. The folder is made first, for realpath; an empty folder is nothing git can add.
+mkdirSync(outDir, { recursive: true });
+const repo = realpathSync(resolve(import.meta.dirname, ".."));
+const rel = relative(repo, realpathSync(outDir));
+const outside = rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel);
+if (!outside) {
   console.error(`outDir must be outside the repo (${repo}).`);
   console.error(USAGE);
   process.exit(2);
 }
-mkdirSync(outDir, { recursive: true });
 const work = resolve(outDir, "cwd");
 mkdirSync(work, { recursive: true });
 
