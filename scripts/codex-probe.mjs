@@ -223,9 +223,22 @@ function autoAnswer(s, file) {
 }
 
 const summary = {};
+// The waits start before the request: one stdout chunk can carry the turn/start answer and
+// the turn's last notification together.
+const turnStart = (s, threadId, text) =>
+  s.request("turn/start", { threadId, input: [{ type: "text", text, text_elements: [] }] });
+async function turn(s, threadId, text) {
+  const done = s.waitFor((m) => m.method === "turn/completed");
+  done.catch(() => {});
+  const r = await turnStart(s, threadId, text);
+  if (r.error) throw new Error("turn/start: " + JSON.stringify(r.error));
+  return done;
+}
+
+let a = null;
+let b = null;
 try {
-  // Run 1: new thread, ed-mcp tool, a command needing approval, streaming.
-  const a = start("run1.jsonl", cliOverrides);
+  a = start("run1.jsonl", cliOverrides);
   autoAnswer(a, "run1");
   summary.initialize = (await init(a)).result ? "ok" : "error";
   const ts = await a.request("thread/start", {
@@ -242,38 +255,33 @@ try {
   a.on((m) => {
     if (m.method === "item/agentMessage/delta") deltas++;
   });
-  await a.request("turn/start", {
+  const done1 = await turn(
+    a,
     threadId,
-    input: [
-      {
-        type: "text",
-        text: "Call the ed-mcp journal_status tool and tell me the commander name. Then create the file C:\\Users\\Public\\edchat-probe.txt containing hi using a shell command.",
-        text_elements: [],
-      },
-    ],
-  });
-  const done1 = await a.waitFor((m) => m.method === "turn/completed");
+    "Call the ed-mcp journal_status tool and tell me the commander name. Then create the file C:\\Users\\Public\\edchat-probe.txt containing hi using a shell command.",
+  );
   summary.turn1 = { status: done1.params.turn.status, deltas };
 
   // Run 1b: interrupt a long turn after the first delta.
-  await a.request("turn/start", {
-    threadId,
-    input: [
-      { type: "text", text: "Count slowly from 1 to 200, one number per line.", text_elements: [] },
-    ],
-  });
-  const first = await a.waitFor(
+  const first = a.waitFor(
     (m) =>
       m.method === "item/agentMessage/delta" ||
       (m.method === "item/started" && m.params.item.type === "agentMessage"),
   );
-  const ir = await a.request("turn/interrupt", { threadId, turnId: first.params.turnId });
-  const done2 = await a.waitFor((m) => m.method === "turn/completed");
-  summary.interrupt = { response: ir.error ? ir.error : "ok", status: done2.params.turn.status };
+  const done2 = a.waitFor((m) => m.method === "turn/completed");
+  first.catch(() => {});
+  done2.catch(() => {});
+  const t2 = await turnStart(a, threadId, "Count slowly from 1 to 200, one number per line.");
+  if (t2.error) throw new Error("turn/start: " + JSON.stringify(t2.error));
+  const ir = await a.request("turn/interrupt", { threadId, turnId: (await first).params.turnId });
+  summary.interrupt = {
+    response: ir.error ? ir.error : "ok",
+    status: (await done2).params.turn.status,
+  };
   a.p.kill();
 
   // Run 2: new process, resume by id, check memory; then a bogus id.
-  const b = start("run2.jsonl", cliOverrides);
+  b = start("run2.jsonl", cliOverrides);
   autoAnswer(b, "run2");
   await init(b);
   const rr = await b.request("thread/resume", {
@@ -282,27 +290,20 @@ try {
     config: threadConfig,
     excludeTurns: true,
   });
-  summary.resume = rr.error ? rr.error : "ok";
-  await b.request("turn/start", {
-    threadId,
-    input: [
-      {
-        type: "text",
-        text: "What commander name did you find earlier? One line.",
-        text_elements: [],
-      },
-    ],
-  });
-  const done3 = await b.waitFor((m) => m.method === "turn/completed");
+  if (rr.error) throw new Error("thread/resume: " + JSON.stringify(rr.error));
+  summary.resume = "ok";
+  const done3 = await turn(b, threadId, "What commander name did you find earlier? One line.");
   summary.resumedTurn = done3.params.turn.status;
   const bogus = await b.request("thread/resume", {
     threadId: "019a0000-0000-7000-8000-000000000000",
   });
   summary.bogusResume = bogus.error ?? "unexpected ok";
-  b.p.kill();
 } catch (e) {
   summary.failure = String(e);
+} finally {
+  // A failed run must not leave codex and its ed-mcp running.
+  for (const s of [a, b]) if (s && s.p.exitCode === null) s.p.kill();
 }
 writeFileSync(join(out, "summary.json"), redact(JSON.stringify(summary, null, 2)));
 console.log(redact(JSON.stringify(summary, null, 2)));
-process.exit(0);
+process.exit(summary.failure ? 1 : 0);
