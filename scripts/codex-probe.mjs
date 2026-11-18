@@ -11,6 +11,12 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 const [codex, outDir, mode = "thread-config"] = process.argv.slice(2);
+if (!codex || !outDir || !["thread-config", "cli-config"].includes(mode)) {
+  console.error(
+    "Usage: node scripts/codex-probe.mjs <path to codex.exe> <outDir outside the repo> [thread-config|cli-config]",
+  );
+  process.exit(2);
+}
 mkdirSync(outDir, { recursive: true });
 const work = resolve(outDir, "cwd");
 mkdirSync(work, { recursive: true });
