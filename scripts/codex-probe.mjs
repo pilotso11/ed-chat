@@ -240,10 +240,12 @@ async function turn(s, threadId, text) {
 function stop(s) {
   if (s.p.exitCode !== null || s.p.signalCode !== null) return;
   if (process.platform === "win32" && s.p.pid) {
-    spawnSync("taskkill", ["/pid", String(s.p.pid), "/T", "/F"], {
+    const r = spawnSync("taskkill", ["/pid", String(s.p.pid), "/T", "/F"], {
       windowsHide: true,
       stdio: "ignore",
     });
+    // No taskkill, or it was refused: codex itself still goes.
+    if (r.error || r.status !== 0) s.p.kill();
   } else {
     s.p.kill();
   }
