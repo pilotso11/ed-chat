@@ -4,51 +4,53 @@
 // scrub them before they become test fixtures. ED_MCP env values longer than 8 chars are redacted.
 // It reads the ed-mcp definition from ~/.claude.json (user scope, then each project) and spends
 // a few Codex turns.
-// Usage: node scripts/codex-probe.mjs <codex.exe> <outDir outside the repo> [mode]; see USAGE.
-import { spawn } from "node:child_process";
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  writeFileSync,
-} from "node:fs";
+// Usage: node scripts/codex-probe.mjs <codex.exe> <outDir outside any git repo> [mode]; see USAGE.
+import { execFileSync, spawn } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const MODES = ["thread-config", "cli-config"];
-const USAGE = `Usage: node scripts/codex-probe.mjs <path to codex.exe> <outDir outside the repo> [${MODES.join("|")}]`;
+const USAGE = `Usage: node scripts/codex-probe.mjs <path to codex.exe> <outDir outside any git repo> [${MODES.join("|")}]`;
 const [codex, outDir, mode = MODES[0]] = process.argv.slice(2);
 if (!codex || !outDir || !MODES.includes(mode)) {
   console.error(USAGE);
   process.exit(2);
 }
-// The recordings hold personal data, so they must not land where git add can pick them up.
-// Both paths are compared as the OS resolves them (realpathSync.native expands short names
-// like ED-CHA~1, junctions and subst drives), before any folder is made.
-const real = (p) => {
-  // The nearest folder that exists, resolved, with the parts that do not exist yet after it.
+// The recordings hold personal data, so they must not land where git add can pick them up:
+// git itself says whether the nearest existing folder is in a work tree, this repo's or any
+// other (a worktree, the main checkout), however the path is spelled.
+function inWorkTree(p) {
   let base = resolve(p);
-  const rest = [];
   while (!existsSync(base)) {
-    rest.unshift(basename(base));
     const up = dirname(base);
-    if (up === base) break;
+    if (up === base) return null;
     base = up;
   }
-  return join(realpathSync.native(base), ...rest);
-};
-const repo = real(resolve(import.meta.dirname, ".."));
-const rel = relative(repo, real(outDir));
-const outside = rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel);
-if (!outside) {
-  console.error(`outDir must be outside the repo (${repo}).`);
+  try {
+    const out = execFileSync("git", ["-C", base, "rev-parse", "--is-inside-work-tree"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return out.trim() === "true";
+  } catch (err) {
+    // git exits non-zero outside a repo; a missing git cannot tell, so the folder is refused.
+    return typeof err.status === "number" ? false : null;
+  }
+}
+const out = resolve(outDir);
+const inside = inWorkTree(out);
+if (inside !== false) {
+  console.error(
+    inside
+      ? `outDir must be outside any git work tree: ${out}`
+      : `cannot check that outDir is outside git (no such drive, or git not found): ${out}`,
+  );
   console.error(USAGE);
   process.exit(2);
 }
-mkdirSync(outDir, { recursive: true });
-const work = resolve(outDir, "cwd");
+mkdirSync(out, { recursive: true });
+const work = join(out, "cwd");
 mkdirSync(work, { recursive: true });
 
 const claudeJson = JSON.parse(readFileSync(join(homedir(), ".claude.json"), "utf8"));
@@ -68,7 +70,7 @@ const secrets = Object.values(ed.env ?? {})
 const redact = (s) => secrets.reduce((acc, v) => acc.split(v).join("<redacted>"), s);
 const edToml = { command: ed.command, args: ed.args, env: ed.env };
 
-const log = (file, line) => appendFileSync(join(outDir, file), redact(line) + "\n");
+const log = (file, line) => appendFileSync(join(out, file), redact(line) + "\n");
 
 function start(file, extraArgs = []) {
   const p = spawn(codex, ["app-server", ...extraArgs], {
@@ -273,6 +275,6 @@ try {
 } catch (e) {
   summary.failure = String(e);
 }
-writeFileSync(join(outDir, "summary.json"), redact(JSON.stringify(summary, null, 2)));
+writeFileSync(join(out, "summary.json"), redact(JSON.stringify(summary, null, 2)));
 console.log(redact(JSON.stringify(summary, null, 2)));
 process.exit(0);
