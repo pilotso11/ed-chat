@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { JournalEvent, Plan } from "ed-mcp/journal";
-import { edMcpSyncDir } from "../src/core/edMcp.js";
+import { syncDirOf } from "../src/core/edMcp.js";
 import { HudFeed } from "../src/core/hud/feed.js";
 import { buildHud, currentMode, parseShipStatus, type HudInput } from "../src/core/hud/hud.js";
 import { LAPSE_JUMPS, cycleMode, journalMode, noteMode, pickMode } from "../src/core/hud/mode.js";
@@ -429,15 +429,15 @@ describe("helpers", () => {
   it("finds ed-mcp's sync folder in Claude Code's config, and nothing else", () => {
     const cfg = (env: Record<string, string>) =>
       JSON.stringify({ mcpServers: { "ed-mcp": { command: "npx", env } } });
-    expect(edMcpSyncDir(cfg({ ED_MCP_SYNC_DIR: "D:\\Sync", ED_MCP_SYNC_PASSWORD: "x" }))).toBe(
-      "D:\\Sync",
-    );
-    expect(edMcpSyncDir(cfg({}))).toBeNull();
+    expect(
+      syncDirOf({ claudeJson: cfg({ ED_MCP_SYNC_DIR: "D:\\Sync", ED_MCP_SYNC_PASSWORD: "x" }) }),
+    ).toBe("D:\\Sync");
+    expect(syncDirOf({ claudeJson: cfg({}) })).toBeNull();
     const project = JSON.stringify({
       projects: { p: { mcpServers: { "ed-mcp": { env: { ED_MCP_SYNC_DIR: "E:\\S" } } } } },
     });
-    expect(edMcpSyncDir(project)).toBe("E:\\S");
-    expect(edMcpSyncDir("not json")).toBeNull();
+    expect(syncDirOf({ claudeJson: project })).toBe("E:\\S");
+    expect(syncDirOf({ claudeJson: "not json" })).toBeNull();
   });
 });
 

@@ -83,9 +83,6 @@ export function syncDirOf(c: AgentConfigs): string | null {
   return null;
 }
 
-/** The sync folder from the text of ~/.claude.json alone. */
-export const edMcpSyncDir = (claudeJson: string): string | null => syncDirOf({ claudeJson });
-
 /** Reads each assistant's config file. A file that cannot be read is left out. */
 export async function readAgentConfigs(home: string = os.homedir()): Promise<AgentConfigs> {
   const read = (p: string) => readFile(p, "utf8").catch(() => undefined);

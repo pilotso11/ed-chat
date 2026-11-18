@@ -2,7 +2,8 @@
 // Drives `codex app-server` the way ED Chat will, and records every JSON-RPC line raw.
 // The recordings hold personal data (commander name, journal paths): keep them out of git and
 // scrub them before they become test fixtures. ED_MCP env values longer than 8 chars are redacted.
-// It reads the ed-mcp definition from ~/.claude.json (user scope) and spends a few Codex turns.
+// It reads the ed-mcp definition from ~/.claude.json (user scope, then each project) and spends
+// a few Codex turns.
 // Usage: node scripts/codex-probe.mjs <path to codex.exe> <outDir outside the repo> [thread-config|cli-config]
 import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from "node:fs";
@@ -15,8 +16,19 @@ const work = resolve(outDir, "cwd");
 mkdirSync(work, { recursive: true });
 
 const claudeJson = JSON.parse(readFileSync(join(homedir(), ".claude.json"), "utf8"));
-const ed = claudeJson.mcpServers["ed-mcp"];
-const secrets = Object.values(ed.env ?? {}).filter((v) => typeof v === "string" && v.length > 8);
+// The same order as findEdMcp() in src/core/edMcp.ts.
+const ed = [
+  claudeJson.mcpServers?.["ed-mcp"],
+  ...Object.values(claudeJson.projects ?? {}).map((p) => p?.mcpServers?.["ed-mcp"]),
+].find((e) => typeof e?.command === "string");
+if (!ed) {
+  console.error("No ed-mcp with a command in ~/.claude.json");
+  process.exit(1);
+}
+// The log lines are JSON, so each value is also redacted in its JSON-escaped form.
+const secrets = Object.values(ed.env ?? {})
+  .filter((v) => typeof v === "string" && v.length > 8)
+  .flatMap((v) => [JSON.stringify(v).slice(1, -1), v]);
 const redact = (s) => secrets.reduce((acc, v) => acc.split(v).join("<redacted>"), s);
 const edToml = { command: ed.command, args: ed.args, env: ed.env };
 
@@ -31,6 +43,16 @@ function start(file, extraArgs = []) {
   let nextId = 1;
   const pending = new Map();
   const listeners = [];
+  // A crash or a failed spawn ends every request still waiting, so the probe does not hang.
+  const failAll = (err) => {
+    for (const { reject } of pending.values()) reject(err);
+    pending.clear();
+  };
+  p.on("error", (err) => {
+    log(file, `!! spawn error: ${err.message}`);
+    failAll(err);
+  });
+  p.on("exit", (code) => failAll(new Error(`codex exited with code ${code}`)));
   p.stdout.on("data", (d) => {
     buf += d.toString("utf8");
     let i;
@@ -46,10 +68,11 @@ function start(file, extraArgs = []) {
         continue;
       }
       if (msg.id !== undefined && msg.method === undefined && pending.has(msg.id)) {
-        pending.get(msg.id)(msg);
+        pending.get(msg.id).resolve(msg);
         pending.delete(msg.id);
       } else {
-        for (const l of listeners) l(msg);
+        // A copy: a listener that is done removes itself while the loop runs.
+        for (const l of [...listeners]) l(msg);
       }
     }
   });
@@ -59,19 +82,33 @@ function start(file, extraArgs = []) {
     log(file, ">> " + s);
     p.stdin.write(s + "\n");
   };
-  const request = (method, params) =>
-    new Promise((resolve) => {
+  const request = (method, params, ms = 180000) =>
+    new Promise((resolve, reject) => {
       const id = nextId++;
-      pending.set(id, resolve);
+      const t = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`timeout waiting for ${method}`));
+      }, ms);
+      pending.set(id, {
+        resolve: (m) => (clearTimeout(t), resolve(m)),
+        reject: (e) => (clearTimeout(t), reject(e)),
+      });
       send({ id, method, params });
     });
   const waitFor = (pred, ms = 180000) =>
     new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error("timeout waiting")), ms);
+      const remove = () => {
+        const i = listeners.indexOf(l);
+        if (i >= 0) listeners.splice(i, 1);
+      };
+      const t = setTimeout(() => {
+        remove();
+        reject(new Error("timeout waiting"));
+      }, ms);
       const l = (m) => {
         if (pred(m)) {
           clearTimeout(t);
-          listeners.splice(listeners.indexOf(l), 1);
+          remove();
           resolve(m);
         }
       };

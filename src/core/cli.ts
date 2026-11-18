@@ -54,8 +54,11 @@ export function lookedIn(
 ): string[] {
   if (configured) return [configured];
   const home = env.USERPROFILE ?? env.HOME;
+  // Whole folder names only: C:\Users\seth must not shorten C:\Users\seth.CORP.
   const short = (p: string) =>
-    home && p.toLowerCase().startsWith(home.toLowerCase()) ? `~${p.slice(home.length)}` : p;
+    home && p.toLowerCase().startsWith(home.toLowerCase()) && /^[\\/]/.test(p.slice(home.length))
+      ? `~${p.slice(home.length)}`
+      : p;
   return ["PATH", ...(lookup.defaultPaths ?? []).map(short)];
 }
 

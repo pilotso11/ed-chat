@@ -207,6 +207,14 @@ describe("lookedIn", () => {
   it("lists only the configured path when there is one", () => {
     expect(lookedIn(claudeLookup(env, "win32"), "D:\\c.exe", env)).toEqual(["D:\\c.exe"]);
   });
+  it("shortens only a whole home folder", () => {
+    const other = { USERPROFILE: "C:\\Users\\p", APPDATA: "C:\\Users\\p.CORP\\AppData\\Roaming" };
+    expect(lookedIn(claudeLookup(other, "win32"), null, other)).toEqual([
+      "PATH",
+      "~\\.local\\bin\\claude.exe",
+      "C:\\Users\\p.CORP\\AppData\\Roaming\\npm\\claude.cmd",
+    ]);
+  });
   it("goes in the not-found notice", () => {
     expect(notFoundText(AGENTS.claude, ["PATH", "~\\x"])).toBe(
       "⚠ claude not found in PATH, ~\\x: install Claude Code or set claude.path",

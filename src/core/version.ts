@@ -26,13 +26,13 @@ function newer(a: string, b: string): boolean {
 }
 
 // At startup the CLI lists the servers it will start, not yet whether each one works.
+const STATUS: Record<Exclude<EdMcpState, "missing">, string> = {
+  ok: "added",
+  failed: "failed to start",
+  needsAuth: "needs authentication",
+};
 const status = (s: EdMcpState, cli: string): string =>
-  ({
-    ok: "added",
-    missing: `not added to ${cli}`,
-    failed: "failed to start",
-    needsAuth: "needs authentication",
-  })[s];
+  s === "missing" ? `not added to ${cli}` : STATUS[s];
 
 /** The /version reply: one line per program. */
 export function versionText(v: Versions): string {
