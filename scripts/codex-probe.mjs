@@ -90,17 +90,29 @@ function start(file, extraArgs = []) {
   let nextId = 1;
   const pending = new Map();
   const listeners = [];
-  // A crash or a failed spawn ends every request still waiting, so the probe does not hang.
+  // Waits for a notification, each with its reject, so a crash ends them too.
+  const waiters = new Set();
+  // A crash or a failed spawn ends every request and wait still open, so the probe does not hang.
+  let dead = null;
   const failAll = (err) => {
-    for (const { reject } of pending.values()) reject(err);
+    dead ??= err;
+    for (const { reject } of pending.values()) reject(dead);
     pending.clear();
+    for (const reject of [...waiters]) reject(dead);
   };
   p.on("error", (err) => {
     log(file, `!! spawn error: ${err.message}`);
     failAll(err);
   });
-  // close, not exit: exit can come before the last stdout line has been read.
+  // exit can come before the last stdout line is read, and close can wait for ever when a
+  // grandchild (ed-mcp under cmd) holds the pipes. So: close, or a moment after exit.
+  p.on("exit", (code) => {
+    const err = new Error(`codex exited with code ${code}`);
+    setTimeout(() => failAll(err), 500).unref();
+  });
   p.on("close", (code) => failAll(new Error(`codex exited with code ${code}`)));
+  // EPIPE when writing to a codex that has gone; the exit reports it.
+  p.stdin.on("error", () => {});
   const onMessage = (raw) => {
     const line = raw.trim();
     if (!line) return;
@@ -126,10 +138,11 @@ function start(file, extraArgs = []) {
   const send = (obj) => {
     const s = JSON.stringify(obj);
     log(file, ">> " + s);
-    p.stdin.write(s + "\n");
+    if (!dead) p.stdin.write(s + "\n");
   };
   const request = (method, params, ms = 180000) =>
     new Promise((resolve, reject) => {
+      if (dead) return reject(dead);
       const id = nextId++;
       const t = setTimeout(() => {
         pending.delete(id);
@@ -143,22 +156,26 @@ function start(file, extraArgs = []) {
     });
   const waitFor = (pred, ms = 180000) =>
     new Promise((resolve, reject) => {
+      if (dead) return reject(dead);
       const remove = () => {
+        clearTimeout(t);
+        waiters.delete(fail);
         const i = listeners.indexOf(l);
         if (i >= 0) listeners.splice(i, 1);
       };
-      const t = setTimeout(() => {
+      const fail = (err) => {
         remove();
-        reject(new Error("timeout waiting"));
-      }, ms);
+        reject(err);
+      };
+      const t = setTimeout(() => fail(new Error("timeout waiting")), ms);
       const l = (m) => {
         if (pred(m)) {
-          clearTimeout(t);
           remove();
           resolve(m);
         }
       };
       listeners.push(l);
+      waiters.add(fail);
     });
   return { p, send, request, waitFor, on: (l) => listeners.push(l) };
 }

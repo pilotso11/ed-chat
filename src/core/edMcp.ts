@@ -92,9 +92,10 @@ export async function readAgentConfigs(home: string = os.homedir()): Promise<Age
 
 export type EdMcpState = "ok" | "missing" | "failed" | "needsAuth";
 
-// Servers are still pending at init and their tools are not listed yet, so read the configured list.
-// Claude's plugin names its server plugin:<plugin>:ed-mcp; Codex has only ed-mcp. A player can have both, and one
-// that works is enough: a failed plugin must not hide a working claude mcp add server.
+// Servers are still pending at init and their tools are not listed yet, so the configured list
+// is read. Each backend gives its statuses in these words (pending, connected, failed,
+// needs-auth). Claude's plugin names its server plugin:<plugin>:ed-mcp, next to an ed-mcp from
+// claude mcp add; one that works is enough, so a failed copy must not hide a working one.
 export function edMcpState(servers: McpServerInfo[]): EdMcpState {
   const found = servers.filter((m) => m.name === "ed-mcp" || /^plugin:[^:]+:ed-mcp$/.test(m.name));
   if (!found.length) return "missing";
