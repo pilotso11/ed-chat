@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { findEdMcp, readAgentConfigs, syncDirOf } from "../src/core/edMcp.js";
+import { edMcpState, findEdMcp, readAgentConfigs, syncDirOf } from "../src/core/edMcp.js";
 
 const npx = { command: "cmd", args: ["/c", "npx", "-y", "ed-mcp@latest"] };
 
@@ -60,5 +60,25 @@ describe("readAgentConfigs", () => {
     } finally {
       await rm(home, { recursive: true, force: true });
     }
+  });
+});
+
+describe("edMcpState", () => {
+  it("finds ed-mcp added with claude mcp add or by the plugin", () => {
+    expect(edMcpState([{ name: "ed-mcp", status: "pending" }])).toBe("ok");
+    expect(edMcpState([{ name: "plugin:elite-dangerous-mcp:ed-mcp", status: "connected" }])).toBe(
+      "ok",
+    );
+    expect(edMcpState([{ name: "ed-mcp", status: "failed" }])).toBe("failed");
+    expect(edMcpState([{ name: "ed-mcp", status: "needs-auth" }])).toBe("needsAuth");
+    expect(edMcpState([{ name: "semble", status: "pending" }])).toBe("missing");
+  });
+
+  it("is ok when one of a plugin and a claude mcp add server works", () => {
+    const plugin = { name: "plugin:elite-dangerous-mcp:ed-mcp", status: "failed" };
+    expect(edMcpState([plugin, { name: "ed-mcp", status: "pending" }])).toBe("ok");
+    expect(edMcpState([{ name: "ed-mcp", status: "connected" }, plugin])).toBe("ok");
+    expect(edMcpState([plugin, { name: "ed-mcp", status: "needs-auth" }])).toBe("needsAuth");
+    expect(edMcpState([plugin, { name: "ed-mcp", status: "failed" }])).toBe("failed");
   });
 });

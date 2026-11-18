@@ -1,8 +1,8 @@
 // Step 0 of the Codex backend spec (docs/superpowers/specs/2026-11-18-codex-backend-design.md).
 // Drives `codex app-server` the way ED Chat will, and records every JSON-RPC line raw.
 // The recordings hold personal data (commander name, journal paths): keep them out of git and
-// scrub them before they become test fixtures. Every ED_MCP_SYNC_* value, and any other env
-// value longer than 8 chars, is redacted.
+// scrub them before they become test fixtures. ED_MCP_SYNC_PASSWORD, and any other env value
+// longer than 8 chars, is redacted.
 // It reads the ed-mcp definition from ~/.claude.json (user scope, then each project) and spends
 // a few Codex turns.
 // Usage: node scripts/codex-probe.mjs <codex.exe> <outDir outside any git repo> [mode]; see USAGE.
@@ -65,10 +65,10 @@ if (!ed) {
   process.exit(1);
 }
 // The log lines are JSON, so each value is also redacted in its JSON-escaped form.
-// The sync settings are secret at any length; other values only when long enough to be one
-// (a short one such as "1" would blank out unrelated text).
+// The password is secret at any length; other values only when long enough to be one (a
+// short one such as "1" would blank out ids and counts all through the recording).
 const secrets = Object.entries(ed.env ?? {})
-  .filter(([k, v]) => typeof v === "string" && v && (k.startsWith("ED_MCP_SYNC_") || v.length > 8))
+  .filter(([k, v]) => typeof v === "string" && v && (k === "ED_MCP_SYNC_PASSWORD" || v.length > 8))
   .flatMap(([, v]) => [JSON.stringify(v).slice(1, -1), v])
   // Longest first, so a value inside another is not redacted half-way.
   .sort((a, b) => b.length - a.length);
@@ -119,7 +119,19 @@ function start(file, extraArgs = []) {
       }
     }
   });
-  p.stderr.on("data", (d) => log(file.replace(".jsonl", ".stderr.txt"), d.toString("utf8")));
+  // By whole lines, like stdout: a secret split across two chunks would not be redacted.
+  let errBuf = "";
+  const errFile = file.replace(".jsonl", ".stderr.txt");
+  p.stderr.on("data", (d) => {
+    errBuf += d.toString("utf8");
+    const lines = errBuf.split("\n");
+    errBuf = lines.pop();
+    for (const l of lines) log(errFile, l);
+  });
+  p.stderr.on("end", () => {
+    if (errBuf) log(errFile, errBuf);
+    errBuf = "";
+  });
   const send = (obj) => {
     const s = JSON.stringify(obj);
     log(file, ">> " + s);
@@ -162,6 +174,11 @@ function start(file, extraArgs = []) {
 
 const DEV =
   "You are a co-pilot in an Elite Dangerous overlay. Begin every reply with the word ROGER. Keep replies under 40 words.";
+if (mode === "cli-config" && Object.keys(ed.env ?? {}).length)
+  console.error(
+    "cli-config: ed-mcp runs without its env (it would be visible on the command line), so it " +
+      "uses its default data folder; results can differ from thread-config.",
+  );
 const cliOverrides =
   mode === "cli-config"
     ? [

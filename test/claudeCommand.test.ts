@@ -7,7 +7,6 @@ import {
   resolveClaude,
 } from "../src/core/backends/claude/command.js";
 import { AGENTS, notFoundText } from "../src/core/backend.js";
-import { edMcpState } from "../src/core/edMcp.js";
 import { isOlder, lookedIn, parseCliVersion, quoteForCmd } from "../src/core/cli.js";
 import { HUD_PROMPT, settingsPrompt } from "../src/core/prompt.js";
 
@@ -172,26 +171,6 @@ describe("versions", () => {
     expect(isOlder([2, 1, 9], [2, 1, 10])).toBe(true);
     expect(isOlder([2, 2, 0], [2, 1, 10])).toBe(false);
     expect(isOlder([2, 1, 10], [2, 1, 10])).toBe(false);
-  });
-});
-
-describe("edMcpState", () => {
-  it("finds ed-mcp added with claude mcp add or by the plugin", () => {
-    expect(edMcpState([{ name: "ed-mcp", status: "pending" }])).toBe("ok");
-    expect(edMcpState([{ name: "plugin:elite-dangerous-mcp:ed-mcp", status: "connected" }])).toBe(
-      "ok",
-    );
-    expect(edMcpState([{ name: "ed-mcp", status: "failed" }])).toBe("failed");
-    expect(edMcpState([{ name: "ed-mcp", status: "needs-auth" }])).toBe("needsAuth");
-    expect(edMcpState([{ name: "semble", status: "pending" }])).toBe("missing");
-  });
-
-  it("is ok when one of a plugin and a claude mcp add server works", () => {
-    const plugin = { name: "plugin:elite-dangerous-mcp:ed-mcp", status: "failed" };
-    expect(edMcpState([plugin, { name: "ed-mcp", status: "pending" }])).toBe("ok");
-    expect(edMcpState([{ name: "ed-mcp", status: "connected" }, plugin])).toBe("ok");
-    expect(edMcpState([plugin, { name: "ed-mcp", status: "needs-auth" }])).toBe("needsAuth");
-    expect(edMcpState([plugin, { name: "ed-mcp", status: "failed" }])).toBe("failed");
   });
 });
 
