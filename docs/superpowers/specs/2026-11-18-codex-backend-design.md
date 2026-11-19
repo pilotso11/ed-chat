@@ -195,8 +195,11 @@ Notes from the probe:
   means idle to the overlay.
 - A process that does not answer the handshake and open a thread within 60 seconds is ended
   and reported like an exit, so a message does not wait for ever.
-- Only -32600 from `thread/resume` starts a new thread; any other error restarts the process
-  and keeps the thread for the next message. Each new process starts with no MCP statuses.
+- `thread/resume`: -32600 "no rollout found" starts a new thread at once. Any other refusal is
+  tried once more in the same process, and a second refusal also starts a new thread with the
+  player's message, so the old conversation is lost but the chat is not blocked. A process
+  that dies during the resume keeps the thread for the restart. Each new process starts with no
+  MCP statuses.
 - Left for Part 4: approvals are keyed by request id alone, and each process counts from 0. A
   refused `turn/interrupt` for a turn that `/new` left is not retried, so that turn can run on.
   Cleanups: the process code shared with `ClaudeSession` (spawn,
