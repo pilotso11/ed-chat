@@ -420,6 +420,19 @@ describe("CodexSession", () => {
     expect(turn.params).toMatchObject({ threadId: "thr-old" });
   });
 
+  it("starts a new thread with the message when the resume answers with nothing", async () => {
+    const { s, events, received } = await setup({ mode: "resume-null", resumeId: "thr-old" });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    expect(events.find((e) => e.type === "resumeFailed")).toEqual({
+      type: "resumeFailed",
+      stderrTail: ["thread/resume gave no result"],
+    });
+    expect(has(events, "exit")).toBe(false);
+    const turn = (await received()).find((m) => m.method === "turn/start")!;
+    expect(turn.params).toMatchObject({ threadId: "thr-1" });
+  });
+
   it("starts a new thread with the message when the resume is refused twice", async () => {
     const { s, events, received } = await setup({ mode: "resume-error", resumeId: "thr-old" });
     s.send("hi");

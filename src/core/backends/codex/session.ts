@@ -391,12 +391,13 @@ export class CodexSession implements AgentBackend {
         } catch (err) {
           if (gen !== this.gen || !(err instanceof RpcError)) throw err;
           // The thread cannot be resumed: a new one starts with the message the player sent.
+          res = undefined;
           this._threadId = null;
           this.emit({ type: "resumeFailed", stderrTail: [err.message] });
         }
       }
       if (gen !== this.gen) return;
-      // undefined: no call answered. A resume that answers null gives no thread id below.
+      // undefined: no thread yet, so one starts.
       if (res === undefined) res = await rpc.request("thread/start", params);
     } catch (err) {
       if (gen === this.gen) this.fail(rpc, err);

@@ -177,6 +177,7 @@ rl.on("line", (line) => {
         (mode === "resume-error" || (mode === "resume-error-once" && !resumeRefused++))
       )
         return out({ id, error: { code: -32603, message: "internal error" } });
+      if (method === "thread/resume" && mode === "resume-null") return out({ id, result: null });
       if (method === "thread/resume" && mode === "no-thread")
         return out({
           id,
