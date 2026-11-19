@@ -143,13 +143,29 @@ ed-mcp tools. A player who has set up ed-mcp for one of them must not have to se
 - `PRIVACY.md`: with Codex chosen, messages and tool results go to OpenAI.
 - `docs/manual-checklist.md`: a Codex pass, and a switch pass.
 - Store listing and package description name both.
-- **Answer comparison.** `scripts/compare-agents.mjs` sends the same 10 to 15 typical player
+- **Answer comparison.** `scripts/compare-agents.ts` sends the same 10 to 15 typical player
   questions (route, engineering, materials, trade, exobiology, a settings change) through the
   real `ClaudeSession` and `CodexSession`, with ED Chat's HUD prompt and ed-mcp. For each answer
   it records the tools called, the approvals asked, the reply length, the time to the first text
   and the total time, and writes one report with both replies side by side. Each reply is
   checked by hand; the report goes into the PR, and the results guide the README's advice on
   which CLI to choose.
+
+### Comparing Claude and Codex
+
+Run `npx tsx scripts/compare-agents.ts --dry-run` first: it lists the questions, each installed
+CLI with its arguments, the permission mode and where its ed-mcp comes from, and starts nothing.
+Then run it without `--dry-run`. This spends tokens on both assistants. The questions are in
+`scripts/compare-questions.json`; `--questions <file>` takes another list, and `--only claude` or
+`--only codex` runs one assistant. Each CLI is found as ED Chat finds it, with the path,
+permission mode and extra arguments from the player's `settings.json`. It runs in a new temp
+folder, with a copy of `settings.json` and its schema, so a settings change touches only the
+copy. Each question starts a new conversation. Approvals are declined and counted; ed-mcp tools
+do not ask. No `[Game state]` note is sent. The Markdown report goes to the temp folder, or to
+`--out <file>` (never inside the repo), with the raw numbers in a `.json` file next to it.
+`--timeout <seconds>` (default 300) limits each reply. Ctrl+C stops every CLI and writes what
+was recorded. The pure parts are in `scripts/compare-lib.ts`, tested in
+`test/compareAgents.test.ts`.
 
 ## Step 0 results
 
