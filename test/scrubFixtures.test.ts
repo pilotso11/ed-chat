@@ -35,6 +35,13 @@ describe("makeScrubber", () => {
     );
   });
 
+  it("replaces a short user name only as a whole word", () => {
+    const s = makeScrubber({ user: "Ed" });
+    expect(s.text("mcp__ed-mcp__journal_status started; ed@pc")).toBe(
+      "mcp__ed-mcp__journal_status started; player@pc",
+    );
+  });
+
   it("replaces the user name, the commander name and the FID", () => {
     expect(scrub.text("ann@pc ANN")).toBe("player@pc player");
     expect(scrub.text("CMDR Hawk Eye (FID F7654321), CMDR HAWK EYE")).toBe(

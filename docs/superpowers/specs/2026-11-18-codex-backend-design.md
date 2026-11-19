@@ -161,7 +161,8 @@ Then run it without `--dry-run`. This spends tokens on both assistants. The ques
 permission mode and extra arguments from the player's `settings.json`. It runs in a new temp
 folder, with a copy of `settings.json` and its schema, so a settings change touches only the
 copy. Each question starts a new conversation. Approvals are declined and counted; ed-mcp tools
-do not ask. No `[Game state]` note is sent. The Markdown report goes to the temp folder, or to
+do not ask, and they use the player's real ed-mcp data, so a question that asks ed-mcp to save
+something (a plan, a preference) saves it. No `[Game state]` note is sent. The Markdown report goes to the temp folder, or to
 `--out <file>` (never inside the repo), with the raw numbers in a `.json` file next to it.
 `--timeout <seconds>` (default 300) limits each reply. Ctrl+C stops every CLI and writes what
 was recorded. The pure parts are in `scripts/compare-lib.ts`, tested in

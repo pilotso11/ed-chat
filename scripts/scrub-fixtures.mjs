@@ -38,13 +38,16 @@ export function makeScrubber({ home, user, commander, fid }) {
     const lead = /^[\\/]/.test(home) ? SEP : "";
     rules.push([new RegExp(lead + parts.map(escapeRe).join(SEP), "gi"), "/home/player"]);
   }
-  // A whole word only: a short name must not eat parts of other words.
-  if (commander) {
-    const name = commander.trim().split(/\s+/).map(escapeRe).join("\\s+");
-    rules.push([new RegExp(`(?<![\\p{L}\\p{N}])${name}(?![\\p{L}\\p{N}])`, "giu"), "Jameson"]);
-  }
+  // Whole words only, where - and _ join words: a short name must not eat parts of others
+  // (ed in mcp__ed-mcp__).
+  const word = (s) =>
+    new RegExp(
+      `(?<![\\p{L}\\p{N}_-])${s.trim().split(/\s+/).map(escapeRe).join("\\s+")}(?![\\p{L}\\p{N}_-])`,
+      "giu",
+    );
+  if (commander) rules.push([word(commander), "Jameson"]);
   if (fid) rules.push([new RegExp(escapeRe(fid), "g"), "F0000000"]);
-  if (user) rules.push([new RegExp(escapeRe(user), "gi"), "player"]);
+  if (user) rules.push([word(user), "player"]);
   const text = (s) => rules.reduce((acc, [re, to]) => acc.replace(re, to), s);
   const json = (v) => {
     if (typeof v === "string") return text(v);
@@ -131,6 +134,9 @@ export function commanderFromJournal(dir) {
   return null;
 }
 
+const sameName = (a, b) =>
+  a.trim().replace(/\s+/g, " ").toLowerCase() === b.trim().replace(/\s+/g, " ").toLowerCase();
+
 function main(argv) {
   const at = argv.indexOf("--commander");
   const journal = path.join(
@@ -141,15 +147,18 @@ function main(argv) {
   );
   const fromJournal = commanderFromJournal(journal);
   const commander = (at >= 0 ? argv[at + 1] : process.env.ED_COMMANDER) || fromJournal?.name;
+  // Without it the commander's name and FID would stay in the fixtures: nothing is written.
   if (!commander) {
-    console.error("No commander name (--commander, ED_COMMANDER or a journal): check by hand.");
+    console.error("No commander name: pass --commander <name>, or set ED_COMMANDER.");
+    process.exit(1);
   }
   const home = os.homedir();
   const scrub = makeScrubber({
     home,
     user: path.basename(home),
     commander,
-    fid: fromJournal?.name === commander ? fromJournal?.fid : undefined,
+    // The journal's FID is this commander's when the names match, in any case or spacing.
+    fid: fromJournal && sameName(fromJournal.name, commander) ? fromJournal.fid : undefined,
   });
   const fixtures = path.join(import.meta.dirname, "..", "test", "fixtures");
   for (const [sub, scrubLines] of [

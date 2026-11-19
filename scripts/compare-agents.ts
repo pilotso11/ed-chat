@@ -2,6 +2,7 @@
 // a report with both replies side by side. It spends tokens: see --help, and try --dry-run first.
 // Usage: npx tsx scripts/compare-agents.ts [--only claude|codex] [--questions f] [--out f] [--dry-run]
 import { execFile } from "node:child_process";
+import { rmSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -18,6 +19,7 @@ import {
   resolveCodex,
 } from "../src/core/backends/codex/command.js";
 import { CodexSession } from "../src/core/backends/codex/session.js";
+import { outDirProblem } from "./codex-probe.mjs";
 import { parseCliVersion, quoteForCmd, type ResolvedCommand } from "../src/core/cli.js";
 import { claudeMcpConfig, readAgentConfigs } from "../src/core/edMcp.js";
 import {
@@ -64,9 +66,13 @@ if (opts.help) {
 }
 const out = path.resolve(opts.out);
 const jsonOut = jsonPathFor(out);
-// The report holds the player's journal data and replies: it never goes into the repo.
-if (isInside(repo, out)) {
-  console.error(`--out must be outside the repo: ${out}`);
+// The report holds the player's journal data and replies: it never goes into this repo, or any
+// other git checkout (a worktree, the main checkout), where git add could pick it up.
+const outProblem = isInside(repo, out)
+  ? `--out must be outside the repo: ${out}`
+  : outDirProblem(path.dirname(out));
+if (outProblem) {
+  console.error(outProblem.replace(/^outDir/, "--out"));
   process.exit(2);
 }
 
@@ -93,8 +99,18 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGBREAK", "SIGHUP"] as const) {
       interrupted.abort();
       return;
     }
-    // taskkill needs a moment to start before this process goes.
-    setTimeout(() => process.exit(130), 1000);
+    // taskkill needs a moment to start before this process goes. The temp folder can hold the
+    // sync password, so it goes too.
+    setTimeout(() => {
+      if (tempRoot) {
+        try {
+          rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+        } catch (err) {
+          console.error(`could not remove ${tempRoot}: ${String(err)}`);
+        }
+      }
+      process.exit(130);
+    }, 1000);
   });
 }
 
