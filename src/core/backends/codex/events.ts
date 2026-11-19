@@ -38,6 +38,7 @@ const MCP_STATUS: Record<string, string> = {
 };
 
 export interface TurnResult {
+  id: string | null;
   status: string;
   durationMs: number | null;
   error: string | null;
@@ -48,6 +49,7 @@ export function turnOf(params: unknown): TurnResult | null {
   if (!turn) return null;
   const error = isRecord(turn.error) ? str(turn.error.message) : null;
   return {
+    id: str(turn.id) || null,
     status: str(turn.status) ?? "completed",
     durationMs: typeof turn.durationMs === "number" ? turn.durationMs : null,
     error,

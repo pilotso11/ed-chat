@@ -120,7 +120,7 @@ describe("CodexEvents", () => {
     expect(e.map("item/completed", item({ ...call, status: "completed", error: null }))).toEqual([
       { type: "toolEnd", id: "m", name: "mcp__ed-mcp__x", isError: false },
     ]);
-    expect(e.result({ status: "completed", durationMs: 7, error: null })).toEqual({
+    expect(e.result({ id: "u", status: "completed", durationMs: 7, error: null })).toEqual({
       type: "result",
       isError: false,
       durationMs: 7,
@@ -129,7 +129,7 @@ describe("CodexEvents", () => {
       denials: ["shell"],
     });
     // The next turn starts clean.
-    expect(e.result({ status: "failed", durationMs: null, error: null })).toMatchObject({
+    expect(e.result({ id: "v", status: "failed", durationMs: null, error: null })).toMatchObject({
       isError: true,
       text: "Codex returned an error.",
       denials: [],

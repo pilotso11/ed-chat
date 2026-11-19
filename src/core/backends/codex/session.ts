@@ -77,6 +77,11 @@ export class CodexSession implements AgentBackend {
   // Threads that /new left: what still arrives for them is dropped, even before the new thread
   // has an id.
   private readonly leftThreads = new Set<string>();
+  // An MCP status change came during a turn; ready is sent when the turn ends.
+  private readyHeld = false;
+  // Turns that have ended in this process. A late or repeated end for one of them can come
+  // before the next turn's id is known, so it is matched by id, not by the running turn.
+  private readonly endedTurns = new Set<string>();
 
   constructor(private readonly opts: CodexSessionOptions) {
     this.cmd = { command: opts.command, args: opts.args, shell: opts.shell ?? false };
@@ -133,7 +138,9 @@ export class CodexSession implements AgentBackend {
     }
     this.cancelling = true;
     if (this.turnId) this.interrupt();
-    // turn/start is in flight: interrupted as soon as its id is known.
+    // turn/start is in flight: interrupted as soon as its id is known, and restarted if it
+    // never comes.
+    else this.armGrace();
   }
 
   newSession(): void {
@@ -145,6 +152,7 @@ export class CodexSession implements AgentBackend {
     }
     this.endTurn();
     this.abortApprovals();
+    this.readyHeld = false;
     this._threadId = null;
     this.threadReady = false;
     this.events.threadId = null;
@@ -169,7 +177,10 @@ export class CodexSession implements AgentBackend {
   }
 
   private endTurn(): void {
+    if (this.turnId) this.endedTurns.add(this.turnId);
+    if (this.endedTurns.size > 100) this.endedTurns.delete(this.endedTurns.values().next().value!);
     clearTimeout(this.interruptTimer);
+    this.interruptTimer = undefined;
     this._busy = false;
     this.pending = null;
     this.turnId = null;
@@ -184,6 +195,12 @@ export class CodexSession implements AgentBackend {
       if (a.rpc === this.rpc) a.rpc.respond(id, { decision: "decline" });
     }
     this.approvals.clear();
+  }
+
+  private emitHeldReady(): void {
+    if (!this.readyHeld || !this.threadReady) return;
+    this.readyHeld = false;
+    this.emit(this.events.ready());
   }
 
   private interruptLeft(rpc: RpcClient, threadId: string, turnId: string): void {
@@ -221,6 +238,9 @@ export class CodexSession implements AgentBackend {
     this.gen++;
     this.child = child;
     this.stderr = [];
+    this.leftThreads.clear();
+    this.endedTurns.clear();
+    this.readyHeld = false;
     this.initialized = false;
     this.threadReady = false;
     const rpc = new RpcClient((line) => child.stdin.write(line), {
@@ -390,6 +410,7 @@ export class CodexSession implements AgentBackend {
               sessionId: this._threadId,
               denials: [],
             });
+          this.emitHeldReady();
         },
       );
   }
@@ -406,8 +427,13 @@ export class CodexSession implements AgentBackend {
     rpc
       .request("turn/interrupt", { threadId: this._threadId, turnId: this.turnId })
       .catch(() => {});
-    // A turn that does not stop is ended with its process; the thread resumes at the restart.
-    clearTimeout(this.interruptTimer);
+    this.armGrace();
+  }
+
+  // A turn that does not stop is ended with its process; the thread resumes at the restart.
+  // Armed once per stop: pressing stop again, or the turn id arriving, does not push it back.
+  private armGrace(): void {
+    if (this.interruptTimer) return;
     this.interruptTimer = setTimeout(() => {
       if (!this.cancelling) return;
       this.kill();
@@ -430,6 +456,8 @@ export class CodexSession implements AgentBackend {
       case "turn/completed": {
         const t = turnOf(params);
         if (!t || !this._busy) return;
+        // Another turn's end (an earlier one, late) leaves the running turn alone.
+        if (t.id && (this.endedTurns.has(t.id) || (this.turnId && t.id !== this.turnId))) return;
         const cancelled = this.cancelling || t.status === "interrupted";
         this.abortApprovals();
         this.endTurn();
@@ -438,6 +466,7 @@ export class CodexSession implements AgentBackend {
           this.events.resetTurn();
           this.emit({ type: "spawned" });
         } else this.emit(this.events.result(t));
+        this.emitHeldReady();
         return;
       }
       case "serverRequest/resolved": {
@@ -465,8 +494,13 @@ export class CodexSession implements AgentBackend {
       }
     }
     for (const e of this.events.map(method, params)) {
+      // ready means idle to the overlay: a status change during a turn waits for its end.
+      if (e.type === "ready" && this._busy) {
+        this.readyHeld = true;
+        continue;
+      }
       // The player stopped the reply: what is still arriving for it is not shown.
-      if (this.cancelling && e.type !== "unknown" && e.type !== "ready") continue;
+      if (this.cancelling && e.type !== "unknown") continue;
       this.emit(e as SessionEvent);
     }
   }

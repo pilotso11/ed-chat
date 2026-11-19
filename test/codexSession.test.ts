@@ -161,7 +161,12 @@ describe("CodexSession", () => {
     await new Promise((r) => setTimeout(r, 50));
     s.cancel();
     await until(() => !s.busy);
-    expect(types(events).at(-1)).toBe("spawned");
+    // ed-mcp's status came during the turn, so its ready follows the stop.
+    expect(
+      types(events)
+        .filter((t) => t !== "ready")
+        .at(-1),
+    ).toBe("spawned");
     expect(has(events, "result")).toBe(false);
     const m = await methods();
     expect(m).toContain("turn/interrupt");
@@ -269,6 +274,57 @@ describe("CodexSession", () => {
       result: { decision: "decline" },
     });
     expect(asked).toHaveLength(0);
+  });
+
+  it("ignores an earlier turn's end that comes with the next turn's start", async () => {
+    const { s, events, received } = await setup({ mode: "stale-complete" });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    await until(() => !s.busy);
+    expect(s.send("again")).toBe(true);
+    await until(
+      async () => (await received()).filter((m) => m.method === "turn/start").length === 2,
+    );
+    await new Promise((r) => setTimeout(r, 150));
+    expect(s.busy).toBe(true);
+    expect(events.filter((e) => e.type === "result")).toHaveLength(1);
+  });
+
+  it("holds an MCP status change during a turn until the turn ends", async () => {
+    const { s, events } = await setup({ mode: "mcp-mid-turn" });
+    s.start();
+    await until(() => has(events, "ready") && s.sessionId === "thr-1");
+    await new Promise((r) => setTimeout(r, 50));
+    const before = events.length;
+    s.send("hi");
+    await until(() => has(events, "result"));
+    await until(() => events.slice(before).some((e) => e.type === "ready"));
+    const after = types(events.slice(before));
+    expect(after.indexOf("ready")).toBeGreaterThan(after.indexOf("result"));
+  });
+
+  it("does not put off the restart when stop is pressed again", async () => {
+    const { s, methods } = await setup({ mode: "stuck", interruptGraceMs: 300 });
+    s.send("hi");
+    await until(async () => (await methods()).includes("turn/start"));
+    await new Promise((r) => setTimeout(r, 50));
+    s.cancel();
+    const stopped = Date.now();
+    await new Promise((r) => setTimeout(r, 200));
+    s.cancel();
+    await until(async () => (await methods()).filter((x) => x === "<start>").length === 2);
+    expect(Date.now() - stopped).toBeLessThan(450);
+  });
+
+  it("restarts when a stopped turn never gets its id", async () => {
+    const { s, methods } = await setup({ mode: "no-turn-start", interruptGraceMs: 200 });
+    s.send("hi");
+    await until(async () => (await methods()).includes("turn/start"));
+    s.cancel();
+    expect(s.busy).toBe(true);
+    await until(async () => (await methods()).filter((x) => x === "<start>").length === 2);
+    expect(s.busy).toBe(false);
+    expect(s.send("again")).toBe(true);
   });
 
   it("keeps the saved thread when the process dies during the resume", async () => {

@@ -21,6 +21,27 @@ function playTurn(threadId, turnId) {
     return;
   }
   if (mode === "hang" || mode === "stuck" || mode === "late-approval") return;
+  // The first turn plays as usual. The second gets the first turn's end again, sent with the
+  // turn/start answer in one chunk, and then hangs.
+  if (mode === "stale-complete" && turnId !== "turn-1") return;
+  // An MCP server changes status during the turn.
+  if (mode === "mcp-mid-turn") {
+    note("mcpServer/startupStatus/updated", {
+      threadId: null,
+      name: "other",
+      status: "ready",
+      error: null,
+    });
+    setTimeout(
+      () =>
+        note("turn/completed", {
+          threadId,
+          turn: { id: turnId, status: "completed", error: null, durationMs: 1 },
+        }),
+      100,
+    );
+    return;
+  }
   if (mode === "fail-turn") {
     note("turn/completed", {
       threadId,
@@ -150,6 +171,26 @@ rl.on("line", (line) => {
       const answer = () =>
         out({ id, result: { turn: { id: turnId, items: [], status: "inProgress", error: null } } });
       if (mode === "slow-start") return setTimeout(answer, 300);
+      if (mode === "stale-complete" && turnId !== "turn-1") {
+        const stale = {
+          method: "turn/completed",
+          params: {
+            threadId: params.threadId,
+            turn: { id: "turn-1", status: "completed", error: null, durationMs: 1 },
+          },
+        };
+        process.stdout.write(
+          JSON.stringify({
+            id,
+            result: { turn: { id: turnId, items: [], status: "inProgress", error: null } },
+          }) +
+            "\n" +
+            JSON.stringify(stale) +
+            "\n",
+        );
+        return playTurn(params.threadId, turnId);
+      }
+      if (mode === "no-turn-start") return;
       answer();
       return playTurn(params.threadId, turnId);
     }

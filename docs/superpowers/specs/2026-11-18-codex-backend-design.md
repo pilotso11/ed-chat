@@ -193,10 +193,12 @@ Notes from the probe:
   `{ method, params }`, and main's `describeUnknown` logs only `type` and `subtype`. The MCP
   status map in `CodexEvents` is kept across a restart, so a server that is gone in the new
   process still reads as connected; clear it at each spawn.
-- Left for a codex that misbehaves: any refused `thread/resume` starts a new thread, not only
-  -32600; a stop while `turn/start` never answers has no grace timer. Cleanups: the process
-  code shared with `ClaudeSession` (spawn, taskkill), and `isRecord`/`str`/`cut` copied across
-  modules.
+- An MCP status change during a turn sends `ready` only when the turn ends, since `ready`
+  means idle to the overlay.
+- Left for Part 4: any refused `thread/resume` starts a new thread, not only -32600, so a
+  passing error loses the conversation. Approvals are keyed by request id alone, and each
+  process counts from 0. Cleanups: the process code shared with `ClaudeSession` (spawn,
+  taskkill), and `isRecord`/`str`/`cut` copied across modules.
 - Probe hardening deferred to Part 5, before fixtures are recorded: fail closed on any git error
   in the outside-the-repo check, ignore inherited `GIT_*` variables, refuse a folder inside
   `.git`; match `turn/completed` on its turn id; stop ed-mcp's processes too when a run ends
