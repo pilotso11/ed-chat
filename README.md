@@ -197,9 +197,15 @@ the ed-mcp activity note, which the panel follows.
 
 The panel uses the same activity note and plans as ed-mcp. ED Chat finds the
 ed-mcp sync folder where ed-mcp is set up: Claude Code's `~/.claude.json`, the
-ed-mcp plugin's options, or Codex's `~/.codex/config.toml` (it reads only
-`ED_MCP_SYNC_DIR`, never the password). Set `hud.edMcpDataDir` if it is
-somewhere else.
+ed-mcp plugin's options, or Codex's `~/.codex/config.toml` (`CLAUDE_CONFIG_DIR`
+and `CODEX_HOME` move them, as they do for the CLIs). The panel reads only
+`ED_MCP_SYNC_DIR`, never the password. Set `hud.edMcpDataDir` if it is somewhere
+else.
+
+ed-mcp needs to be set up only once. If Claude Code has no ed-mcp of its own,
+ED Chat gives it the one from Codex's config or from another Claude project,
+with its whole `env`, sync password included. That copy is written to
+`approval-mcp.json` in ED Chat's data folder, `%APPDATA%\ed-chat`.
 
 ## Permissions
 

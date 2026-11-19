@@ -99,11 +99,15 @@ ed-mcp tools. A player who has set up ed-mcp for one of them must not have to se
 ## Part 3: shared ed-mcp config
 
 - `findEdMcp()` returns `{ source, command, args, env }` or nothing. It looks in this order:
-  1. `~/.claude.json` user-scope `mcpServers["ed-mcp"]`.
-  2. `~/.claude.json` project-scope entries.
-  3. `~/.codex/config.toml` `[mcp_servers.ed-mcp]`. A TOML parser is needed (`smol-toml`).
-  4. An installed Claude plugin `plugin:*:ed-mcp`, for its sync folder only.
-- `ED_MCP_SYNC_DIR` for the HUD comes from the same result.
+  1. `~/.claude.json`, the project entry for ED Chat's workspace (Claude ranks it above user
+     scope).
+  2. `~/.claude.json` user-scope `mcpServers["ed-mcp"]`.
+  3. `~/.claude.json` other project-scope entries.
+  4. `~/.codex/config.toml` `[mcp_servers.ed-mcp]`. A TOML parser is needed (`smol-toml`).
+  5. An installed Claude plugin `plugin:*:ed-mcp`, for its sync folder only.
+- `ED_MCP_SYNC_DIR` for the HUD comes from the ed-mcp that the running backend uses: its own,
+  or the one ED Chat gives it. When neither runs as a command (an http server, or switched off
+  in Codex), the first entry that names a sync folder (see "Notes from Part 3").
 - **Claude.** If Claude's own config has no ed-mcp, ED Chat adds it to the `approval-mcp.json`
   that it already passes with `--mcp-config`.
 - **Codex.** If Codex's `config.toml` has no ed-mcp, ED Chat passes it in the `config` field of

@@ -127,11 +127,13 @@ const firstDefinition = (all: Entry[]): EdMcpDefinition | null => {
 };
 
 /**
- * The first ed-mcp that runs as a command, in this order: Claude's user scope, Claude's
- * projects, Codex's config.toml. Null when the player has set none up. It does not know ED
- * Chat's folder: edMcpToAdd and syncDirOf rank that project's entry first.
+ * The first ed-mcp that runs as a command, in this order: Claude's project entry for ED Chat's
+ * folder (when workspace is given), Claude's user scope, Claude's other projects, Codex's
+ * config.toml. Null when none runs as a command: the plugin, an http server or one switched
+ * off in Codex can still be set up, so this is not "is ed-mcp set up anywhere".
  */
-export const findEdMcp = (c: AgentConfigs): EdMcpDefinition | null => firstDefinition(entries(c));
+export const findEdMcp = (c: AgentConfigs, workspace: string): EdMcpDefinition | null =>
+  firstDefinition(entriesFor(c, workspace));
 
 function samePath(a: string, b: string): boolean {
   const n = (p: string) => path.resolve(p).replace(/[\\/]+$/, "");

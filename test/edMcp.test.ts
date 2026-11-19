@@ -19,7 +19,7 @@ describe("findEdMcp", () => {
       mcpServers: { "ed-mcp": { ...npx, env: { ED_MCP_SYNC_DIR: "D:/Sync" } } },
       projects: { p: { mcpServers: { "ed-mcp": { command: "other" } } } },
     });
-    expect(findEdMcp({ claudeJson })).toEqual({
+    expect(findEdMcp({ claudeJson }, workspace)).toEqual({
       source: "claudeUser",
       ...npx,
       env: { ED_MCP_SYNC_DIR: "D:/Sync" },
@@ -31,7 +31,7 @@ describe("findEdMcp", () => {
       mcpServers: { "ed-mcp": { type: "http", url: "http://x" } },
       projects: { p: { mcpServers: { "ed-mcp": { command: "ed-mcp", args: [1, "a"] } } } },
     });
-    expect(findEdMcp({ claudeJson })).toEqual({
+    expect(findEdMcp({ claudeJson }, workspace)).toEqual({
       source: "claudeProject",
       command: "ed-mcp",
       args: ["a"],
@@ -40,9 +40,11 @@ describe("findEdMcp", () => {
   });
 
   it("gives null for no config, bad JSON or no ed-mcp", () => {
-    expect(findEdMcp({})).toBeNull();
-    expect(findEdMcp({ claudeJson: "{" })).toBeNull();
-    expect(findEdMcp({ claudeJson: '{"mcpServers":{"other":{"command":"x"}}}' })).toBeNull();
+    expect(findEdMcp({}, workspace)).toBeNull();
+    expect(findEdMcp({ claudeJson: "{" }, workspace)).toBeNull();
+    expect(
+      findEdMcp({ claudeJson: '{"mcpServers":{"other":{"command":"x"}}}' }, workspace),
+    ).toBeNull();
   });
 });
 
@@ -133,7 +135,7 @@ const workspace = path.resolve("ed-chat-data", "workspace");
 
 describe("findEdMcp with Codex and the plugin", () => {
   it("reads [mcp_servers.ed-mcp] from Codex's config.toml", () => {
-    expect(findEdMcp({ codexToml: codexToml() })).toEqual({
+    expect(findEdMcp({ codexToml: codexToml() }, workspace)).toEqual({
       source: "codex",
       ...npx,
       env: { ED_MCP_SYNC_DIR: "C:/Codex/Sync" },
@@ -142,13 +144,13 @@ describe("findEdMcp with Codex and the plugin", () => {
 
   it("prefers Claude's definitions, and skips one switched off or a bad file", () => {
     const claudeJson = JSON.stringify({ mcpServers: { "ed-mcp": { command: "claude-ed" } } });
-    expect(findEdMcp({ claudeJson, codexToml: codexToml() })?.source).toBe("claudeUser");
-    expect(findEdMcp({ codexToml: codexToml("enabled = false") })).toBeNull();
-    expect(findEdMcp({ codexToml: "[mcp_servers" })).toBeNull();
+    expect(findEdMcp({ claudeJson, codexToml: codexToml() }, workspace)?.source).toBe("claudeUser");
+    expect(findEdMcp({ codexToml: codexToml("enabled = false") }, workspace)).toBeNull();
+    expect(findEdMcp({ codexToml: "[mcp_servers" }, workspace)).toBeNull();
   });
 
   it("never runs the plugin's ed-mcp itself: it lives in the plugin's folder", () => {
-    expect(findEdMcp({ claudeSettings: pluginSettings(true) })).toBeNull();
+    expect(findEdMcp({ claudeSettings: pluginSettings(true) }, workspace)).toBeNull();
   });
 });
 
@@ -197,6 +199,16 @@ describe("edMcpToAdd", () => {
     ).toBe("claudeProject");
   });
 
+  it("does not take another enabled plugin for ed-mcp", () => {
+    const other = JSON.stringify({
+      enabledPlugins: { "other-plugin@marketplace": true },
+      pluginConfigs: { "other-plugin@marketplace": { options: { dir: "X:/" } } },
+    });
+    const c = { codexToml: codexToml(), claudeSettings: other };
+    expect(edMcpToAdd("claude", c, workspace)?.source).toBe("codex");
+    expect(syncDirOf({ claudeSettings: other }, "claude", workspace)).toBeNull();
+  });
+
   it("gives nothing when ed-mcp is set up nowhere", () => {
     expect(edMcpToAdd("claude", {}, workspace)).toBeNull();
     expect(edMcpToAdd("codex", {}, workspace)).toBeNull();
@@ -225,6 +237,12 @@ describe("startableOn", () => {
 });
 
 describe("syncDirOf per agent", () => {
+  it("still finds the sync folder of an ed-mcp that is switched off in Codex", () => {
+    expect(syncDirOf({ codexToml: codexToml("enabled = false") }, "codex", workspace)).toBe(
+      "C:/Codex/Sync",
+    );
+  });
+
   it("reads the sync folder of the ed-mcp that the agent runs", () => {
     const claudeJson = JSON.stringify({
       mcpServers: { "ed-mcp": { ...npx, env: { ED_MCP_SYNC_DIR: "D:/Claude" } } },
@@ -249,6 +267,12 @@ describe("syncDirOf per agent", () => {
       ED_MCP_SYNC_DIR: "D:/Here",
     });
     expect(syncDirOf({ claudeJson }, "codex", workspace)).toBe("D:/Here");
+    expect(findEdMcp({ claudeJson }, workspace)?.env.ED_MCP_SYNC_DIR).toBe("D:/Here");
+    // Codex's own entry still wins for Codex.
+    expect(edMcpToAdd("codex", { claudeJson, codexToml: codexToml() }, workspace)).toBeNull();
+    expect(syncDirOf({ claudeJson, codexToml: codexToml() }, "codex", workspace)).toBe(
+      "C:/Codex/Sync",
+    );
   });
 
   it("reads the plugin's sync folder from Claude's settings", () => {
