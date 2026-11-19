@@ -29,7 +29,13 @@ function playTurn(threadId, turnId) {
     process.stderr.write("boom\n", () => process.exit(1));
     return;
   }
-  if (mode === "hang" || mode === "stuck" || mode === "late-approval") return;
+  if (
+    mode === "hang" ||
+    mode === "stuck" ||
+    mode === "late-approval" ||
+    mode === "crash-on-interrupt"
+  )
+    return;
   // The first turn plays as usual. The second gets the first turn's end again, sent with the
   // turn/start answer in one chunk, and then hangs.
   if (mode === "stale-complete" && turnId !== "turn-1") return;
@@ -277,6 +283,7 @@ rl.on("line", (line) => {
       return playTurn(params.threadId, turnId);
     }
     case "turn/interrupt":
+      if (mode === "crash-on-interrupt") process.exit(1);
       out({ id, result: {} });
       if (mode === "late-approval" && current)
         out({

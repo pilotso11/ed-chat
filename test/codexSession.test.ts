@@ -196,6 +196,41 @@ describe("CodexSession", () => {
     expect(has(events, "result")).toBe(false);
   });
 
+  it("drops the held message when the player stops again", async () => {
+    const { s, received } = await setup({ mode: "hang" });
+    s.send("hi");
+    await until(async () => (await received()).some((m) => m.method === "turn/start"));
+    await new Promise((r) => setTimeout(r, 50));
+    s.cancel();
+    expect(s.send("next")).toBe(true);
+    s.cancel();
+    await until(() => !s.busy);
+    await new Promise((r) => setTimeout(r, 100));
+    expect((await received()).filter((m) => m.method === "turn/start")).toHaveLength(1);
+  });
+
+  it("drops the held message when codex dies during the stop", async () => {
+    const { s, events, received } = await setup({ mode: "crash-on-interrupt" });
+    s.send("hi");
+    await until(async () => (await received()).some((m) => m.method === "turn/start"));
+    await new Promise((r) => setTimeout(r, 50));
+    s.cancel();
+    expect(s.send("next")).toBe(true);
+    await until(() => has(events, "exit"));
+    expect(s.busy).toBe(false);
+    // The next message starts codex again; the one held before the crash is gone.
+    expect(s.send("again")).toBe(true);
+    await until(
+      async () => (await received()).filter((m) => m.method === "turn/start").length === 2,
+    );
+    const turns = (await received()).filter((m) => m.method === "turn/start");
+    expect(turns[1]!.params).toMatchObject({ input: [{ text: "again" }] });
+    // Nothing stale is held: the next stop takes the player's new message.
+    await new Promise((r) => setTimeout(r, 50));
+    s.cancel();
+    expect(s.send("other")).toBe(true);
+  });
+
   it("restarts a process whose turn does not stop, and resumes the thread", async () => {
     const { s, events, methods } = await setup({ mode: "stuck", interruptGraceMs: 200 });
     s.send("hi");

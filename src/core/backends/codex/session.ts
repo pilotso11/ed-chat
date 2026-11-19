@@ -143,6 +143,8 @@ export class CodexSession implements AgentBackend {
   cancel(): void {
     if (!this._busy) return;
     this.pending = null;
+    // Stopping again drops a message held for after the first stop.
+    this.afterStop = null;
     this.abortApprovals();
     // Not started yet: nothing to stop. Reported after the caller's own "cancelled".
     if (!this.turnId && !this.threadReady) {
@@ -193,7 +195,10 @@ export class CodexSession implements AgentBackend {
     for (const l of this.listeners) l(e);
   }
 
-  private endTurn(): void {
+  /** Ends the turn. Returns the message held during a stop, which the caller may send. */
+  private endTurn(): string | null {
+    const next = this.afterStop;
+    this.afterStop = null;
     if (this.turnId) this.endedTurns.add(this.turnId);
     if (this.endedTurns.size > 100) this.endedTurns.delete(this.endedTurns.values().next().value!);
     clearTimeout(this.interruptTimer);
@@ -202,6 +207,7 @@ export class CodexSession implements AgentBackend {
     this.pending = null;
     this.turnId = null;
     this.cancelling = false;
+    return next;
   }
 
   // Withdraws the cards, and declines the requests in a process that is still running: Codex
@@ -228,12 +234,6 @@ export class CodexSession implements AgentBackend {
       if (this.rpc === rpc && !this.threadReady)
         this.fail(rpc, new Error("codex did not open a conversation in time"));
     }, this.opts.startTimeoutMs ?? 60_000);
-  }
-
-  private sendAfterStop(): void {
-    const text = this.afterStop;
-    this.afterStop = null;
-    if (text !== null) this.send(text);
   }
 
   private interruptLeft(rpc: RpcClient, threadId: string, turnId: string): void {
@@ -384,6 +384,9 @@ export class CodexSession implements AgentBackend {
             if (gen !== this.gen || !(err instanceof RpcError) || isGone(err)) throw err;
             res = await resume();
           }
+          // A resume that answers with nothing cannot be used, like a refusal.
+          if (res === null || res === undefined)
+            throw new RpcError(-32603, "thread/resume gave no result");
           call = "thread/resume";
         } catch (err) {
           if (gen !== this.gen || !(err instanceof RpcError)) throw err;
@@ -450,11 +453,9 @@ export class CodexSession implements AgentBackend {
           if (gen !== this.gen || this.rpc !== rpc) return;
           // Refused before it started, so no turn/completed follows.
           const cancelled = this.cancelling;
-          this.endTurn();
-          if (cancelled) {
-            this.emit({ type: "spawned" });
-            this.sendAfterStop();
-          } else
+          const next = this.endTurn();
+          if (cancelled) this.emit({ type: "spawned" });
+          else
             this.emit({
               type: "result",
               isError: true,
@@ -464,6 +465,7 @@ export class CodexSession implements AgentBackend {
               denials: [],
             });
           this.emitHeldReady();
+          if (next !== null) this.send(next);
         },
       );
   }
@@ -491,11 +493,11 @@ export class CodexSession implements AgentBackend {
     this.interruptTimer = setTimeout(() => {
       if (!this.cancelling) return;
       this.kill();
-      this.endTurn();
+      const next = this.endTurn();
       this.abortApprovals();
       this.events.resetTurn();
       this.spawnChild();
-      this.sendAfterStop();
+      if (next !== null) this.send(next);
     }, this.opts.interruptGraceMs ?? 5_000);
   }
 
@@ -517,14 +519,14 @@ export class CodexSession implements AgentBackend {
         if (t.id) this.endedTurns.add(t.id);
         const cancelled = this.cancelling || t.status === "interrupted";
         this.abortApprovals();
-        this.endTurn();
+        const next = this.endTurn();
         // A stopped turn has no reply: the overlay goes back to idle.
         if (cancelled) {
           this.events.resetTurn();
           this.emit({ type: "spawned" });
         } else this.emit(this.events.result(t));
-        if (cancelled) this.sendAfterStop();
         this.emitHeldReady();
+        if (next !== null) this.send(next);
         return;
       }
       case "serverRequest/resolved": {
