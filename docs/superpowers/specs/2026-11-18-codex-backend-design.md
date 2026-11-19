@@ -259,8 +259,11 @@ Notes from the probe:
 - The ed-mcp "missing" notice for Codex comes from the config files: ed-mcp is there when Codex's
   own config runs one (`hasOwnEdMcp()`) or ED Chat gives it one, never from an empty `ready`.
   Its setup line is Claude's `mcp add` when Claude is installed, else Codex's.
-- First run (no conversation saved, `agent` not in settings.json): only Codex installed picks
-  Codex; both installed keeps Claude and says how to switch.
+- First run (no state.json yet, `agent` not in settings.json): only Codex installed picks
+  Codex; both installed keeps Claude and says how to switch, once.
+- A write ED Chat makes for the player (`/codex`, the permission question) starts from the
+  player-only values last applied, so a change still waiting for the player's answer is not
+  applied with it.
 - `describeUnknown` logs a Codex notification's method only, and skips the routine ones.
 - `resumeHours` is player-only, as it was in the `claude` group.
 - Still to do with the real CLI: how Codex reports a Windows sandbox that is not installed, and
