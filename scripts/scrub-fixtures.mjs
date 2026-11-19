@@ -38,11 +38,12 @@ export function makeScrubber({ home, user, commander, fid }) {
     const lead = /^[\\/]/.test(home) ? SEP : "";
     rules.push([new RegExp(lead + parts.map(escapeRe).join(SEP), "gi"), "/home/player"]);
   }
-  // Whole words only, where - and _ join words: a short name must not eat parts of others
-  // (ed in mcp__ed-mcp__).
+  // Whole words only, so a short name does not eat parts of other words. A letter after a
+  // backslash is an escape (\n in JSON text), not part of the word. ed-mcp's tool names
+  // (mcp__ed-mcp__…) are not a name either.
   const word = (s) =>
     new RegExp(
-      `(?<![\\p{L}\\p{N}_-])${s.trim().split(/\s+/).map(escapeRe).join("\\s+")}(?![\\p{L}\\p{N}_-])`,
+      `(?<!__)(?<!(?<!\\\\)[\\p{L}\\p{N}])${s.trim().split(/\s+/).map(escapeRe).join("\\s+")}(?![\\p{L}\\p{N}])(?!-mcp)`,
       "giu",
     );
   if (commander) rules.push([word(commander), "Jameson"]);

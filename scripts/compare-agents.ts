@@ -72,7 +72,7 @@ const outProblem = isInside(repo, out)
   ? `--out must be outside the repo: ${out}`
   : outDirProblem(path.dirname(out));
 if (outProblem) {
-  console.error(outProblem.replace(/^outDir/, "--out"));
+  console.error(outProblem.replace(/\boutDir\b/g, "--out"));
   process.exit(2);
 }
 
@@ -354,11 +354,17 @@ try {
   stopAll();
   await approvalServer?.stop();
   // What was recorded so far is written even after an error.
+  // A report that cannot be written must not keep the temp folder from going.
   if (run.runs.length) {
-    await mkdir(path.dirname(out), { recursive: true });
-    await writeFile(out, buildReport(run));
-    await writeFile(jsonOut, JSON.stringify(run, null, 2) + "\n");
-    console.error(`Report: ${out}\nNumbers: ${jsonOut}`);
+    try {
+      await mkdir(path.dirname(out), { recursive: true });
+      await writeFile(out, buildReport(run));
+      await writeFile(jsonOut, JSON.stringify(run, null, 2) + "\n");
+      console.error(`Report: ${out}\nNumbers: ${jsonOut}`);
+    } catch (err) {
+      failed = true;
+      console.error(`could not write the report: ${String(err)}`);
+    }
   }
   // The temp folder holds the copied ed-mcp env, which can have the sync password. The CLIs
   // may hold files open for a moment after taskkill, so removal retries.

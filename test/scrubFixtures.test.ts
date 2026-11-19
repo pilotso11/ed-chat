@@ -42,6 +42,14 @@ describe("makeScrubber", () => {
     );
   });
 
+  it("still replaces a user name joined to other words by - or _, or after an escape", () => {
+    const s = makeScrubber({ user: "seth" });
+    expect(s.text("host SETH-PC, seth_backup, D:\\seth-games, user-seth")).toBe(
+      "host player-PC, player_backup, D:\\player-games, user-player",
+    );
+    expect(s.text("line\\nseth and\\tseth")).toBe("line\\nplayer and\\tplayer");
+  });
+
   it("replaces the user name, the commander name and the FID", () => {
     expect(scrub.text("ann@pc ANN")).toBe("player@pc player");
     expect(scrub.text("CMDR Hawk Eye (FID F7654321), CMDR HAWK EYE")).toBe(
