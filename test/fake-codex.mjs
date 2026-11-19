@@ -114,6 +114,7 @@ rl.on("line", (line) => {
       return;
     case "thread/start":
     case "thread/resume": {
+      if (method === "thread/resume" && mode === "resume-crash") process.exit(1);
       if (method === "thread/resume" && mode === "no-thread")
         return out({
           id,

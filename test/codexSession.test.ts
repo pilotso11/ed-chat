@@ -207,6 +207,35 @@ describe("CodexSession", () => {
     expect(events.filter((e) => e.type === "ready").at(-1)).toMatchObject({ sessionId: "thr-2" });
   });
 
+  it("at /new mid-reply, stops the old turn and keeps its end out of the new thread", async () => {
+    const { s, events, received } = await setup({ mode: "hang" });
+    s.send("first");
+    await until(async () => (await received()).some((m) => m.method === "turn/start"));
+    await until(() => s.busy && s.sessionId === "thr-1");
+    await new Promise((r) => setTimeout(r, 50));
+    s.newSession();
+    // Sent before the new thread exists, while the old turn's interrupted end is on its way.
+    expect(s.send("second")).toBe(true);
+    await until(async () =>
+      (await received()).some(
+        (m) => m.method === "turn/start" && (m.params as { threadId: string }).threadId === "thr-2",
+      ),
+    );
+    const interrupt = (await received()).find((m) => m.method === "turn/interrupt")!;
+    expect(interrupt.params).toMatchObject({ threadId: "thr-1" });
+    expect(s.busy).toBe(true);
+    // Only the process start: the old turn's end did not end the new message.
+    expect(types(events).filter((t) => t === "spawned")).toHaveLength(1);
+  });
+
+  it("keeps the saved thread when the process dies during the resume", async () => {
+    const { s, events } = await setup({ mode: "resume-crash", resumeId: "thr-old" });
+    s.start();
+    await until(() => has(events, "exit"));
+    expect(has(events, "resumeFailed")).toBe(false);
+    expect(s.sessionId).toBe("thr-old");
+  });
+
   it("resumes a saved thread", async () => {
     const { s, events, received } = await setup({ resumeId: "thr-old" });
     s.send("hi");

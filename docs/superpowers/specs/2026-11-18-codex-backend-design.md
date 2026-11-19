@@ -180,6 +180,10 @@ Notes from the probe:
   from it for Codex: whether ed-mcp is set up comes from the config lookup (Part 3).
 - Still to find out, with the real CLI: how Codex reports a Windows sandbox that is not
   installed (elevated), for the notice in "Decisions".
+- For Part 4, when Codex is wired in: `brokerApprover()` tells "allow until /new" from "allow"
+  by reading `isAllowed()` after the answer, which needs main to call `allowTool()` in the same
+  tick; the broker should return the kind of allow instead. Codex's `unknown` events carry
+  `{ method, params }`, and main's `describeUnknown` logs only `type` and `subtype`.
 - Probe hardening deferred to Part 5, before fixtures are recorded: fail closed on any git error
   in the outside-the-repo check, ignore inherited `GIT_*` variables, refuse a folder inside
   `.git`; match `turn/completed` on its turn id; stop ed-mcp's processes too when a run ends

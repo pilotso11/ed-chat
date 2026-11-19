@@ -4,7 +4,7 @@ import { quoteForCmd } from "../../cli.js";
 import { CrashTracker } from "../../crashTracker.js";
 import { permissionModeOf, type ThreadSettings } from "./command.js";
 import { CodexEvents, turnOf } from "./events.js";
-import { RpcClient, type RequestId } from "./rpc.js";
+import { RpcClient, RpcError, type RequestId } from "./rpc.js";
 
 /** A shell command or a file change that Codex wants the player to allow. */
 export interface CodexApproval {
@@ -72,6 +72,9 @@ export class CodexSession implements AgentBackend {
   private readonly approvals = new Map<RequestId, AbortController>();
   // Paths of each file change, for the approval card: the request itself names none.
   private readonly fileChanges = new Map<string, string[]>();
+  // Threads that /new left: what still arrives for them is dropped, even before the new thread
+  // has an id.
+  private readonly leftThreads = new Set<string>();
 
   constructor(private readonly opts: CodexSessionOptions) {
     this.cmd = { command: opts.command, args: opts.args, shell: opts.shell ?? false };
@@ -132,6 +135,14 @@ export class CodexSession implements AgentBackend {
   }
 
   newSession(): void {
+    // The old thread's turn is stopped, and anything it still sends is dropped.
+    if (this._threadId) {
+      this.leftThreads.add(this._threadId);
+      if (this.turnId && this.rpc)
+        this.rpc
+          .request("turn/interrupt", { threadId: this._threadId, turnId: this.turnId })
+          .catch(() => {});
+    }
     this.endTurn();
     this.abortApprovals();
     this._threadId = null;
@@ -143,7 +154,6 @@ export class CodexSession implements AgentBackend {
       this.spawnChild();
       return;
     }
-    // The old thread's turn, if any, is left to finish; its notifications are dropped.
     const gen = ++this.gen;
     if (this.initialized) void this.openThread(gen);
   }
@@ -299,7 +309,8 @@ export class CodexSession implements AgentBackend {
         try {
           res = await rpc.request("thread/resume", { threadId: this._threadId, ...params });
         } catch (err) {
-          if (gen !== this.gen) return;
+          // The process went: the thread is still there, and resumes at the restart.
+          if (gen !== this.gen || !(err instanceof RpcError)) throw err;
           // An unknown id is -32600 "no rollout found"; any other refusal also leaves no
           // thread to resume, so a new one starts with the message the player sent.
           this._threadId = null;
@@ -385,15 +396,15 @@ export class CodexSession implements AgentBackend {
       if (!this.cancelling) return;
       this.kill();
       this.endTurn();
+      this.abortApprovals();
+      this.events.resetTurn();
       this.spawnChild();
     }, this.opts.interruptGraceMs ?? 5_000);
   }
 
   private onNotification(method: string, params: unknown): void {
     const p = isRecord(params) ? params : {};
-    const threadId = str(p.threadId);
-    // A thread that /new left behind.
-    if (threadId && this._threadId && threadId !== this._threadId) return;
+    if (this.isLeft(p)) return;
     switch (method) {
       case "turn/started": {
         const turn = isRecord(p.turn) ? p.turn : {};
@@ -444,8 +455,20 @@ export class CodexSession implements AgentBackend {
     }
   }
 
+  // A message for a thread that /new left behind, or for one that is not this session's.
+  private isLeft(p: Record<string, unknown>): boolean {
+    const threadId = str(p.threadId);
+    if (!threadId) return false;
+    if (this.leftThreads.has(threadId)) return true;
+    return !!this._threadId && threadId !== this._threadId;
+  }
+
   private onServerRequest(rpc: RpcClient, id: RequestId, method: string, params: unknown): void {
     const p = isRecord(params) ? params : {};
+    if (this.isLeft(p) && method.endsWith("/requestApproval")) {
+      rpc.respond(id, { decision: "decline" });
+      return;
+    }
     switch (method) {
       case "item/commandExecution/requestApproval": {
         const command = str(p.command);
