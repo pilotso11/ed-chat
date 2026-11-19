@@ -176,6 +176,12 @@ function ownEntry(agent: AgentId, all: Entry[], workspace?: string): Entry | nul
 }
 
 /**
+ * Whether the player has set ed-mcp up anywhere ED Chat looks, runnable or not: the plugin, an
+ * http server or one switched off count. The setup notice is for a player with none.
+ */
+export const edMcpSetUp = (c: AgentConfigs): boolean => entries(c).length > 0;
+
+/**
  * The ed-mcp that ED Chat gives the agent: the player's definition from another place, when the
  * agent's own config has none. Null when the agent has its own, or there is none at all.
  */
@@ -279,7 +285,8 @@ export async function readAgentConfigs(
   const unreadable: ConfigFile[] = [];
   const read = (p: string, f: ConfigFile) =>
     readFile(p, "utf8").catch((err: NodeJS.ErrnoException) => {
-      if (err.code !== "ENOENT") unreadable.push(f);
+      // ENOTDIR: a folder on the way is a file, so this file is not there either.
+      if (err.code !== "ENOENT" && err.code !== "ENOTDIR") unreadable.push(f);
       return undefined;
     });
   const claudeDir = env.CLAUDE_CONFIG_DIR || null;

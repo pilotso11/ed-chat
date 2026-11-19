@@ -22,6 +22,7 @@ import {
   notFoundText,
   type AgentBackend,
   type AgentId,
+  type AgentInfo,
   type BackendEvent,
 } from "../core/backend.js";
 import { ApprovalBroker } from "../core/approvals.js";
@@ -34,7 +35,23 @@ import {
   resolveClaude,
 } from "../core/backends/claude/command.js";
 import { ClaudeSession } from "../core/backends/claude/session.js";
-import { isOlder, lookedIn, parseCliVersion, quoteForCmd } from "../core/cli.js";
+import {
+  TESTED_CODEX_VERSION,
+  buildCodexArgs,
+  codexLookup,
+  codexThreadSettings,
+  resolveCodex,
+} from "../core/backends/codex/command.js";
+import { brokerApprover } from "../core/backends/codex/approvals.js";
+import { CodexSession } from "../core/backends/codex/session.js";
+import {
+  isOlder,
+  lookedIn,
+  parseCliVersion,
+  quoteForCmd,
+  type CliLookup,
+  type ResolvedCommand,
+} from "../core/cli.js";
 import {
   INITIAL_STATE,
   answerAllowed,
@@ -83,6 +100,7 @@ import { resumeId } from "../core/resume.js";
 import { openStores } from "ed-mcp/journal";
 import {
   configProblems,
+  edMcpSetUp,
   edMcpState,
   ownConfigUnreadable,
   edMcpToAdd,
@@ -119,14 +137,31 @@ const logDir = path.join(dataDir, "logs");
 const log = new Logger(path.join(logDir, "overlay.log"));
 const settingsFile = path.join(dataDir, "settings.json");
 
-// The assistant that runs. Part 4 of the Codex spec makes this a setting.
-const agentId: AgentId = "claude";
-const agent = AGENTS[agentId];
+// How ED Chat finds each CLI, and the version it was tested with.
+const CLIS: Record<
+  AgentId,
+  {
+    lookup: () => CliLookup;
+    resolve: (path: string | null) => ResolvedCommand | null;
+    tested: string;
+  }
+> = {
+  claude: {
+    lookup: () => claudeLookup(),
+    resolve: (p) => resolveClaude(p),
+    tested: TESTED_CLI_VERSION,
+  },
+  codex: {
+    lookup: () => codexLookup(),
+    resolve: (p) => resolveCodex(p),
+    tested: TESTED_CODEX_VERSION,
+  },
+};
 
 // A command in backticks is copied when the player clicks the notice.
-const ED_MCP_MISSING = `⚠ ed-mcp not connected; click to copy \`${agent.mcpAddCommand}\``;
-const ED_MCP_FAILED = `⚠ ed-mcp failed to start; run \`${agent.mcpListCommand}\``;
-const ED_MCP_AUTH = `⚠ ed-mcp needs authentication; run \`${agent.mcpListCommand}\``;
+const edMcpMissing = (command: string) => `⚠ ed-mcp not connected; click to copy \`${command}\``;
+const edMcpFailed = (a: AgentInfo) => `⚠ ed-mcp failed to start; run \`${a.mcpListCommand}\``;
+const edMcpAuth = (a: AgentInfo) => `⚠ ed-mcp needs authentication; run \`${a.mcpListCommand}\``;
 const SCOPE_GAME = "ⓘ hotkeys work while Elite is in front";
 const COMMAND_COPIED = "📋 copied; paste it in a terminal";
 const KEYS_SECONDS = 15;
@@ -134,8 +169,8 @@ const FULLSCREEN = "⚠ Elite is in fullscreen; switch to Borderless to see the 
 const REFOCUS = "⚠ click the game to refocus";
 const IN_DANGER = "⛔ in danger: chat blocked";
 const NO_AUTO = "⚠ auto mode unavailable, using manual approvals";
-const BUSY = `⚠ ${agent.name} is busy`;
-const GAVE_UP = `⚠ ${agent.name} keeps stopping`;
+const busyText = (a: AgentInfo) => `⚠ ${a.name} is busy`;
+const gaveUpText = (a: AgentInfo) => `⚠ ${a.name} keeps stopping`;
 const RESUMED = "↺ resumed your last conversation";
 const RESUME_FAILED = "ⓘ could not resume the last conversation; started a new one";
 
@@ -196,12 +231,15 @@ async function main(): Promise<void> {
   let position: Position;
   ({ position, saved } = effectivePosition(settings.position, saved));
   state = { ...state, iconMode: saved.iconMode ?? settings.strip.startAsIcon };
+  // The assistant that runs; the agent setting switches it.
+  let agentId: AgentId = settings.agent;
+  let agent = AGENTS[agentId];
   // The conversation from the last run, used by the first session only.
-  let resumeFrom = resumeId(saved.session, new Date(), settings.claude.resumeHours);
-  const resumedTurns =
-    resumeFrom && saved.session?.history ? await history.resume(saved.session.history) : [];
+  let resumeFrom = resumeId(saved.sessions?.[agentId], new Date(), settings.resumeHours);
+  const savedHistory = saved.sessions?.[agentId]?.history;
+  const resumedTurns = resumeFrom && savedHistory ? await history.resume(savedHistory) : [];
   if (!history.fileName) history.newSession();
-  state = { ...state, history: resumedTurns, resumedTurns: resumedTurns.length };
+  state = { ...state, agent: agentId, history: resumedTurns, resumedTurns: resumedTurns.length };
 
   const win: BrowserWindow = createOverlayWindow(
     path.join(import.meta.dirname, "../preload/index.cjs"),
@@ -643,75 +681,96 @@ async function main(): Promise<void> {
   // Read once: the panel must read the sync folder of the ed-mcp that runs, which is set up
   // from these at startup.
   const agentConfigs = await readAgentConfigs();
-  // Without the approval server the assistant cannot ask for permission, so the overlay runs without it.
-  let agentBlocked: string | null = null;
+  // Claude asks for approval through ED Chat's approval server, so Claude cannot run without it.
+  // Codex asks through its own protocol. Both need the data folder.
+  let approvalBlocked: string | null = null;
+  let dataBlocked: string | null = null;
   try {
     await approval.start();
   } catch (err) {
     log.log("warn", `approval server: ${message(err)}`);
-    agentBlocked = `⚠ Can't start the approval server: ${message(err)}`;
+    approvalBlocked = `⚠ Can't start the approval server: ${message(err)}`;
   }
-  if (!agentBlocked) {
-    try {
-      // ed-mcp from Codex's config or another Claude project, when Claude has none of its own.
-      // Its env can hold the sync password; the file is in ED Chat's own data folder, which
-      // already holds the approval server's token.
-      const problems = configProblems(agentConfigs);
-      if (problems.length) {
-        const own = ownConfigUnreadable(agentId, agentConfigs, workspace);
-        log.log(
-          "warn",
-          `ed-mcp: cannot read or parse ${problems.join(", ")}` +
-            (own ? `; ${agent.name}'s own config, so ED Chat adds no ed-mcp` : ""),
-        );
-      }
-      const add = edMcpToAdd(agentId, agentConfigs, workspace);
-      const edMcp = add && startableOn(add);
+  const problems = configProblems(agentConfigs);
+  if (problems.length) log.log("warn", `ed-mcp: cannot read or parse ${problems.join(", ")}`);
+  // ed-mcp from the other CLI's config or another Claude project, when an assistant has none
+  // of its own. Its env can hold the sync password: Claude gets it in a file in ED Chat's own
+  // data folder, which already holds the approval server's token; Codex gets it in the request.
+  const edMcpFor = (id: AgentId) => {
+    if (ownConfigUnreadable(id, agentConfigs, workspace))
+      log.log("warn", `ed-mcp: ${AGENTS[id].name}'s own config cannot be read; added none`);
+    const add = edMcpToAdd(id, agentConfigs, workspace);
+    if (add) log.log("info", `ed-mcp for ${AGENTS[id].name}: the definition from ${add.source}`);
+    if (!add) return null;
+    // Only the fields the CLIs take: source is ED Chat's own.
+    const { command, args, env } = startableOn(add);
+    return { command, args, env };
+  };
+  const codexEdMcp = edMcpFor("codex");
+  try {
+    if (!approvalBlocked) {
+      const edMcp = edMcpFor("claude");
       const mcpServers: Record<string, unknown> = { ...approval.mcpConfig().mcpServers };
-      if (edMcp) {
-        mcpServers["ed-mcp"] = { command: edMcp.command, args: edMcp.args, env: edMcp.env };
-        log.log("info", `ed-mcp: using the definition from ${edMcp.source}`);
-      }
+      if (edMcp) mcpServers["ed-mcp"] = edMcp;
       await writeFile(mcpConfigFile, JSON.stringify({ mcpServers }));
-      await mkdir(workspace, { recursive: true });
-    } catch (err) {
-      log.log("warn", `data folder: ${message(err)}`);
-      agentBlocked = `⚠ Can't write to ${dataDir}: ${message(err)}`;
     }
+    await mkdir(workspace, { recursive: true });
+  } catch (err) {
+    log.log("warn", `data folder: ${message(err)}`);
+    dataBlocked = `⚠ Can't write to ${dataDir}: ${message(err)}`;
   }
+  const blockedFor = (id: AgentId) => dataBlocked ?? (id === "claude" ? approvalBlocked : null);
   const notFound = () =>
-    agentBlocked ?? notFoundText(agent, lookedIn(claudeLookup(), settings.claude.path));
+    blockedFor(agentId) ??
+    notFoundText(agent, lookedIn(CLIS[agentId].lookup(), settings[agentId].path));
 
-  const agentCommand = (s: Settings) => {
-    if (agentBlocked) return null;
-    const resolved = resolveClaude(s.claude.path);
+  const agentCommand = (s: Settings, id: AgentId = agentId) => {
+    if (blockedFor(id)) return null;
+    const resolved = CLIS[id].resolve(s[id].path);
     if (!resolved) return null;
-    const args = buildClaudeArgs({
-      permissionMode: s.claude.permissionMode,
-      mcpConfigFile,
-      extraArgs: s.claude.extraArgs,
-      settingsFile,
-    });
+    const args =
+      id === "claude"
+        ? buildClaudeArgs({
+            permissionMode: s.claude.permissionMode,
+            mcpConfigFile,
+            extraArgs: s.claude.extraArgs,
+            settingsFile,
+          })
+        : buildCodexArgs({ extraArgs: s.codex.extraArgs });
     return { ...resolved, args };
   };
+  // What each Codex thread starts with; a change applies to the next thread.
+  const codexThread = (s: Settings) =>
+    codexThreadSettings({
+      permissionMode: s.codex.permissionMode,
+      cwd: workspace,
+      settingsFile,
+      edMcp: codexEdMcp,
+    });
 
   let session: AgentBackend | null = null;
+  // Stops the running session's events from reaching the overlay, at a switch.
+  let unsubscribe: (() => void) | null = null;
   let resumePending = false;
   // For /version.
   let cliVersion: string | null = null;
   let edMcpStatus: Versions["edMcpStatus"] = null;
   function startSession(c: { command: string; args: string[]; shell: boolean }): void {
-    session = new ClaudeSession({
-      command: c.command,
-      args: c.args,
-      shell: c.shell,
-      cwd: workspace,
-      resumeId: resumeFrom,
-    });
+    const base = { command: c.command, args: c.args, shell: c.shell, cwd: workspace };
+    session =
+      agentId === "claude"
+        ? new ClaudeSession({ ...base, resumeId: resumeFrom })
+        : new CodexSession({
+            ...base,
+            resumeId: resumeFrom,
+            thread: codexThread(settings),
+            approve: brokerApprover(approvals),
+            clientVersion: app.getVersion(),
+          });
     // Shown at the first ready: the CLI confirms the conversation only then.
     resumePending = resumeFrom !== null;
     resumeFrom = null;
-    session.onEvent(onBackend);
+    unsubscribe = session.onEvent(onBackend);
     session.start();
     checkVersion(c.command, c.shell);
   }
@@ -743,7 +802,7 @@ async function main(): Promise<void> {
     } catch (err) {
       // The choice still holds for this run; the player sees that it was not saved.
       log.log("warn", `settings.json: ${message(err)}`);
-      settings = { ...settings, claude: { ...settings.claude, permissionMode: mode } };
+      settings = { ...settings, [agentId]: { ...settings[agentId], permissionMode: mode } };
       dispatch({
         type: "notice",
         key: "settings",
@@ -754,7 +813,26 @@ async function main(): Promise<void> {
   // Runs after the tray exists: the question can open behind a fullscreen game, and the tray is
   // how the player quits. Settings reloads start no session before the answer.
   let agentStarted = false;
+  // First run, before any conversation: with only Codex installed, Codex is the assistant.
+  // With both, Claude stays, and the player hears how to switch. A file that names the agent
+  // has chosen already.
+  async function firstRunAgent(): Promise<void> {
+    if (settingsStore.broken || saved.sessions?.claude || saved.sessions?.codex) return;
+    try {
+      const raw = JSON.parse(settingsStore.text) as Record<string, unknown>;
+      if ("agent" in raw) return;
+    } catch {
+      return;
+    }
+    const claude = !!CLIS.claude.resolve(settings.claude.path);
+    const codex = !!CLIS.codex.resolve(settings.codex.path);
+    if (codex && !claude) await chooseAgent("codex");
+    else if (codex && claude)
+      flash("agent", "ⓘ Codex is installed too: type /codex to switch", 12_000);
+  }
+
   async function startAgent(): Promise<void> {
+    await firstRunAgent();
     await askPermissionMode();
     agentStarted = true;
     const cmd = agentCommand(settings);
@@ -763,6 +841,11 @@ async function main(): Promise<void> {
     if (cmd) startSession(cmd);
     else dispatch({ type: "notice", key: "claude", text: notFound() });
   }
+
+  // The setup line: Claude's when Claude is installed (ED Chat then gives it to Codex too),
+  // else Codex's.
+  const setupCommand = () =>
+    (CLIS.claude.resolve(settings.claude.path) ? AGENTS.claude : AGENTS.codex).mcpAddCommand;
 
   function onBackend(e: BackendEvent): void {
     dispatch({ type: "backend", event: e });
@@ -773,18 +856,22 @@ async function main(): Promise<void> {
           flash("resume", RESUMED, 6_000);
         }
         {
-          const ed = edMcpState(e.mcpServers);
+          let ed = edMcpState(e.mcpServers);
+          // Codex reports its servers only after the thread starts, so a missing ed-mcp is
+          // read from the config files; an ed-mcp ED Chat gives it is set up too.
+          if (agentId === "codex" && ed === "missing")
+            ed = codexEdMcp || edMcpSetUp(agentConfigs) ? "ok" : "missing";
           edMcpStatus = ed;
           dispatch({
             type: "notice",
             key: "edmcp",
             text:
               ed === "missing"
-                ? ED_MCP_MISSING
+                ? edMcpMissing(setupCommand())
                 : ed === "failed"
-                  ? ED_MCP_FAILED
+                  ? edMcpFailed(agent)
                   : ed === "needsAuth"
-                    ? ED_MCP_AUTH
+                    ? edMcpAuth(agent)
                     : null,
           });
         }
@@ -792,7 +879,7 @@ async function main(): Promise<void> {
           type: "notice",
           key: "mode",
           text:
-            settings.claude.permissionMode === "auto" &&
+            settings[agentId].permissionMode === "auto" &&
             e.permissionMode &&
             e.permissionMode !== "auto"
               ? NO_AUTO
@@ -804,14 +891,12 @@ async function main(): Promise<void> {
         scheduleFade();
         // An error reply still counts as use: the conversation exists and was used just now.
         if (e.sessionId && history.fileName) {
-          saved = {
-            ...saved,
-            session: {
-              id: e.sessionId,
-              lastUsed: new Date().toISOString(),
-              history: history.fileName,
-            },
+          const s = {
+            id: e.sessionId,
+            lastUsed: new Date().toISOString(),
+            history: history.fileName,
           };
+          saved = { ...saved, sessions: { ...saved.sessions, [agentId]: s } };
           writeState();
         }
         break;
@@ -821,7 +906,7 @@ async function main(): Promise<void> {
         // The reducer dropped the old conversation's turns; what is left is the question in
         // flight, which the new conversation answers, so it starts the new file.
         for (const t of state.history) appendHistory(t);
-        saved = { ...saved, session: undefined };
+        saved = { ...saved, sessions: { ...saved.sessions, [agentId]: undefined } };
         writeState();
         flash("resume", RESUME_FAILED, 6_000);
         log.log(
@@ -856,14 +941,16 @@ async function main(): Promise<void> {
       if (n !== versionCheck) return;
       const v = err ? null : parseCliVersion(stdout);
       cliVersion = v ? v.join(".") : null;
-      const tested = parseCliVersion(TESTED_CLI_VERSION)!;
-      if (v && isOlder(v, tested)) {
-        dispatch({
-          type: "notice",
-          key: "version",
-          text: `⚠ ${agent.cli} ${v.join(".")} is older than ${TESTED_CLI_VERSION}; run \`${agent.updateCommand}\``,
-        });
-      }
+      const testedText = CLIS[agentId].tested;
+      const tested = parseCliVersion(testedText)!;
+      dispatch({
+        type: "notice",
+        key: "version",
+        text:
+          v && isOlder(v, tested)
+            ? `⚠ ${agent.cli} ${v.join(".")} is older than ${testedText}; run \`${agent.updateCommand}\``
+            : null,
+      });
     });
   }
 
@@ -871,22 +958,85 @@ async function main(): Promise<void> {
     session?.newSession();
     history.newSession();
     resumePending = false;
-    saved = { ...saved, session: undefined };
+    saved = { ...saved, sessions: { ...saved.sessions, [agentId]: undefined } };
     writeState();
     approvals.clearAllowed();
     dispatch({ type: "newSession" });
+  }
+
+  // The player's choice of assistant, from /claude, /codex or the tray. It is written as the
+  // player's own change, so no dialog; the settings watcher then switches.
+  async function chooseAgent(id: AgentId): Promise<boolean> {
+    if (id === settings.agent) {
+      flash("agent", `ⓘ ${AGENTS[id].name} is already the assistant`, 4_000);
+      return true;
+    }
+    try {
+      await playerOnly.playerWrite(settingsStore.textWithTop("agent", id));
+      await settingsStore.load();
+      applyNewSettings(playerOnly.effective() ?? settingsStore.settings);
+      await switching;
+      return true;
+    } catch (err) {
+      log.log("warn", `settings.json: ${message(err)}`);
+      flash("agent", `⚠ settings.json: could not switch to ${AGENTS[id].name}`, 6_000);
+      return false;
+    }
+  }
+
+  // Stops the running assistant and starts the other. Its own saved conversation is resumed if
+  // it is fresh; a session id is never given to the other CLI.
+  let switching = Promise.resolve();
+  function switchAgent(id: AgentId): Promise<void> {
+    switching = switching
+      .then(() => doSwitch(id))
+      .catch((err) => {
+        log.log("warn", `switch to ${id}: ${message(err)}`);
+      });
+    return switching;
+  }
+  async function doSwitch(id: AgentId): Promise<void> {
+    if (id === agentId) return;
+    // What the old assistant still sends is not for the new one.
+    unsubscribe?.();
+    unsubscribe = null;
+    session?.stop();
+    session = null;
+    approvals.denyAll();
+    approvals.clearAllowed();
+    resumePending = false;
+    cliVersion = null;
+    edMcpStatus = null;
+    agentId = id;
+    agent = AGENTS[id];
+    const s = saved.sessions?.[id];
+    resumeFrom = resumeId(s, new Date(), settings.resumeHours);
+    const turns = resumeFrom && s?.history ? await history.resume(s.history) : [];
+    if (!resumeFrom || !s?.history) history.newSession();
+    for (const key of ["claude", "edmcp", "mode", "version"])
+      dispatch({ type: "notice", key, text: null });
+    dispatch({ type: "switchAgent", agent: id, history: turns });
+    dispatch({ type: "localReply", text: `Switched to ${agent.name}.` });
+    scheduleFade();
+    log.log("info", `switched to ${agent.cli}`);
+    void openHudFeed().then(pollHud, (err) => log.log("warn", `panel: ${message(err)}`));
+    if (!agentStarted) return;
+    await askPermissionMode();
+    const cmd = agentCommand(settings);
+    if (cmd) startSession(cmd);
+    else dispatch({ type: "notice", key: "claude", text: notFound() });
   }
 
   function answerApproval(id: string, a: "approve" | "deny" | "alwaysAllow"): void {
     const req = state.approvals.find((r) => r.id === id);
     if (!req) return;
     if (!answerAllowed(a, id, shownApproval, Date.now())) return;
-    approvals.answer(id, a === "deny" ? "deny" : "allow");
+    if (a === "alwaysAllow") approvals.allowTool(req.toolName);
+    approvals.answer(id, a === "deny" ? "deny" : a === "alwaysAllow" ? "allowSession" : "allow");
     if (a === "alwaysAllow") {
-      approvals.allowTool(req.toolName);
       // Requests for the same tool that already wait in the queue are allowed too.
       for (const r of state.approvals)
-        if (r.toolName === req.toolName) approvals.answer(r.id, "allow");
+        if (r.toolName === req.toolName) approvals.answer(r.id, "allowSession");
       flash("approval", `✓ ${shortTool(req.toolName)} allowed until /new`, 4_000);
     }
   }
@@ -941,9 +1091,11 @@ async function main(): Promise<void> {
     const t = text.trim();
     if (!t) return false;
     // ED Chat's own commands. They do not reach the assistant.
-    if (t === "/new" || t === "/version") {
+    if (t === "/new" || t === "/version" || t === "/claude" || t === "/codex") {
       if (t === "/new") newConversation();
-      else if (!showVersion()) return false;
+      else if (t === "/version") {
+        if (!showVersion()) return false;
+      } else if (!(await chooseAgent(t === "/claude" ? "claude" : "codex"))) return false;
       const ok = await giveFocusBack();
       dispatch({ type: "closeChat" });
       if (ok) void settleFocus();
@@ -957,7 +1109,7 @@ async function main(): Promise<void> {
     const where = fresh ? (hudData?.journal?.location ?? null) : null;
     const note = fresh ? gameContext(where, hudData?.status ?? null, lastHudView) : null;
     if (!session.send(withGameContext(t, note))) {
-      flash("chat", session.busy ? BUSY : GAVE_UP);
+      flash("chat", session.busy ? busyText(agent) : gaveUpText(agent));
       return false;
     }
     clearTimeout(fadeTimer);
@@ -1236,13 +1388,15 @@ async function main(): Promise<void> {
     ) {
       void openHudFeed().then(pollHud, (err) => log.log("warn", `panel: ${message(err)}`));
     }
-    if (JSON.stringify(old.claude) !== JSON.stringify(settings.claude)) {
+    if (old.agent !== settings.agent) void switchAgent(settings.agent);
+    else if (JSON.stringify(old[agentId]) !== JSON.stringify(settings[agentId])) {
       const c = agentCommand(settings);
       dispatch({ type: "notice", key: "claude", text: c ? null : notFound() });
       // /version must not report the binary that is no longer configured.
       cliVersion = null;
       if (c && session) {
         session.configure(c);
+        if (session instanceof CodexSession) session.configureThread(codexThread(settings));
         checkVersion(c.command, c.shell);
         flash("agentSettings", `ⓘ ${agent.cli} settings apply after /new`, 6_000);
       } else if (c && agentStarted) startSession(c);
@@ -1317,6 +1471,15 @@ async function main(): Promise<void> {
       ...(chips.length ? [{ type: "separator" as const }] : []),
       { label: "Open chat", click: tray({ type: "openChat" }) },
       { label: "New conversation", click: newConversation },
+      {
+        label: "Assistant",
+        submenu: (["claude", "codex"] as const).map((id) => ({
+          label: AGENTS[id].name,
+          type: "radio" as const,
+          checked: agentId === id,
+          click: () => void chooseAgent(id),
+        })),
+      },
       { label: "Show hotkeys", click: showKeys },
       ...(failedHotkeys.length
         ? [{ label: `Hotkey problems (${failedHotkeys.length})…`, click: showHotkeyProblems }]

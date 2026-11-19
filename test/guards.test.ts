@@ -79,6 +79,13 @@ describe("describeUnknown", () => {
       "type=system subtype=status",
     );
   });
+  it("logs only a Codex notification's method, and skips the routine ones", () => {
+    expect(describeUnknown({ method: "thread/compacted", params: { text: "secret" } })).toBe(
+      "method=thread/compacted",
+    );
+    expect(describeUnknown({ method: "thread/tokenUsage/updated", params: {} })).toBeNull();
+    expect(describeUnknown({ method: "item/reasoning/textDelta", params: {} })).toBeNull();
+  });
   it("logs only the length of a non-JSON line", () => {
     expect(describeUnknown("secret prompt")).toBe("non-JSON line (13 chars)");
   });

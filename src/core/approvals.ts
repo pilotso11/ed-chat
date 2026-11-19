@@ -13,7 +13,8 @@ export interface ApprovalRequest {
   /** When the request is denied for want of an answer, in ms since the epoch. */
   deadline: number;
 }
-export type ApprovalDecision = "allow" | "deny";
+/** allowSession: allowed until /new, so a backend can say so to its CLI. */
+export type ApprovalDecision = "allow" | "allowSession" | "deny";
 export type Outcome = ApprovalDecision | "timeout" | "cancelled";
 
 export interface ApprovalBrokerOptions {
@@ -89,7 +90,7 @@ export class ApprovalBroker {
   ask(toolName: string, input: unknown, o: AskOptions = {}): Promise<Outcome> {
     const { signal } = o;
     if (signal?.aborted) return Promise.resolve("cancelled");
-    if (this.allowed.has(toolName)) return Promise.resolve("allow");
+    if (this.allowed.has(toolName)) return Promise.resolve("allowSession");
     const id = randomUUID();
     return new Promise((resolve) => {
       const settle = (d: Outcome) => {

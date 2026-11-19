@@ -97,15 +97,31 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "approval.timeoutSeconds": { text: "Seconds before a request with no answer is denied." },
   "approval.sound": { text: "Play a sound when a request arrives." },
 
+  agent: {
+    text:
+      "The assistant that runs: claude (Claude Code) or codex (OpenAI's Codex). It decides which " +
+      "company receives the chat. The player switches with /claude or /codex, or the tray menu.",
+    playerOnly: true,
+  },
+  resumeHours: {
+    text:
+      "Resume the assistant's last conversation when ED Chat starts, or switches to it, within " +
+      "this many hours. 0 turns it off.",
+  },
   claude: { text: "How ED Chat starts the claude CLI.", playerOnly: true },
   "claude.path": { text: "Path to claude. null searches PATH, then the default install folders." },
   "claude.permissionMode": {
     text: "auto: Claude runs most tools without asking. default: ask for each tool.",
   },
   "claude.extraArgs": { text: "More command-line arguments for claude." },
-  "claude.resumeHours": {
-    text: "Resume the last conversation when ED Chat starts within this many hours. 0 turns it off.",
+  codex: { text: "How ED Chat starts the codex CLI.", playerOnly: true },
+  "codex.path": { text: "Path to codex. null searches PATH, then the default install folders." },
+  "codex.permissionMode": {
+    text:
+      "auto: Codex decides inside its sandbox, and asks for anything outside it. default: ask " +
+      "before anything not known to be safe.",
   },
+  "codex.extraArgs": { text: "More command-line arguments for codex app-server." },
 
   journalDir: {
     text: "The game's journal folder. null uses the Saved Games folder.",

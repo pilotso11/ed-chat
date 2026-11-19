@@ -194,6 +194,24 @@ describe("reduce", () => {
     });
   });
 
+  it("switches the assistant, with its resumed turns, and names it in errors", () => {
+    const turns = [{ role: "user" as const, text: "q" }];
+    const s = run([
+      ready,
+      { type: "sent", text: "a" },
+      { type: "switchAgent", agent: "codex", history: turns },
+    ]);
+    expect(s).toMatchObject({
+      agent: "codex",
+      history: turns,
+      resumedTurns: 1,
+      session: "starting",
+      reply: "",
+    });
+    const gone = run([{ type: "backend", event: { type: "spawnError", message: "ENOENT" } }], s);
+    expect(gone.notices.claude).toContain("codex");
+  });
+
   it("shows a resumed conversation's turns, and drops them when the resume fails", () => {
     const old = [
       { role: "user" as const, text: "a" },

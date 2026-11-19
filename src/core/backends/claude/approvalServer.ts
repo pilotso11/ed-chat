@@ -98,7 +98,7 @@ export class ApprovalServer {
       async ({ tool_name, input }, extra) => {
         const d = await this.broker.ask(tool_name, input ?? {}, { signal: extra.signal });
         const payload =
-          d === "allow"
+          d === "allow" || d === "allowSession"
             ? { behavior: "allow", updatedInput: input ?? {} }
             : {
                 behavior: "deny",

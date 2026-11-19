@@ -261,8 +261,8 @@ describe("ApprovalBroker for Codex", () => {
     const always = approve(ask());
     await Promise.resolve();
     // What main does for "Allow until /new".
-    broker.answer(requests[1]!.id, "allow");
     broker.allowTool("shell");
+    broker.answer(requests[1]!.id, "allowSession");
     expect(await always).toBe("acceptForSession");
     // Allowed tools skip the card until /new.
     expect(await approve(ask())).toBe("acceptForSession");

@@ -91,6 +91,13 @@ const HudSchema = z.strictObject({
   edMcpDataDir: z.string().min(1).nullable().default(null),
 });
 
+// How ED Chat starts each CLI. The same fields for both.
+const CliSchema = z.strictObject({
+  path: z.string().min(1).nullable().default(null),
+  permissionMode: z.enum(["auto", "default"]).default("auto"),
+  extraArgs: z.array(z.string()).default([]),
+});
+
 export const SettingsSchema = z.strictObject({
   hotkeys: HotkeysSchema.prefault({}),
   strip: z
@@ -123,18 +130,16 @@ export const SettingsSchema = z.strictObject({
       sound: z.boolean().default(true),
     })
     .prefault({}),
-  claude: z
-    .strictObject({
-      path: z.string().min(1).nullable().default(null),
-      permissionMode: z.enum(["auto", "default"]).default("auto"),
-      extraArgs: z.array(z.string()).default([]),
-      resumeHours: z.number().min(0).max(720).default(12),
-    })
-    .prefault({}),
+  // Which assistant runs. Only the player changes it: it decides which company gets the chat.
+  agent: z.enum(["claude", "codex"]).default("claude"),
+  resumeHours: z.number().min(0).max(720).default(12),
+  claude: CliSchema.prefault({}),
+  codex: CliSchema.prefault({}),
   journalDir: z.string().min(1).nullable().default(null),
   hud: HudSchema.prefault({}),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
+export type CliSettings = Settings["claude"];
 
 export const DEFAULT_SETTINGS: Settings = SettingsSchema.parse({});
 
@@ -142,11 +147,22 @@ export const DEFAULT_SETTINGS: Settings = SettingsSchema.parse({});
 // unknown key is an error, so they are dropped before the check.
 const REMOVED: [string, string][] = [["hotkeys", "toggleOverlay"]];
 
+const isGroup = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === "object" && !Array.isArray(v);
+
 function dropRemoved(raw: unknown): void {
   for (const [group, key] of REMOVED) {
     const g = (raw as Record<string, unknown> | null)?.[group];
-    if (g && typeof g === "object" && !Array.isArray(g)) delete (g as Record<string, unknown>)[key];
+    if (isGroup(g)) delete g[key];
   }
+}
+
+// claude.resumeHours moved to the top level when Codex came; an older file still loads. The
+// top-level value wins when both are set.
+function moveResumeHours(raw: unknown): void {
+  if (!isGroup(raw) || !isGroup(raw.claude) || !("resumeHours" in raw.claude)) return;
+  if (!("resumeHours" in raw)) raw.resumeHours = raw.claude.resumeHours;
+  delete raw.claude.resumeHours;
 }
 
 /** Whether the player's own settings.json sets this value, as opposed to the default. */
@@ -174,6 +190,7 @@ export function parseSettings(text: string): ParseResult {
     raw = rest;
   }
   dropRemoved(raw);
+  moveResumeHours(raw);
   const r = SettingsSchema.safeParse(raw);
   if (r.success) return { ok: true, settings: r.data };
   const issue = r.error.issues[0]!;

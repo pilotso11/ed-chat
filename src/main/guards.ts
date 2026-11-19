@@ -36,12 +36,29 @@ const label = (v: unknown): string =>
   typeof v === "string" ? v.slice(0, 40) : v === undefined ? "-" : typeof v;
 
 // Unknown events can carry message text, so only their type is logged. Null means drop silently.
+// Codex notifications that come every turn and that ED Chat does not need.
+const CODEX_ROUTINE = [
+  "thread/tokenUsage",
+  "account/rateLimits",
+  "thread/started",
+  "turn/started",
+  "item/reasoning",
+  "turn/diff",
+  "turn/plan",
+];
+
 export function describeUnknown(raw: unknown): string | null {
   if (typeof raw === "string") return `non-JSON line (${raw.length} chars)`;
   if (typeof raw !== "object" || raw === null) return `non-object ${typeof raw}`;
   const r = raw as Record<string, unknown>;
   if (r.type === "system" && typeof r.subtype === "string" && r.subtype.startsWith("hook_"))
     return null;
+  // Codex: a notification that ED Chat does not use. Its params can quote the chat, so only
+  // the method is logged, and the routine ones not at all.
+  if (typeof r.method === "string")
+    return CODEX_ROUTINE.some((m) => r.method === m || (r.method as string).startsWith(m + "/"))
+      ? null
+      : `method=${label(r.method)}`;
   return `type=${label(r.type)} subtype=${label(r.subtype)}`;
 }
 
