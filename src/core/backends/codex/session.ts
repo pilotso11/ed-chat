@@ -382,10 +382,14 @@ export class CodexSession implements AgentBackend {
       if (gen === this.gen) this.fail(rpc, err);
       return;
     }
-    if (gen !== this.gen) return;
     const r = isRecord(res) ? res : {};
     const thread = isRecord(r.thread) ? r.thread : {};
     const id = str(thread.id);
+    if (gen !== this.gen) {
+      // /new asked for another thread while this one was opening: what it sends is dropped.
+      if (id && this.rpc === rpc) this.leftThreads.add(id);
+      return;
+    }
     if (!id) {
       this.fail(rpc, new Error(`${call} gave no thread id`));
       return;

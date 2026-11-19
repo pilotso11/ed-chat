@@ -184,6 +184,30 @@ rl.on("line", (line) => {
           error: null,
         });
       const threadId = method === "thread/resume" ? params.threadId : `thr-${++threads}`;
+      // slow-thread: the answer comes late, and the thread then says something on its own.
+      if (mode === "slow-thread") {
+        setTimeout(
+          () => {
+            out({
+              id,
+              result: { thread: { id: threadId }, approvalPolicy: params.approvalPolicy },
+            });
+            setTimeout(
+              () =>
+                note("item/agentMessage/delta", {
+                  threadId,
+                  turnId: "t",
+                  itemId: `m-${threadId}`,
+                  delta: `from ${threadId}`,
+                }),
+              30,
+            );
+            // The second thread opens later, so the first one speaks before it is known.
+          },
+          threadId === "thr-1" ? 200 : 500,
+        );
+        return;
+      }
       out({
         id,
         result: {

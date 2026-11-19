@@ -201,6 +201,16 @@ describe("CodexSession", () => {
     expect(await methods()).not.toContain("turn/start");
   });
 
+  it("drops what a thread says when /new came while it was opening", async () => {
+    const { s, events, received } = await setup({ mode: "slow-thread" });
+    s.start();
+    await until(async () => (await received()).some((m) => m.method === "thread/start"));
+    s.newSession();
+    await until(() => s.sessionId === "thr-2");
+    const texts = events.flatMap((e) => (e.type === "text" ? [e.delta] : []));
+    expect(texts.join("")).not.toContain("from thr-1");
+  });
+
   it("starts a new thread in the same process at /new", async () => {
     const { s, events, methods } = await setup();
     s.start();
