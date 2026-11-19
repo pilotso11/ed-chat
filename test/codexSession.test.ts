@@ -304,16 +304,17 @@ describe("CodexSession", () => {
   });
 
   it("does not put off the restart when stop is pressed again", async () => {
-    const { s, methods } = await setup({ mode: "stuck", interruptGraceMs: 300 });
+    const { s, methods } = await setup({ mode: "stuck", interruptGraceMs: 1_000 });
     s.send("hi");
     await until(async () => (await methods()).includes("turn/start"));
     await new Promise((r) => setTimeout(r, 50));
     s.cancel();
     const stopped = Date.now();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 700));
     s.cancel();
     await until(async () => (await methods()).filter((x) => x === "<start>").length === 2);
-    expect(Date.now() - stopped).toBeLessThan(450);
+    // About 1 s after the first stop; put off, it would be 1.7 s.
+    expect(Date.now() - stopped).toBeLessThan(1_500);
   });
 
   it("restarts when a stopped turn never gets its id", async () => {

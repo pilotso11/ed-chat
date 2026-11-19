@@ -367,6 +367,8 @@ export class CodexSession implements AgentBackend {
     this.events.threadId = id;
     this.events.permissionMode = permissionModeOf(r.approvalPolicy);
     this.threadReady = true;
+    // This ready carries every status so far: one held from before is not sent again.
+    this.readyHeld = false;
     this.emit(this.events.ready());
     if (this._busy && this.pending !== null) this.startTurn(this.pending);
   }
@@ -416,7 +418,8 @@ export class CodexSession implements AgentBackend {
   }
 
   private turnStarted(id: string | null): void {
-    if (!id || this.turnId === id) return;
+    // A turn that has ended (its start or answer came late) is not the running one.
+    if (!id || this.turnId === id || this.endedTurns.has(id)) return;
     this.turnId = id;
     if (this.cancelling) this.interrupt();
   }
@@ -458,6 +461,8 @@ export class CodexSession implements AgentBackend {
         if (!t || !this._busy) return;
         // Another turn's end (an earlier one, late) leaves the running turn alone.
         if (t.id && (this.endedTurns.has(t.id) || (this.turnId && t.id !== this.turnId))) return;
+        // Its id is kept even when it ended before its turn/start answer gave it.
+        if (t.id) this.endedTurns.add(t.id);
         const cancelled = this.cancelling || t.status === "interrupted";
         this.abortApprovals();
         this.endTurn();
@@ -557,7 +562,8 @@ export class CodexSession implements AgentBackend {
       .approve({ ...r, signal: ctl.signal })
       .catch((): CodexDecision => "decline")
       .then((decision) => {
-        this.approvals.delete(id);
+        // Only its own entry: a new process can reuse the id for another request.
+        if (this.approvals.get(id)?.ctl === ctl) this.approvals.delete(id);
         // Codex stopped waiting, or the process has gone.
         if (ctl.signal.aborted || this.rpc !== rpc) return;
         rpc.respond(id, { decision });
