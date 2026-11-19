@@ -292,7 +292,7 @@ next start.
 | `claude.permissionMode` | asked on first run | `auto` or `default` (ask for everything not allowed). Without an answer the code default is `auto` |
 | `claude.extraArgs` | `[]` | More arguments for `claude` |
 | `codex.path` | `null` | Path to `codex`; `null` searches `PATH`, then the default install folders |
-| `codex.permissionMode` | asked when you first switch | `auto` (Codex decides inside its sandbox) or `default` (ask before anything not known to be safe) |
+| `codex.permissionMode` | asked the first time Codex runs | `auto` (Codex decides inside its sandbox) or `default` (ask before anything not known to be safe) |
 | `codex.extraArgs` | `[]` | More arguments for `codex app-server` |
 | `journalDir` | `null` | The game's journal folder; `null` uses Saved Games |
 | `hud.enabled` | `true` | Show the activity panel |
