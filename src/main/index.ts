@@ -839,7 +839,12 @@ async function main(): Promise<void> {
 
   async function startAgent(): Promise<void> {
     await firstRunAgent();
-    await askPermissionMode();
+    // Asked again if the player switched while the question was open: the assistant that
+    // starts must be the one asked about.
+    for (let asked: AgentId | null = null; asked !== agentId;) {
+      asked = agentId;
+      await askPermissionMode();
+    }
     agentStarted = true;
     const cmd = agentCommand(settings);
     log.log("info", `started; ${agent.cli} ${cmd ? cmd.command : "not found"}`);

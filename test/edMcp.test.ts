@@ -280,6 +280,12 @@ describe("edMcpToAdd", () => {
     );
     expect(hasOwnEdMcp("claude", { claudeSettings: pluginSettings(true) }, workspace)).toBe(true);
     expect(hasOwnEdMcp("codex", { claudeSettings: pluginSettings(true) }, workspace)).toBe(false);
+    // An http server runs too, unless switched off.
+    const http = (extra = "") => `[mcp_servers.ed-mcp]
+url = "http://127.0.0.1:9/mcp"
+${extra}`;
+    expect(hasOwnEdMcp("codex", { codexToml: http() }, workspace)).toBe(true);
+    expect(hasOwnEdMcp("codex", { codexToml: http("enabled = false") }, workspace)).toBe(false);
   });
 
   it("gives nothing when ed-mcp is set up nowhere", () => {

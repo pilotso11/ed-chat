@@ -176,12 +176,15 @@ function ownEntry(agent: AgentId, all: Entry[], workspace?: string): Entry | nul
 }
 
 /**
- * Whether the agent's own config has an ed-mcp that it runs: one switched off in Codex, or one
- * that runs no command, does not count.
+ * Whether the agent's own config has an ed-mcp that it runs: a command, a url (an http
+ * server) or the plugin. One switched off in Codex does not count.
  */
 export function hasOwnEdMcp(agent: AgentId, c: AgentConfigs, workspace: string): boolean {
   const own = ownEntry(agent, entriesFor(c, workspace), workspace);
-  return !!own && (own.source === "claudePlugin" || !!definition(own));
+  if (!own) return false;
+  if (own.source === "claudePlugin" || definition(own)) return true;
+  const v = own.value;
+  return isRecord(v) && v.enabled !== false && typeof v.url === "string" && !!v.url;
 }
 
 /**
