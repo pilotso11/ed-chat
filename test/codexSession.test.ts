@@ -456,6 +456,44 @@ describe("CodexSession", () => {
     expect(has(events, "result")).toBe(false);
   });
 
+  it("withdraws and declines an approval request that the turn's end leaves open", async () => {
+    let card: CodexApproval | null = null;
+    const { s, events, received } = await setup({
+      mode: "end-with-open-approval",
+      approve: (r) => {
+        card = r;
+        return new Promise(() => {});
+      },
+    });
+    s.send("run it");
+    await until(() => has(events, "result"));
+    expect(card!.signal.aborted).toBe(true);
+    await until(async () => (await received()).some((m) => m.id === "srv-1"));
+    expect((await received()).filter((m) => m.id === "srv-1")).toEqual([
+      { id: "srv-1", result: { decision: "decline" } },
+    ]);
+  });
+
+  it("withdraws the card, and sends nothing, when Codex resolves the request itself", async () => {
+    let card: CodexApproval | null = null;
+    let answer: ((d: CodexDecision) => void) | null = null;
+    const { s, received } = await setup({
+      mode: "self-resolved",
+      approve: (r) => {
+        card = r;
+        return new Promise((resolve) => (answer = resolve));
+      },
+    });
+    s.send("run it");
+    await until(() => card !== null);
+    await until(() => card!.signal.aborted);
+    // The player's late answer goes nowhere.
+    answer!("accept");
+    await new Promise((r) => setTimeout(r, 100));
+    expect((await received()).some((m) => m.id === "srv-1")).toBe(false);
+    expect(s.busy).toBe(true);
+  });
+
   it("declines MCP elicitation", async () => {
     const { s, events, received } = await setup({ mode: "elicit" });
     s.send("hi");

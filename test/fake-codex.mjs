@@ -97,6 +97,25 @@ function playTurn(threadId, turnId) {
     });
     return;
   }
+  // An approval request that the turn leaves open: the turn ends, or Codex resolves the
+  // request itself, while the card is up.
+  if (mode === "end-with-open-approval" || mode === "self-resolved") {
+    out({
+      id: "srv-1",
+      method: "item/commandExecution/requestApproval",
+      params: { threadId, turnId, itemId: "cmd-1", command: "dir", cwd: "C:\\" },
+    });
+    setTimeout(() => {
+      if (mode === "self-resolved")
+        note("serverRequest/resolved", { threadId, requestId: "srv-1" });
+      else
+        note("turn/completed", {
+          threadId,
+          turn: { id: turnId, status: "completed", error: null, durationMs: 1 },
+        });
+    }, 100);
+    return;
+  }
   if (mode === "elicit") {
     waiting.set("srv-2", () =>
       note("turn/completed", {
