@@ -1,9 +1,8 @@
 # Codex as an alternative to Claude
 
 Date: 2026-11-18
-Status: draft. Step 0 (protocol probe) done, see "Step 0 results". Part 1 done; `findEdMcp()`
-reads only `~/.claude.json` so far, and Part 3 adds `config.toml` and the plugin lookup. Part 2
-done, not yet wired into main (Part 4); see "Notes from Part 2".
+Status: draft. Step 0 (protocol probe) done, see "Step 0 results". Parts 1 to 3 done; Part 2
+is not yet wired into main (Part 4). See "Notes from Part 2" and "Notes from Part 3".
 
 ## Purpose
 
@@ -100,11 +99,15 @@ ed-mcp tools. A player who has set up ed-mcp for one of them must not have to se
 ## Part 3: shared ed-mcp config
 
 - `findEdMcp()` returns `{ source, command, args, env }` or nothing. It looks in this order:
-  1. `~/.claude.json` user-scope `mcpServers["ed-mcp"]`.
-  2. `~/.claude.json` project-scope entries.
-  3. `~/.codex/config.toml` `[mcp_servers.ed-mcp]`. A TOML parser is needed (`smol-toml`).
-  4. An installed Claude plugin `plugin:*:ed-mcp`, for its sync folder only.
-- `ED_MCP_SYNC_DIR` for the HUD comes from the same result.
+  1. `~/.claude.json`, the project entry for ED Chat's workspace (Claude ranks it above user
+     scope).
+  2. `~/.claude.json` user-scope `mcpServers["ed-mcp"]`.
+  3. `~/.claude.json` other project-scope entries.
+  4. `~/.codex/config.toml` `[mcp_servers.ed-mcp]`. A TOML parser is needed (`smol-toml`).
+  5. An installed Claude plugin `plugin:*:ed-mcp`, for its sync folder only.
+- `ED_MCP_SYNC_DIR` for the HUD comes from the ed-mcp that the running backend uses: its own,
+  or the one ED Chat gives it. When neither runs as a command (an http server, or switched off
+  in Codex), the first entry that names a sync folder (see "Notes from Part 3").
 - **Claude.** If Claude's own config has no ed-mcp, ED Chat adds it to the `approval-mcp.json`
   that it already passes with `--mcp-config`.
 - **Codex.** If Codex's `config.toml` has no ed-mcp, ED Chat passes it in the `config` field of
@@ -212,3 +215,31 @@ Notes from the probe:
   (`taskkill /T`); in cli-config mode, pass ed-mcp's env through codex's own environment and
   `env_vars` rather than leaving it out; check recordings by hand for secrets in other spellings
   (forward-slash paths, double escaping) and in ed-mcp's args.
+
+## Notes from Part 3
+
+- `edMcp.ts` reads `~/.claude.json`, `~/.claude/settings.json` (for the plugin) and
+  `~/.codex/config.toml`, and follows `CLAUDE_CONFIG_DIR` and `CODEX_HOME` as the CLIs do.
+- The plugin's options are in `pluginConfigs["<plugin>@<marketplace>"].options` in Claude's user
+  settings; only enabled plugins count. Its password is in Claude's secret store, and its server
+  runs from the plugin's folder, so it is never given to another backend: only its sync folder
+  is read.
+- A backend's own ed-mcp: for Claude, the project entry for ED Chat's workspace (Claude ranks it
+  above user scope), user scope, or the plugin; for Codex, `[mcp_servers.ed-mcp]`, even with
+  `enabled = false` (the player turned it off). `edMcpToAdd()` gives a backend the first runnable
+  definition only when it has none, in the same order, so Codex gets the one Claude runs.
+- Claude gets the added ed-mcp in `approval-mcp.json`, written at startup, so a change to either
+  config applies when ED Chat starts again. Part 4 passes `edMcpToAdd("codex", …)` to
+  `codexThreadSettings()`.
+- The configs are read once at startup, for both the added ed-mcp and the panel's sync folder,
+  so the two cannot disagree. An added `npx` or `.cmd` command runs through `cmd /c`.
+- Not carried over: Codex's `env_vars` (variables passed by name from Codex's environment), and
+  a Codex `cwd` or a Claude project folder, so a definition with relative paths fails to start.
+  Only the user `settings.json` is read for the plugin, not local, project or managed settings,
+  and Claude's per-project `disabledMcpServers` is not read.
+- Also left for later: `startableOn()` does not quote for cmd, so a spaced command path with
+  spaced arguments, or `&`, `|`, `^` in them, breaks; Claude expands `${VAR}` in the copied
+  definition, which Codex does not; with an own entry that cannot run (http, or
+  `enabled = false`), the panel falls back to the first sync folder in any entry.
+- The setup notice still gives the running backend's `mcp add` line. Part 4 picks the line from
+  the CLIs that are installed.

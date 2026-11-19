@@ -29,6 +29,10 @@ PC can connect to it.
 All of these are in `%APPDATA%\ed-chat\`. You can delete any of them.
 
 - `settings.json`: your settings.
+- `approval-mcp.json`: what ED Chat gives Claude Code at start: the address of its
+  local approval server and, when Claude Code has no ed-mcp of its own, a copy of
+  the ed-mcp setup from Codex or another Claude project, with its settings,
+  including your ed-mcp sync password if you set one.
 - `state.json`: the overlay position, and the ID and time of your last
   conversation, so ED Chat can resume it.
 - `history\`: one file per conversation, with your messages and Claude's

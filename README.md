@@ -196,9 +196,16 @@ the ed-mcp activity note, which the panel follows.
 | Ctrl+Alt+PageDown / PageUp | Mark the current route stop done / go back one stop, and copy the stop's system |
 
 The panel uses the same activity note and plans as ed-mcp. ED Chat finds the
-ed-mcp sync folder in Claude Code's `~/.claude.json` (it reads only
-`ED_MCP_SYNC_DIR`, never the password). Set `hud.edMcpDataDir` if it is
-somewhere else.
+ed-mcp sync folder where ed-mcp is set up: Claude Code's `~/.claude.json`, the
+ed-mcp plugin's options, or Codex's `~/.codex/config.toml` (`CLAUDE_CONFIG_DIR`
+and `CODEX_HOME` move them, as they do for the CLIs). The panel reads only
+`ED_MCP_SYNC_DIR`, never the password. Set `hud.edMcpDataDir` if it is somewhere
+else.
+
+ed-mcp needs to be set up only once. If Claude Code has no ed-mcp of its own,
+ED Chat gives it the one from Codex's config or from another Claude project,
+with its whole `env`, sync password included. That copy is written to
+`approval-mcp.json` in ED Chat's data folder, `%APPDATA%\ed-chat`.
 
 ## Permissions
 
@@ -287,7 +294,7 @@ next start.
 | `hud.valuableMin` | `500000` | Bodies worth less when mapped are left off the exploration panel. Those with geological signals are counted on one line |
 | `hud.bioMin` | `5000000` | Planets whose likely species are worth less than this in total are left off the exploration panel |
 | `hud.spansh` | `true` | Look up each system's planets on Spansh when you arrive. Only the system's ID is sent |
-| `hud.edMcpDataDir` | `null` | The ed-mcp sync folder; `null` finds it in `~/.claude.json` |
+| `hud.edMcpDataDir` | `null` | The ed-mcp sync folder; `null` finds it in ed-mcp's setup |
 
 With the chat open you can also drag the overlay by its status line. It snaps
 to the nearest edge or corner when you let go.

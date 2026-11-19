@@ -142,7 +142,7 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
       "genera can be worth.",
   },
   "hud.edMcpDataDir": {
-    text: "The ed-mcp sync folder. null finds it in the ed-mcp entry of ~/.claude.json.",
+    text: "The ed-mcp sync folder. null finds it where ed-mcp is set up for Claude Code or Codex.",
     playerOnly: true,
   },
 };
