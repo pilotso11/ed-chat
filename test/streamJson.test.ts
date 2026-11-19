@@ -1,7 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { StreamParser, type SessionEvent } from "../src/core/streamJson.js";
+import type { SessionEvent } from "../src/core/backend.js";
+import { StreamParser } from "../src/core/backends/claude/streamJson.js";
 
 const dir = path.join(import.meta.dirname, "fixtures", "stream");
 const read = (name: string) => readFileSync(path.join(dir, name), "utf8");

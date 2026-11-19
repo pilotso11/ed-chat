@@ -1,31 +1,11 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { quoteForCmd } from "./claudeCommand.js";
-import { CrashTracker } from "./crashTracker.js";
-import { StreamParser, type SessionEvent } from "./streamJson.js";
-
-export type BackendEvent =
-  | SessionEvent
-  | { type: "spawned" }
-  // The conversation saved from the last run could not be resumed; a new one has started.
-  | { type: "resumeFailed"; stderrTail: string[] }
-  | { type: "exit"; code: number | null; stderrTail: string[] }
-  | { type: "gaveUp"; stderrTail: string[] }
-  | { type: "spawnError"; message: string };
+import type { AgentBackend, BackendCommand, BackendEvent, SessionEvent } from "../../backend.js";
+import { quoteForCmd } from "../../cli.js";
+import { CrashTracker } from "../../crashTracker.js";
+import { StreamParser } from "./streamJson.js";
 
 // What the CLI prints on stderr for a --resume id it does not know.
 const NOT_FOUND = /No conversation found/i;
-
-export interface ClaudeBackend {
-  start(): void;
-  send(text: string): boolean;
-  cancel(): void;
-  newSession(): void;
-  stop(): void;
-  configure(c: { command: string; args: string[]; shell: boolean }): void;
-  onEvent(listener: (e: BackendEvent) => void): () => void;
-  readonly busy: boolean;
-  readonly sessionId: string | null;
-}
 
 export interface ClaudeSessionOptions {
   command: string;
@@ -38,7 +18,7 @@ export interface ClaudeSessionOptions {
   resumeId?: string | null;
 }
 
-export class ClaudeSession implements ClaudeBackend {
+export class ClaudeSession implements AgentBackend {
   private child: ChildProcessWithoutNullStreams | null = null;
   private readonly expected = new WeakSet<ChildProcessWithoutNullStreams>();
   private readonly listeners = new Set<(e: BackendEvent) => void>();
@@ -53,7 +33,7 @@ export class ClaudeSession implements ClaudeBackend {
   private heldResult: SessionEvent | null = null;
   // Exits before init while resuming that did not say the conversation is gone.
   private earlyExits = 0;
-  private cmd: { command: string; args: string[]; shell: boolean };
+  private cmd: BackendCommand;
 
   constructor(private readonly opts: ClaudeSessionOptions) {
     this.cmd = { command: opts.command, args: opts.args, shell: opts.shell ?? false };
@@ -76,7 +56,7 @@ export class ClaudeSession implements ClaudeBackend {
   }
 
   /** Takes effect at the next spawn. */
-  configure(c: { command: string; args: string[]; shell: boolean }): void {
+  configure(c: BackendCommand): void {
     this.cmd = c;
   }
 

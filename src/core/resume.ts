@@ -1,4 +1,4 @@
-/** The Claude conversation that ED Chat resumes on its next start. */
+/** The conversation that ED Chat resumes on its next start. */
 export interface SavedSession {
   id: string;
   /** When the conversation last finished a turn, as an ISO time. */
@@ -10,7 +10,7 @@ export interface SavedSession {
 /**
  * The conversation to resume on start, or null for a new one. A conversation older than
  * `hours` is not resumed: after a long break the player has usually moved on, and the saved
- * activity note still tells Claude what they were doing. 0 turns resume off.
+ * activity note still tells the assistant what they were doing. 0 turns resume off.
  */
 export function resumeId(saved: SavedSession | undefined, now: Date, hours: number): string | null {
   if (!saved || hours <= 0) return null;

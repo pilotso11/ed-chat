@@ -3,12 +3,11 @@ import { CrashTracker } from "../src/core/crashTracker.js";
 import {
   APPROVAL_TOOL,
   buildClaudeArgs,
-  edMcpState,
-  isOlder,
-  parseCliVersion,
-  quoteForCmd,
+  claudeLookup,
   resolveClaude,
-} from "../src/core/claudeCommand.js";
+} from "../src/core/backends/claude/command.js";
+import { AGENTS, notFoundText } from "../src/core/backend.js";
+import { isOlder, lookedIn, parseCliVersion, quoteForCmd } from "../src/core/cli.js";
 import { HUD_PROMPT, settingsPrompt } from "../src/core/prompt.js";
 
 describe("CrashTracker", () => {
@@ -59,6 +58,43 @@ describe("resolveClaude", () => {
 
   it("returns null when claude is not on PATH", () => {
     expect(resolveClaude(null, { PATH: "/usr/bin" }, "linux", has([]))).toBeNull();
+  });
+
+  const winEnv = {
+    PATH: "C:\\a",
+    USERPROFILE: "C:\\Users\\p",
+    APPDATA: "C:\\Users\\p\\AppData\\Roaming",
+  };
+
+  it("finds the native install when it is not on PATH", () => {
+    expect(
+      resolveClaude(null, winEnv, "win32", has(["C:\\Users\\p\\.local\\bin\\claude.exe"])),
+    ).toEqual({
+      command: "C:\\Users\\p\\.local\\bin\\claude.exe",
+      shell: false,
+    });
+  });
+
+  it("finds the npm shim when it is not on PATH", () => {
+    expect(
+      resolveClaude(
+        null,
+        winEnv,
+        "win32",
+        has(["C:\\Users\\p\\AppData\\Roaming\\npm\\claude.cmd"]),
+      ),
+    ).toEqual({ command: "C:\\Users\\p\\AppData\\Roaming\\npm\\claude.cmd", shell: true });
+  });
+
+  it("prefers PATH over the default install folders", () => {
+    expect(
+      resolveClaude(
+        null,
+        winEnv,
+        "win32",
+        has(["C:\\a\\claude.cmd", "C:\\Users\\p\\.local\\bin\\claude.exe"]),
+      ),
+    ).toEqual({ command: "C:\\a\\claude.cmd", shell: true });
   });
 });
 
@@ -138,22 +174,29 @@ describe("versions", () => {
   });
 });
 
-describe("edMcpState", () => {
-  it("finds ed-mcp added with claude mcp add or by the plugin", () => {
-    expect(edMcpState([{ name: "ed-mcp", status: "pending" }])).toBe("ok");
-    expect(edMcpState([{ name: "plugin:elite-dangerous-mcp:ed-mcp", status: "connected" }])).toBe(
-      "ok",
-    );
-    expect(edMcpState([{ name: "ed-mcp", status: "failed" }])).toBe("failed");
-    expect(edMcpState([{ name: "ed-mcp", status: "needs-auth" }])).toBe("needsAuth");
-    expect(edMcpState([{ name: "semble", status: "pending" }])).toBe("missing");
+describe("lookedIn", () => {
+  const env = { USERPROFILE: "C:\\Users\\p", APPDATA: "C:\\Users\\p\\AppData\\Roaming" };
+  it("lists PATH and the default install folders, with the home folder as ~", () => {
+    expect(lookedIn(claudeLookup(env, "win32"), null, env)).toEqual([
+      "PATH",
+      "~\\.local\\bin\\claude.exe",
+      "~\\AppData\\Roaming\\npm\\claude.cmd",
+    ]);
   });
-
-  it("is ok when one of a plugin and a claude mcp add server works", () => {
-    const plugin = { name: "plugin:elite-dangerous-mcp:ed-mcp", status: "failed" };
-    expect(edMcpState([plugin, { name: "ed-mcp", status: "pending" }])).toBe("ok");
-    expect(edMcpState([{ name: "ed-mcp", status: "connected" }, plugin])).toBe("ok");
-    expect(edMcpState([plugin, { name: "ed-mcp", status: "needs-auth" }])).toBe("needsAuth");
-    expect(edMcpState([plugin, { name: "ed-mcp", status: "failed" }])).toBe("failed");
+  it("lists only the configured path when there is one", () => {
+    expect(lookedIn(claudeLookup(env, "win32"), "D:\\c.exe", env)).toEqual(["D:\\c.exe"]);
+  });
+  it("shortens only a whole home folder", () => {
+    const other = { USERPROFILE: "C:\\Users\\p", APPDATA: "C:\\Users\\p.CORP\\AppData\\Roaming" };
+    expect(lookedIn(claudeLookup(other, "win32"), null, other)).toEqual([
+      "PATH",
+      "~\\.local\\bin\\claude.exe",
+      "C:\\Users\\p.CORP\\AppData\\Roaming\\npm\\claude.cmd",
+    ]);
+  });
+  it("goes in the not-found notice", () => {
+    expect(notFoundText(AGENTS.claude, ["PATH", "~\\x"])).toBe(
+      "⚠ claude not found in PATH, ~\\x: install Claude Code or set claude.path",
+    );
   });
 });

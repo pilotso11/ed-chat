@@ -1,6 +1,6 @@
 // The settings that only the player may change are locked in the app, not only in the prompt:
-// a change to them in settings.json waits until the player applies it. Claude can edit the
-// file, and text from the game reaches Claude, so the prompt alone is not enough.
+// a change to them in settings.json waits until the player applies it. The assistant can edit the
+// file, and text from the game reaches the assistant, so the prompt alone is not enough.
 //
 // The values are kept as settings.json writes them, not as parsed settings: a key that the
 // file does not set is absent, so Undo can remove it again and the default applies.

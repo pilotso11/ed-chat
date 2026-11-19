@@ -6,8 +6,8 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
-import { ApprovalServer } from "../src/core/approvalServer.js";
-import { buildClaudeArgs } from "../src/core/claudeCommand.js";
+import { ApprovalServer } from "../src/core/backends/claude/approvalServer.js";
+import { buildClaudeArgs } from "../src/core/backends/claude/command.js";
 
 const [mode, prompt, out] = process.argv.slice(2);
 if ((mode !== "auto" && mode !== "default") || !prompt || !out) {

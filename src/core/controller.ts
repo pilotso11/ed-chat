@@ -1,6 +1,6 @@
-import type { ApprovalRequest } from "./approvalServer.js";
+import type { ApprovalRequest } from "./approvals.js";
 import { firstLine, parseChips, type Chip } from "./chips.js";
-import type { BackendEvent } from "./claudeSession.js";
+import { AGENTS, notFoundText, type AgentId, type BackendEvent } from "./backend.js";
 import type { KeyRow } from "./hotkeys.js";
 import type { ShipFlags } from "./status.js";
 
@@ -30,7 +30,9 @@ export interface OverlayState {
   notices: Record<string, string>;
   /** The player prefers the small icon at rest. Replies, approvals and the chat show over it. */
   iconMode: boolean;
-  /** The player stopped the reply; Claude restarts. */
+  /** Which assistant runs: its name goes in the notices. */
+  agent: AgentId;
+  /** The player stopped the reply; the assistant restarts. */
   cancelled: boolean;
   /** The hotkey list, shown at startup and from the tray. */
   keys: KeyRow[] | null;
@@ -56,6 +58,7 @@ export const INITIAL_STATE: OverlayState = {
   flags: null,
   notices: {},
   iconMode: false,
+  agent: "claude",
   cancelled: false,
   stepHidden: false,
   keys: null,
@@ -98,6 +101,7 @@ function withNotice(s: OverlayState, key: string, text: string | null): OverlayS
 const tail = (lines: string[]) => (lines.length ? `: ${lines.at(-1)}` : "");
 
 function onBackend(s: OverlayState, e: BackendEvent): OverlayState {
+  const agent = AGENTS[s.agent];
   switch (e.type) {
     case "spawned":
     case "ready":
@@ -114,7 +118,9 @@ function onBackend(s: OverlayState, e: BackendEvent): OverlayState {
       return { ...s, tool: null };
     case "result": {
       // An error result carries the CLI's own message, which is shown unchanged.
-      const reply = e.isError ? (e.text ?? "Claude returned an error.") : s.reply || (e.text ?? "");
+      const reply = e.isError
+        ? (e.text ?? `${agent.name} returned an error.`)
+        : s.reply || (e.text ?? "");
       const { plain, chips } = parseChips(reply);
       return {
         ...s,
@@ -132,21 +138,21 @@ function onBackend(s: OverlayState, e: BackendEvent): OverlayState {
       return withNotice(
         { ...s, session: "stopped", tool: null },
         "claude",
-        `⚠ Claude stopped${tail(e.stderrTail)}`,
+        `⚠ ${agent.name} stopped${tail(e.stderrTail)}`,
       );
     case "gaveUp":
       return withNotice(
         { ...s, session: "stopped", tool: null },
         "claude",
-        `⚠ Claude keeps stopping${tail(e.stderrTail)}`,
+        `⚠ ${agent.name} keeps stopping${tail(e.stderrTail)}`,
       );
     case "spawnError":
       return withNotice(
         { ...s, session: "stopped", tool: null },
         "claude",
         e.message.includes("ENOENT")
-          ? "⚠ claude not found: install Claude Code or set claude.path"
-          : `⚠ Can't start claude: ${e.message}`,
+          ? notFoundText(agent)
+          : `⚠ Can't start ${agent.cli}: ${e.message}`,
       );
     // The earlier turns belong to the conversation that could not be resumed.
     case "resumeFailed":

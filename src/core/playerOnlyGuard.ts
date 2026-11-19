@@ -27,7 +27,7 @@ export interface PlayerOnlyHost {
 
 /**
  * Keeps the player-only settings at the values the player last applied. A change to them in
- * settings.json, by the player or by Claude, waits for the player's answer; the other
+ * settings.json, by the player or by the assistant, waits for the player's answer; the other
  * settings in the same save apply at once.
  */
 export class PlayerOnlyGuard {
