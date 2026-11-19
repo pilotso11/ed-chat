@@ -201,6 +201,31 @@ export function edMcpToAdd(
   return ownEntry(agent, all, workspace) ? null : firstDefinition(all);
 }
 
+/** The ed-mcp server as a CLI's config takes it: ED Chat's own source field left out. */
+export interface CliMcpServer {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+/** The definition from edMcpToAdd, ready for a CLI: startable on this platform, source left out. */
+export function forCli(
+  add: EdMcpDefinition | null,
+  platform: NodeJS.Platform = process.platform,
+): CliMcpServer | null {
+  if (!add) return null;
+  const { command, args, env } = startableOn(add, platform);
+  return { command, args, env };
+}
+
+/** What ED Chat passes to Claude with --mcp-config: its approval server, and ed-mcp if added. */
+export function claudeMcpConfig(
+  approvalServers: Record<string, unknown>,
+  edMcp: CliMcpServer | null,
+): { mcpServers: Record<string, unknown> } {
+  return { mcpServers: edMcp ? { ...approvalServers, "ed-mcp": edMcp } : { ...approvalServers } };
+}
+
 /**
  * A definition that a CLI can start on Windows. npx, npm and other .cmd shims cannot be
  * started directly, only through cmd /c, which `codex mcp add` leaves to the player.

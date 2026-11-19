@@ -3,8 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  claudeMcpConfig,
   configProblems,
   edMcpState,
+  forCli,
   hasOwnEdMcp,
   edMcpToAdd,
   findEdMcp,
@@ -312,6 +314,37 @@ describe("startableOn", () => {
       "npx",
     ]);
     expect(startableOn(d, "linux")).toBe(d);
+  });
+});
+
+describe("what ED Chat passes to the CLIs", () => {
+  const add = {
+    source: "codex" as const,
+    command: "npx",
+    args: ["-y", "ed-mcp@latest"],
+    env: { ED_MCP_SYNC_DIR: "S:/" },
+  };
+  const approval = { ed_chat: { type: "http", url: "http://127.0.0.1:1/mcp" } };
+
+  it("starts npx through cmd on Windows, and leaves source out", () => {
+    const ed = forCli(add, "win32");
+    expect(ed).toEqual({
+      command: "cmd",
+      args: ["/c", "npx", "-y", "ed-mcp@latest"],
+      env: { ED_MCP_SYNC_DIR: "S:/" },
+    });
+    expect(forCli(add, "linux")).toEqual({
+      command: "npx",
+      args: ["-y", "ed-mcp@latest"],
+      env: { ED_MCP_SYNC_DIR: "S:/" },
+    });
+    expect(forCli(null)).toBeNull();
+  });
+
+  it("keeps the approval server next to the added ed-mcp in Claude's --mcp-config", () => {
+    const ed = forCli(add, "win32");
+    expect(claudeMcpConfig(approval, ed)).toEqual({ mcpServers: { ...approval, "ed-mcp": ed } });
+    expect(claudeMcpConfig(approval, null)).toEqual({ mcpServers: approval });
   });
 });
 

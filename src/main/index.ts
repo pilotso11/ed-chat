@@ -105,7 +105,8 @@ import {
   ownConfigUnreadable,
   edMcpToAdd,
   readAgentConfigs,
-  startableOn,
+  claudeMcpConfig,
+  forCli,
   syncDirOf,
 } from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
@@ -701,18 +702,13 @@ async function main(): Promise<void> {
       log.log("warn", `ed-mcp: ${AGENTS[id].name}'s own config cannot be read; added none`);
     const add = edMcpToAdd(id, agentConfigs, workspace);
     if (add) log.log("info", `ed-mcp for ${AGENTS[id].name}: the definition from ${add.source}`);
-    if (!add) return null;
-    // Only the fields the CLIs take: source is ED Chat's own.
-    const { command, args, env } = startableOn(add);
-    return { command, args, env };
+    return forCli(add);
   };
   const codexEdMcp = edMcpFor("codex");
   try {
     if (!approvalBlocked) {
-      const edMcp = edMcpFor("claude");
-      const mcpServers: Record<string, unknown> = { ...approval.mcpConfig().mcpServers };
-      if (edMcp) mcpServers["ed-mcp"] = edMcp;
-      await writeFile(mcpConfigFile, JSON.stringify({ mcpServers }));
+      const config = claudeMcpConfig(approval.mcpConfig().mcpServers, edMcpFor("claude"));
+      await writeFile(mcpConfigFile, JSON.stringify(config));
     }
     await mkdir(workspace, { recursive: true });
   } catch (err) {
@@ -1012,8 +1008,19 @@ async function main(): Promise<void> {
       });
     return switching;
   }
+  // While a switch runs (its question can be open), a settings reload starts no session: the
+  // switch starts the one session, with the conversation to resume.
+  let switchInProgress = false;
   async function doSwitch(id: AgentId): Promise<void> {
     if (id === agentId) return;
+    switchInProgress = true;
+    try {
+      await switchTo(id);
+    } finally {
+      switchInProgress = false;
+    }
+  }
+  async function switchTo(id: AgentId): Promise<void> {
     // What the old assistant still sends is not for the new one.
     unsubscribe?.();
     unsubscribe = null;
@@ -1418,7 +1425,7 @@ async function main(): Promise<void> {
         if (session instanceof CodexSession) session.configureThread(codexThread(settings));
         checkVersion(c.command, c.shell);
         flash("agentSettings", `ⓘ ${agent.cli} settings apply after /new`, 6_000);
-      } else if (c && agentStarted) startSession(c);
+      } else if (c && agentStarted && !switchInProgress) startSession(c);
     }
     if (journalDir(old) !== journalDir(settings)) {
       status.stop();
