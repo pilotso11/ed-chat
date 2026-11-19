@@ -756,6 +756,9 @@ async function main(): Promise<void> {
   let cliVersion: string | null = null;
   let edMcpStatus: Versions["edMcpStatus"] = null;
   function startSession(c: { command: string; args: string[]; shell: boolean }): void {
+    // Never two at once: one that is still running stops first.
+    unsubscribe?.();
+    session?.stop();
     const base = { command: c.command, args: c.args, shell: c.shell, cwd: workspace };
     session =
       agentId === "claude"
@@ -842,8 +845,11 @@ async function main(): Promise<void> {
     // Asked again if the player switched while the question was open: the assistant that
     // starts must be the one asked about.
     for (let asked: AgentId | null = null; asked !== agentId;) {
+      // A switch still under way finishes first, so agentId is settled.
+      await switching;
       asked = agentId;
       await askPermissionMode();
+      await switching;
     }
     agentStarted = true;
     const cmd = agentCommand(settings);

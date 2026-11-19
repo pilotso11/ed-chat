@@ -184,7 +184,7 @@ export function hasOwnEdMcp(agent: AgentId, c: AgentConfigs, workspace: string):
   if (!own) return false;
   if (own.source === "claudePlugin" || definition(own)) return true;
   const v = own.value;
-  return isRecord(v) && v.enabled !== false && typeof v.url === "string" && !!v.url;
+  return isRecord(v) && v.enabled !== false && typeof v.url === "string" && !!v.url.trim();
 }
 
 /**

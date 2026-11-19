@@ -303,6 +303,16 @@ describe("CodexSession", () => {
     expect(starts.at(-1)).toEqual({ argv: ["--changed"] });
   });
 
+  it("keeps the process at /new when the command is the same, in any key order", async () => {
+    const { s, methods } = await setup();
+    s.start();
+    await until(() => s.sessionId === "thr-1");
+    s.configure({ command: process.execPath, shell: false, args: [fake] });
+    s.newSession();
+    await until(() => s.sessionId === "thr-2");
+    expect((await methods()).filter((x) => x === "<start>")).toHaveLength(1);
+  });
+
   it("starts a new thread in the same process at /new", async () => {
     const { s, events, methods } = await setup();
     s.start();
