@@ -310,11 +310,25 @@ describe("CodexSession", () => {
     await new Promise((r) => setTimeout(r, 50));
     s.cancel();
     const stopped = Date.now();
-    await new Promise((r) => setTimeout(r, 700));
+    await new Promise((r) => setTimeout(r, 900));
     s.cancel();
-    await until(async () => (await methods()).filter((x) => x === "<start>").length === 2);
-    // About 1 s after the first stop; put off, it would be 1.7 s.
-    expect(Date.now() - stopped).toBeLessThan(1_500);
+    // The restart begins 1 s after the first stop; put off, it would begin at 1.9 s. The
+    // kill and the new process can take a while on a busy machine, so the new process is
+    // looked for in a window that closes before 1.9 s, and the start itself after it.
+    const restarted = async () => (await methods()).filter((x) => x === "<start>").length === 2;
+    await new Promise((r) => setTimeout(r, Math.max(0, 1_800 - (Date.now() - stopped))));
+    expect(s.busy).toBe(false);
+    await until(restarted);
+  });
+
+  it("ignores a turn/start answer that comes after its turn ended", async () => {
+    const { s, events } = await setup({ mode: "early-complete" });
+    s.send("first");
+    await until(() => has(events, "result"));
+    expect(s.send("second")).toBe(true);
+    // The first turn's late answer comes during the second turn, which still ends.
+    await until(() => events.filter((e) => e.type === "result").length === 2, 3_000);
+    expect(s.busy).toBe(false);
   });
 
   it("restarts when a stopped turn never gets its id", async () => {

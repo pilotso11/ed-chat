@@ -210,6 +210,27 @@ rl.on("line", (line) => {
         return playTurn(params.threadId, turnId);
       }
       if (mode === "no-turn-start") return;
+      // The first turn ends before its turn/start answer, which comes late, during the next
+      // turn. The next turn ends once that late answer is out.
+      if (mode === "early-complete") {
+        if (turnId === "turn-1") {
+          note("turn/completed", {
+            threadId: params.threadId,
+            turn: { id: turnId, status: "completed", error: null, durationMs: 1 },
+          });
+          return setTimeout(answer, 300);
+        }
+        answer();
+        // Only the end: no turn/started that would name the running turn again.
+        return setTimeout(
+          () =>
+            note("turn/completed", {
+              threadId: params.threadId,
+              turn: { id: turnId, status: "completed", error: null, durationMs: 1 },
+            }),
+          600,
+        );
+      }
       answer();
       return playTurn(params.threadId, turnId);
     }
