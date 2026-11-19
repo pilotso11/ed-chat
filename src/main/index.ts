@@ -81,7 +81,7 @@ import {
 } from "../core/stores.js";
 import { resumeId } from "../core/resume.js";
 import { openStores } from "ed-mcp/journal";
-import { edMcpState, edMcpToAdd, readAgentConfigs, syncDirOf } from "../core/edMcp.js";
+import { edMcpState, edMcpToAdd, readAgentConfigs, startableOn, syncDirOf } from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
@@ -521,7 +521,7 @@ async function main(): Promise<void> {
   let hudPlans: ReturnType<typeof openStores>["plans"] | null = null;
   async function openHudFeed(): Promise<void> {
     let syncDir = settings.hud.edMcpDataDir;
-    if (!syncDir) syncDir = syncDirOf(await readAgentConfigs(), agentId, workspace);
+    if (!syncDir) syncDir = syncDirOf(agentConfigs, agentId, workspace);
     const stores = openStores(
       { ED_JOURNAL_DIR: journalDir(settings), ED_MCP_SYNC_DIR: syncDir ?? undefined },
       { keep: HUD_EVENTS },
@@ -632,6 +632,9 @@ async function main(): Promise<void> {
   });
   const mcpConfigFile = path.join(dataDir, "approval-mcp.json");
   const workspace = path.join(dataDir, "workspace");
+  // Read once: the panel must read the sync folder of the ed-mcp that runs, which is set up
+  // from these at startup.
+  const agentConfigs = await readAgentConfigs();
   // Without the approval server the assistant cannot ask for permission, so the overlay runs without it.
   let agentBlocked: string | null = null;
   try {
@@ -645,7 +648,8 @@ async function main(): Promise<void> {
       // ed-mcp from Codex's config or another Claude project, when Claude has none of its own.
       // Its env can hold the sync password; the file is in ED Chat's own data folder, which
       // already holds the approval server's token.
-      const edMcp = edMcpToAdd(agentId, await readAgentConfigs(), workspace);
+      const add = edMcpToAdd(agentId, agentConfigs, workspace);
+      const edMcp = add && startableOn(add);
       const mcpServers: Record<string, unknown> = { ...approval.mcpConfig().mcpServers };
       if (edMcp) {
         mcpServers["ed-mcp"] = { command: edMcp.command, args: edMcp.args, env: edMcp.env };

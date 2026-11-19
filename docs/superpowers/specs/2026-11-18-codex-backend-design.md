@@ -226,6 +226,11 @@ Notes from the probe:
 - Claude gets the added ed-mcp in `approval-mcp.json`, written at startup, so a change to either
   config applies when ED Chat starts again. Part 4 passes `edMcpToAdd("codex", …)` to
   `codexThreadSettings()`.
-- Not carried over: Codex's `env_vars` (variables passed by name from Codex's environment).
+- The configs are read once at startup, for both the added ed-mcp and the panel's sync folder,
+  so the two cannot disagree. An added `npx` or `.cmd` command runs through `cmd /c`.
+- Not carried over: Codex's `env_vars` (variables passed by name from Codex's environment), and
+  a Codex `cwd` or a Claude project folder, so a definition with relative paths fails to start.
+  Only the user `settings.json` is read for the plugin, not local, project or managed settings,
+  and Claude's per-project `disabledMcpServers` is not read.
 - The setup notice still gives the running backend's `mcp add` line. Part 4 picks the line from
   the CLIs that are installed.

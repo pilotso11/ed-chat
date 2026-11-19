@@ -7,6 +7,7 @@ import {
   edMcpToAdd,
   findEdMcp,
   readAgentConfigs,
+  startableOn,
   syncDirOf,
 } from "../src/core/edMcp.js";
 
@@ -199,6 +200,27 @@ describe("edMcpToAdd", () => {
   it("gives nothing when ed-mcp is set up nowhere", () => {
     expect(edMcpToAdd("claude", {}, workspace)).toBeNull();
     expect(edMcpToAdd("codex", {}, workspace)).toBeNull();
+  });
+});
+
+describe("startableOn", () => {
+  const d = { source: "codex" as const, command: "npx", args: ["-y", "ed-mcp@latest"], env: {} };
+  it("starts npx and other .cmd shims through cmd /c on Windows", () => {
+    expect(startableOn(d, "win32")).toMatchObject({
+      command: "cmd",
+      args: ["/c", "npx", "-y", "ed-mcp@latest"],
+    });
+    expect(startableOn({ ...d, command: "C:\\x\\ed-mcp.CMD" }, "win32").command).toBe("cmd");
+  });
+
+  it("leaves other commands, and other systems, as they are", () => {
+    const node = { ...d, command: "node", args: ["x.js"] };
+    expect(startableOn(node, "win32")).toBe(node);
+    expect(startableOn({ ...d, command: "cmd", args: ["/c", "npx"] }, "win32").args).toEqual([
+      "/c",
+      "npx",
+    ]);
+    expect(startableOn(d, "linux")).toBe(d);
   });
 });
 

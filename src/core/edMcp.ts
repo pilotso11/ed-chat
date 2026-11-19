@@ -163,6 +163,20 @@ export function edMcpToAdd(
   return ownEntry(agent, all, workspace) ? null : firstDefinition(all);
 }
 
+/**
+ * A definition that a CLI can start on Windows. npx, npm and other .cmd shims cannot be
+ * started directly, only through cmd /c, which `codex mcp add` leaves to the player.
+ */
+export function startableOn(
+  d: EdMcpDefinition,
+  platform: NodeJS.Platform = process.platform,
+): EdMcpDefinition {
+  if (platform !== "win32") return d;
+  const name = path.win32.basename(d.command).toLowerCase();
+  const shim = /\.(cmd|bat)$/.test(name) || /^(npx|npm|pnpm|pnpx|yarn|bunx)$/.test(name);
+  return shim ? { ...d, command: "cmd", args: ["/c", d.command, ...d.args] } : d;
+}
+
 const syncDir = (dir: unknown): string | null =>
   typeof dir === "string" && dir.trim() ? dir : null;
 
@@ -175,8 +189,8 @@ function envSyncDir(e: Entry): string | null {
  * The ED_MCP_SYNC_DIR that the player gave ed-mcp: the panel must read the same activity note
  * and plans. It comes from the ed-mcp that the agent runs (its own, or the one ED Chat adds), so
  * a sync folder in another entry cannot point the panel away from where ed-mcp writes. With
- * none that runs, the first entry that names one. Only that one value is read; the password
- * next to it is not.
+ * none that runs, the first entry that names one. Only that one value is used here; the
+ * password next to it is not (edMcpToAdd passes the whole env on to the agent).
  */
 export function syncDirOf(
   c: AgentConfigs,
