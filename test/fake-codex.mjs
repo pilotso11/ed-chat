@@ -20,7 +20,7 @@ function playTurn(threadId, turnId) {
     process.stderr.write("boom\n", () => process.exit(1));
     return;
   }
-  if (mode === "hang" || mode === "stuck") return;
+  if (mode === "hang" || mode === "stuck" || mode === "late-approval") return;
   if (mode === "fail-turn") {
     note("turn/completed", {
       threadId,
@@ -147,11 +147,20 @@ rl.on("line", (line) => {
     case "turn/start": {
       const turnId = `turn-${++turns}`;
       current = { threadId: params.threadId, turnId };
-      out({ id, result: { turn: { id: turnId, items: [], status: "inProgress", error: null } } });
+      const answer = () =>
+        out({ id, result: { turn: { id: turnId, items: [], status: "inProgress", error: null } } });
+      if (mode === "slow-start") return setTimeout(answer, 300);
+      answer();
       return playTurn(params.threadId, turnId);
     }
     case "turn/interrupt":
       out({ id, result: {} });
+      if (mode === "late-approval" && current)
+        out({
+          id: "srv-3",
+          method: "item/commandExecution/requestApproval",
+          params: { ...current, itemId: "cmd-3", command: "del C:\\x", cwd: "C:\\" },
+        });
       if (mode !== "stuck" && current)
         note("turn/completed", {
           threadId: current.threadId,

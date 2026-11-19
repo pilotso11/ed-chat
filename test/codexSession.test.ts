@@ -228,6 +228,49 @@ describe("CodexSession", () => {
     expect(types(events).filter((t) => t === "spawned")).toHaveLength(1);
   });
 
+  it("at /new before the turn has started, stops that turn when its id comes", async () => {
+    const { s, received } = await setup({ mode: "slow-start" });
+    s.send("first");
+    await until(async () => (await received()).some((m) => m.method === "turn/start"));
+    s.newSession();
+    await until(async () => (await received()).some((m) => m.method === "turn/interrupt"));
+    const interrupt = (await received()).find((m) => m.method === "turn/interrupt")!;
+    expect(interrupt.params).toEqual({ threadId: "thr-1", turnId: "turn-1" });
+  });
+
+  it("declines an open approval request at /new, as well as withdrawing the card", async () => {
+    let card: CodexApproval | null = null;
+    const { s, received } = await setup({
+      mode: "approval",
+      approve: (r) => {
+        card = r;
+        return new Promise(() => {});
+      },
+    });
+    s.send("run it");
+    await until(() => card !== null);
+    s.newSession();
+    expect(card!.signal.aborted).toBe(true);
+    await until(async () => (await received()).some((m) => m.id === "srv-1"));
+    expect((await received()).find((m) => m.id === "srv-1")).toMatchObject({
+      result: { decision: "decline" },
+    });
+  });
+
+  it("declines, without a card, an approval request for a stopped reply", async () => {
+    const { s, received, asked } = await setup({ mode: "late-approval" });
+    s.send("hi");
+    await until(() => s.sessionId === "thr-1" && s.busy);
+    await until(async () => (await received()).some((m) => m.method === "turn/start"));
+    await new Promise((r) => setTimeout(r, 50));
+    s.cancel();
+    await until(async () => (await received()).some((m) => m.id === "srv-3"));
+    expect((await received()).find((m) => m.id === "srv-3")).toMatchObject({
+      result: { decision: "decline" },
+    });
+    expect(asked).toHaveLength(0);
+  });
+
   it("keeps the saved thread when the process dies during the resume", async () => {
     const { s, events } = await setup({ mode: "resume-crash", resumeId: "thr-old" });
     s.start();
@@ -350,7 +393,10 @@ describe("CodexSession", () => {
     s.cancel();
     expect(signal!.aborted).toBe(true);
     await new Promise((r) => setTimeout(r, 100));
-    expect((await received()).some((m) => m.id === "srv-1" && !m.method)).toBe(false);
+    // Declined once, by the session: the player's late answer is not sent as well.
+    expect((await received()).filter((m) => m.id === "srv-1" && !m.method)).toEqual([
+      { id: "srv-1", result: { decision: "decline" } },
+    ]);
     expect(has(events, "result")).toBe(false);
   });
 

@@ -69,7 +69,9 @@ export class CodexSession implements AgentBackend {
   private turnId: string | null = null;
   private cancelling = false;
   private interruptTimer: NodeJS.Timeout | undefined;
-  private readonly approvals = new Map<RequestId, AbortController>();
+  // Each open approval request, with the process it came from, so a withdrawn card is
+  // declined there.
+  private readonly approvals = new Map<RequestId, { ctl: AbortController; rpc: RpcClient }>();
   // Paths of each file change, for the approval card: the request itself names none.
   private readonly fileChanges = new Map<string, string[]>();
   // Threads that /new left: what still arrives for them is dropped, even before the new thread
@@ -138,10 +140,8 @@ export class CodexSession implements AgentBackend {
     // The old thread's turn is stopped, and anything it still sends is dropped.
     if (this._threadId) {
       this.leftThreads.add(this._threadId);
-      if (this.turnId && this.rpc)
-        this.rpc
-          .request("turn/interrupt", { threadId: this._threadId, turnId: this.turnId })
-          .catch(() => {});
+      // A turn/start still in flight is interrupted when its answer comes (startTurn).
+      if (this.turnId && this.rpc) this.interruptLeft(this.rpc, this._threadId, this.turnId);
     }
     this.endTurn();
     this.abortApprovals();
@@ -176,9 +176,18 @@ export class CodexSession implements AgentBackend {
     this.cancelling = false;
   }
 
+  // Withdraws the cards, and declines the requests in a process that is still running: Codex
+  // would otherwise wait for an answer that never comes.
   private abortApprovals(): void {
-    for (const c of this.approvals.values()) c.abort();
+    for (const [id, a] of this.approvals) {
+      a.ctl.abort();
+      if (a.rpc === this.rpc) a.rpc.respond(id, { decision: "decline" });
+    }
     this.approvals.clear();
+  }
+
+  private interruptLeft(rpc: RpcClient, threadId: string, turnId: string): void {
+    rpc.request("turn/interrupt", { threadId, turnId }).catch(() => {});
   }
 
   private kill(): void {
@@ -346,18 +355,25 @@ export class CodexSession implements AgentBackend {
     const rpc = this.rpc;
     if (!rpc || !this._threadId) return;
     const gen = this.gen;
+    const threadId = this._threadId;
     this.events.resetTurn();
     this.fileChanges.clear();
     rpc
       .request("turn/start", {
-        threadId: this._threadId,
+        threadId,
         input: [{ type: "text", text, text_elements: [] }],
       })
       .then(
         (res) => {
-          if (gen !== this.gen || !this._busy) return;
           const turn = isRecord(res) && isRecord(res.turn) ? res.turn : {};
-          this.turnStarted(str(turn.id));
+          const turnId = str(turn.id);
+          // /new came before this answer: the old thread's turn is stopped now.
+          if (this.leftThreads.has(threadId)) {
+            if (turnId && this.rpc === rpc) this.interruptLeft(rpc, threadId, turnId);
+            return;
+          }
+          if (gen !== this.gen || !this._busy) return;
+          this.turnStarted(turnId);
         },
         (err: unknown) => {
           if (gen !== this.gen || this.rpc !== rpc) return;
@@ -427,7 +443,7 @@ export class CodexSession implements AgentBackend {
       case "serverRequest/resolved": {
         const id = p.requestId;
         if (typeof id === "string" || typeof id === "number") {
-          this.approvals.get(id)?.abort();
+          this.approvals.get(id)?.ctl.abort();
           this.approvals.delete(id);
         }
         return;
@@ -465,7 +481,8 @@ export class CodexSession implements AgentBackend {
 
   private onServerRequest(rpc: RpcClient, id: RequestId, method: string, params: unknown): void {
     const p = isRecord(params) ? params : {};
-    if (this.isLeft(p) && method.endsWith("/requestApproval")) {
+    // For a thread that /new left, or a reply the player stopped: nothing to show.
+    if ((this.isLeft(p) || this.cancelling) && method.endsWith("/requestApproval")) {
       rpc.respond(id, { decision: "decline" });
       return;
     }
@@ -501,7 +518,7 @@ export class CodexSession implements AgentBackend {
 
   private ask(rpc: RpcClient, id: RequestId, r: Omit<CodexApproval, "signal">): void {
     const ctl = new AbortController();
-    this.approvals.set(id, ctl);
+    this.approvals.set(id, { ctl, rpc });
     this.opts
       .approve({ ...r, signal: ctl.signal })
       .catch((): CodexDecision => "decline")

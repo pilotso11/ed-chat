@@ -140,6 +140,13 @@ ed-mcp tools. A player who has set up ed-mcp for one of them must not have to se
 - `PRIVACY.md`: with Codex chosen, messages and tool results go to OpenAI.
 - `docs/manual-checklist.md`: a Codex pass, and a switch pass.
 - Store listing and package description name both.
+- **Answer comparison.** `scripts/compare-agents.mjs` sends the same 10 to 15 typical player
+  questions (route, engineering, materials, trade, exobiology, a settings change) through the
+  real `ClaudeSession` and `CodexSession`, with ED Chat's HUD prompt and ed-mcp. For each answer
+  it records the tools called, the approvals asked, the reply length, the time to the first text
+  and the total time, and writes one report with both replies side by side. Each reply is
+  checked by hand; the report goes into the PR, and the results guide the README's advice on
+  which CLI to choose.
 
 ## Step 0 results
 
@@ -183,7 +190,13 @@ Notes from the probe:
 - For Part 4, when Codex is wired in: `brokerApprover()` tells "allow until /new" from "allow"
   by reading `isAllowed()` after the answer, which needs main to call `allowTool()` in the same
   tick; the broker should return the kind of allow instead. Codex's `unknown` events carry
-  `{ method, params }`, and main's `describeUnknown` logs only `type` and `subtype`.
+  `{ method, params }`, and main's `describeUnknown` logs only `type` and `subtype`. The MCP
+  status map in `CodexEvents` is kept across a restart, so a server that is gone in the new
+  process still reads as connected; clear it at each spawn.
+- Left for a codex that misbehaves: any refused `thread/resume` starts a new thread, not only
+  -32600; a stop while `turn/start` never answers has no grace timer. Cleanups: the process
+  code shared with `ClaudeSession` (spawn, taskkill), and `isRecord`/`str`/`cut` copied across
+  modules.
 - Probe hardening deferred to Part 5, before fixtures are recorded: fail closed on any git error
   in the outside-the-repo check, ignore inherited `GIT_*` variables, refuse a folder inside
   `.git`; match `turn/completed` on its turn id; stop ed-mcp's processes too when a run ends
