@@ -6,6 +6,7 @@ import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { parse as parseToml } from "smol-toml";
 import type { AgentId, McpServerInfo } from "./backend.js";
+import { isCmdShim } from "./cli.js";
 
 /**
  * Where an entry comes from. claudePlugin is the ed-mcp plugin for Claude Code: it runs from the
@@ -20,7 +21,10 @@ export interface EdMcpDefinition {
   env: Record<string, string>;
 }
 
-/** The text of each config file; missing when the file cannot be read. */
+/**
+ * The text of each config file; missing when the file is not there. A file that is there but
+ * cannot be read is listed in unreadable, and may hold the agent's own ed-mcp.
+ */
 export interface AgentConfigs {
   /** ~/.claude.json */
   claudeJson?: string;
@@ -28,7 +32,11 @@ export interface AgentConfigs {
   claudeSettings?: string;
   /** ~/.codex/config.toml */
   codexToml?: string;
+  /** Files that are there but could not be read (not "not found"). */
+  unreadable?: ConfigFile[];
 }
+
+export type ConfigFile = "claudeJson" | "claudeSettings" | "codexToml";
 
 interface Entry {
   source: EdMcpSource;
@@ -66,14 +74,17 @@ function claudeEntries(claudeJson: string | undefined): Entry[] {
   return out;
 }
 
-function codexEntries(codexToml: string | undefined): Entry[] {
-  if (!codexToml) return [];
-  let root: unknown;
+function parseCodexToml(text: string | undefined): unknown {
+  if (text === undefined) return null;
   try {
-    root = parseToml(codexToml);
+    return parseToml(text);
   } catch {
-    return [];
+    return null;
   }
+}
+
+function codexEntries(codexToml: string | undefined): Entry[] {
+  const root = parseCodexToml(codexToml);
   if (!isRecord(root) || !isRecord(root.mcp_servers) || !("ed-mcp" in root.mcp_servers)) return [];
   return [{ source: "codex", value: root.mcp_servers["ed-mcp"] }];
 }
@@ -173,6 +184,7 @@ export function edMcpToAdd(
   c: AgentConfigs,
   workspace: string,
 ): EdMcpDefinition | null {
+  if (ownConfigUnreadable(agent, c)) return null;
   const all = entriesFor(c, workspace);
   return ownEntry(agent, all, workspace) ? null : firstDefinition(all);
 }
@@ -187,7 +199,7 @@ export function startableOn(
 ): EdMcpDefinition {
   if (platform !== "win32") return d;
   const name = path.win32.basename(d.command).toLowerCase();
-  const shim = /\.(cmd|bat)$/.test(name) || /^(npx|npm|pnpm|pnpx|yarn|bunx)$/.test(name);
+  const shim = isCmdShim(name) || /^(npx|npm|pnpm|pnpx|yarn|bunx)$/.test(name);
   return shim ? { ...d, command: "cmd", args: ["/c", d.command, ...d.args] } : d;
 }
 
@@ -211,6 +223,9 @@ export function syncDirOf(
   agent: AgentId = "claude",
   workspace?: string,
 ): string | null {
+  // The ed-mcp that runs may be in the file that cannot be read: no folder is better than
+  // another entry's.
+  if (ownConfigUnreadable(agent, c)) return null;
   const all = entriesFor(c, workspace);
   const own = ownEntry(agent, all, workspace);
   if (own && (own.source === "claudePlugin" || definition(own))) return envSyncDir(own);
@@ -225,23 +240,52 @@ export function syncDirOf(
   return null;
 }
 
+/** Config files that are there but cannot be read or parsed, for the log. */
+export function configProblems(c: AgentConfigs): ConfigFile[] {
+  const out = new Set<ConfigFile>(c.unreadable ?? []);
+  // An empty JSON file is one being rewritten; an empty config.toml is a valid empty config.
+  if (c.claudeJson !== undefined && !parseJson(c.claudeJson)) out.add("claudeJson");
+  if (c.claudeSettings !== undefined && !parseJson(c.claudeSettings)) out.add("claudeSettings");
+  if (c.codexToml !== undefined && !isRecord(parseCodexToml(c.codexToml))) out.add("codexToml");
+  return [...out];
+}
+
 /**
- * Reads each assistant's config file. A file that cannot be read is left out. CLAUDE_CONFIG_DIR
- * and CODEX_HOME move the files, as they do for the CLIs.
+ * The agent's own config file is there but cannot be read or parsed (mid-write by a running
+ * CLI, say). It may hold the agent's own ed-mcp, so ED Chat adds none: ed-mcp could run twice.
+ */
+export function ownConfigUnreadable(agent: AgentId, c: AgentConfigs): boolean {
+  if (agent === "codex") return configProblems(c).includes("codexToml");
+  // Claude's settings.json holds only the plugin. One that does not parse cannot load the
+  // plugin either (and stays broken until the player fixes it), so only a read error counts.
+  return configProblems(c).includes("claudeJson") || !!c.unreadable?.includes("claudeSettings");
+}
+
+/**
+ * Reads each assistant's config file. A file that is not there is left out; one that is there
+ * but cannot be read is listed in unreadable. CLAUDE_CONFIG_DIR and CODEX_HOME move the files,
+ * as they do for the CLIs.
  */
 export async function readAgentConfigs(
   home: string = os.homedir(),
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<AgentConfigs> {
-  const read = (p: string) => readFile(p, "utf8").catch(() => undefined);
+  const unreadable: ConfigFile[] = [];
+  const read = (p: string, f: ConfigFile) =>
+    readFile(p, "utf8").catch((err: NodeJS.ErrnoException) => {
+      if (err.code !== "ENOENT") unreadable.push(f);
+      return undefined;
+    });
   const claudeDir = env.CLAUDE_CONFIG_DIR || null;
   const codexDir = env.CODEX_HOME || path.join(home, ".codex");
   const [claudeJson, claudeSettings, codexToml] = await Promise.all([
-    read(path.join(claudeDir ?? home, ".claude.json")),
-    read(path.join(claudeDir ?? path.join(home, ".claude"), "settings.json")),
-    read(path.join(codexDir, "config.toml")),
+    read(path.join(claudeDir ?? home, ".claude.json"), "claudeJson"),
+    read(path.join(claudeDir ?? path.join(home, ".claude"), "settings.json"), "claudeSettings"),
+    read(path.join(codexDir, "config.toml"), "codexToml"),
   ]);
-  return { claudeJson, claudeSettings, codexToml };
+  return unreadable.length
+    ? { claudeJson, claudeSettings, codexToml, unreadable }
+    : { claudeJson, claudeSettings, codexToml };
 }
 
 export type EdMcpState = "ok" | "missing" | "failed" | "needsAuth";

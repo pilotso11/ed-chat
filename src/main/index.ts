@@ -81,7 +81,15 @@ import {
 } from "../core/stores.js";
 import { resumeId } from "../core/resume.js";
 import { openStores } from "ed-mcp/journal";
-import { edMcpState, edMcpToAdd, readAgentConfigs, startableOn, syncDirOf } from "../core/edMcp.js";
+import {
+  configProblems,
+  edMcpState,
+  ownConfigUnreadable,
+  edMcpToAdd,
+  readAgentConfigs,
+  startableOn,
+  syncDirOf,
+} from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
@@ -648,6 +656,15 @@ async function main(): Promise<void> {
       // ed-mcp from Codex's config or another Claude project, when Claude has none of its own.
       // Its env can hold the sync password; the file is in ED Chat's own data folder, which
       // already holds the approval server's token.
+      const problems = configProblems(agentConfigs);
+      if (problems.length) {
+        const own = ownConfigUnreadable(agentId, agentConfigs);
+        log.log(
+          "warn",
+          `ed-mcp: cannot read or parse ${problems.join(", ")}` +
+            (own ? `; ${agent.name}'s own config, so ED Chat adds no ed-mcp` : ""),
+        );
+      }
       const add = edMcpToAdd(agentId, agentConfigs, workspace);
       const edMcp = add && startableOn(add);
       const mcpServers: Record<string, unknown> = { ...approval.mcpConfig().mcpServers };

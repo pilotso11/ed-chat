@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  configProblems,
   edMcpState,
   edMcpToAdd,
   findEdMcp,
@@ -88,6 +89,17 @@ describe("readAgentConfigs", () => {
         claudeSettings: "{ }",
         codexToml: "x = 1",
       });
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it("tells a file that cannot be read from one that is not there", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "edmcp-"));
+    try {
+      // A folder where the file should be cannot be read as one.
+      await mkdir(path.join(home, ".claude.json"));
+      expect(await readAgentConfigs(home, {})).toMatchObject({ unreadable: ["claudeJson"] });
     } finally {
       await rm(home, { recursive: true, force: true });
     }
@@ -207,6 +219,50 @@ describe("edMcpToAdd", () => {
     const c = { codexToml: codexToml(), claudeSettings: other };
     expect(edMcpToAdd("claude", c, workspace)?.source).toBe("codex");
     expect(syncDirOf({ claudeSettings: other }, "claude", workspace)).toBeNull();
+  });
+
+  it("adds nothing when the agent's own config is there but cannot be read or parsed", () => {
+    const codex = codexToml();
+    expect(
+      edMcpToAdd("claude", { claudeJson: "{ half writ", codexToml: codex }, workspace),
+    ).toBeNull();
+    expect(
+      edMcpToAdd("claude", { codexToml: codex, unreadable: ["claudeJson"] }, workspace),
+    ).toBeNull();
+    const claudeJson = JSON.stringify({ mcpServers: { "ed-mcp": npx } });
+    expect(edMcpToAdd("codex", { claudeJson, codexToml: "[mcp_servers" }, workspace)).toBeNull();
+    // An empty JSON file is one being rewritten; an empty config.toml is a valid config.
+    expect(edMcpToAdd("claude", { claudeJson: "", codexToml: codex }, workspace)).toBeNull();
+    expect(configProblems({ codexToml: "" })).toEqual([]);
+    // The panel does not follow another entry while the agent's own file cannot be read.
+    expect(syncDirOf({ claudeJson: "{", codexToml: codex }, "claude", workspace)).toBeNull();
+    // Claude's settings.json only holds the plugin: one that does not parse cannot load it
+    // either, so it does not block. One that cannot be read does.
+    expect(
+      edMcpToAdd("claude", { claudeSettings: "{,", codexToml: codex }, workspace)?.source,
+    ).toBe("codex");
+    expect(
+      edMcpToAdd("claude", { codexToml: codex, unreadable: ["claudeSettings"] }, workspace),
+    ).toBeNull();
+    expect(edMcpToAdd("codex", { claudeJson, unreadable: ["codexToml"] }, workspace)).toBeNull();
+    // Another CLI's broken file does not matter.
+    expect(edMcpToAdd("codex", { claudeJson, claudeSettings: "{" }, workspace)?.source).toBe(
+      "claudeUser",
+    );
+    expect(
+      configProblems({ claudeJson: "{", codexToml: "x = 1", unreadable: ["claudeSettings"] }),
+    ).toEqual(["claudeSettings", "claudeJson"]);
+  });
+
+  it("counts a plugin of another name when it carries ed-mcp's sync option", () => {
+    const renamed = JSON.stringify({
+      enabledPlugins: { "my-ed@market": true },
+      pluginConfigs: { "my-ed@market": { options: { ed_mcp_sync_dir: "R:/Sync" } } },
+    });
+    expect(
+      edMcpToAdd("claude", { codexToml: codexToml(), claudeSettings: renamed }, workspace),
+    ).toBeNull();
+    expect(syncDirOf({ claudeSettings: renamed }, "claude", workspace)).toBe("R:/Sync");
   });
 
   it("gives nothing when ed-mcp is set up nowhere", () => {
