@@ -162,6 +162,8 @@ export interface SavedState {
   position?: Position;
   positionBase?: string;
   iconMode?: boolean;
+  /** The first-run hint that Codex is installed too has been shown. */
+  agentHintShown?: boolean;
   /** The conversation each assistant resumes. A Claude id is never given to Codex. */
   sessions?: { claude?: SavedSession; codex?: SavedSession };
   /** The activity panel's position, chosen with the move keys, and its settings base. */
@@ -193,6 +195,7 @@ const SavedStateSchema = z.object({
   hudMode: z.object({ mode: z.enum([...HUD_MODES, "off"]), at: z.string() }).optional(),
   hudHidden: z.boolean().optional(),
   playerOnly: z.record(z.string(), z.unknown()).optional(),
+  agentHintShown: z.boolean().optional(),
   sessions: z
     .object({ claude: SessionSchema.optional(), codex: SessionSchema.optional() })
     .optional(),

@@ -100,7 +100,7 @@ import { resumeId } from "../core/resume.js";
 import { openStores } from "ed-mcp/journal";
 import {
   configProblems,
-  edMcpSetUp,
+  hasOwnEdMcp,
   edMcpState,
   ownConfigUnreadable,
   edMcpToAdd,
@@ -777,17 +777,20 @@ async function main(): Promise<void> {
 
   // Auto mode runs most tools without asking, so the player chooses once, before the assistant starts.
   async function askPermissionMode(): Promise<void> {
+    // The assistant asked about, even if the player switches while the question is open.
+    const id = agentId;
+    const a = AGENTS[id];
     // A broken settings.json shows its own error; the question waits for a good file.
-    if (settingsStore.broken || setsKey(settingsStore.text, agentId, "permissionMode")) return;
+    if (settingsStore.broken || setsKey(settingsStore.text, id, "permissionMode")) return;
     const r = await dialog.showMessageBox({
       type: "question",
       title: "ED Chat",
-      message: `How should ${agent.name} run tools?`,
+      message: `How should ${a.name} run tools?`,
       detail:
-        `Ask me: the overlay shows each tool that ${agent.name} wants to run, and you allow or ` +
-        `deny it with a hotkey.\n\nAuto: ${agent.name} decides, and runs most tools without ` +
+        `Ask me: the overlay shows each tool that ${a.name} wants to run, and you allow or ` +
+        `deny it with a hotkey.\n\nAuto: ${a.name} decides, and runs most tools without ` +
         "asking, including commands that you ask for.\n\nYou can change this later in " +
-        `settings.json, ${agentId}.permissionMode.`,
+        `settings.json, ${id}.permissionMode.`,
       buttons: ["Ask me", "Auto"],
       defaultId: 0,
       cancelId: 0,
@@ -796,13 +799,13 @@ async function main(): Promise<void> {
     const mode = r.response === 1 ? "auto" : "default";
     try {
       // The player chose this, so the guard does not ask about it.
-      await playerOnly.playerWrite(settingsStore.textWith(agentId, "permissionMode", mode));
+      await playerOnly.playerWrite(settingsStore.textWith(id, "permissionMode", mode));
       await settingsStore.load();
       settings = playerOnly.effective() ?? settingsStore.settings;
     } catch (err) {
       // The choice still holds for this run; the player sees that it was not saved.
       log.log("warn", `settings.json: ${message(err)}`);
-      settings = { ...settings, [agentId]: { ...settings[agentId], permissionMode: mode } };
+      settings = { ...settings, [id]: { ...settings[id], permissionMode: mode } };
       dispatch({
         type: "notice",
         key: "settings",
@@ -827,8 +830,11 @@ async function main(): Promise<void> {
     const claude = !!CLIS.claude.resolve(settings.claude.path);
     const codex = !!CLIS.codex.resolve(settings.codex.path);
     if (codex && !claude) await chooseAgent("codex");
-    else if (codex && claude)
+    else if (codex && claude && !saved.agentHintShown) {
       flash("agent", "ⓘ Codex is installed too: type /codex to switch", 12_000);
+      saved = { ...saved, agentHintShown: true };
+      writeState();
+    }
   }
 
   async function startAgent(): Promise<void> {
@@ -860,7 +866,7 @@ async function main(): Promise<void> {
           // Codex reports its servers only after the thread starts, so a missing ed-mcp is
           // read from the config files; an ed-mcp ED Chat gives it is set up too.
           if (agentId === "codex" && ed === "missing")
-            ed = codexEdMcp || edMcpSetUp(agentConfigs) ? "ok" : "missing";
+            ed = codexEdMcp || hasOwnEdMcp("codex", agentConfigs, workspace) ? "ok" : "missing";
           edMcpStatus = ed;
           dispatch({
             type: "notice",
@@ -1009,6 +1015,8 @@ async function main(): Promise<void> {
     edMcpStatus = null;
     agentId = id;
     agent = AGENTS[id];
+    // A version check still running is for the CLI that stopped.
+    versionCheck++;
     const s = saved.sessions?.[id];
     resumeFrom = resumeId(s, new Date(), settings.resumeHours);
     const turns = resumeFrom && s?.history ? await history.resume(s.history) : [];

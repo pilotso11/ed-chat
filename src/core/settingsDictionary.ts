@@ -107,6 +107,8 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
     text:
       "Resume the assistant's last conversation when ED Chat starts, or switches to it, within " +
       "this many hours. 0 turns it off.",
+    // It was in the claude group, which only the player changes.
+    playerOnly: true,
   },
   claude: { text: "How ED Chat starts the claude CLI.", playerOnly: true },
   "claude.path": { text: "Path to claude. null searches PATH, then the default install folders." },

@@ -85,6 +85,8 @@ describe("describeUnknown", () => {
     );
     expect(describeUnknown({ method: "thread/tokenUsage/updated", params: {} })).toBeNull();
     expect(describeUnknown({ method: "item/reasoning/textDelta", params: {} })).toBeNull();
+    // Streamed output comes in many small pieces.
+    expect(describeUnknown({ method: "item/commandExecution/outputDelta" })).toBeNull();
   });
   it("logs only the length of a non-JSON line", () => {
     expect(describeUnknown("secret prompt")).toBe("non-JSON line (13 chars)");

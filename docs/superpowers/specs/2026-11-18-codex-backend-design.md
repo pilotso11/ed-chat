@@ -256,10 +256,13 @@ Notes from the probe:
 - The approval server is needed by Claude only. When it cannot start, Codex still runs.
 - `ApprovalBroker` returns `allowSession` for "allow until /new" and for a tool already allowed,
   so Codex answers `acceptForSession` without reading the broker's state afterwards.
-- The ed-mcp "missing" notice for Codex comes from the config files (`edMcpSetUp()`, or an
-  ed-mcp that ED Chat gives Codex), never from an empty `ready`. Its setup line is Claude's
-  `mcp add` when Claude is installed, else Codex's.
+- The ed-mcp "missing" notice for Codex comes from the config files: ed-mcp is there when Codex's
+  own config runs one (`hasOwnEdMcp()`) or ED Chat gives it one, never from an empty `ready`.
+  Its setup line is Claude's `mcp add` when Claude is installed, else Codex's.
 - First run (no conversation saved, `agent` not in settings.json): only Codex installed picks
   Codex; both installed keeps Claude and says how to switch.
 - `describeUnknown` logs a Codex notification's method only, and skips the routine ones.
-- Still to do with the real CLI: how Codex reports a Windows sandbox that is not installed.
+- `resumeHours` is player-only, as it was in the `claude` group.
+- Still to do with the real CLI: how Codex reports a Windows sandbox that is not installed, and
+  whether it sends `mcpServer/elicitation/request` before an ed-mcp tool in `default` mode
+  (ED Chat declines those).

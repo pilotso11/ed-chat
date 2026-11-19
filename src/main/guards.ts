@@ -56,7 +56,8 @@ export function describeUnknown(raw: unknown): string | null {
   // Codex: a notification that ED Chat does not use. Its params can quote the chat, so only
   // the method is logged, and the routine ones not at all.
   if (typeof r.method === "string")
-    return CODEX_ROUTINE.some((m) => r.method === m || (r.method as string).startsWith(m + "/"))
+    return CODEX_ROUTINE.some((m) => r.method === m || (r.method as string).startsWith(m + "/")) ||
+      /Delta$/.test(r.method)
       ? null
       : `method=${label(r.method)}`;
   return `type=${label(r.type)} subtype=${label(r.subtype)}`;

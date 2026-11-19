@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   configProblems,
   edMcpState,
+  hasOwnEdMcp,
   edMcpToAdd,
   findEdMcp,
   readAgentConfigs,
@@ -270,6 +271,15 @@ describe("edMcpToAdd", () => {
       edMcpToAdd("claude", { codexToml: codexToml(), claudeSettings: renamed }, workspace),
     ).toBeNull();
     expect(syncDirOf({ claudeSettings: renamed }, "claude", workspace)).toBe("R:/Sync");
+  });
+
+  it("tells whether the agent's own config runs an ed-mcp", () => {
+    expect(hasOwnEdMcp("codex", { codexToml: codexToml() }, workspace)).toBe(true);
+    expect(hasOwnEdMcp("codex", { codexToml: codexToml("enabled = false") }, workspace)).toBe(
+      false,
+    );
+    expect(hasOwnEdMcp("claude", { claudeSettings: pluginSettings(true) }, workspace)).toBe(true);
+    expect(hasOwnEdMcp("codex", { claudeSettings: pluginSettings(true) }, workspace)).toBe(false);
   });
 
   it("gives nothing when ed-mcp is set up nowhere", () => {

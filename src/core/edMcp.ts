@@ -176,10 +176,13 @@ function ownEntry(agent: AgentId, all: Entry[], workspace?: string): Entry | nul
 }
 
 /**
- * Whether the player has set ed-mcp up anywhere ED Chat looks, runnable or not: the plugin, an
- * http server or one switched off count. The setup notice is for a player with none.
+ * Whether the agent's own config has an ed-mcp that it runs: one switched off in Codex, or one
+ * that runs no command, does not count.
  */
-export const edMcpSetUp = (c: AgentConfigs): boolean => entries(c).length > 0;
+export function hasOwnEdMcp(agent: AgentId, c: AgentConfigs, workspace: string): boolean {
+  const own = ownEntry(agent, entriesFor(c, workspace), workspace);
+  return !!own && (own.source === "claudePlugin" || !!definition(own));
+}
 
 /**
  * The ed-mcp that ED Chat gives the agent: the player's definition from another place, when the
