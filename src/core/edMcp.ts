@@ -50,8 +50,9 @@ function parseJson(text: string | undefined): Record<string, unknown> | null {
   }
 }
 
-// User scope first, then each project. A project entry is not what runs in ED Chat's own
-// folder, but it is the player's definition all the same.
+// User scope first, then each project. Callers that know ED Chat's folder move its project
+// entry to the front (entriesFor), as Claude ranks it; another project's entry does not run in
+// ED Chat's folder, but it is the player's definition all the same.
 function claudeEntries(claudeJson: string | undefined): Entry[] {
   const root = parseJson(claudeJson);
   if (!root) return [];
@@ -127,7 +128,8 @@ const firstDefinition = (all: Entry[]): EdMcpDefinition | null => {
 
 /**
  * The first ed-mcp that runs as a command, in this order: Claude's user scope, Claude's
- * projects, Codex's config.toml. Null when the player has set none up.
+ * projects, Codex's config.toml. Null when the player has set none up. It does not know ED
+ * Chat's folder: edMcpToAdd and syncDirOf rank that project's entry first.
  */
 export const findEdMcp = (c: AgentConfigs): EdMcpDefinition | null => firstDefinition(entries(c));
 
@@ -136,15 +138,25 @@ function samePath(a: string, b: string): boolean {
   return process.platform === "win32" ? n(a).toLowerCase() === n(b).toLowerCase() : n(a) === n(b);
 }
 
+const isHere = (e: Entry, workspace?: string): boolean =>
+  e.source === "claudeProject" && !!workspace && !!e.project && samePath(e.project, workspace);
+
+// All entries, with Claude's project entry for ED Chat's folder first, as Claude ranks it: the
+// definition ED Chat copies is then the one Claude runs.
+function entriesFor(c: AgentConfigs, workspace?: string): Entry[] {
+  const all = entries(c);
+  return [...all.filter((e) => isHere(e, workspace)), ...all.filter((e) => !isHere(e, workspace))];
+}
+
 // The agent's own ed-mcp, which always wins, so ed-mcp never runs twice. Claude's counts when it
-// is user scope, the project for ED Chat's own folder, or the plugin. Codex's counts when
-// config.toml names one, even one switched off.
+// is the project for ED Chat's own folder (which Claude prefers to user scope, as it does every
+// project entry), user scope, or the plugin. Codex's counts when config.toml names one, even
+// one switched off.
 function ownEntry(agent: AgentId, all: Entry[], workspace?: string): Entry | null {
   if (agent === "codex") return all.find((e) => e.source === "codex") ?? null;
-  const here = (e: Entry) => !!workspace && !!e.project && samePath(e.project, workspace);
   return (
+    all.find((e) => isHere(e, workspace)) ??
     all.find((e) => e.source === "claudeUser") ??
-    all.find((e) => e.source === "claudeProject" && here(e)) ??
     all.find((e) => e.source === "claudePlugin") ??
     null
   );
@@ -159,7 +171,7 @@ export function edMcpToAdd(
   c: AgentConfigs,
   workspace: string,
 ): EdMcpDefinition | null {
-  const all = entries(c);
+  const all = entriesFor(c, workspace);
   return ownEntry(agent, all, workspace) ? null : firstDefinition(all);
 }
 
@@ -197,7 +209,7 @@ export function syncDirOf(
   agent: AgentId = "claude",
   workspace?: string,
 ): string | null {
-  const all = entries(c);
+  const all = entriesFor(c, workspace);
   const own = ownEntry(agent, all, workspace);
   if (own && (own.source === "claudePlugin" || definition(own))) return envSyncDir(own);
   if (!own) {

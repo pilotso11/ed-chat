@@ -236,6 +236,21 @@ describe("syncDirOf per agent", () => {
     expect(syncDirOf({ claudeJson }, "codex", workspace)).toBe("D:/Claude");
   });
 
+  it("prefers the project entry for ED Chat's folder to user scope, as Claude does", () => {
+    const claudeJson = JSON.stringify({
+      mcpServers: { "ed-mcp": { ...npx, env: { ED_MCP_SYNC_DIR: "D:/User" } } },
+      projects: {
+        [workspace]: { mcpServers: { "ed-mcp": { ...npx, env: { ED_MCP_SYNC_DIR: "D:/Here" } } } },
+      },
+    });
+    expect(syncDirOf({ claudeJson }, "claude", workspace)).toBe("D:/Here");
+    // Codex gets the same one, and the panel follows it.
+    expect(edMcpToAdd("codex", { claudeJson }, workspace)?.env).toEqual({
+      ED_MCP_SYNC_DIR: "D:/Here",
+    });
+    expect(syncDirOf({ claudeJson }, "codex", workspace)).toBe("D:/Here");
+  });
+
   it("reads the plugin's sync folder from Claude's settings", () => {
     const c = { claudeSettings: pluginSettings(true), codexToml: codexToml() };
     expect(syncDirOf(c, "claude", workspace)).toBe("P:/Sync");

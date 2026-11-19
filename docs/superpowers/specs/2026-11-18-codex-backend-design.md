@@ -220,9 +220,10 @@ Notes from the probe:
   settings; only enabled plugins count. Its password is in Claude's secret store, and its server
   runs from the plugin's folder, so it is never given to another backend: only its sync folder
   is read.
-- A backend's own ed-mcp: for Claude, user scope, the project entry for ED Chat's workspace, or
-  the plugin; for Codex, `[mcp_servers.ed-mcp]`, even with `enabled = false` (the player turned
-  it off). `edMcpToAdd()` gives a backend the first runnable definition only when it has none.
+- A backend's own ed-mcp: for Claude, the project entry for ED Chat's workspace (Claude ranks it
+  above user scope), user scope, or the plugin; for Codex, `[mcp_servers.ed-mcp]`, even with
+  `enabled = false` (the player turned it off). `edMcpToAdd()` gives a backend the first runnable
+  definition only when it has none, in the same order, so Codex gets the one Claude runs.
 - Claude gets the added ed-mcp in `approval-mcp.json`, written at startup, so a change to either
   config applies when ED Chat starts again. Part 4 passes `edMcpToAdd("codex", …)` to
   `codexThreadSettings()`.
@@ -232,5 +233,9 @@ Notes from the probe:
   a Codex `cwd` or a Claude project folder, so a definition with relative paths fails to start.
   Only the user `settings.json` is read for the plugin, not local, project or managed settings,
   and Claude's per-project `disabledMcpServers` is not read.
+- Also left for later: `startableOn()` does not quote for cmd, so a spaced command path with
+  spaced arguments, or `&`, `|`, `^` in them, breaks; Claude expands `${VAR}` in the copied
+  definition, which Codex does not; with an own entry that cannot run (http, or
+  `enabled = false`), the panel falls back to the first sync folder in any entry.
 - The setup notice still gives the running backend's `mcp add` line. Part 4 picks the line from
   the CLIs that are installed.
