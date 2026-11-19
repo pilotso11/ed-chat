@@ -1,20 +1,27 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, describe, expect, it } from "vitest";
-import { summarize, type ApprovalRequest, type Outcome } from "../src/core/approvals.js";
+import {
+  ApprovalBroker,
+  summarize,
+  type ApprovalRequest,
+  type Outcome,
+} from "../src/core/approvals.js";
 import { ApprovalServer } from "../src/core/backends/claude/approvalServer.js";
 
 let server: ApprovalServer | undefined;
+let broker: ApprovalBroker | undefined;
 afterEach(async () => {
   await server?.stop();
   server = undefined;
+  broker = undefined;
 });
 
 async function setup(timeoutMs = 5_000) {
   const requests: ApprovalRequest[] = [];
   const settled: string[] = [];
   const outcomes: Outcome[] = [];
-  server = new ApprovalServer({
+  broker = new ApprovalBroker({
     timeoutMs,
     onRequest: (r) => requests.push(r),
     onSettled: (id, outcome) => {
@@ -23,6 +30,7 @@ async function setup(timeoutMs = 5_000) {
     },
     now: () => 1_000,
   });
+  server = new ApprovalServer(broker);
   await server.start();
   const cfg = server.mcpConfig().mcpServers.ed_chat!;
   const client = new Client({ name: "test", version: "1.0.0" });
@@ -52,16 +60,16 @@ describe("ApprovalServer", () => {
     const p = t.call();
     const req = await t.waitRequest();
     expect(req).toMatchObject({ toolName: "Bash", summary: "ls", shell: true, deadline: 6_000 });
-    expect(server!.answer(req.id, "allow")).toBe(true);
+    expect(broker!.answer(req.id, "allow")).toBe(true);
     expect(await t.decision(p)).toEqual({ behavior: "allow", updatedInput: { command: "ls" } });
     expect(t.settled).toEqual([req.id]);
-    expect(server!.answer(req.id, "allow")).toBe(false);
+    expect(broker!.answer(req.id, "allow")).toBe(false);
   });
 
   it("denies", async () => {
     const t = await setup();
     const p = t.call();
-    server!.answer((await t.waitRequest()).id, "deny");
+    broker!.answer((await t.waitRequest()).id, "deny");
     expect(await t.decision(p)).toEqual({ behavior: "deny", message: "Player denied" });
   });
 
@@ -107,12 +115,12 @@ describe("ApprovalServer", () => {
     await t.client.close();
     while (!t.settled.length) await new Promise((r) => setTimeout(r, 10));
     expect(t.settled).toEqual([req.id]);
-    expect(server!.answer(req.id, "allow")).toBe(false);
+    expect(broker!.answer(req.id, "allow")).toBe(false);
   });
 
   it("cancels at once when the request is already aborted", async () => {
     const t = await setup(60_000);
-    expect(await server!.broker.ask("Bash", {}, { signal: AbortSignal.abort() })).toBe("cancelled");
+    expect(await broker!.ask("Bash", {}, { signal: AbortSignal.abort() })).toBe("cancelled");
     expect(t.requests).toEqual([]);
     expect(t.settled).toEqual([]);
   });
@@ -146,15 +154,15 @@ describe("summarize", () => {
 describe("always allow", () => {
   it("allows the tool without asking until cleared", async () => {
     const t = await setup();
-    server!.allowTool("Bash");
+    broker!.allowTool("Bash");
     expect(await t.decision(t.call())).toEqual({
       behavior: "allow",
       updatedInput: { command: "ls" },
     });
     expect(t.requests).toEqual([]);
-    server!.clearAllowed();
+    broker!.clearAllowed();
     const p = t.call();
-    server!.answer((await t.waitRequest()).id, "deny");
+    broker!.answer((await t.waitRequest()).id, "deny");
     expect(await t.decision(p)).toMatchObject({ behavior: "deny" });
     expect(t.outcomes).toEqual(["deny"]);
   });

@@ -4,30 +4,26 @@ import type { AddressInfo } from "node:net";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import {
-  ApprovalBroker,
-  type ApprovalBrokerOptions,
-  type ApprovalDecision,
-} from "../../approvals.js";
+import type { ApprovalBroker } from "../../approvals.js";
 import { APPROVAL_SERVER } from "./command.js";
 
-export interface ApprovalServerOptions extends ApprovalBrokerOptions {
+export interface ApprovalServerOptions {
   onError?: (err: unknown) => void;
 }
 
 /**
  * Claude asks for approval through an MCP tool (--permission-prompt-tool). This is that MCP
- * server, on 127.0.0.1 with a random port and token. The broker holds the player's side.
+ * server, on 127.0.0.1 with a random port and token. The broker holds the player's side and
+ * belongs to the caller, who answers through it.
  */
 export class ApprovalServer {
   private server?: http.Server;
   private port = 0;
   private readonly token = randomBytes(24).toString("hex");
-  readonly broker: ApprovalBroker;
-
-  constructor(private readonly opts: ApprovalServerOptions) {
-    this.broker = new ApprovalBroker(opts);
-  }
+  constructor(
+    private readonly broker: ApprovalBroker,
+    private readonly opts: ApprovalServerOptions = {},
+  ) {}
 
   async start(): Promise<number> {
     const server = http.createServer((req, res) => void this.handle(req, res));
@@ -48,23 +44,6 @@ export class ApprovalServer {
     if (!s) return;
     s.closeAllConnections();
     await new Promise<void>((resolve) => s.close(() => resolve()));
-  }
-
-  setTimeoutMs(ms: number): void {
-    this.broker.setTimeoutMs(ms);
-  }
-
-  /** Allows this tool without asking until clearAllowed(), for example at /new. */
-  allowTool(toolName: string): void {
-    this.broker.allowTool(toolName);
-  }
-
-  clearAllowed(): void {
-    this.broker.clearAllowed();
-  }
-
-  answer(id: string, d: ApprovalDecision): boolean {
-    return this.broker.answer(id, d);
   }
 
   mcpConfig() {

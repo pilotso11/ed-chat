@@ -55,7 +55,7 @@ export interface AgentBackend {
   readonly sessionId: string | null;
 }
 
-export type AgentId = "claude";
+export type AgentId = "claude" | "codex";
 
 export interface AgentInfo {
   /** The assistant's name in notices: "Claude stopped". */
@@ -83,6 +83,15 @@ export const AGENTS: Record<AgentId, AgentInfo> = {
     mcpAddCommand: "claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp@latest",
     mcpListCommand: "claude mcp list",
     updateCommand: "claude update",
+  },
+  codex: {
+    name: "Codex",
+    cli: "codex",
+    product: "the Codex CLI",
+    pathSetting: "codex.path",
+    mcpAddCommand: "codex mcp add ed-mcp -- cmd /c npx -y ed-mcp@latest",
+    mcpListCommand: "codex mcp list",
+    updateCommand: "codex update",
   },
 };
 

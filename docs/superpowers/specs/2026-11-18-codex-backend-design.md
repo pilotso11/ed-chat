@@ -2,7 +2,8 @@
 
 Date: 2026-11-18
 Status: draft. Step 0 (protocol probe) done, see "Step 0 results". Part 1 done; `findEdMcp()`
-reads only `~/.claude.json` so far, and Part 3 adds `config.toml` and the plugin lookup.
+reads only `~/.claude.json` so far, and Part 3 adds `config.toml` and the plugin lookup. Part 2
+done, not yet wired into main (Part 4); see "Notes from Part 2".
 
 ## Purpose
 
@@ -139,6 +140,13 @@ ed-mcp tools. A player who has set up ed-mcp for one of them must not have to se
 - `PRIVACY.md`: with Codex chosen, messages and tool results go to OpenAI.
 - `docs/manual-checklist.md`: a Codex pass, and a switch pass.
 - Store listing and package description name both.
+- **Answer comparison.** `scripts/compare-agents.mjs` sends the same 10 to 15 typical player
+  questions (route, engineering, materials, trade, exobiology, a settings change) through the
+  real `ClaudeSession` and `CodexSession`, with ED Chat's HUD prompt and ed-mcp. For each answer
+  it records the tools called, the approvals asked, the reply length, the time to the first text
+  and the total time, and writes one report with both replies side by side. Each reply is
+  checked by hand; the report goes into the PR, and the results guide the README's advice on
+  which CLI to choose.
 
 ## Step 0 results
 
@@ -163,3 +171,44 @@ Notes from the probe:
   directory name is invalid (os error 267)".
 - The generated protocol types (`codex app-server generate-ts --out <dir>`) are the reference.
   They change between versions, so `events.ts` reads only the fields it needs.
+
+## Notes from Part 2
+
+- The approval card's text comes from `CodexSession`, not `summarize()`: the command line (with
+  its folder when that is not the workspace), or the changed files, which arrive with the
+  `fileChange` item before the request. `brokerApprover()` connects it to `ApprovalBroker`.
+- Main owns the `ApprovalBroker`; the Claude MCP approval server takes it, so both backends share
+  one queue, timeout and "allow until /new".
+- A stopped turn emits `spawned`, not `result`: the overlay goes back to idle with no reply. A
+  turn that has not ended 5 seconds after `turn/interrupt` is ended with its process, and the
+  thread resumes at the restart.
+- `ready` is emitted when the thread starts, and again at each MCP startup status. Against the
+  real CLI the first `ready` comes before any status, so Part 4 must not show "ed-mcp missing"
+  from it for Codex: whether ed-mcp is set up comes from the config lookup (Part 3).
+- Still to find out, with the real CLI: how Codex reports a Windows sandbox that is not
+  installed (elevated), for the notice in "Decisions".
+- For Part 4, when Codex is wired in: `brokerApprover()` tells "allow until /new" from "allow"
+  by reading `isAllowed()` after the answer, which needs main to call `allowTool()` in the same
+  tick; the broker should return the kind of allow instead. Codex's `unknown` events carry
+  `{ method, params }`, and main's `describeUnknown` logs only `type` and `subtype`.
+- An MCP status change during a turn sends `ready` only when the turn ends, since `ready`
+  means idle to the overlay.
+- A message sent while a stopped reply is still ending is held and sent once it has ended, as
+  Claude's respawn does; a second one is refused as busy.
+- A process that does not answer the handshake and open a thread within 60 seconds is ended
+  and reported like an exit, so a message does not wait for ever.
+- `thread/resume`: -32600 "no rollout found" starts a new thread at once. Any other refusal is
+  tried once more in the same process, and a second refusal also starts a new thread with the
+  player's message, so the old conversation is lost but the chat is not blocked. A process
+  that dies during the resume keeps the thread for the restart. Each new process starts with no
+  MCP statuses.
+- Left for Part 4: approvals are keyed by request id alone, and each process counts from 0. A
+  refused `turn/interrupt` for a turn that `/new` left is not retried, so that turn can run on.
+  Cleanups: the process code shared with `ClaudeSession` (spawn,
+  taskkill), and `isRecord`/`str`/`cut` copied across modules.
+- Probe hardening deferred to Part 5, before fixtures are recorded: fail closed on any git error
+  in the outside-the-repo check, ignore inherited `GIT_*` variables, refuse a folder inside
+  `.git`; match `turn/completed` on its turn id; stop ed-mcp's processes too when a run ends
+  (`taskkill /T`); in cli-config mode, pass ed-mcp's env through codex's own environment and
+  `env_vars` rather than leaving it out; check recordings by hand for secrets in other spellings
+  (forward-slash paths, double escaping) and in ed-mcp's args.

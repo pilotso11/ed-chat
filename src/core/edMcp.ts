@@ -71,15 +71,22 @@ export function findEdMcp(c: AgentConfigs): EdMcpDefinition | null {
   return null;
 }
 
+const syncDir = (dir: unknown): string | null =>
+  typeof dir === "string" && dir.trim() ? dir : null;
+
 /**
  * The ED_MCP_SYNC_DIR that the player gave ed-mcp: the panel must read the same activity note
- * and plans. Only that one value is read; the password next to it is not.
+ * and plans. It comes from the definition that runs (findEdMcp), so a sync folder in another
+ * entry cannot point the panel away from where ed-mcp writes. With no runnable definition, the
+ * first entry that names one. Only that one value is read; the password next to it is not.
  */
 export function syncDirOf(c: AgentConfigs): string | null {
+  const running = findEdMcp(c);
+  if (running) return syncDir(running.env.ED_MCP_SYNC_DIR);
   for (const e of entries(c)) {
     const env = isRecord(e.value) ? e.value.env : undefined;
-    const dir = isRecord(env) ? env.ED_MCP_SYNC_DIR : undefined;
-    if (typeof dir === "string" && dir.trim()) return dir;
+    const dir = syncDir(isRecord(env) ? env.ED_MCP_SYNC_DIR : undefined);
+    if (dir) return dir;
   }
   return null;
 }
