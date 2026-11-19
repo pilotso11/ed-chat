@@ -342,15 +342,30 @@ describe("CodexSession", () => {
     expect(s.send("again")).toBe(true);
   });
 
-  it("keeps the saved thread when the resume fails for another reason", async () => {
-    const { s, events } = await setup({ mode: "resume-error", resumeId: "thr-old" });
+  it("tries a refused resume once more, and keeps the thread when that works", async () => {
+    const { s, events, received } = await setup({
+      mode: "resume-error-once",
+      resumeId: "thr-old",
+    });
     s.send("hi");
-    await until(() => has(events, "exit"));
+    await until(() => has(events, "result"));
     expect(has(events, "resumeFailed")).toBe(false);
     expect(s.sessionId).toBe("thr-old");
-    expect(events.find((e) => e.type === "exit")).toMatchObject({
+    const turn = (await received()).find((m) => m.method === "turn/start")!;
+    expect(turn.params).toMatchObject({ threadId: "thr-old" });
+  });
+
+  it("starts a new thread with the message when the resume is refused twice", async () => {
+    const { s, events, received } = await setup({ mode: "resume-error", resumeId: "thr-old" });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    expect(events.find((e) => e.type === "resumeFailed")).toEqual({
+      type: "resumeFailed",
       stderrTail: ["internal error"],
     });
+    expect(has(events, "exit")).toBe(false);
+    const turn = (await received()).find((m) => m.method === "turn/start")!;
+    expect(turn.params).toMatchObject({ threadId: "thr-1" });
   });
 
   it("forgets the MCP statuses of a process that has gone", async () => {

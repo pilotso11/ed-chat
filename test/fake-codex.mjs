@@ -19,6 +19,7 @@ const reportsMcp = mode !== "mcp-first-only" || start === 1;
 const out = (msg) => process.stdout.write(JSON.stringify(msg) + "\n");
 const note = (method, params) => out({ method, params });
 let threads = 0;
+let resumeRefused = 0;
 let turns = 0;
 let current = null;
 const waiting = new Map();
@@ -163,7 +164,11 @@ rl.on("line", (line) => {
     case "thread/start":
     case "thread/resume": {
       if (method === "thread/resume" && mode === "resume-crash") process.exit(1);
-      if (method === "thread/resume" && mode === "resume-error")
+      // resume-error refuses every resume; resume-error-once only the first in each process.
+      if (
+        method === "thread/resume" &&
+        (mode === "resume-error" || (mode === "resume-error-once" && !resumeRefused++))
+      )
         return out({ id, error: { code: -32603, message: "internal error" } });
       if (method === "thread/resume" && mode === "no-thread")
         return out({

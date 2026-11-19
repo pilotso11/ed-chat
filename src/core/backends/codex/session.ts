@@ -39,6 +39,8 @@ const cut = (s: string, max = 200) => (s.length > max ? s.slice(0, max - 1) + "â
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+// thread/resume for a thread with no saved rollout: -32600 "no rollout found for thread id â€¦".
+const isGone = (e: RpcError) => e.code === -32600 && /no rollout/i.test(e.message);
 
 /**
  * `codex app-server`: one process, one thread. send is turn/start, cancel is turn/interrupt, and
@@ -339,20 +341,22 @@ export class CodexSession implements AgentBackend {
     let call = "thread/start";
     try {
       if (this._threadId) {
+        const resume = () => rpc.request("thread/resume", { threadId: this._threadId, ...params });
         try {
-          res = await rpc.request("thread/resume", { threadId: this._threadId, ...params });
+          try {
+            res = await resume();
+          } catch (err) {
+            // A process that went keeps the thread for the restart. "no rollout found" means
+            // the thread is gone. Any other refusal may pass, so it is tried once more.
+            if (gen !== this.gen || !(err instanceof RpcError) || isGone(err)) throw err;
+            res = await resume();
+          }
           call = "thread/resume";
         } catch (err) {
-          // Only -32600 "no rollout found" means the thread is gone. Anything else (the
-          // process went, an internal error) keeps it: the process is restarted, and the
-          // thread resumes at the next message.
-          if (gen !== this.gen || !(err instanceof RpcError) || err.code !== -32600) throw err;
-          // A new thread starts with the message the player sent.
+          if (gen !== this.gen || !(err instanceof RpcError)) throw err;
+          // The thread cannot be resumed: a new one starts with the message the player sent.
           this._threadId = null;
-          this.emit({
-            type: "resumeFailed",
-            stderrTail: [err instanceof Error ? err.message : String(err)],
-          });
+          this.emit({ type: "resumeFailed", stderrTail: [err.message] });
         }
       }
       if (gen !== this.gen) return;
