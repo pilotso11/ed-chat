@@ -86,17 +86,17 @@ export class SettingsStore {
   }
 
   /** settings.json with one value set and the rest of the file kept. */
-  textWith(group: string, key: string, value: unknown, base: string = this.text): string {
+  textWith(group: string, key: string, value: unknown): string {
     // Throws on a broken file, which must not be replaced with one value.
-    const raw = JSON.parse(base) as Record<string, unknown>;
+    const raw = JSON.parse(this.text) as Record<string, unknown>;
     const g = raw[group];
     raw[group] = { ...(g && typeof g === "object" ? g : {}), [key]: value };
     return JSON.stringify(raw, null, 2) + "\n";
   }
 
   /** settings.json text with one top-level value changed, the rest kept. */
-  textWithTop(key: string, value: unknown, base: string = this.text): string {
-    const raw = JSON.parse(base) as Record<string, unknown>;
+  textWithTop(key: string, value: unknown): string {
+    const raw = JSON.parse(this.text) as Record<string, unknown>;
     raw[key] = value;
     return JSON.stringify(raw, null, 2) + "\n";
   }

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
-import { watchFile } from "node:fs";
+import { existsSync, watchFile } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -115,7 +115,6 @@ import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
 import { currentStop, nextStopAfter, previousStop, todoStops } from "../core/hud/panels.js";
-import { withValues } from "../core/playerOnly.js";
 import { PlayerOnlyGuard } from "../core/playerOnlyGuard.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
 import { fetchLatestEdMcp, versionText, type Versions } from "../core/version.js";
@@ -192,7 +191,12 @@ process.on("unhandledRejection", (err) => log.log("warn", `unhandled rejection: 
 
 async function main(): Promise<void> {
   const settingsStore = new SettingsStore(settingsFile);
-  const stateStore = new StateStore(path.join(dataDir, "state.json"));
+  const stateFile = path.join(dataDir, "state.json");
+  // No state.json yet: ED Chat has never run here, so it may choose the assistant. A state.json
+  // that cannot be read also reads as empty, so the file itself is checked, before anything
+  // writes it.
+  const firstRun = !existsSync(stateFile);
+  const stateStore = new StateStore(stateFile);
   const history = new HistoryStore(path.join(dataDir, "history"));
 
   let state: OverlayState = INITIAL_STATE;
@@ -203,8 +207,6 @@ async function main(): Promise<void> {
 
   const first = await settingsStore.load();
   let saved: SavedState = await stateStore.read();
-  // No state.json yet: ED Chat has never run here, so it may choose the assistant.
-  const firstRun = Object.keys(saved).length === 0;
   // A change to a player-only setting waits for the player, also across a restart: the values
   // last applied are kept in state.json.
   const playerOnly = new PlayerOnlyGuard(
@@ -231,9 +233,6 @@ async function main(): Promise<void> {
     },
     saved.playerOnly ?? null,
   );
-  // The file as the player last applied it: a write that ED Chat makes for the player must not
-  // apply a player-only change that still waits for the player's answer.
-  const playerBase = () => withValues(settingsStore.text, playerOnly.values);
   let settings: Settings = playerOnly.effective() ?? settingsStore.settings;
   let position: Position;
   ({ position, saved } = effectivePosition(settings.position, saved));
@@ -805,7 +804,9 @@ async function main(): Promise<void> {
     try {
       // The player chose this, so the guard does not ask about it.
       await playerOnly.playerWrite(
-        settingsStore.textWith(id, "permissionMode", mode, playerBase()),
+        settingsStore.textWith(id, "permissionMode", mode),
+        `${id}.permissionMode`,
+        mode,
       );
       await settingsStore.load();
       settings = playerOnly.effective() ?? settingsStore.settings;
@@ -990,17 +991,17 @@ async function main(): Promise<void> {
   // The player's choice of assistant, from /claude, /codex or the tray. It is written as the
   // player's own change, so no dialog; the settings watcher then switches.
   async function chooseAgent(id: AgentId): Promise<boolean> {
+    if (id === settings.agent) {
+      flash("agent", `ⓘ ${AGENTS[id].name} is already the assistant`, 4_000);
+      return true;
+    }
     // The switch is read back from the file, which must be good first.
     if (settingsStore.broken) {
       flash("agent", "⚠ settings.json has an error: fix it, then switch", 6_000);
       return false;
     }
-    if (id === settings.agent) {
-      flash("agent", `ⓘ ${AGENTS[id].name} is already the assistant`, 4_000);
-      return true;
-    }
     try {
-      await playerOnly.playerWrite(settingsStore.textWithTop("agent", id, playerBase()));
+      await playerOnly.playerWrite(settingsStore.textWithTop("agent", id), "agent", id);
       await settingsStore.load();
       applyNewSettings(playerOnly.effective() ?? settingsStore.settings);
       await switching;

@@ -50,6 +50,18 @@ export function playerOnlyValues(text: string): PlayerOnlyValues {
   return values;
 }
 
+/** These values with one setting (a dotted path, such as claude.permissionMode) changed. */
+export function valuesWith(
+  values: PlayerOnlyValues,
+  path: string,
+  value: unknown,
+): PlayerOnlyValues {
+  const raw: Obj = {};
+  for (const p of PLAYER_ONLY_PATHS) setAt(raw, p, values[p]);
+  setAt(raw, path, value);
+  return playerOnlyValues(JSON.stringify(raw));
+}
+
 /** The player-only settings that differ between the two. */
 export function changedPaths(from: PlayerOnlyValues, to: PlayerOnlyValues): string[] {
   return PLAYER_ONLY_PATHS.filter((p) => !same(from[p], to[p]));
