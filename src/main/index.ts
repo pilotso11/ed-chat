@@ -658,7 +658,7 @@ async function main(): Promise<void> {
       // already holds the approval server's token.
       const problems = configProblems(agentConfigs);
       if (problems.length) {
-        const own = ownConfigUnreadable(agentId, agentConfigs);
+        const own = ownConfigUnreadable(agentId, agentConfigs, workspace);
         log.log(
           "warn",
           `ed-mcp: cannot read or parse ${problems.join(", ")}` +

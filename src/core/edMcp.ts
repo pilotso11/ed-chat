@@ -184,7 +184,7 @@ export function edMcpToAdd(
   c: AgentConfigs,
   workspace: string,
 ): EdMcpDefinition | null {
-  if (ownConfigUnreadable(agent, c)) return null;
+  if (ownConfigUnreadable(agent, c, workspace)) return null;
   const all = entriesFor(c, workspace);
   return ownEntry(agent, all, workspace) ? null : firstDefinition(all);
 }
@@ -225,7 +225,7 @@ export function syncDirOf(
 ): string | null {
   // The ed-mcp that runs may be in the file that cannot be read: no folder is better than
   // another entry's.
-  if (ownConfigUnreadable(agent, c)) return null;
+  if (ownConfigUnreadable(agent, c, workspace)) return null;
   const all = entriesFor(c, workspace);
   const own = ownEntry(agent, all, workspace);
   if (own && (own.source === "claudePlugin" || definition(own))) return envSyncDir(own);
@@ -254,11 +254,17 @@ export function configProblems(c: AgentConfigs): ConfigFile[] {
  * The agent's own config file is there but cannot be read or parsed (mid-write by a running
  * CLI, say). It may hold the agent's own ed-mcp, so ED Chat adds none: ed-mcp could run twice.
  */
-export function ownConfigUnreadable(agent: AgentId, c: AgentConfigs): boolean {
+export function ownConfigUnreadable(agent: AgentId, c: AgentConfigs, workspace?: string): boolean {
   if (agent === "codex") return configProblems(c).includes("codexToml");
+  if (configProblems(c).includes("claudeJson")) return true;
   // Claude's settings.json holds only the plugin. One that does not parse cannot load the
-  // plugin either (and stays broken until the player fixes it), so only a read error counts.
-  return configProblems(c).includes("claudeJson") || !!c.unreadable?.includes("claudeSettings");
+  // plugin either (and stays broken until the player fixes it), so only a read error counts,
+  // and only when the plugin could be Claude's own ed-mcp: its user scope and the project for
+  // ED Chat's folder rank above it.
+  if (!c.unreadable?.includes("claudeSettings")) return false;
+  return !claudeEntries(c.claudeJson).some(
+    (e) => e.source === "claudeUser" || isHere(e, workspace),
+  );
 }
 
 /**

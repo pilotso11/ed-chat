@@ -244,6 +244,13 @@ describe("edMcpToAdd", () => {
     expect(
       edMcpToAdd("claude", { codexToml: codex, unreadable: ["claudeSettings"] }, workspace),
     ).toBeNull();
+    // With a user-scope ed-mcp, which ranks above the plugin, it does not matter.
+    const user = JSON.stringify({
+      mcpServers: { "ed-mcp": { ...npx, env: { ED_MCP_SYNC_DIR: "U:/" } } },
+    });
+    expect(
+      syncDirOf({ claudeJson: user, unreadable: ["claudeSettings"] }, "claude", workspace),
+    ).toBe("U:/");
     expect(edMcpToAdd("codex", { claudeJson, unreadable: ["codexToml"] }, workspace)).toBeNull();
     // Another CLI's broken file does not matter.
     expect(edMcpToAdd("codex", { claudeJson, claudeSettings: "{" }, workspace)?.source).toBe(
