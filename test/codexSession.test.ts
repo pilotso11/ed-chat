@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -17,6 +17,7 @@ const sessions: CodexSession[] = [];
 
 interface Setup {
   mode?: string;
+  startTimeoutMs?: number;
   resumeId?: string | null;
   approve?: Approver;
   command?: string;
@@ -40,6 +41,7 @@ async function setup(o: Setup = {}) {
         return "decline";
       }),
     interruptGraceMs: o.interruptGraceMs,
+    startTimeoutMs: o.startTimeoutMs,
     env: { ...process.env, FAKE_FIXTURE: fixture, FAKE_MODE: o.mode ?? "ok", FAKE_LOG: log },
   });
   sessions.push(s);
@@ -451,6 +453,16 @@ describe("CodexSession", () => {
     });
   });
 
+  it("ends a process that never opens a conversation, so the message does not wait for ever", async () => {
+    const { s, events } = await setup({ mode: "no-answer", startTimeoutMs: 200 });
+    s.send("hi");
+    await until(() => has(events, "exit"));
+    expect(events.find((e) => e.type === "exit")).toMatchObject({
+      stderrTail: ["codex did not open a conversation in time"],
+    });
+    expect(s.busy).toBe(false);
+  });
+
   it("reports a CLI that cannot start", async () => {
     const { s, events } = await setup({ command: path.join(os.tmpdir(), "no-such-codex.exe") });
     s.start();
@@ -557,5 +569,29 @@ describe("CodexSession", () => {
     await until(() => has(events, "result"));
     const reply = (await received()).find((m) => m.id === "srv-2" && !m.method)!;
     expect(reply.result).toEqual({ action: "decline", content: null, _meta: null });
+  });
+});
+
+// npm installs Codex as codex.cmd, which needs a shell; the args must survive cmd.exe.
+describe.skipIf(process.platform !== "win32")("CodexSession through a .cmd shim", () => {
+  it("passes quoted args intact from a path with spaces", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "ed chat spaces-"));
+    const shim = path.join(dir, "fake codex.cmd");
+    await writeFile(shim, `@"${process.execPath}" "${fake}" %*\r\n`);
+    const log = path.join(dir, "log.jsonl");
+    const s = new CodexSession({
+      command: shim,
+      args: ["app-server", "two words", path.join(dir, "a b.toml")],
+      shell: true,
+      cwd: dir,
+      thread: codexThreadSettings({ permissionMode: "default", cwd: dir }),
+      approve: async () => "decline",
+      env: { ...process.env, FAKE_FIXTURE: fixture, FAKE_MODE: "ok", FAKE_LOG: log },
+    });
+    sessions.push(s);
+    s.start();
+    await until(() => s.sessionId !== null);
+    const first = JSON.parse((await readFile(log, "utf8")).split("\n")[0]!) as { argv: string[] };
+    expect(first.argv).toEqual(["app-server", "two words", path.join(dir, "a b.toml")]);
   });
 });

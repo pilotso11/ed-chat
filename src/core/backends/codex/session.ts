@@ -33,6 +33,8 @@ export interface CodexSessionOptions {
   clientVersion?: string;
   /** How long a stopped turn may take to end before the process is restarted. */
   interruptGraceMs?: number;
+  /** How long a process may take to answer the handshake and open a thread. */
+  startTimeoutMs?: number;
 }
 
 const cut = (s: string, max = 200) => (s.length > max ? s.slice(0, max - 1) + "…" : s);
@@ -71,6 +73,8 @@ export class CodexSession implements AgentBackend {
   private turnId: string | null = null;
   private cancelling = false;
   private interruptTimer: NodeJS.Timeout | undefined;
+  // A process that does not open a thread in time is restarted, like a turn that will not stop.
+  private startTimer: NodeJS.Timeout | undefined;
   // Each open approval request, with the process it came from, so a withdrawn card is
   // declined there.
   private readonly approvals = new Map<RequestId, { ctl: AbortController; rpc: RpcClient }>();
@@ -165,6 +169,7 @@ export class CodexSession implements AgentBackend {
       return;
     }
     const gen = ++this.gen;
+    if (this.rpc) this.armStart(this.rpc);
     if (this.initialized) void this.openThread(gen);
   }
 
@@ -205,11 +210,22 @@ export class CodexSession implements AgentBackend {
     this.emit(this.events.ready());
   }
 
+  // Covers the handshake and the thread call: no answer in time ends the process, which is
+  // reported like an exit, so the overlay does not wait for ever. The next message restarts it.
+  private armStart(rpc: RpcClient): void {
+    clearTimeout(this.startTimer);
+    this.startTimer = setTimeout(() => {
+      if (this.rpc === rpc && !this.threadReady)
+        this.fail(rpc, new Error("codex did not open a conversation in time"));
+    }, this.opts.startTimeoutMs ?? 60_000);
+  }
+
   private interruptLeft(rpc: RpcClient, threadId: string, turnId: string): void {
     rpc.request("turn/interrupt", { threadId, turnId }).catch(() => {});
   }
 
   private kill(): void {
+    clearTimeout(this.startTimer);
     const c = this.child;
     this.rpc?.close(new Error("stopped"));
     this.rpc = null;
@@ -259,6 +275,7 @@ export class CodexSession implements AgentBackend {
       },
     });
     this.rpc = rpc;
+    this.armStart(rpc);
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
@@ -377,6 +394,7 @@ export class CodexSession implements AgentBackend {
     this.events.threadId = id;
     this.events.permissionMode = permissionModeOf(r.approvalPolicy);
     this.threadReady = true;
+    clearTimeout(this.startTimer);
     // This ready carries every status so far: one held from before is not sent again.
     this.readyHeld = false;
     this.emit(this.events.ready());

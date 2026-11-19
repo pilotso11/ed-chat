@@ -156,6 +156,7 @@ rl.on("line", (line) => {
   const { id, method, params } = msg;
   switch (method) {
     case "initialize":
+      if (mode === "no-answer") return;
       if (mode === "init-error")
         return out({ id, error: { code: -32603, message: "not logged in" } });
       return out({ id, result: { userAgent: "fake-codex/0.170.0" } });
