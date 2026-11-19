@@ -94,6 +94,8 @@ export class CodexSession implements AgentBackend {
   private readonly leftThreads = new Set<string>();
   // An MCP status change came during a turn; ready is sent when the turn ends.
   private readyHeld = false;
+  // The command changed since this process started: /new starts a new process with it.
+  private cmdChanged = false;
   // Turns that have ended in this process. A late or repeated end for one of them can come
   // before the next turn's id is known, so it is matched by id, not by the running turn.
   private readonly endedTurns = new Set<string>();
@@ -120,6 +122,7 @@ export class CodexSession implements AgentBackend {
 
   /** Takes effect at the next spawn. */
   configure(c: BackendCommand): void {
+    if (JSON.stringify(c) !== JSON.stringify(this.cmd)) this.cmdChanged = true;
     this.cmd = c;
   }
 
@@ -182,6 +185,7 @@ export class CodexSession implements AgentBackend {
     this.events.threadId = null;
     this.events.resetTurn();
     this.crashes.reset();
+    if (this.child && this.cmdChanged) this.kill();
     if (!this.child) {
       this.spawnChild();
       return;
@@ -278,6 +282,7 @@ export class CodexSession implements AgentBackend {
     );
     this.gen++;
     this.child = child;
+    this.cmdChanged = false;
     this.stderr = [];
     this.leftThreads.clear();
     this.endedTurns.clear();

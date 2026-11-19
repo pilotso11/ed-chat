@@ -290,6 +290,19 @@ describe("CodexSession", () => {
     expect(texts.join("")).not.toContain("from thr-1");
   });
 
+  it("starts a new process at /new when the command changed", async () => {
+    const { s, methods, received } = await setup();
+    s.start();
+    await until(() => s.sessionId === "thr-1");
+    s.configure({ command: process.execPath, args: [fake, "--changed"], shell: false });
+    // Not before /new: the conversation goes on.
+    expect((await methods()).filter((x) => x === "<start>")).toHaveLength(1);
+    s.newSession();
+    await until(async () => (await methods()).filter((x) => x === "<start>").length === 2);
+    const starts = (await received()).filter((m) => m.argv);
+    expect(starts.at(-1)).toEqual({ argv: ["--changed"] });
+  });
+
   it("starts a new thread in the same process at /new", async () => {
     const { s, events, methods } = await setup();
     s.start();
