@@ -95,12 +95,20 @@ export class CodexEvents {
   }
 
   result(t: TurnResult): SessionEvent {
-    const isError = t.status === "failed";
+    // Anything but completed is an error the player hears about: failed, a stop the player did
+    // not ask for, or a status a newer Codex adds.
+    const isError = t.status !== "completed";
+    const said =
+      t.status === "failed"
+        ? "Codex returned an error."
+        : t.status === "interrupted"
+          ? "Codex stopped the reply."
+          : `Codex ended the reply: ${t.status}.`;
     const e: SessionEvent = {
       type: "result",
       isError,
       durationMs: t.durationMs,
-      text: isError ? (t.error ?? "Codex returned an error.") : null,
+      text: isError ? (t.error ?? said) : null,
       sessionId: this.threadId,
       denials: this.denials,
     };

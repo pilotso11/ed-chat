@@ -146,6 +146,32 @@ describe("CodexSession", () => {
     expect(s.busy).toBe(false);
   });
 
+  it("shows a turn that Codex stopped by itself as an error, not as a quiet stop", async () => {
+    const { s, events } = await setup({ mode: "self-interrupt" });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    expect(events.find((e) => e.type === "result")).toMatchObject({
+      isError: true,
+      text: "Codex stopped the reply.",
+    });
+    expect(s.busy).toBe(false);
+  });
+
+  it("does not name the workspace as another folder on an approval card", async () => {
+    let card: CodexApproval | null = null;
+    const { s, dir } = await setup({
+      mode: "approval-in-workspace",
+      approve: async (r) => {
+        card = r;
+        return "decline";
+      },
+    });
+    s.send("run it");
+    await until(() => card !== null);
+    expect(card!.summary).toBe("dir");
+    expect(dir).toBeTruthy();
+  });
+
   it("reports a failed ed-mcp from its startup status", async () => {
     const { s, events } = await setup({ mode: "edmcp-fail" });
     s.start();

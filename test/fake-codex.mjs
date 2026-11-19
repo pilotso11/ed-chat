@@ -19,6 +19,7 @@ const reportsMcp = mode !== "mcp-first-only" || start === 1;
 const out = (msg) => process.stdout.write(JSON.stringify(msg) + "\n");
 const note = (method, params) => out({ method, params });
 let threads = 0;
+let threadCwd = "";
 let resumeRefused = 0;
 let turns = 0;
 let current = null;
@@ -55,6 +56,32 @@ function playTurn(threadId, turnId) {
         }),
       100,
     );
+    return;
+  }
+  // Codex ends the turn by itself, with no stop from the player.
+  // A shell command in the workspace, which Codex echoes with another case (Windows) or a
+  // trailing slash.
+  if (mode === "approval-in-workspace") {
+    waiting.set("srv-4", () =>
+      note("turn/completed", {
+        threadId,
+        turn: { id: turnId, status: "completed", error: null, durationMs: 1 },
+      }),
+    );
+    const cwd = process.platform === "win32" ? threadCwd.toUpperCase() : threadCwd + "/";
+    out({
+      id: "srv-4",
+      method: "item/commandExecution/requestApproval",
+      params: { threadId, turnId, itemId: "cmd-4", command: "dir", cwd },
+    });
+    return;
+  }
+  if (mode === "self-interrupt") {
+    note("item/agentMessage/delta", { threadId, turnId, itemId: "m", delta: "Part of " });
+    note("turn/completed", {
+      threadId,
+      turn: { id: turnId, status: "interrupted", error: null, durationMs: 2 },
+    });
     return;
   }
   if (mode === "fail-turn") {
@@ -191,6 +218,7 @@ rl.on("line", (line) => {
           error: null,
         });
       const threadId = method === "thread/resume" ? params.threadId : `thr-${++threads}`;
+      threadCwd = params.cwd ?? "";
       // slow-thread: the answer comes late, and the thread then says something on its own.
       if (mode === "slow-thread") {
         setTimeout(

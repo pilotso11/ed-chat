@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import path from "node:path";
 import type { AgentBackend, BackendCommand, BackendEvent, SessionEvent } from "../../backend.js";
 import { quoteForCmd } from "../../cli.js";
 import { CrashTracker } from "../../crashTracker.js";
@@ -41,6 +42,12 @@ const cut = (s: string, max = 200) => (s.length > max ? s.slice(0, max - 1) + "â
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+// Codex may echo the workspace with another case or slashes on Windows.
+function samePath(a: string, b: string): boolean {
+  const n = (p: string) => path.resolve(p).replace(/[\\/]+$/, "");
+  return process.platform === "win32" ? n(a).toLowerCase() === n(b).toLowerCase() : n(a) === n(b);
+}
+
 // thread/resume for a thread with no saved rollout: -32600 "no rollout found for thread id â€¦".
 const isGone = (e: RpcError) => e.code === -32600 && /no rollout/i.test(e.message);
 
@@ -518,7 +525,8 @@ export class CodexSession implements AgentBackend {
         if (t.id && (this.endedTurns.has(t.id) || (this.turnId && t.id !== this.turnId))) return;
         // Its id is kept even when it ended before its turn/start answer gave it.
         if (t.id) this.endedTurns.add(t.id);
-        const cancelled = this.cancelling || t.status === "interrupted";
+        // Only a stop the player asked for ends quietly; Codex stopping by itself is shown.
+        const cancelled = this.cancelling;
         this.abortApprovals();
         const next = this.endTurn();
         // A stopped turn has no reply: the overlay goes back to idle.
@@ -585,7 +593,7 @@ export class CodexSession implements AgentBackend {
       case "item/commandExecution/requestApproval": {
         const command = str(p.command);
         const cwd = str(p.cwd);
-        const where = cwd && cwd !== this.thread.cwd ? ` (in ${cwd})` : "";
+        const where = cwd && !samePath(cwd, this.thread.cwd) ? ` (in ${cwd})` : "";
         const summary = command ? command + where : (str(p.reason) ?? "a shell command");
         this.ask(rpc, id, { toolName: "shell", summary: cut(summary), shell: true });
         return;

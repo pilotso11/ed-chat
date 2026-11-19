@@ -129,6 +129,13 @@ describe("CodexEvents", () => {
       denials: ["shell"],
     });
     // The next turn starts clean.
+    expect(e.result({ id: "w", status: "interrupted", durationMs: 1, error: null })).toMatchObject({
+      isError: true,
+      text: "Codex stopped the reply.",
+    });
+    expect(
+      e.result({ id: "x", status: "cancelledByServer", durationMs: 1, error: null }),
+    ).toMatchObject({ isError: true, text: "Codex ended the reply: cancelledByServer." });
     expect(e.result({ id: "v", status: "failed", durationMs: null, error: null })).toMatchObject({
       isError: true,
       text: "Codex returned an error.",
