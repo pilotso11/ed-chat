@@ -25,6 +25,7 @@
     "koffi": "^3.3.6",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "smol-toml": "^1.9.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {

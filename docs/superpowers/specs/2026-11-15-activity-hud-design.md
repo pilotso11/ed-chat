@@ -106,7 +106,8 @@ per body, with the first-discovery and first-mapped bonuses from the scan's `Was
     sent).
   - `bioMin`: bio planets likely worth less than this are left off.
   - `edMcpDataDir`: the ed-mcp sync folder. When null, it is read from `ED_MCP_SYNC_DIR` in the
-    ed-mcp entry of Claude Code's `~/.claude.json`, else ed-mcp's own config folder.
+    ed-mcp that the assistant runs (Claude Code's `~/.claude.json` or plugin options, or
+    Codex's `config.toml`), else ed-mcp's own config folder.
 - Hotkeys, through the same `globalShortcut` registration as the chat's:
   - `hudToggle` (Ctrl+Alt+P): show or hide.
   - `hudMode` (Ctrl+Alt+Shift+P): cycle auto → each enabled mode → off → auto.
@@ -267,8 +268,8 @@ The mode registry first sketched here was not needed. The modes are small, pure 
 - `src/core/hud/hud.ts`: picks the mode and builds the view. `src/core/hud/feed.ts` reads the
   sources, and `src/core/hud/known.ts` is the Spansh lookup.
 - `src/core/edMcp.ts` (`syncDirOf`, formerly `src/core/hud/edMcpConfig.ts`): finds the ed-mcp
-  sync folder from `ED_MCP_SYNC_DIR` in Claude Code's `~/.claude.json` (Codex's config is
-  planned), for `hud.edMcpDataDir` when it is null.
+  sync folder from `ED_MCP_SYNC_DIR` in the assistants' config, for `hud.edMcpDataDir` when it
+  is null.
 - `src/renderer/hud.tsx`: one component renders any `PanelView`.
 
 A new mode is a rule in `mode.ts`, a panel function and its tests.

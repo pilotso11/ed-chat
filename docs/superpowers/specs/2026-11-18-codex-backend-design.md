@@ -1,9 +1,8 @@
 # Codex as an alternative to Claude
 
 Date: 2026-11-18
-Status: draft. Step 0 (protocol probe) done, see "Step 0 results". Part 1 done; `findEdMcp()`
-reads only `~/.claude.json` so far, and Part 3 adds `config.toml` and the plugin lookup. Part 2
-done, not yet wired into main (Part 4); see "Notes from Part 2".
+Status: draft. Step 0 (protocol probe) done, see "Step 0 results". Parts 1 to 3 done; Part 2
+is not yet wired into main (Part 4). See "Notes from Part 2" and "Notes from Part 3".
 
 ## Purpose
 
@@ -212,3 +211,21 @@ Notes from the probe:
   (`taskkill /T`); in cli-config mode, pass ed-mcp's env through codex's own environment and
   `env_vars` rather than leaving it out; check recordings by hand for secrets in other spellings
   (forward-slash paths, double escaping) and in ed-mcp's args.
+
+## Notes from Part 3
+
+- `edMcp.ts` reads `~/.claude.json`, `~/.claude/settings.json` (for the plugin) and
+  `~/.codex/config.toml`, and follows `CLAUDE_CONFIG_DIR` and `CODEX_HOME` as the CLIs do.
+- The plugin's options are in `pluginConfigs["<plugin>@<marketplace>"].options` in Claude's user
+  settings; only enabled plugins count. Its password is in Claude's secret store, and its server
+  runs from the plugin's folder, so it is never given to another backend: only its sync folder
+  is read.
+- A backend's own ed-mcp: for Claude, user scope, the project entry for ED Chat's workspace, or
+  the plugin; for Codex, `[mcp_servers.ed-mcp]`, even with `enabled = false` (the player turned
+  it off). `edMcpToAdd()` gives a backend the first runnable definition only when it has none.
+- Claude gets the added ed-mcp in `approval-mcp.json`, written at startup, so a change to either
+  config applies when ED Chat starts again. Part 4 passes `edMcpToAdd("codex", …)` to
+  `codexThreadSettings()`.
+- Not carried over: Codex's `env_vars` (variables passed by name from Codex's environment).
+- The setup notice still gives the running backend's `mcp add` line. Part 4 picks the line from
+  the CLIs that are installed.

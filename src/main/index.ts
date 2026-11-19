@@ -81,7 +81,7 @@ import {
 } from "../core/stores.js";
 import { resumeId } from "../core/resume.js";
 import { openStores } from "ed-mcp/journal";
-import { edMcpState, readAgentConfigs, syncDirOf } from "../core/edMcp.js";
+import { edMcpState, edMcpToAdd, readAgentConfigs, syncDirOf } from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
@@ -521,7 +521,7 @@ async function main(): Promise<void> {
   let hudPlans: ReturnType<typeof openStores>["plans"] | null = null;
   async function openHudFeed(): Promise<void> {
     let syncDir = settings.hud.edMcpDataDir;
-    if (!syncDir) syncDir = syncDirOf(await readAgentConfigs());
+    if (!syncDir) syncDir = syncDirOf(await readAgentConfigs(), agentId, workspace);
     const stores = openStores(
       { ED_JOURNAL_DIR: journalDir(settings), ED_MCP_SYNC_DIR: syncDir ?? undefined },
       { keep: HUD_EVENTS },
@@ -642,7 +642,16 @@ async function main(): Promise<void> {
   }
   if (!agentBlocked) {
     try {
-      await writeFile(mcpConfigFile, JSON.stringify(approval.mcpConfig()));
+      // ed-mcp from Codex's config or another Claude project, when Claude has none of its own.
+      // Its env can hold the sync password; the file is in ED Chat's own data folder, which
+      // already holds the approval server's token.
+      const edMcp = edMcpToAdd(agentId, await readAgentConfigs(), workspace);
+      const mcpServers: Record<string, unknown> = { ...approval.mcpConfig().mcpServers };
+      if (edMcp) {
+        mcpServers["ed-mcp"] = { command: edMcp.command, args: edMcp.args, env: edMcp.env };
+        log.log("info", `ed-mcp: using the definition from ${edMcp.source}`);
+      }
+      await writeFile(mcpConfigFile, JSON.stringify({ mcpServers }));
       await mkdir(workspace, { recursive: true });
     } catch (err) {
       log.log("warn", `data folder: ${message(err)}`);
