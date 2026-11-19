@@ -240,6 +240,8 @@ export class CodexSession implements AgentBackend {
     this.stderr = [];
     this.leftThreads.clear();
     this.endedTurns.clear();
+    // A new process reports its own MCP statuses; the old ones may no longer hold.
+    this.events.resetProcess();
     this.readyHeld = false;
     this.initialized = false;
     this.threadReady = false;
@@ -333,15 +335,19 @@ export class CodexSession implements AgentBackend {
     if (!rpc) return;
     const params = { ...this.thread };
     let res: unknown;
+    // Which call gave the thread, for the error when it names none.
+    let call = "thread/start";
     try {
       if (this._threadId) {
         try {
           res = await rpc.request("thread/resume", { threadId: this._threadId, ...params });
+          call = "thread/resume";
         } catch (err) {
-          // The process went: the thread is still there, and resumes at the restart.
-          if (gen !== this.gen || !(err instanceof RpcError)) throw err;
-          // An unknown id is -32600 "no rollout found"; any other refusal also leaves no
-          // thread to resume, so a new one starts with the message the player sent.
+          // Only -32600 "no rollout found" means the thread is gone. Anything else (the
+          // process went, an internal error) keeps it: the process is restarted, and the
+          // thread resumes at the next message.
+          if (gen !== this.gen || !(err instanceof RpcError) || err.code !== -32600) throw err;
+          // A new thread starts with the message the player sent.
           this._threadId = null;
           this.emit({
             type: "resumeFailed",
@@ -360,7 +366,7 @@ export class CodexSession implements AgentBackend {
     const thread = isRecord(r.thread) ? r.thread : {};
     const id = str(thread.id);
     if (!id) {
-      this.fail(rpc, new Error("thread/start gave no thread id"));
+      this.fail(rpc, new Error(`${call} gave no thread id`));
       return;
     }
     this._threadId = id;

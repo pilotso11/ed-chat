@@ -67,6 +67,13 @@ export class CodexEvents {
   private wroteText = false;
   private denials: string[] = [];
 
+  /** Forgets everything from a process that has gone, MCP statuses included. */
+  resetProcess(): void {
+    this.mcp.clear();
+    this.threadId = null;
+    this.resetTurn();
+  }
+
   /** Forgets the turn: a new turn, or a new thread. */
   resetTurn(): void {
     this.tools.clear();

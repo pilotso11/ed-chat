@@ -342,6 +342,33 @@ describe("CodexSession", () => {
     expect(s.send("again")).toBe(true);
   });
 
+  it("keeps the saved thread when the resume fails for another reason", async () => {
+    const { s, events } = await setup({ mode: "resume-error", resumeId: "thr-old" });
+    s.send("hi");
+    await until(() => has(events, "exit"));
+    expect(has(events, "resumeFailed")).toBe(false);
+    expect(s.sessionId).toBe("thr-old");
+    expect(events.find((e) => e.type === "exit")).toMatchObject({
+      stderrTail: ["internal error"],
+    });
+  });
+
+  it("forgets the MCP statuses of a process that has gone", async () => {
+    const { s, events, methods } = await setup({ mode: "mcp-first-only" });
+    s.start();
+    await until(() =>
+      events.some((e) => e.type === "ready" && e.mcpServers.some((m) => m.name === "ed-mcp")),
+    );
+    s.send("hi");
+    await until(() => has(events, "exit"));
+    const before = events.length;
+    s.send("again");
+    await until(async () => (await methods()).includes("thread/resume"));
+    await until(() => events.slice(before).some((e) => e.type === "ready"));
+    const ready = events.slice(before).find((e) => e.type === "ready");
+    expect(ready).toMatchObject({ mcpServers: [] });
+  });
+
   it("keeps the saved thread when the process dies during the resume", async () => {
     const { s, events } = await setup({ mode: "resume-crash", resumeId: "thr-old" });
     s.start();

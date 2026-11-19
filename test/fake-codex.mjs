@@ -7,6 +7,14 @@ const fixture = readFileSync(process.env.FAKE_FIXTURE, "utf8").split("\n").filte
 const mode = process.env.FAKE_MODE ?? "ok";
 const logFile = process.env.FAKE_LOG;
 if (logFile) appendFileSync(logFile, JSON.stringify({ argv: process.argv.slice(2) }) + "\n");
+// Which start of the fake this is, counted in the log: 1 for the first process.
+const start = logFile
+  ? readFileSync(logFile, "utf8")
+      .split("\n")
+      .filter((l) => l.startsWith('{"argv"')).length
+  : 1;
+// mcp-first-only: only the first process reports ed-mcp, and it dies at its first turn.
+const reportsMcp = mode !== "mcp-first-only" || start === 1;
 
 const out = (msg) => process.stdout.write(JSON.stringify(msg) + "\n");
 const note = (method, params) => out({ method, params });
@@ -16,7 +24,7 @@ let current = null;
 const waiting = new Map();
 
 function playTurn(threadId, turnId) {
-  if (mode === "crash") {
+  if (mode === "crash" || (mode === "mcp-first-only" && start === 1)) {
     process.stderr.write("boom\n", () => process.exit(1));
     return;
   }
@@ -155,17 +163,20 @@ rl.on("line", (line) => {
     case "thread/start":
     case "thread/resume": {
       if (method === "thread/resume" && mode === "resume-crash") process.exit(1);
+      if (method === "thread/resume" && mode === "resume-error")
+        return out({ id, error: { code: -32603, message: "internal error" } });
       if (method === "thread/resume" && mode === "no-thread")
         return out({
           id,
           error: { code: -32600, message: `no rollout found for thread id ${params.threadId}` },
         });
-      note("mcpServer/startupStatus/updated", {
-        threadId: null,
-        name: "ed-mcp",
-        status: "starting",
-        error: null,
-      });
+      if (reportsMcp)
+        note("mcpServer/startupStatus/updated", {
+          threadId: null,
+          name: "ed-mcp",
+          status: "starting",
+          error: null,
+        });
       const threadId = method === "thread/resume" ? params.threadId : `thr-${++threads}`;
       out({
         id,
@@ -176,12 +187,13 @@ rl.on("line", (line) => {
         },
       });
       const failed = mode === "edmcp-fail";
-      note("mcpServer/startupStatus/updated", {
-        threadId: null,
-        name: "ed-mcp",
-        status: failed ? "failed" : "ready",
-        error: failed ? "spawn npx ENOENT" : null,
-      });
+      if (reportsMcp)
+        note("mcpServer/startupStatus/updated", {
+          threadId: null,
+          name: "ed-mcp",
+          status: failed ? "failed" : "ready",
+          error: failed ? "spawn npx ENOENT" : null,
+        });
       return;
     }
     case "turn/start": {

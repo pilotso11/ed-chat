@@ -190,14 +190,14 @@ Notes from the probe:
 - For Part 4, when Codex is wired in: `brokerApprover()` tells "allow until /new" from "allow"
   by reading `isAllowed()` after the answer, which needs main to call `allowTool()` in the same
   tick; the broker should return the kind of allow instead. Codex's `unknown` events carry
-  `{ method, params }`, and main's `describeUnknown` logs only `type` and `subtype`. The MCP
-  status map in `CodexEvents` is kept across a restart, so a server that is gone in the new
-  process still reads as connected; clear it at each spawn.
+  `{ method, params }`, and main's `describeUnknown` logs only `type` and `subtype`.
 - An MCP status change during a turn sends `ready` only when the turn ends, since `ready`
   means idle to the overlay.
-- Left for Part 4: any refused `thread/resume` starts a new thread, not only -32600, so a
-  passing error loses the conversation. Approvals are keyed by request id alone, and each
-  process counts from 0. Cleanups: the process code shared with `ClaudeSession` (spawn,
+- Only -32600 from `thread/resume` starts a new thread; any other error restarts the process
+  and keeps the thread for the next message. Each new process starts with no MCP statuses.
+- Left for Part 4: approvals are keyed by request id alone, and each process counts from 0. A
+  refused `turn/interrupt` for a turn that `/new` left is not retried, so that turn can run on.
+  Cleanups: the process code shared with `ClaudeSession` (spawn,
   taskkill), and `isRecord`/`str`/`cut` copied across modules.
 - Probe hardening deferred to Part 5, before fixtures are recorded: fail closed on any git error
   in the outside-the-repo check, ignore inherited `GIT_*` variables, refuse a folder inside
