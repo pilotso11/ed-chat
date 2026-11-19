@@ -193,6 +193,8 @@ Notes from the probe:
   `{ method, params }`, and main's `describeUnknown` logs only `type` and `subtype`.
 - An MCP status change during a turn sends `ready` only when the turn ends, since `ready`
   means idle to the overlay.
+- A message sent while a stopped reply is still ending is held and sent once it has ended, as
+  Claude's respawn does; a second one is refused as busy.
 - A process that does not answer the handshake and open a thread within 60 seconds is ended
   and reported like an exit, so a message does not wait for ever.
 - `thread/resume`: -32600 "no rollout found" starts a new thread at once. Any other refusal is

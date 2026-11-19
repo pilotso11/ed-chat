@@ -178,6 +178,24 @@ describe("CodexSession", () => {
     expect(s.sessionId).toBe("thr-1");
   });
 
+  it("sends a message given while a stopped reply is still ending, once it has", async () => {
+    const { s, events, received } = await setup({ mode: "hang" });
+    s.send("hi");
+    await until(async () => (await received()).some((m) => m.method === "turn/start"));
+    await new Promise((r) => setTimeout(r, 50));
+    s.cancel();
+    expect(s.send("next")).toBe(true);
+    // A third waits for nothing: the player sees busy.
+    expect(s.send("third")).toBe(false);
+    await until(
+      async () => (await received()).filter((m) => m.method === "turn/start").length === 2,
+    );
+    const turns = (await received()).filter((m) => m.method === "turn/start");
+    expect(turns[1]!.params).toMatchObject({ input: [{ text: "next" }] });
+    expect(s.busy).toBe(true);
+    expect(has(events, "result")).toBe(false);
+  });
+
   it("restarts a process whose turn does not stop, and resumes the thread", async () => {
     const { s, events, methods } = await setup({ mode: "stuck", interruptGraceMs: 200 });
     s.send("hi");

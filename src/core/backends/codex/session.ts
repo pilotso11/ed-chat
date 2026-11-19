@@ -72,6 +72,8 @@ export class CodexSession implements AgentBackend {
   private pending: string | null = null;
   private turnId: string | null = null;
   private cancelling = false;
+  // A message sent while a stopped reply was still ending; sent when it has.
+  private afterStop: string | null = null;
   private interruptTimer: NodeJS.Timeout | undefined;
   // A process that does not open a thread in time is restarted, like a turn that will not stop.
   private startTimer: NodeJS.Timeout | undefined;
@@ -124,7 +126,13 @@ export class CodexSession implements AgentBackend {
   }
 
   send(text: string): boolean {
-    if (this._busy || this.crashes.gaveUp) return false;
+    if (this.crashes.gaveUp) return false;
+    if (this._busy) {
+      // A reply the player stopped is still ending: the message goes once it has.
+      if (!this.cancelling || this.afterStop !== null) return false;
+      this.afterStop = text;
+      return true;
+    }
     this._busy = true;
     this.pending = text;
     if (!this.child) this.spawnChild();
@@ -150,6 +158,7 @@ export class CodexSession implements AgentBackend {
   }
 
   newSession(): void {
+    this.afterStop = null;
     // The old thread's turn is stopped, and anything it still sends is dropped.
     if (this._threadId) {
       this.leftThreads.add(this._threadId);
@@ -174,6 +183,7 @@ export class CodexSession implements AgentBackend {
   }
 
   stop(): void {
+    this.afterStop = null;
     this.kill();
     this.endTurn();
     this.abortApprovals();
@@ -218,6 +228,12 @@ export class CodexSession implements AgentBackend {
       if (this.rpc === rpc && !this.threadReady)
         this.fail(rpc, new Error("codex did not open a conversation in time"));
     }, this.opts.startTimeoutMs ?? 60_000);
+  }
+
+  private sendAfterStop(): void {
+    const text = this.afterStop;
+    this.afterStop = null;
+    if (text !== null) this.send(text);
   }
 
   private interruptLeft(rpc: RpcClient, threadId: string, turnId: string): void {
@@ -377,7 +393,8 @@ export class CodexSession implements AgentBackend {
         }
       }
       if (gen !== this.gen) return;
-      if (!res) res = await rpc.request("thread/start", params);
+      // undefined: no call answered. A resume that answers null gives no thread id below.
+      if (res === undefined) res = await rpc.request("thread/start", params);
     } catch (err) {
       if (gen === this.gen) this.fail(rpc, err);
       return;
@@ -434,8 +451,10 @@ export class CodexSession implements AgentBackend {
           // Refused before it started, so no turn/completed follows.
           const cancelled = this.cancelling;
           this.endTurn();
-          if (cancelled) this.emit({ type: "spawned" });
-          else
+          if (cancelled) {
+            this.emit({ type: "spawned" });
+            this.sendAfterStop();
+          } else
             this.emit({
               type: "result",
               isError: true,
@@ -476,6 +495,7 @@ export class CodexSession implements AgentBackend {
       this.abortApprovals();
       this.events.resetTurn();
       this.spawnChild();
+      this.sendAfterStop();
     }, this.opts.interruptGraceMs ?? 5_000);
   }
 
@@ -503,6 +523,7 @@ export class CodexSession implements AgentBackend {
           this.events.resetTurn();
           this.emit({ type: "spawned" });
         } else this.emit(this.events.result(t));
+        if (cancelled) this.sendAfterStop();
         this.emitHeldReady();
         return;
       }
