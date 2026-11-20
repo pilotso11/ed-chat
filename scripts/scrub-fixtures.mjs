@@ -71,7 +71,11 @@ export function makeScrubber({ home, user, commander, fid, commanders = [], fids
   // placeholders themselves are not names to scrub.
   const byLength = (xs) =>
     [...new Set(xs.filter(Boolean).map((x) => x.trim()))].sort((a, b) => b.length - a.length);
-  const names = byLength([commander, ...commanders]).filter((n) => !sameName(n, "Jameson"));
+  // A commander named like a placeholder or a word the recordings use (User, System) is not
+  // replaced as a word: it would break the fixtures, and could not be told from the placeholder.
+  const names = byLength([commander, ...commanders]).filter(
+    (n) => !sameName(n, "Jameson") && !PROTOCOL_WORDS.has(n.toLowerCase()),
+  );
   const allFids = byLength([fid, ...fids]).filter((f) => f !== "F0000000");
   for (const name of names) rules.push([word(name), "Jameson"]);
   for (const f of allFids) rules.push([new RegExp(escapeRe(f), "gi"), "F0000000"]);
@@ -80,14 +84,13 @@ export function makeScrubber({ home, user, commander, fid, commanders = [], fids
   if (user && !PROTOCOL_WORDS.has(user.toLowerCase())) rules.push([word(user), "player"]);
   /**
    * The names and FIDs still in the text. Looser than the rules: any case, any spacing, and a
-   * name joined by __, - or _ to other words. ed-mcp's and ED Chat's own names and the
-   * placeholders are taken out first, so a commander called Ed or James is not a false alarm.
+   * name joined by __, - or _ to other words. ed-mcp's and ED Chat's own names and the home
+   * placeholder are taken out first, so a commander called Ed or Home is not a false alarm.
    */
   const leaks = (s) => {
-    const t = s.replace(
-      /mcp__ed-mcp__|ed-mcp|ed_chat|ed_overlay|Jameson|F0000000|\/home\/player|player/gi,
-      " ",
-    );
+    // The placeholders need no removing: names are matched as whole words, and a name equal to a
+    // placeholder is not scrubbed. So Jameson Smith or Soloplayer, left behind, is still found.
+    const t = s.replace(/mcp__ed-mcp__|ed-mcp|ed_chat|ed_overlay|\/home\/player|F0000000/gi, " ");
     const loose = (n) =>
       new RegExp(
         `(?<!(?<!\\\\)[\\p{L}\\p{N}])${n.split(/\s+/).map(escapeRe).join("\\s*")}(?![\\p{L}\\p{N}])`,

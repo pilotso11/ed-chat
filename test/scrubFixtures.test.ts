@@ -233,6 +233,18 @@ describe("commanderFromJournal", () => {
     }
   });
 
+  it("still finds a name that holds a placeholder, left where the rules skip it", () => {
+    for (const commander of ["Jameson Smith", "Soloplayer"]) {
+      const s = makeScrubber({ commander });
+      expect(s.leaks(s.text(`tmp__${commander}`))).toEqual([commander]);
+    }
+  });
+
+  it("does not replace a commander named like a word the recordings use", () => {
+    const s = makeScrubber({ commander: "User" });
+    expect(s.text('{"type":"user"}')).toBe('{"type":"user"}');
+  });
+
   it("leaves a user name that the recordings use as a word to the home folder rule", () => {
     const s = makeScrubber({ home: "C:\\Users\\User", user: "User" });
     expect(s.text('{"type":"user"} C:\\Users\\User\\x')).toBe('{"type":"user"} /home/player\\x');
