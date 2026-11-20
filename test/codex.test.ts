@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ApprovalBroker, type ApprovalRequest } from "../src/core/approvals.js";
 import { brokerApprover } from "../src/core/backends/codex/approvals.js";
@@ -242,6 +243,15 @@ describe("codex command", () => {
     });
     expect(s.developerInstructions).toContain("⟦");
     expect(s.developerInstructions).toContain("C:\\s.json");
+  });
+
+  it("makes the settings folder writable in auto mode only", () => {
+    const dir = path.resolve("d");
+    const o = { cwd: path.join(dir, "w"), settingsFile: path.join(dir, "settings.json") };
+    expect(codexThreadSettings({ ...o, permissionMode: "auto" }).config).toEqual({
+      sandbox_workspace_write: { writable_roots: [dir] },
+    });
+    expect(codexThreadSettings({ ...o, permissionMode: "default" }).config).toBeUndefined();
   });
 });
 

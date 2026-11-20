@@ -91,9 +91,15 @@ export function codexThreadSettings(o: {
     developerInstructions: prompt,
   };
   if (o.model) s.model = o.model;
+  const config: Record<string, unknown> = {};
   // In the request body, not as -c arguments: the env can hold ED_MCP_SYNC_PASSWORD, and
   // command lines are visible to other processes.
-  if (o.edMcp) s.config = { mcp_servers: { "ed-mcp": o.edMcp } };
+  if (o.edMcp) config.mcp_servers = { "ed-mcp": o.edMcp };
+  // In auto mode Codex may change settings.json without a card, as Claude does: its folder is
+  // writable in the sandbox. ED Chat still asks the player about player-only settings.
+  if (o.permissionMode === "auto" && o.settingsFile)
+    config.sandbox_workspace_write = { writable_roots: [path.dirname(o.settingsFile)] };
+  if (Object.keys(config).length) s.config = config;
   return s;
 }
 
