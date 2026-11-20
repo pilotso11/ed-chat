@@ -34,6 +34,18 @@ const PRIVATE_METHOD = /^(account|remoteControl)\//;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // A run of slashes or backslashes: one path separator in any spelling, JSON-escaped or not.
 const SEP = "(?:\\\\+|/)+";
+// Words the recordings use for roles and fields; a user name like these is not replaced as a word.
+const PROTOCOL_WORDS = new Set([
+  "user",
+  "assistant",
+  "system",
+  "tool",
+  "admin",
+  "administrator",
+  "owner",
+  "default",
+  "player",
+]);
 
 /**
  * A scrubber for one recorder: `text` scrubs a string, `json` every string and key in a value.
@@ -47,11 +59,11 @@ export function makeScrubber({ home, user, commander, fid, commanders = [], fids
     rules.push([new RegExp(lead + parts.map(escapeRe).join(SEP), "gi"), "/home/player"]);
   }
   // Whole words only, so a short name does not eat parts of other words. A letter after a
-  // backslash is an escape (\n in JSON text), not part of the word. ed-mcp's tool names
-  // (mcp__ed-mcp__…) are not a name either.
+  // backslash is an escape (\n in JSON text), not part of the word. ed-mcp's and ED Chat's own
+  // names (mcp__ed-mcp__…, ed_overlay, ed_chat) are not a name either.
   const word = (s) =>
     new RegExp(
-      `(?<!__)(?<!(?<!\\\\)[\\p{L}\\p{N}])${s.trim().split(/\s+/).map(escapeRe).join("\\s+")}(?![\\p{L}\\p{N}])(?!-mcp)`,
+      `(?<!__)(?<!(?<!\\\\)[\\p{L}\\p{N}])${s.trim().split(/\s+/).map(escapeRe).join("\\s+")}(?![\\p{L}\\p{N}])(?!-mcp|_overlay|_chat)`,
       "giu",
     );
   // Every commander the player has: a machine with two game accounts records either. Longest
@@ -63,23 +75,24 @@ export function makeScrubber({ home, user, commander, fid, commanders = [], fids
   const allFids = byLength([fid, ...fids]).filter((f) => f !== "F0000000");
   for (const name of names) rules.push([word(name), "Jameson"]);
   for (const f of allFids) rules.push([new RegExp(escapeRe(f), "gi"), "F0000000"]);
-  if (user) rules.push([word(user), "player"]);
+  // A user name that is also a word the recordings use ("type":"user") is left to the home
+  // folder rule: replacing it would break the fixtures.
+  if (user && !PROTOCOL_WORDS.has(user.toLowerCase())) rules.push([word(user), "player"]);
   /**
-   * The names and FIDs still in the text. Looser than the rules on purpose: any case, any
-   * spacing, no exceptions for tool names or escapes, so a spelling the rules missed shows.
-   * ed-mcp's own names are taken out first, so a commander called Ed is not a false alarm.
+   * The names and FIDs still in the text. Looser than the rules: any case, any spacing, and a
+   * name joined by __, - or _ to other words. ed-mcp's and ED Chat's own names and the
+   * placeholders are taken out first, so a commander called Ed or James is not a false alarm.
    */
   const leaks = (s) => {
-    const t = s.replace(/mcp__ed-mcp__|ed-mcp|ed_chat|ed_overlay/gi, " ");
-    // A name of four letters or more is looked for anywhere; a shorter one only as a word, or
-    // it would be found inside other words.
-    const loose = (n) => {
-      const body = n.split(/\s+/).map(escapeRe).join("\\s*");
-      return new RegExp(
-        n.length >= 4 ? body : `(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`,
+    const t = s.replace(
+      /mcp__ed-mcp__|ed-mcp|ed_chat|ed_overlay|Jameson|F0000000|\/home\/player|player/gi,
+      " ",
+    );
+    const loose = (n) =>
+      new RegExp(
+        `(?<!(?<!\\\\)[\\p{L}\\p{N}])${n.split(/\s+/).map(escapeRe).join("\\s*")}(?![\\p{L}\\p{N}])`,
         "iu",
       );
-    };
     return [
       ...names.filter((n) => loose(n).test(t)),
       ...allFids.filter((f) => t.toLowerCase().includes(f.toLowerCase())),

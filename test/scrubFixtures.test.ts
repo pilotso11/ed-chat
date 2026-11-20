@@ -219,6 +219,23 @@ describe("commanderFromJournal", () => {
     expect(s.leaks("tmp__hawk eye and hawkeye")).toEqual(["Hawk Eye"]);
     expect(s.leaks("f7654321")).toEqual(["F7654321"]);
     expect(s.leaks("mcp__ed-mcp__journal_status and ed_overlay")).toEqual([]);
+    // A commander called Ed keeps ED Chat's own server names.
+    expect(s.text('{"name":"ed_overlay"} ed_chat, CMDR Ed')).toBe(
+      '{"name":"ed_overlay"} ed_chat, CMDR Jameson',
+    );
+  });
+
+  it("does not raise a false alarm for a name inside other words or the placeholders", () => {
+    for (const commander of ["Star", "James", "Player", "Nova"]) {
+      const s = makeScrubber({ user: "seth", commander });
+      const out = s.text(`turn/started innovation ${commander} seth`);
+      expect(s.leaks(out)).toEqual([]);
+    }
+  });
+
+  it("leaves a user name that the recordings use as a word to the home folder rule", () => {
+    const s = makeScrubber({ home: "C:\\Users\\User", user: "User" });
+    expect(s.text('{"type":"user"} C:\\Users\\User\\x')).toBe('{"type":"user"} /home/player\\x');
   });
 
   it("does not scrub or report the placeholders themselves", () => {
