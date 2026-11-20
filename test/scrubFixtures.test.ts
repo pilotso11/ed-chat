@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   commanderFromJournal,
+  commandersFromJournals,
   makeScrubber,
   scrubClaudeLine,
   scrubCodexLines,
@@ -178,9 +179,25 @@ describe("commanderFromJournal", () => {
         '{"event":"Fileheader"}\n{"event":"LoadGame","FID":"F2","Commander":"New"}\n',
       );
       expect(commanderFromJournal(dir)).toEqual({ name: "New", fid: "F2" });
+      // Every commander, for a machine with two game accounts.
+      expect(commandersFromJournals(dir)).toEqual(
+        expect.arrayContaining([
+          { name: "Old", fid: "F1" },
+          { name: "New", fid: "F2" },
+        ]),
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("scrubs every commander, and tells what a spelling it missed left behind", () => {
+    const s = makeScrubber({ commander: "New", commanders: ["Old", "New"], fids: ["F1", "F2"] });
+    expect(s.text("CMDR Old (F1) and CMDR New (F2)")).toBe(
+      "CMDR Jameson (F0000000) and CMDR Jameson (F0000000)",
+    );
+    expect(s.leaks("all clean, Jameson")).toEqual([]);
+    expect(s.leaks("CMDR old and F2")).toEqual(["Old", "F2"]);
   });
 
   it("gives nothing for a missing folder", () => {

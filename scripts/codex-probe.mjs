@@ -107,8 +107,10 @@ export function makeRedactor(secrets) {
 
 /**
  * The `-c` overrides and the environment for codex in cli-config mode. ed-mcp's env goes into
- * codex's own environment, and `env_vars` names it, so codex passes it on. Values never go on
- * the command line, where other processes can read them (ED_MCP_SYNC_PASSWORD).
+ * codex's own environment, and `env_vars` names it, so codex passes it on. Env values never go
+ * on the command line, where other processes can read them (ED_MCP_SYNC_PASSWORD). ed-mcp's
+ * args do: a secret passed as an arg is visible to other processes while the probe runs (it is
+ * still redacted from the recordings). Use config-field mode for such a setup.
  */
 export function cliConfig(ed, baseEnv = process.env) {
   const env = Object.fromEntries(

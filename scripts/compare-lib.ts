@@ -252,9 +252,8 @@ export function summarizeRun(r: AgentRun): RunSummary {
     toolCalls: r.results.reduce((n, x) => n + x.tools.length, 0),
     approvals: r.results.reduce((n, x) => n + x.approvals.length, 0),
     medianChars: median(ok.map((x) => x.replyChars)),
-    medianFirstTextMs: median(
-      r.results.flatMap((x) => (x.firstTextMs === null ? [] : [x.firstTextMs])),
-    ),
+    // From the answered questions only, like the other medians.
+    medianFirstTextMs: median(ok.flatMap((x) => (x.firstTextMs === null ? [] : [x.firstTextMs]))),
     medianTotalMs: median(ok.map((x) => x.totalMs)),
     totalMs: r.results.reduce((n, x) => n + x.totalMs, 0),
   };
@@ -346,7 +345,8 @@ export function buildReport(run: CompareRun): string {
 
   out.push("## Replies", "");
   for (const q of run.questions) {
-    out.push(`### ${q.id}. ${q.topic ? `${q.topic}: ` : ""}${q.text}`, "");
+    // Escaped like the table cells: a line break or a leading # must not break the layout.
+    out.push(`### ${q.id}. ${cell(q.topic ? `${q.topic}: ` : "")}${cell(q.text)}`, "");
     out.push(`| ${ran.map((r) => NAMES[r.agent]).join(" | ")} |`);
     out.push(`|${ran.map(() => "---").join("|")}|`);
     const results = ran.map((r) => byId(r, q.id));

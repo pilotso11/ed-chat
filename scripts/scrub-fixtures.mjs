@@ -31,7 +31,7 @@ const SEP = "(?:\\\\+|/)+";
  * A scrubber for one recorder: `text` scrubs a string, `json` every string and key in a value.
  * The home folder matches with either slash and any escaping, in any case (Windows paths).
  */
-export function makeScrubber({ home, user, commander, fid }) {
+export function makeScrubber({ home, user, commander, fid, commanders = [], fids = [] }) {
   const rules = [];
   const parts = home ? home.split(/[\\/]+/).filter(Boolean) : [];
   if (parts.length) {
@@ -46,9 +46,17 @@ export function makeScrubber({ home, user, commander, fid }) {
       `(?<!__)(?<!(?<!\\\\)[\\p{L}\\p{N}])${s.trim().split(/\s+/).map(escapeRe).join("\\s+")}(?![\\p{L}\\p{N}])(?!-mcp)`,
       "giu",
     );
-  if (commander) rules.push([word(commander), "Jameson"]);
-  if (fid) rules.push([new RegExp(escapeRe(fid), "g"), "F0000000"]);
+  // Every commander the player has: a machine with two game accounts records either.
+  const names = [...new Set([commander, ...commanders].filter(Boolean))];
+  for (const name of names) rules.push([word(name), "Jameson"]);
+  for (const f of new Set([fid, ...fids].filter(Boolean)))
+    rules.push([new RegExp(escapeRe(f), "g"), "F0000000"]);
   if (user) rules.push([word(user), "player"]);
+  /** What of the names and FIDs is still in the text, to check the result. */
+  const leaks = (s) => [
+    ...names.filter((n) => word(n).test(s)),
+    ...[fid, ...fids].filter((f) => f && s.includes(f)),
+  ];
   const text = (s) => rules.reduce((acc, [re, to]) => acc.replace(re, to), s);
   const json = (v) => {
     if (typeof v === "string") return text(v);
@@ -58,7 +66,7 @@ export function makeScrubber({ home, user, commander, fid }) {
     }
     return v;
   };
-  return { text, json };
+  return { text, json, leaks };
 }
 
 /** Scrubs one parsed line of a Claude stream-json recording. */
@@ -135,6 +143,43 @@ export function commanderFromJournal(dir) {
   return null;
 }
 
+/**
+ * Every commander in the journals, with the FID: one game account or several. A journal names
+ * its commander in the first lines, so only those are read.
+ */
+export function commandersFromJournals(dir) {
+  let files;
+  try {
+    files = readdirSync(dir).filter((f) => /^Journal\..*\.log$/.test(f));
+  } catch {
+    return [];
+  }
+  const found = new Map();
+  for (const f of files) {
+    let head;
+    try {
+      head = readFileSync(path.join(dir, f), "utf8").split("\n", 30);
+    } catch {
+      continue;
+    }
+    for (const line of head) {
+      if (!/"event":\s*"(Commander|LoadGame)"/.test(line)) continue;
+      try {
+        const e = JSON.parse(line);
+        const name = e.event === "Commander" ? e.Name : e.Commander;
+        if (typeof name === "string" && name) {
+          const key = name.trim().toLowerCase();
+          const fid = typeof e.FID === "string" ? e.FID : found.get(key)?.fid;
+          found.set(key, { name, fid });
+        }
+      } catch {
+        // A line cut short while the game wrote it.
+      }
+    }
+  }
+  return [...found.values()];
+}
+
 const sameName = (a, b) =>
   a.trim().replace(/\s+/g, " ").toLowerCase() === b.trim().replace(/\s+/g, " ").toLowerCase();
 
@@ -147,6 +192,8 @@ function main(argv) {
     "Elite Dangerous",
   );
   const fromJournal = commanderFromJournal(journal);
+  // Every commander in the journals: the fixtures may have been recorded with any of them.
+  const all = commandersFromJournals(journal);
   const commander = (at >= 0 ? argv[at + 1] : process.env.ED_COMMANDER) || fromJournal?.name;
   // Without it the commander's name and FID would stay in the fixtures: nothing is written.
   if (!commander) {
@@ -160,7 +207,10 @@ function main(argv) {
     commander,
     // The journal's FID is this commander's when the names match, in any case or spacing.
     fid: fromJournal && sameName(fromJournal.name, commander) ? fromJournal.fid : undefined,
+    commanders: all.map((c) => c.name),
+    fids: all.flatMap((c) => (c.fid ? [c.fid] : [])),
   });
+  let leaked = false;
   const fixtures = path.join(import.meta.dirname, "..", "test", "fixtures");
   for (const [sub, scrubLines] of [
     ["stream", (lines) => lines.map((l) => JSON.stringify(scrubClaudeLine(JSON.parse(l), scrub)))],
@@ -170,10 +220,17 @@ function main(argv) {
     for (const name of readdirSync(dir).filter((f) => f.startsWith("recorded-"))) {
       const file = path.join(dir, name);
       const lines = readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean);
-      writeFileSync(file, scrubLines(lines).join("\n") + "\n");
-      console.log(`scrubbed ${sub}/${name}`);
+      const out = scrubLines(lines).join("\n") + "\n";
+      writeFileSync(file, out);
+      // A name or FID still there, in a spelling the rules missed, must not pass as scrubbed.
+      const left = scrub.leaks(out);
+      if (left.length) {
+        leaked = true;
+        console.error(`NOT CLEAN ${sub}/${name}: still holds ${left.length} name(s) or FID(s)`);
+      } else console.log(`scrubbed ${sub}/${name}`);
     }
   }
+  if (leaked) process.exit(1);
 }
 
 // Run as a script, not when a test imports it. Windows paths differ in case only.

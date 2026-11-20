@@ -304,10 +304,15 @@ Notes from the probe:
     gone, its children (found by parent id, started after it) are stopped the same way.
     Elsewhere codex runs in its own process group, and the group is stopped.
   - cli-config mode puts ed-mcp's env into codex's own environment and names it in
-    `mcp_servers.ed-mcp.env_vars`. No value goes on the command line.
+    `mcp_servers.ed-mcp.env_vars`. No env value goes on the command line; ed-mcp's args do,
+    so a secret passed as an arg is visible to other processes while the probe runs. Use
+    config-field mode for such a setup.
   - Redaction matches each secret with either slash, any escaping of backslashes and quotes,
     and in any case. Secrets in ed-mcp's args are the value after a secret-looking flag
     (`--password x`) and the value of `--token=x` or `API_KEY=x`.
 - Not done: a process whose parent and grandparent have both gone (ed-mcp's node when codex and
   cmd have both ended) is not found. A secret in ed-mcp's args with no flag name is not known
   as one. So recordings are still read by hand before they become fixtures.
+- The scrubber replaces every commander found in the journals (a machine can have two game
+  accounts), with their FIDs, and checks each file afterwards: a name or FID that is still
+  there stops it with an error instead of "scrubbed".
