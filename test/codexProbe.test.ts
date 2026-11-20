@@ -129,6 +129,9 @@ describe("secretsOf and makeRedactor", () => {
       "--pass-word",
       "--pass-phrase",
       "--db-pass-file",
+      "--api-keys",
+      "--api_keys",
+      "--apikeys",
       // Errs on the safe side: pass is a word of its own here.
       "--pass-through",
     ];

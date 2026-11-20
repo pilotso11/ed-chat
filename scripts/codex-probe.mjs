@@ -77,7 +77,7 @@ const SECRET_NAME = {
         (!NOT_SECRET.test(w) &&
           (/password|passwd|passphrase|secret|token|apikey/.test(w) ||
             /^(auth|oauth|cred|pass)/.test(w))) ||
-        (w === "api" && words[i + 1] === "key"),
+        (w === "api" && /^keys?$/.test(words[i + 1] ?? "")),
     );
   },
 };
