@@ -1,8 +1,8 @@
 # Codex as an alternative to Claude
 
 Date: 2026-11-18
-Status: draft. Step 0 (protocol probe) done, see "Step 0 results". Parts 1 to 3 done; Part 2
-is not yet wired into main (Part 4). See "Notes from Part 2" and "Notes from Part 3".
+Status: draft. Step 0 (protocol probe) done, see "Step 0 results". Parts 1 to 4 done; Part 5
+(fixtures, the answer comparison, store listing) is left. See the notes from each part.
 
 ## Purpose
 
@@ -243,3 +243,29 @@ Notes from the probe:
   `enabled = false`), the panel falls back to the first sync folder in any entry.
 - The setup notice still gives the running backend's `mcp add` line. Part 4 picks the line from
   the CLIs that are installed.
+
+## Notes from Part 4
+
+- Main keeps `agentId` and `agent` as variables. `switchAgent()` runs one switch at a time: it
+  drops the old session's events, stops it, withdraws open approval cards, clears "allow until
+  /new", resumes the new assistant's own conversation if it is fresh (history included), posts
+  "Switched to …" and starts the new CLI. Before the first start (first run) it only changes
+  the variables.
+- `/claude`, `/codex` and the tray's Assistant submenu write `agent` with `playerWrite()` and
+  apply it at once; the file watcher then sees no change.
+- The approval server is needed by Claude only. When it cannot start, Codex still runs.
+- `ApprovalBroker` returns `allowSession` for "allow until /new" and for a tool already allowed,
+  so Codex answers `acceptForSession` without reading the broker's state afterwards.
+- The ed-mcp "missing" notice for Codex comes from the config files: ed-mcp is there when Codex's
+  own config runs one (`hasOwnEdMcp()`) or ED Chat gives it one, never from an empty `ready`.
+  Its setup line is Claude's `mcp add` when Claude is installed, else Codex's.
+- First run (no state.json yet, `agent` not in settings.json): only Codex installed picks
+  Codex; both installed keeps Claude and says how to switch, once.
+- A write ED Chat makes for the player (`/codex`, the permission question) trusts only the one
+  value it sets: a change in the file still waiting for the player's answer stays there, and
+  still waits.
+- `describeUnknown` logs a Codex notification's method only, and skips the routine ones.
+- `resumeHours` is player-only, as it was in the `claude` group.
+- Still to do with the real CLI: how Codex reports a Windows sandbox that is not installed, and
+  whether it sends `mcpServer/elicitation/request` before an ed-mcp tool in `default` mode
+  (ED Chat declines those).

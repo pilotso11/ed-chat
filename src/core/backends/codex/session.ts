@@ -48,6 +48,12 @@ function samePath(a: string, b: string): boolean {
   return process.platform === "win32" ? n(a).toLowerCase() === n(b).toLowerCase() : n(a) === n(b);
 }
 
+const sameCommand = (a: BackendCommand, b: BackendCommand) =>
+  a.command === b.command &&
+  a.shell === b.shell &&
+  a.args.length === b.args.length &&
+  a.args.every((x, i) => x === b.args[i]);
+
 // thread/resume for a thread with no saved rollout: -32600 "no rollout found for thread id …".
 const isGone = (e: RpcError) => e.code === -32600 && /no rollout/i.test(e.message);
 
@@ -94,6 +100,8 @@ export class CodexSession implements AgentBackend {
   private readonly leftThreads = new Set<string>();
   // An MCP status change came during a turn; ready is sent when the turn ends.
   private readyHeld = false;
+  // The command the running process started with: /new starts a new process when it differs.
+  private spawnedCmd: BackendCommand | null = null;
   // Turns that have ended in this process. A late or repeated end for one of them can come
   // before the next turn's id is known, so it is matched by id, not by the running turn.
   private readonly endedTurns = new Set<string>();
@@ -118,7 +126,7 @@ export class CodexSession implements AgentBackend {
     return () => this.listeners.delete(listener);
   }
 
-  /** Takes effect at the next spawn. */
+  /** Takes effect at the next spawn, and at /new, which starts a new process if it changed. */
   configure(c: BackendCommand): void {
     this.cmd = c;
   }
@@ -182,6 +190,7 @@ export class CodexSession implements AgentBackend {
     this.events.threadId = null;
     this.events.resetTurn();
     this.crashes.reset();
+    if (this.child && this.spawnedCmd && !sameCommand(this.spawnedCmd, this.cmd)) this.kill();
     if (!this.child) {
       this.spawnChild();
       return;
@@ -278,6 +287,7 @@ export class CodexSession implements AgentBackend {
     );
     this.gen++;
     this.child = child;
+    this.spawnedCmd = this.cmd;
     this.stderr = [];
     this.leftThreads.clear();
     this.endedTurns.clear();

@@ -3,8 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  claudeMcpConfig,
   configProblems,
   edMcpState,
+  forCli,
+  hasOwnEdMcp,
   edMcpToAdd,
   findEdMcp,
   readAgentConfigs,
@@ -272,6 +275,21 @@ describe("edMcpToAdd", () => {
     expect(syncDirOf({ claudeSettings: renamed }, "claude", workspace)).toBe("R:/Sync");
   });
 
+  it("tells whether the agent's own config runs an ed-mcp", () => {
+    expect(hasOwnEdMcp("codex", { codexToml: codexToml() }, workspace)).toBe(true);
+    expect(hasOwnEdMcp("codex", { codexToml: codexToml("enabled = false") }, workspace)).toBe(
+      false,
+    );
+    expect(hasOwnEdMcp("claude", { claudeSettings: pluginSettings(true) }, workspace)).toBe(true);
+    expect(hasOwnEdMcp("codex", { claudeSettings: pluginSettings(true) }, workspace)).toBe(false);
+    // An http server runs too, unless switched off.
+    const http = (extra = "") => `[mcp_servers.ed-mcp]
+url = "http://127.0.0.1:9/mcp"
+${extra}`;
+    expect(hasOwnEdMcp("codex", { codexToml: http() }, workspace)).toBe(true);
+    expect(hasOwnEdMcp("codex", { codexToml: http("enabled = false") }, workspace)).toBe(false);
+  });
+
   it("gives nothing when ed-mcp is set up nowhere", () => {
     expect(edMcpToAdd("claude", {}, workspace)).toBeNull();
     expect(edMcpToAdd("codex", {}, workspace)).toBeNull();
@@ -296,6 +314,37 @@ describe("startableOn", () => {
       "npx",
     ]);
     expect(startableOn(d, "linux")).toBe(d);
+  });
+});
+
+describe("what ED Chat passes to the CLIs", () => {
+  const add = {
+    source: "codex" as const,
+    command: "npx",
+    args: ["-y", "ed-mcp@latest"],
+    env: { ED_MCP_SYNC_DIR: "S:/" },
+  };
+  const approval = { ed_chat: { type: "http", url: "http://127.0.0.1:1/mcp" } };
+
+  it("starts npx through cmd on Windows, and leaves source out", () => {
+    const ed = forCli(add, "win32");
+    expect(ed).toEqual({
+      command: "cmd",
+      args: ["/c", "npx", "-y", "ed-mcp@latest"],
+      env: { ED_MCP_SYNC_DIR: "S:/" },
+    });
+    expect(forCli(add, "linux")).toEqual({
+      command: "npx",
+      args: ["-y", "ed-mcp@latest"],
+      env: { ED_MCP_SYNC_DIR: "S:/" },
+    });
+    expect(forCli(null)).toBeNull();
+  });
+
+  it("keeps the approval server next to the added ed-mcp in Claude's --mcp-config", () => {
+    const ed = forCli(add, "win32");
+    expect(claudeMcpConfig(approval, ed)).toEqual({ mcpServers: { ...approval, "ed-mcp": ed } });
+    expect(claudeMcpConfig(approval, null)).toEqual({ mcpServers: approval });
   });
 });
 

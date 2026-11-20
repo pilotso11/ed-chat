@@ -28,12 +28,18 @@ describe("parseSettings", () => {
       offsetY: 24,
       display: "primary",
     });
-    expect(DEFAULT_SETTINGS.claude).toEqual({
-      path: null,
-      permissionMode: "auto",
-      extraArgs: [],
-      resumeHours: 12,
-    });
+    const cli = { path: null, permissionMode: "auto", extraArgs: [] };
+    expect(DEFAULT_SETTINGS).toMatchObject({ agent: "claude", resumeHours: 12 });
+    expect(DEFAULT_SETTINGS.claude).toEqual(cli);
+    expect(DEFAULT_SETTINGS.codex).toEqual(cli);
+  });
+
+  it("loads claude.resumeHours from an older file at the top level", () => {
+    const old = parseSettings('{"claude":{"resumeHours":3,"path":"C:/c.exe"}}');
+    expect(old.ok && old.settings.resumeHours).toBe(3);
+    expect(old.ok && old.settings.claude.path).toBe("C:/c.exe");
+    const both = parseSettings('{"resumeHours":5,"claude":{"resumeHours":3}}');
+    expect(both.ok && both.settings.resumeHours).toBe(5);
   });
 
   it("keeps defaults next to a partial override", () => {

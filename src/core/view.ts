@@ -145,7 +145,8 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
           }
         : null,
     status: statusText(s),
-    auto: settings.claude.permissionMode === "auto" && !("mode" in s.notices),
+    // The running assistant's own mode: Claude's and Codex's are set apart.
+    auto: settings[s.agent].permissionMode === "auto" && !("mode" in s.notices),
     notice: pickNotice(s.notices),
     keys: s.keys,
     pinned: settings.strip.lines === 2 ? s.pinned : null,

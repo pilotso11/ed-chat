@@ -1,9 +1,10 @@
 import {
+  type PlayerOnlyValues,
   changedPaths,
   describeChanges,
   playerOnlyValues,
+  valuesWith,
   withValues,
-  type PlayerOnlyValues,
 } from "./playerOnly.js";
 import type { Settings } from "./settings.js";
 
@@ -76,9 +77,11 @@ export class PlayerOnlyGuard {
    * chose at first start. The new values are trusted before the write, so the file watcher
    * does not ask about them.
    */
-  async playerWrite(text: string): Promise<void> {
+  async playerWrite(text: string, path: string, value: unknown): Promise<void> {
     const before = this.applied;
-    this.trust(playerOnlyValues(text));
+    // Only the value ED Chat sets is trusted: a change in the file that still waits for the
+    // player's answer stays in the file, and still waits.
+    this.trust(valuesWith(this.applied, path, value));
     try {
       await this.host.write(text);
     } catch (err) {

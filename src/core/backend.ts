@@ -48,7 +48,7 @@ export interface AgentBackend {
   cancel(): void;
   newSession(): void;
   stop(): void;
-  /** Takes effect at the next spawn. */
+  /** Takes effect at the next spawn (Codex: also at /new, when it changed). */
   configure(c: BackendCommand): void;
   onEvent(listener: (e: BackendEvent) => void): () => void;
   readonly busy: boolean;

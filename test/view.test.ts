@@ -293,6 +293,20 @@ describe("buildView icon preference", () => {
     const manual = SettingsSchema.parse({ claude: { permissionMode: "default" } });
     expect(buildView(run([]), manual).auto).toBe(false);
   });
+
+  it("reads the AUTO badge from the running assistant's own mode", () => {
+    const codex = run([{ type: "switchAgent", agent: "codex", history: [] }]);
+    const codexAsks = SettingsSchema.parse({
+      claude: { permissionMode: "auto" },
+      codex: { permissionMode: "default" },
+    });
+    expect(buildView(codex, codexAsks).auto).toBe(false);
+    const codexAuto = SettingsSchema.parse({
+      claude: { permissionMode: "default" },
+      codex: { permissionMode: "auto" },
+    });
+    expect(buildView(codex, codexAuto).auto).toBe(true);
+  });
 });
 
 describe("show more", () => {

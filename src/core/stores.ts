@@ -94,6 +94,13 @@ export class SettingsStore {
     return JSON.stringify(raw, null, 2) + "\n";
   }
 
+  /** settings.json text with one top-level value changed, the rest kept. */
+  textWithTop(key: string, value: unknown): string {
+    const raw = JSON.parse(this.text) as Record<string, unknown>;
+    raw[key] = value;
+    return JSON.stringify(raw, null, 2) + "\n";
+  }
+
   /** Sets one value in settings.json and keeps the rest of the file. */
   async set(group: string, key: string, value: unknown): Promise<void> {
     await writeFile(this.file, this.textWith(group, key, value));
@@ -155,7 +162,10 @@ export interface SavedState {
   position?: Position;
   positionBase?: string;
   iconMode?: boolean;
-  session?: SavedSession;
+  /** The first-run hint that Codex is installed too has been shown. */
+  agentHintShown?: boolean;
+  /** The conversation each assistant resumes. A Claude id is never given to Codex. */
+  sessions?: { claude?: SavedSession; codex?: SavedSession };
   /** The activity panel's position, chosen with the move keys, and its settings base. */
   hudPosition?: Position;
   hudPositionBase?: string;
@@ -166,6 +176,16 @@ export interface SavedState {
   playerOnly?: Record<string, unknown>;
 }
 
+const SessionSchema = z.object({
+  id: z.string().min(1),
+  lastUsed: z.string(),
+  // A bare file name: state.json must not point the history store outside its folder.
+  history: z
+    .string()
+    .regex(/^[\w.-]+\.jsonl$/)
+    .optional(),
+});
+
 const SavedStateSchema = z.object({
   position: PositionSchema.optional(),
   positionBase: z.string().optional(),
@@ -175,17 +195,12 @@ const SavedStateSchema = z.object({
   hudMode: z.object({ mode: z.enum([...HUD_MODES, "off"]), at: z.string() }).optional(),
   hudHidden: z.boolean().optional(),
   playerOnly: z.record(z.string(), z.unknown()).optional(),
-  session: z
-    .object({
-      id: z.string().min(1),
-      lastUsed: z.string(),
-      // A bare file name: state.json must not point the history store outside its folder.
-      history: z
-        .string()
-        .regex(/^[\w.-]+\.jsonl$/)
-        .optional(),
-    })
+  agentHintShown: z.boolean().optional(),
+  sessions: z
+    .object({ claude: SessionSchema.optional(), codex: SessionSchema.optional() })
     .optional(),
+  // Before Codex there was one conversation, Claude's.
+  session: SessionSchema.optional(),
 });
 
 // A hotkey-chosen position is kept until the player edits position in settings.json.
@@ -234,7 +249,10 @@ export class StateStore {
   async read(): Promise<SavedState> {
     try {
       const r = SavedStateSchema.safeParse(JSON.parse(await readFile(this.file, "utf8")));
-      return r.success ? r.data : {};
+      if (!r.success) return {};
+      const { session, ...rest } = r.data;
+      if (!session || rest.sessions?.claude) return rest;
+      return { ...rest, sessions: { ...rest.sessions, claude: session } };
     } catch {
       return {};
     }

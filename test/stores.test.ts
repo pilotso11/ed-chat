@@ -201,14 +201,28 @@ describe("StateStore", () => {
     expect(await st.read()).toEqual({});
   });
 
-  it("keeps the saved conversation, and drops one whose history file is not a bare name", async () => {
+  it("keeps each assistant's conversation, and drops one whose history file is not a bare name", async () => {
     const file = path.join(await tmp(), "state.json");
     const st = new StateStore(file);
     const session = { id: "s-1", lastUsed: "2026-11-14T20:00:00.000Z", history: "a-1.jsonl" };
-    await st.write({ session });
-    expect((await st.read()).session).toEqual(session);
-    await writeFile(file, JSON.stringify({ session: { ...session, history: "../x.jsonl" } }));
+    const codex = { ...session, id: "thr-1" };
+    await st.write({ sessions: { claude: session, codex } });
+    expect((await st.read()).sessions).toEqual({ claude: session, codex });
+    await writeFile(
+      file,
+      JSON.stringify({ sessions: { claude: { ...session, history: "../x.jsonl" } } }),
+    );
     expect(await st.read()).toEqual({});
+  });
+
+  it("loads the single conversation of an older state.json as Claude's", async () => {
+    const file = path.join(await tmp(), "state.json");
+    const session = { id: "s-1", lastUsed: "2026-11-14T20:00:00.000Z", history: "a-1.jsonl" };
+    await writeFile(file, JSON.stringify({ session, iconMode: true }));
+    expect(await new StateStore(file).read()).toEqual({
+      iconMode: true,
+      sessions: { claude: session },
+    });
   });
 });
 

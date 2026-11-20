@@ -171,10 +171,38 @@ describe("PlayerOnlyGuard", () => {
   it("does not ask about a value ED Chat writes for the player", async () => {
     const { h, host } = fakeHost(START);
     const g = new PlayerOnlyGuard(host, null);
-    await g.playerWrite('{"claude":{"permissionMode":"auto"},"hud":{"bioMin":1}}');
+    await g.playerWrite(
+      '{"claude":{"permissionMode":"auto"},"hud":{"bioMin":1}}',
+      "claude.permissionMode",
+      "auto",
+    );
     g.fileChanged();
     expect(h.questions).toEqual([]);
     expect(g.values).toEqual({ claude: { permissionMode: "auto" } });
+  });
+
+  it("keeps a change that waits for the player when ED Chat writes another value", async () => {
+    const { h, host } = fakeHost(START);
+    const g = new PlayerOnlyGuard(host, null);
+    // The assistant (or the player) changes extraArgs; the question is open.
+    h.text = '{"claude":{"permissionMode":"default","extraArgs":["--x"]},"hud":{"bioMin":1}}';
+    g.fileChanged();
+    expect(h.questions).toHaveLength(1);
+    // Meanwhile ED Chat writes the agent for the player.
+    h.text = JSON.stringify({ ...JSON.parse(h.text), agent: "codex" });
+    await g.playerWrite(h.text, "agent", "codex");
+    expect(g.values).toEqual({ claude: { permissionMode: "default" }, agent: "codex" });
+    // The waiting change is still in the file and still waits.
+    expect(h.text).toContain("--x");
+    // The file changed while the question was open, so the player is asked again, about it
+    // as it is now; agent is no longer part of the question.
+    h.answers[0]!(true);
+    await tick();
+    expect(h.questions).toHaveLength(2);
+    expect(h.questions[1]!.join(" ")).not.toContain("agent");
+    h.answers[1]!(true);
+    await tick();
+    expect(g.values).toMatchObject({ claude: { extraArgs: ["--x"] }, agent: "codex" });
   });
 
   it("keeps the old values when ED Chat's own write fails", async () => {
@@ -183,7 +211,9 @@ describe("PlayerOnlyGuard", () => {
       { ...host, write: () => Promise.reject(new Error("EBUSY")) },
       null,
     );
-    await expect(g.playerWrite('{"claude":{"permissionMode":"auto"}}')).rejects.toThrow();
+    await expect(
+      g.playerWrite('{"claude":{"permissionMode":"auto"}}', "claude.permissionMode", "auto"),
+    ).rejects.toThrow();
     expect(g.values).toEqual({ claude: { permissionMode: "default" } });
   });
 });

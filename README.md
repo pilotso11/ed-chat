@@ -62,16 +62,20 @@ installer is not code signed, so Windows SmartScreen warns on first run. Select
 | Ctrl+Alt+M | Move the overlay to the next monitor |
 
 Type `/new` in the chat to start a new conversation. Type `/version` to see the versions
-of ED Chat, `claude`, the ed-mcp that ED Chat carries for the activity panel and
-the latest ed-mcp on npm, which Claude's `npx ed-mcp@latest` runs. Neither
-command goes to Claude.
+of ED Chat, the assistant's CLI, the ed-mcp that ED Chat carries for the activity panel
+and the latest ed-mcp on npm, which `npx ed-mcp@latest` runs. Type `/claude` or `/codex`
+to switch between Claude Code and OpenAI's Codex; the tray menu's Assistant item does the
+same. None of these commands goes to the assistant.
+
+Each assistant keeps its own conversation. Switching back within 12 hours resumes it.
+With Codex chosen, your messages and tool results go to OpenAI instead of Anthropic.
 
 When ED Chat starts within 12 hours of your last reply, it resumes that
 conversation, and the history (Ctrl+Shift+H) shows its turns. With an ed-mcp that has
 the activity tools, Claude also keeps a short note of what you are doing, for example
 scanning bios on a planet or running a massacre stack, and the route that
 you are flying. It reads the note when a conversation starts, so it knows
-after `/new` or a long break. Set `claude.resumeHours` to change the 12 hours.
+after `/new` or a long break. Set `resumeHours` to change the 12 hours.
 
 At startup the overlay shows its hotkeys for 15 seconds. Click the list to
 close it.
@@ -203,7 +207,7 @@ and `CODEX_HOME` move them, as they do for the CLIs). The panel reads only
 else.
 
 ed-mcp needs to be set up only once. If Claude Code has no ed-mcp of its own,
-ED Chat gives it the one from Codex's config or from another Claude project,
+ED Chat gives it the one from another Claude project or else from Codex's config,
 with its whole `env`, sync password included. That copy is written to
 `approval-mcp.json` in ED Chat's data folder, `%APPDATA%\ed-chat`.
 
@@ -245,7 +249,8 @@ edit that one. Version 0.1.0 wrote every default into `settings.json`, so the
 whole file, to get the current defaults.
 
 Changes apply when you save the file. The file is plain JSON. Settings for
-`claude` apply after `/new`; the overlay shows `ⓘ claude settings apply after /new`.
+`claude` or `codex` apply after `/new`; the overlay shows, for example,
+`ⓘ claude settings apply after /new`.
 
 You can also ask Claude, for example "what is my bio threshold?" or "only show
 bio planets worth 2M or more". Claude knows where `settings.json` is and reads
@@ -281,10 +286,14 @@ next start.
 | `safety.blockWhenInDanger` | `true` | Do not open the chat while in danger |
 | `approval.timeoutSeconds` | `120` | Deny a request that gets no answer |
 | `approval.sound` | `true` | Play a sound when a request arrives |
-| `claude.path` | `null` | Path to `claude`; `null` searches `PATH` |
+| `agent` | `claude` | The assistant: `claude` or `codex`. Only you change it, with `/claude`, `/codex` or the tray |
+| `resumeHours` | `12` | Resume the assistant's last conversation when ED Chat starts, or switches to it, within this many hours. `0` turns it off. An older `claude.resumeHours` still works |
+| `claude.path` | `null` | Path to `claude`; `null` searches `PATH`, then the default install folders |
 | `claude.permissionMode` | asked on first run | `auto` or `default` (ask for everything not allowed). Without an answer the code default is `auto` |
 | `claude.extraArgs` | `[]` | More arguments for `claude` |
-| `claude.resumeHours` | `12` | Resume the last conversation when ED Chat starts within this many hours. `0` turns it off |
+| `codex.path` | `null` | Path to `codex`; `null` searches `PATH`, then the default install folders |
+| `codex.permissionMode` | asked the first time Codex runs | `auto` (Codex decides inside its sandbox) or `default` (ask before anything not known to be safe) |
+| `codex.extraArgs` | `[]` | More arguments for `codex app-server` |
 | `journalDir` | `null` | The game's journal folder; `null` uses Saved Games |
 | `hud.enabled` | `true` | Show the activity panel |
 | `hud.position` | `top-right`, 24, 120 | Where the panel sits, like `position` |

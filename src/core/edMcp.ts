@@ -176,6 +176,18 @@ function ownEntry(agent: AgentId, all: Entry[], workspace?: string): Entry | nul
 }
 
 /**
+ * Whether the agent's own config has an ed-mcp that it runs: a command, a url (an http
+ * server) or the plugin. One switched off in Codex does not count.
+ */
+export function hasOwnEdMcp(agent: AgentId, c: AgentConfigs, workspace: string): boolean {
+  const own = ownEntry(agent, entriesFor(c, workspace), workspace);
+  if (!own) return false;
+  if (own.source === "claudePlugin" || definition(own)) return true;
+  const v = own.value;
+  return isRecord(v) && v.enabled !== false && typeof v.url === "string" && !!v.url.trim();
+}
+
+/**
  * The ed-mcp that ED Chat gives the agent: the player's definition from another place, when the
  * agent's own config has none. Null when the agent has its own, or there is none at all.
  */
@@ -187,6 +199,31 @@ export function edMcpToAdd(
   if (ownConfigUnreadable(agent, c, workspace)) return null;
   const all = entriesFor(c, workspace);
   return ownEntry(agent, all, workspace) ? null : firstDefinition(all);
+}
+
+/** The ed-mcp server as a CLI's config takes it: ED Chat's own source field left out. */
+export interface CliMcpServer {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+/** The definition from edMcpToAdd, ready for a CLI: startable on this platform, source left out. */
+export function forCli(
+  add: EdMcpDefinition | null,
+  platform: NodeJS.Platform = process.platform,
+): CliMcpServer | null {
+  if (!add) return null;
+  const { command, args, env } = startableOn(add, platform);
+  return { command, args, env };
+}
+
+/** What ED Chat passes to Claude with --mcp-config: its approval server, and ed-mcp if added. */
+export function claudeMcpConfig(
+  approvalServers: Record<string, unknown>,
+  edMcp: CliMcpServer | null,
+): { mcpServers: Record<string, unknown> } {
+  return { mcpServers: edMcp ? { ...approvalServers, "ed-mcp": edMcp } : { ...approvalServers } };
 }
 
 /**
@@ -279,7 +316,8 @@ export async function readAgentConfigs(
   const unreadable: ConfigFile[] = [];
   const read = (p: string, f: ConfigFile) =>
     readFile(p, "utf8").catch((err: NodeJS.ErrnoException) => {
-      if (err.code !== "ENOENT") unreadable.push(f);
+      // ENOTDIR: a folder on the way is a file, so this file is not there either.
+      if (err.code !== "ENOENT" && err.code !== "ENOTDIR") unreadable.push(f);
       return undefined;
     });
   const claudeDir = env.CLAUDE_CONFIG_DIR || null;

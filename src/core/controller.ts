@@ -87,6 +87,8 @@ export type Action =
   | { type: "flags"; flags: ShipFlags | null }
   | { type: "notice"; key: string; text: string | null }
   | { type: "newSession" }
+  /** Another assistant runs now, with its resumed turns, if any. */
+  | { type: "switchAgent"; agent: AgentId; history: Turn[] }
   | { type: "cancelled" }
   | { type: "keys"; rows: KeyRow[] | null }
   // An answer from ED Chat itself, such as /version, shown in the reply card. replaces: update
@@ -284,6 +286,13 @@ export function reduce(s: OverlayState, a: Action): OverlayState {
         "claude",
         null,
       );
+    case "switchAgent":
+      return {
+        ...reduce(s, { type: "newSession" }),
+        agent: a.agent,
+        history: a.history,
+        resumedTurns: a.history.length,
+      };
     case "cancelled":
       return { ...s, session: "starting", tool: null, cancelled: true };
     case "keys":
