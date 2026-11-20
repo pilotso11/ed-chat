@@ -19,6 +19,9 @@ function parses(text: string): boolean {
   }
 }
 
+const sameSet = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((p) => b.includes(p));
+
 export interface PlayerOnlyHost {
   /** settings.json as last read, without a BOM. */
   fileText(): string;
@@ -45,6 +48,8 @@ export interface PlayerOnlyHost {
 export class PlayerOnlyGuard {
   private asking = false;
   private applied: PlayerOnlyValues;
+  // Settings that became player-only since the values were saved, still to take from the file.
+  private adding: string[];
 
   /**
    * applied: the values saved at the last run, or null on the first run of this version.
@@ -56,16 +61,34 @@ export class PlayerOnlyGuard {
     covers: readonly string[],
   ) {
     // The first run of this version has nothing saved, so it trusts the file it starts with.
-    // A setting that became player-only since the values were saved is trusted the same way,
-    // or an upgrade would take back what the player had set. A file that does not parse waits
-    // for the next start, so the player's values are not lost to a half-saved edit.
-    const file = playerOnlyValues(host.fileText());
-    this.applied = applied ?? file;
-    if (applied && !parses(host.fileText())) return;
-    const added = applied ? PLAYER_ONLY_PATHS.filter((p) => !covers.includes(p)) : [];
-    for (const p of added) this.applied = valuesWith(this.applied, p, file[p]);
-    if (!applied || added.length || covers.length !== PLAYER_ONLY_PATHS.length)
-      host.save(this.applied, PLAYER_ONLY_PATHS);
+    this.applied = applied ?? playerOnlyValues(host.fileText());
+    this.adding = applied ? PLAYER_ONLY_PATHS.filter((p) => !covers.includes(p)) : [];
+    if (!applied) this.save();
+    else if (!this.adopt() && !sameSet(covers, PLAYER_ONLY_PATHS)) this.save();
+  }
+
+  /**
+   * A setting that became player-only since the values were saved is trusted from the file, as
+   * the first run does, or an upgrade would take back what the player had set. It waits for a
+   * file that parses, so a half-saved edit does not lose the player's values. True when it took
+   * them.
+   */
+  private adopt(): boolean {
+    const text = this.host.fileText();
+    if (!this.adding.length || !parses(text)) return false;
+    const file = playerOnlyValues(text);
+    for (const p of this.adding) this.applied = valuesWith(this.applied, p, file[p]);
+    this.adding = [];
+    this.save();
+    return true;
+  }
+
+  /** Saves the values, with the paths they cover: not those still to take from the file. */
+  private save(): void {
+    this.host.save(
+      this.applied,
+      PLAYER_ONLY_PATHS.filter((p) => !this.adding.includes(p)),
+    );
   }
 
   /** The values in use. */
@@ -75,6 +98,7 @@ export class PlayerOnlyGuard {
 
   /** The settings to use: those in the file, with the player-only ones as last applied. */
   effective(): Settings | null {
+    this.adopt();
     try {
       return this.host.parse(withValues(this.host.fileText(), this.applied));
     } catch {
@@ -91,6 +115,7 @@ export class PlayerOnlyGuard {
 
   /** Asks about a change still waiting, for example one made while ED Chat was closed. */
   check(): void {
+    this.adopt();
     if (this.asking || !this.pending().length) return;
     void this.askLoop();
   }
@@ -101,6 +126,7 @@ export class PlayerOnlyGuard {
    * does not ask about them.
    */
   async playerWrite(text: string, path: string, value: unknown): Promise<void> {
+    this.adopt();
     const before = this.applied;
     // Only the value ED Chat sets is trusted: a change in the file that still waits for the
     // player's answer stays in the file, and still waits.
@@ -119,7 +145,7 @@ export class PlayerOnlyGuard {
 
   private trust(values: PlayerOnlyValues): void {
     this.applied = values;
-    this.host.save(values, PLAYER_ONLY_PATHS);
+    this.save();
   }
 
   private async askLoop(): Promise<void> {

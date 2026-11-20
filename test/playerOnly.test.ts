@@ -59,6 +59,7 @@ function fakeHost(text: string) {
     text,
     applied: [] as Settings[],
     saved: [] as PlayerOnlyValues[],
+    covered: [] as string[][],
     questions: [] as string[][],
     answers: [] as ((ok: boolean) => void)[],
     waiting: false,
@@ -81,7 +82,10 @@ function fakeHost(text: string) {
         h.answers.push(resolve);
       }),
     waiting: (on) => void (h.waiting = on),
-    save: (v) => void h.saved.push(v),
+    save: (v, paths) => {
+      h.saved.push(v);
+      h.covered.push([...paths]);
+    },
     log: () => {},
   };
   return { h, host };
@@ -119,8 +123,17 @@ describe("PlayerOnlyGuard", () => {
     const { h, host } = fakeHost('{"hotkeys":');
     const saved = { claude: { permissionMode: "default" } };
     const old = PLAYER_ONLY_PATHS.filter((p) => p !== "hotkeys");
-    expect(new PlayerOnlyGuard(host, saved, old).values).toEqual(saved);
-    expect(h.saved).toEqual([]);
+    const g = new PlayerOnlyGuard(host, saved, old);
+    expect(g.values).toEqual(saved);
+    expect(h.saved.every((v) => !("hotkeys" in v))).toBe(true);
+    expect(h.covered.every((c) => !c.includes("hotkeys"))).toBe(true);
+    // The player fixes the file in the same run: its hotkeys are taken, not asked about.
+    h.text = '{"hotkeys":{"openChat":"F9"},"claude":{"permissionMode":"default"}}';
+    g.fileChanged();
+    expect(g.values).toEqual({ ...saved, hotkeys: { openChat: "F9" } });
+    expect(h.applied.at(-1)!.hotkeys.openChat).toBe("F9");
+    expect(h.questions).toEqual([]);
+    expect(h.covered.at(-1)).toEqual(PLAYER_ONLY_PATHS);
   });
 
   it("does not save again when the saved values cover every player-only path", () => {
