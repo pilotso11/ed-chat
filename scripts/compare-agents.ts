@@ -35,6 +35,7 @@ import {
 import {
   AGENT_IDS,
   USAGE,
+  type RunSpec,
   buildReport,
   edChatDataDir,
   edMcpPlan,
@@ -135,10 +136,14 @@ const resolvers: Record<AgentId, (p: string | null) => ResolvedCommand | null> =
 
 interface Plan {
   agent: AgentId;
+  model: string | null;
   cli: ResolvedCommand | null;
 }
-const plans: Plan[] = (opts.only ? [opts.only] : AGENT_IDS).map((agent) => ({
+const specs: RunSpec[] =
+  opts.runs ?? (opts.only ? [opts.only] : AGENT_IDS).map((agent) => ({ agent }));
+const plans: Plan[] = specs.map(({ agent, model }) => ({
   agent,
+  model: model ?? settings[agent].model,
   cli: resolvers[agent](settings[agent].path),
 }));
 
@@ -147,7 +152,7 @@ if (opts.dryRun) {
   console.log(`Questions (${questions.length}) from ${opts.questions}:`);
   for (const q of questions) console.log(`  ${q.id}. [${q.topic}] ${q.text}`);
   const ws = path.join(os.tmpdir(), "ed-chat-compare-XXXX", "workspace");
-  for (const { agent, cli } of plans) {
+  for (const { agent, model, cli } of plans) {
     if (!cli) {
       console.log(`\n${agent}: not installed, skipped`);
       continue;
@@ -157,6 +162,7 @@ if (opts.dryRun) {
       agent === "claude"
         ? buildClaudeArgs({
             permissionMode: s.permissionMode,
+            model,
             mcpConfigFile: "<temp>/approval-mcp.json",
             extraArgs: s.extraArgs,
             settingsFile: "<temp>/settings.json",
@@ -164,6 +170,7 @@ if (opts.dryRun) {
         : buildCodexArgs({ extraArgs: s.extraArgs });
     console.log(`\n${agent}: would run ${cli.command}${cli.shell ? " (through cmd)" : ""}`);
     console.log(`  args: ${args.map(short).join(" ")}`);
+    console.log(`  model: ${model ?? "the CLI's default"}`);
     console.log(`  permission mode: ${s.permissionMode}`);
     console.log(`  ed-mcp: ${edMcpPlan(agent, configs, ws, edChatWorkspace).note}`);
   }
@@ -256,7 +263,6 @@ try {
   const workspace = path.join(tempRoot, "workspace");
   const settingsFile = path.join(tempRoot, "settings.json");
   await mkdir(workspace);
-  await writeFile(settingsFile, settingsText ?? newSettingsText());
   await writeFile(path.join(tempRoot, SCHEMA_FILE), settingsSchemaText());
   await writeFile(path.join(tempRoot, DEFAULTS_FILE), defaultSettingsText());
 
@@ -277,12 +283,16 @@ try {
     onSettled: () => {},
   });
 
-  for (const { agent, cli } of plans) {
+  for (const { agent, model, cli } of plans) {
     if (interrupted.signal.aborted) break;
     const s = settings[agent];
+    // A fresh copy for each run: a settings change by one assistant must not carry over to
+    // the next, which would then find the change already made.
+    await writeFile(settingsFile, settingsText ?? newSettingsText());
     const plan = edMcpPlan(agent, configs, workspace, edChatWorkspace);
     const entry: AgentRun = {
       agent,
+      model,
       command: cli?.command ?? null,
       version: null,
       permissionMode: s.permissionMode,
@@ -305,6 +315,7 @@ try {
       await writeFile(mcpConfigFile, JSON.stringify(config));
       const args = buildClaudeArgs({
         permissionMode: s.permissionMode,
+        model,
         mcpConfigFile,
         extraArgs: s.extraArgs,
         settingsFile,
@@ -317,6 +328,7 @@ try {
         cwd: workspace,
         thread: codexThreadSettings({
           permissionMode: s.permissionMode,
+          model,
           cwd: workspace,
           settingsFile,
           edMcp: plan.server,

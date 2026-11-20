@@ -134,6 +134,15 @@ describe("buildClaudeArgs", () => {
   });
 });
 
+describe("the model", () => {
+  it("passes --model when one is set, and none for null", () => {
+    const base = { permissionMode: "auto" as const, mcpConfigFile: "a.json", extraArgs: [] };
+    const args = buildClaudeArgs({ ...base, model: "opus" });
+    expect(args[args.indexOf("--model") + 1]).toBe("opus");
+    expect(buildClaudeArgs({ ...base, model: null })).not.toContain("--model");
+  });
+});
+
 describe("settingsPrompt", () => {
   it("tells Claude where settings.json is", () => {
     const file = String.raw`C:\Users\cmdr\AppData\Roaming\ed-chat\settings.json`;

@@ -115,6 +115,9 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "claude.permissionMode": {
     text: "auto: Claude runs most tools without asking. default: ask for each tool.",
   },
+  "claude.model": {
+    text: "The Claude model: sonnet, opus, haiku or a full model name. null uses Claude Code's default.",
+  },
   "claude.extraArgs": { text: "More command-line arguments for claude." },
   codex: { text: "How ED Chat starts the codex CLI.", playerOnly: true },
   "codex.path": { text: "Path to codex. null searches PATH, then the default install folders." },
@@ -122,6 +125,9 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
     text:
       "auto: Codex decides inside its sandbox, and asks for anything outside it. default: ask " +
       "before anything not known to be safe.",
+  },
+  "codex.model": {
+    text: "The Codex model, such as gpt-6.1-terra. null uses the model in Codex's config.toml.",
   },
   "codex.extraArgs": { text: "More command-line arguments for codex app-server." },
 

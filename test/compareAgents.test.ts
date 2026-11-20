@@ -25,6 +25,7 @@ describe("parseArgs", () => {
       ok: true,
       options: {
         only: null,
+        runs: null,
         questions: "q.json",
         out: "/tmp/r.md",
         timeoutSec: 300,
@@ -43,6 +44,7 @@ describe("parseArgs", () => {
       ok: true,
       options: {
         only: "codex",
+        runs: null,
         questions: "mine.json",
         out: "o.md",
         timeoutSec: 60,
@@ -51,6 +53,19 @@ describe("parseArgs", () => {
       },
     });
     expect(parseArgs(["-h"], defaults)).toMatchObject({ ok: true, options: { help: true } });
+  });
+
+  it("reads --run, with and without a model, in order", () => {
+    const r = parseArgs(
+      ["--run", "claude:sonnet", "--run=claude:opus", "--run", "codex"],
+      defaults,
+    );
+    expect(r.ok && r.options.runs).toEqual([
+      { agent: "claude", model: "sonnet" },
+      { agent: "claude", model: "opus" },
+      { agent: "codex" },
+    ]);
+    expect(parseArgs(["--run", "gpt"], defaults)).toMatchObject({ ok: false });
   });
 
   it("refuses an unknown assistant, a missing value and an unknown argument", () => {
@@ -172,6 +187,7 @@ const result = (id: number, o: Partial<QuestionResult> = {}): QuestionResult => 
 
 const claudeRun: AgentRun = {
   agent: "claude",
+  model: null,
   command: "claude.exe",
   version: "2.1.308",
   permissionMode: "auto",
@@ -199,6 +215,7 @@ const claudeRun: AgentRun = {
 
 const codexRun: AgentRun = {
   agent: "codex",
+  model: null,
   command: "codex.exe",
   version: "0.170.0",
   permissionMode: "auto",
@@ -260,6 +277,18 @@ describe("summaries", () => {
 
 describe("buildReport", () => {
   const report = buildReport(run);
+
+  it("names each run with its model, so two runs of one assistant stay apart", () => {
+    const report = buildReport({
+      ...run,
+      runs: [
+        { ...claudeRun, model: "sonnet" },
+        { ...claudeRun, model: "opus" },
+      ],
+    });
+    expect(report).toContain("| | Claude (sonnet) | Claude (opus) |");
+    expect(report).toContain("model sonnet");
+  });
 
   it("has a summary with a column per assistant", () => {
     expect(report).toContain("| | Claude | Codex |");

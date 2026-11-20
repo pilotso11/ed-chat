@@ -22,6 +22,9 @@ a new conversation. Approvals are declined. This spends tokens on each assistant
 
 Options:
   --only claude|codex   Run one assistant only.
+  --run <agent>[:model] Run this assistant with this model; give it more than once to compare
+                        models, for example --run claude:sonnet --run claude:opus --run codex.
+                        Without a model, the model in ED Chat's settings is used.
   --questions <file>    A JSON list of { "topic", "text" } (default scripts/compare-questions.json).
   --out <file>          The Markdown report (default in the temp folder). The raw numbers go
                         next to it, with .json. It must be outside the repo.
@@ -29,8 +32,16 @@ Options:
   --dry-run             Print what would run, and start no CLI.
   --help                Show this message.`;
 
+/** One assistant to run, with a model that overrides the one in ED Chat's settings. */
+export interface RunSpec {
+  agent: AgentId;
+  model?: string;
+}
+
 export interface CompareOptions {
   only: AgentId | null;
+  /** From --run, in order; null when none was given. */
+  runs: RunSpec[] | null;
   questions: string;
   out: string;
   timeoutSec: number;
@@ -47,6 +58,7 @@ export function parseArgs(
 ): ParseResult {
   const o: CompareOptions = {
     only: null,
+    runs: null,
     questions: defaults.questions,
     out: defaults.out,
     timeoutSec: 300,
@@ -78,6 +90,15 @@ export function parseArgs(
         if (v !== "claude" && v !== "codex")
           return { ok: false, error: "--only takes claude or codex" };
         o.only = v;
+        break;
+      }
+      case "--run": {
+        const v = value();
+        const m = v ? /^(claude|codex)(?::(.+))?$/.exec(v) : null;
+        if (!m) return { ok: false, error: "--run takes claude or codex, and :model if wanted" };
+        const spec: RunSpec = { agent: m[1] as AgentId };
+        if (m[2]) spec.model = m[2];
+        (o.runs ??= []).push(spec);
         break;
       }
       case "--questions": {
@@ -210,6 +231,8 @@ export interface QuestionResult {
 
 export interface AgentRun {
   agent: AgentId;
+  /** The model asked for, or null for the CLI's own default. */
+  model: string | null;
   /** The CLI started, or null when it is not installed. */
   command: string | null;
   version: string | null;
@@ -284,6 +307,10 @@ function approvalList(a: ApprovalAsked[]): string {
 }
 
 /** The Markdown report: a summary, a table per assistant, then each question's replies side by side. */
+/** How a run is named in the report: the assistant, and its model when one was set. */
+export const runLabel = (r: AgentRun): string =>
+  r.model ? `${NAMES[r.agent]} (${r.model})` : NAMES[r.agent];
+
 export function buildReport(run: CompareRun): string {
   const ran = run.runs.filter((r) => !r.skipped);
   const out: string[] = [];
@@ -298,8 +325,8 @@ export function buildReport(run: CompareRun): string {
   for (const r of run.runs) {
     const what = r.skipped
       ? `skipped: ${r.skipped}`
-      : `${r.command}${r.version ? ` (${r.version})` : ""}, permission mode ${r.permissionMode}, ed-mcp: ${r.edMcp}`;
-    out.push(`- **${NAMES[r.agent]}**: ${cell(what)}`);
+      : `${r.command}${r.version ? ` (${r.version})` : ""}, model ${r.model ?? "the CLI's default"}, permission mode ${r.permissionMode}, ed-mcp: ${r.edMcp}`;
+    out.push(`- **${runLabel(r)}**: ${cell(what)}`);
   }
   out.push("");
   if (!ran.length) {
@@ -309,7 +336,7 @@ export function buildReport(run: CompareRun): string {
 
   out.push("## Summary", "");
   const sums = ran.map(summarizeRun);
-  out.push(`| | ${ran.map((r) => NAMES[r.agent]).join(" | ")} |`);
+  out.push(`| | ${ran.map(runLabel).join(" | ")} |`);
   out.push(`|---|${ran.map(() => "---").join("|")}|`);
   const row = (label: string, f: (s: RunSummary) => string) =>
     out.push(`| ${label} | ${sums.map(f).join(" | ")} |`);
@@ -325,7 +352,7 @@ export function buildReport(run: CompareRun): string {
 
   const byId = (r: AgentRun, id: number) => r.results.find((x) => x.questionId === id);
   for (const r of ran) {
-    out.push(`## ${NAMES[r.agent]}`, "");
+    out.push(`## ${runLabel(r)}`, "");
     out.push("| # | Topic | Tools | Approvals | Chars | First text | Total | Error |");
     out.push("|---|---|---|---|---|---|---|---|");
     for (const q of run.questions) {
@@ -347,7 +374,7 @@ export function buildReport(run: CompareRun): string {
   for (const q of run.questions) {
     // Escaped like the table cells: a line break, a | or HTML must not break the layout.
     out.push(`### ${q.id}. ${cell(q.topic ? `${q.topic}: ` : "")}${cell(q.text)}`, "");
-    out.push(`| ${ran.map((r) => NAMES[r.agent]).join(" | ")} |`);
+    out.push(`| ${ran.map(runLabel).join(" | ")} |`);
     out.push(`|${ran.map(() => "---").join("|")}|`);
     const results = ran.map((r) => byId(r, q.id));
     const replyCell = (x: QuestionResult | undefined) => {

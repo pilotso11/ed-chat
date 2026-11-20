@@ -316,9 +316,11 @@ next start.
 | `resumeHours` | `12` | Resume the assistant's last conversation when ED Chat starts, or switches to it, within this many hours. `0` turns it off. An older `claude.resumeHours` still works |
 | `claude.path` | `null` | Path to `claude`; `null` searches `PATH`, then the default install folders |
 | `claude.permissionMode` | asked on first run | `auto` or `default` (ask for everything not allowed). Without an answer the code default is `auto` |
+| `claude.model` | `sonnet` | The Claude model: `sonnet`, `opus`, `haiku` or a full model name. `null` uses Claude Code's default |
 | `claude.extraArgs` | `[]` | More arguments for `claude` |
 | `codex.path` | `null` | Path to `codex`; `null` searches `PATH`, then the default install folders |
 | `codex.permissionMode` | asked the first time Codex runs | `auto` (Codex decides inside its sandbox) or `default` (ask before anything not known to be safe) |
+| `codex.model` | `gpt-6.1-terra` | The Codex model. `null` uses the model in Codex's `config.toml` |
 | `codex.extraArgs` | `[]` | More arguments for `codex app-server` |
 | `journalDir` | `null` | The game's journal folder; `null` uses Saved Games |
 | `hud.enabled` | `true` | Show the activity panel |

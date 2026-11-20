@@ -61,6 +61,8 @@ export interface ThreadSettings {
   approvalPolicy: "on-request" | "untrusted";
   sandbox: "workspace-write";
   developerInstructions: string;
+  /** The model; absent, Codex's config.toml decides. */
+  model?: string;
   /** Config overrides, for example ed-mcp when Codex's own config lacks it. */
   config?: Record<string, unknown>;
 }
@@ -72,6 +74,8 @@ export interface ThreadSettings {
  */
 export function codexThreadSettings(o: {
   permissionMode: "auto" | "default";
+  /** null: the model in Codex's config.toml. */
+  model?: string | null;
   cwd: string;
   /** ED Chat's settings.json, which the player can ask Codex to show or change. */
   settingsFile?: string;
@@ -86,6 +90,7 @@ export function codexThreadSettings(o: {
     sandbox: "workspace-write",
     developerInstructions: prompt,
   };
+  if (o.model) s.model = o.model;
   // In the request body, not as -c arguments: the env can hold ED_MCP_SYNC_PASSWORD, and
   // command lines are visible to other processes.
   if (o.edMcp) s.config = { mcp_servers: { "ed-mcp": o.edMcp } };

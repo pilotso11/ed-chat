@@ -316,3 +316,16 @@ Notes from the probe:
 - The scrubber replaces every commander found in the journals (a machine can have two game
   accounts), with their FIDs, and checks each file afterwards: a name or FID that is still
   there stops it with an error instead of "scrubbed".
+
+## Follow-ups after Part 5
+
+- The first real comparison (Opus 5.5 against gpt-6.1-terra at low effort) found that Codex
+  asks before an MCP tool that is not read-only, with `mcpServer/elicitation/request` and
+  `_meta.codex_approval_kind: "mcp_tool_call"` (with `tool_name`, `tool_params_display`).
+  ED Chat declined every one, so ed-mcp tools such as `activity_set` failed. ED Chat now
+  accepts these for ed-mcp, as with Claude, and brings another server's tool to the card as
+  `mcp__<server>__<tool>`. Any other elicitation is still declined.
+- `claude.model` (default `sonnet`) and `codex.model` (default `gpt-6.1-terra`) choose the
+  model; `null` leaves the CLI's own default. Both are player-only, as their groups are.
+- compare-agents takes `--run <agent>[:model]`, more than once, to compare models; each run
+  gets a fresh copy of settings.json, and the report names each run's model.

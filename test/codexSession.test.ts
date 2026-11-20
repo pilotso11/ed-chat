@@ -688,6 +688,34 @@ describe("CodexSession", () => {
     expect(s.busy).toBe(true);
   });
 
+  it("runs an ed-mcp tool that Codex asks about, with no card", async () => {
+    const { s, events, received, asked } = await setup({ mode: "mcp-approval-ed" });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    const reply = (await received()).find((m) => m.id === "srv-5" && !m.method)!;
+    expect(reply.result).toEqual({ action: "accept", content: {}, _meta: null });
+    expect(asked).toHaveLength(0);
+  });
+
+  it("brings another MCP server's tool to the card, and answers in elicitation form", async () => {
+    const { s, events, received, asked } = await setup({
+      mode: "mcp-approval-other",
+      approve: async (r) => {
+        asked.push(r);
+        return "acceptForSession";
+      },
+    });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    expect(asked[0]).toMatchObject({
+      toolName: "mcp__other__activity_set",
+      summary: "summary: probe test",
+      shell: false,
+    });
+    const reply = (await received()).find((m) => m.id === "srv-5" && !m.method)!;
+    expect(reply.result).toEqual({ action: "accept", content: {}, _meta: { persist: "session" } });
+  });
+
   it("declines MCP elicitation", async () => {
     const { s, events, received } = await setup({ mode: "elicit" });
     s.send("hi");

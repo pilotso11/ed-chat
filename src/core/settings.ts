@@ -92,11 +92,14 @@ const HudSchema = z.strictObject({
 });
 
 // How ED Chat starts each CLI. The same fields for both.
-const CliSchema = z.strictObject({
-  path: z.string().min(1).nullable().default(null),
-  permissionMode: z.enum(["auto", "default"]).default("auto"),
-  extraArgs: z.array(z.string()).default([]),
-});
+// The same fields for both; model differs by its default. null leaves the CLI's own default.
+const cliSchema = (model: string) =>
+  z.strictObject({
+    path: z.string().min(1).nullable().default(null),
+    permissionMode: z.enum(["auto", "default"]).default("auto"),
+    model: z.string().min(1).nullable().default(model),
+    extraArgs: z.array(z.string()).default([]),
+  });
 
 export const SettingsSchema = z.strictObject({
   hotkeys: HotkeysSchema.prefault({}),
@@ -133,8 +136,9 @@ export const SettingsSchema = z.strictObject({
   // Which assistant runs. Only the player changes it: it decides which company gets the chat.
   agent: z.enum(["claude", "codex"]).default("claude"),
   resumeHours: z.number().min(0).max(720).default(12),
-  claude: CliSchema.prefault({}),
-  codex: CliSchema.prefault({}),
+  // Sonnet is quick and cheap enough for short in-game answers; Opus is a setting away.
+  claude: cliSchema("sonnet").prefault({}),
+  codex: cliSchema("gpt-6.1-terra").prefault({}),
   journalDir: z.string().min(1).nullable().default(null),
   hud: HudSchema.prefault({}),
 });

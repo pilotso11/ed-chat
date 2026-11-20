@@ -158,6 +158,35 @@ function playTurn(threadId, turnId) {
     }, 100);
     return;
   }
+  // Codex asks before an MCP tool that is not read-only, in the shape the real app-server uses.
+  if (mode === "mcp-approval-ed" || mode === "mcp-approval-other") {
+    const serverName = mode === "mcp-approval-ed" ? "ed-mcp" : "other";
+    waiting.set("srv-5", () =>
+      note("turn/completed", {
+        threadId,
+        turn: { id: turnId, status: "completed", error: null, durationMs: 1 },
+      }),
+    );
+    out({
+      id: "srv-5",
+      method: "mcpServer/elicitation/request",
+      params: {
+        threadId,
+        turnId,
+        serverName,
+        mode: "form",
+        _meta: {
+          codex_approval_kind: "mcp_tool_call",
+          persist: ["session", "always"],
+          tool_name: "activity_set",
+          tool_params_display: [{ name: "summary", value: "probe test", display_name: "summary" }],
+        },
+        message: `Allow the ${serverName} MCP server to run tool "activity_set"?`,
+        requestedSchema: { type: "object", properties: {} },
+      },
+    });
+    return;
+  }
   if (mode === "elicit") {
     waiting.set("srv-2", () =>
       note("turn/completed", {
