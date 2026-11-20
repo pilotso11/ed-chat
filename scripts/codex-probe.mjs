@@ -62,8 +62,9 @@ export const isTurnCompleted = (m, turnId) =>
 // at: one that holds password, passwd, passphrase, secret, token or apikey, or starts with
 // auth, oauth, cred or pass, is a secret, unless it is one of the words that only look like
 // one. When unsure, a value is redacted: a recording with too much hidden is safe.
+// The bare word pass is a secret (--pass-word, --db-pass); only longer words are excluded.
 const NOT_SECRET =
-  /^(author(s|ed|ing|ship)?|passthrough|passive\w*|passenger\w*|passage\w*|pass(es|ed|ing)?)$/;
+  /^(author(s|ed|ing|ship)?|passthrough|passive\w*|passenger\w*|passage\w*|pass(es|ed|ing))$/;
 const SECRET_NAME = {
   test(name) {
     const words = String(name)
@@ -73,7 +74,6 @@ const SECRET_NAME = {
       .filter(Boolean);
     return words.some(
       (w, i) =>
-        (w === "pass" && i === words.length - 1) ||
         (!NOT_SECRET.test(w) &&
           (/password|passwd|passphrase|secret|token|apikey/.test(w) ||
             /^(auth|oauth|cred|pass)/.test(w))) ||

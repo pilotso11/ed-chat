@@ -126,9 +126,14 @@ describe("secretsOf and makeRedactor", () => {
       "--credentials",
       "--db-pass",
       "--pass",
+      "--pass-word",
+      "--pass-phrase",
+      "--db-pass-file",
+      // Errs on the safe side: pass is a word of its own here.
+      "--pass-through",
     ];
     for (const flag of flags) expect(secretsOf({ args: [flag, "v1"] }), flag).toEqual(["v1"]);
-    for (const flag of ["--author", "--authors", "--passthrough", "--pass-through", "--passes"])
+    for (const flag of ["--author", "--authors", "--passthrough", "--passes"])
       expect(secretsOf({ args: [flag, "v1"] }), flag).toEqual([]);
   });
 
