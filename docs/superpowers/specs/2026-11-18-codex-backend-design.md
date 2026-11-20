@@ -143,13 +143,30 @@ ed-mcp tools. A player who has set up ed-mcp for one of them must not have to se
 - `PRIVACY.md`: with Codex chosen, messages and tool results go to OpenAI.
 - `docs/manual-checklist.md`: a Codex pass, and a switch pass.
 - Store listing and package description name both.
-- **Answer comparison.** `scripts/compare-agents.mjs` sends the same 10 to 15 typical player
+- **Answer comparison.** `scripts/compare-agents.ts` sends the same 10 to 15 typical player
   questions (route, engineering, materials, trade, exobiology, a settings change) through the
   real `ClaudeSession` and `CodexSession`, with ED Chat's HUD prompt and ed-mcp. For each answer
   it records the tools called, the approvals asked, the reply length, the time to the first text
   and the total time, and writes one report with both replies side by side. Each reply is
   checked by hand; the report goes into the PR, and the results guide the README's advice on
   which CLI to choose.
+
+### Comparing Claude and Codex
+
+Run `npx tsx scripts/compare-agents.ts --dry-run` first: it lists the questions, each installed
+CLI with its arguments, the permission mode and where its ed-mcp comes from, and starts nothing.
+Then run it without `--dry-run`. This spends tokens on both assistants. The questions are in
+`scripts/compare-questions.json`; `--questions <file>` takes another list, and `--only claude` or
+`--only codex` runs one assistant. Each CLI is found as ED Chat finds it, with the path,
+permission mode and extra arguments from the player's `settings.json`. It runs in a new temp
+folder, with a copy of `settings.json` and its schema, so a settings change touches only the
+copy. Each question starts a new conversation. Approvals are declined and counted; ed-mcp tools
+do not ask, and they use the player's real ed-mcp data, so a question that asks ed-mcp to save
+something (a plan, a preference) saves it. No `[Game state]` note is sent. The Markdown report goes to the temp folder, or to
+`--out <file>` (never inside the repo), with the raw numbers in a `.json` file next to it.
+`--timeout <seconds>` (default 300) limits each reply. Ctrl+C stops every CLI and writes what
+was recorded. The pure parts are in `scripts/compare-lib.ts`, tested in
+`test/compareAgents.test.ts`.
 
 ## Step 0 results
 
@@ -209,12 +226,8 @@ Notes from the probe:
   refused `turn/interrupt` for a turn that `/new` left is not retried, so that turn can run on.
   Cleanups: the process code shared with `ClaudeSession` (spawn,
   taskkill), and `isRecord`/`str`/`cut` copied across modules.
-- Probe hardening deferred to Part 5, before fixtures are recorded: fail closed on any git error
-  in the outside-the-repo check, ignore inherited `GIT_*` variables, refuse a folder inside
-  `.git`; match `turn/completed` on its turn id; stop ed-mcp's processes too when a run ends
-  (`taskkill /T`); in cli-config mode, pass ed-mcp's env through codex's own environment and
-  `env_vars` rather than leaving it out; check recordings by hand for secrets in other spellings
-  (forward-slash paths, double escaping) and in ed-mcp's args.
+- Probe hardening was deferred to Part 5, before fixtures are recorded. It is done; see "Notes
+  from Part 5".
 
 ## Notes from Part 3
 
@@ -269,3 +282,37 @@ Notes from the probe:
 - Still to do with the real CLI: how Codex reports a Windows sandbox that is not installed, and
   whether it sends `mcpServer/elicitation/request` before an ed-mcp tool in `default` mode
   (ED Chat declines those).
+
+## Notes from Part 5
+
+- `scrub-fixtures.mjs` scrubs `test/fixtures/codex/recorded-*.jsonl` too. It keeps the probe's
+  `>> ` and `<< ` marks, and also reads plain JSON lines. An `account/*` or `remoteControl/*`
+  message is removed with the answer to it (same id, the other way). Thread and turn ids stay.
+- The home folder matches with either slash, any number of backslashes (JSON-escaped once or
+  twice) and in any case. The user name, the commander name (a whole word, any case) and the
+  FID are replaced in Claude and Codex fixtures. The commander name comes from `--commander`,
+  `ED_COMMANDER` or the newest game journal, which also gives the FID. Keys are scrubbed too.
+- The probe hardening from Part 2 is done, in `codex-probe.mjs`, with its pure parts exported
+  and tested (`test/codexProbe.test.ts`). The script still runs as before.
+  - The outDir check runs git without inherited `GIT_*` variables and in English. Only "not a
+    git repository" accepts the folder; any other git answer or error refuses it. A path with a
+    `.git` part, or a folder git calls a git dir (a bare repository), is refused.
+  - A turn ends on the `turn/completed` with its own turn id, also when it came before the wait.
+    The interrupt uses the id from the `turn/start` answer.
+  - Each codex is stopped on every exit path: the end of a run, a failure, an uncaught error, a
+    `process.exit` and Ctrl+C. On Windows `taskkill /T` stops the tree. When codex has already
+    gone, its children (found by parent id, started after it) are stopped the same way.
+    Elsewhere codex runs in its own process group, and the group is stopped.
+  - cli-config mode puts ed-mcp's env into codex's own environment and names it in
+    `mcp_servers.ed-mcp.env_vars`. No env value goes on the command line; ed-mcp's args do,
+    so a secret passed as an arg is visible to other processes while the probe runs. Use
+    config-field mode for such a setup.
+  - Redaction matches each secret with either slash, any escaping of backslashes and quotes,
+    and in any case. Secrets in ed-mcp's args are the value after a secret-looking flag
+    (`--password x`) and the value of `--token=x` or `API_KEY=x`.
+- Not done: a process whose parent and grandparent have both gone (ed-mcp's node when codex and
+  cmd have both ended) is not found. A secret in ed-mcp's args with no flag name is not known
+  as one. So recordings are still read by hand before they become fixtures.
+- The scrubber replaces every commander found in the journals (a machine can have two game
+  accounts), with their FIDs, and checks each file afterwards: a name or FID that is still
+  there stops it with an error instead of "scrubbed".

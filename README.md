@@ -1,7 +1,7 @@
 # ED Chat
 
-A small Claude chat window on top of Elite Dangerous. Press a hotkey, ask a
-question, press Enter, and keep flying. The reply shows in a corner of the
+A small AI chat window on top of Elite Dangerous, for Claude Code or OpenAI's
+Codex. Press a hotkey, ask a question, press Enter, and keep flying. The reply shows in a corner of the
 screen. Star system and station names in the reply become numbered chips;
 Ctrl+Shift+1…9 or a click copies one, ready to paste into the galaxy map search.
 
@@ -12,12 +12,21 @@ VR.
 
 - Elite Dangerous in **Borderless** or **Windowed** mode (Options → Graphics →
   Display). The overlay cannot show over exclusive fullscreen.
-- [Claude Code](https://claude.com/claude-code), installed and logged in. The
-  overlay starts your own `claude` command and uses your login and settings.
+- One of these assistants, installed and logged in. The overlay starts your
+  own command and uses your login and settings.
+  - [Claude Code](https://claude.com/claude-code) (`claude`), the default.
+  - [OpenAI's Codex CLI](https://github.com/openai/codex) (`codex`). Log
+    in with `codex login`. Codex runs commands in its Windows sandbox, which
+    needs its admin install: see the Codex documentation for
+    `[windows] sandbox = "elevated"`.
+
+  With both installed, ED Chat uses Claude Code; type `/codex` in the chat to
+  switch. With only Codex installed, ED Chat uses Codex.
 - Recommended: [ed-mcp](https://github.com/pilotso11/ed-mcp) for game tools.
-  ED Chat uses the ed-mcp that your `claude` already has, with its settings.
-  Add it for your user, not one project. Windows needs `cmd /c` to run `npx`,
-  and `@latest` gets each new release:
+  Set it up once, in either assistant: ED Chat finds it and gives the same
+  ed-mcp, with its settings, to the other one. For Claude Code, add it for your
+  user, not one project. Windows needs `cmd /c` to run `npx`, and `@latest`
+  gets each new release:
 
   ```
   claude mcp add ed-mcp -s user -- cmd /c npx -y ed-mcp@latest
@@ -29,6 +38,12 @@ VR.
 
   ```
   claude mcp add ed-mcp -s user -e ED_MCP_SYNC_DIR=<folder> -e ED_MCP_SYNC_PASSWORD=<password> -- cmd /c npx -y ed-mcp@latest
+  ```
+
+  For Codex instead:
+
+  ```
+  codex mcp add ed-mcp -- cmd /c npx -y ed-mcp@latest
   ```
 
   The [ed-mcp README](https://github.com/pilotso11/ed-mcp#readme) lists every
@@ -53,7 +68,7 @@ installer is not code signed, so Windows SmartScreen warns on first run. Select
 | Ctrl+` | Step: the last reply, then the whole reply, then the chat; a press in the chat closes it |
 | Ctrl+Alt+Enter | Open the chat directly. Enter sends and returns to the game. Esc closes. |
 | Ctrl+Shift+1…9 | Copy chip 1…9 (top-row digits). A click on a chip also copies it. |
-| Ctrl+Alt+Y / N | Allow / deny a tool that Claude asks to run |
+| Ctrl+Alt+Y / N | Allow / deny a tool that the assistant asks to run |
 | Ctrl+Alt+A | Allow the tool, and allow it without asking until `/new` |
 | Ctrl+Alt+X | Stop the current reply |
 | Ctrl+Shift+H | Show or hide this session's history |
@@ -72,7 +87,7 @@ With Codex chosen, your messages and tool results go to OpenAI instead of Anthro
 
 When ED Chat starts within 12 hours of your last reply, it resumes that
 conversation, and the history (Ctrl+Shift+H) shows its turns. With an ed-mcp that has
-the activity tools, Claude also keeps a short note of what you are doing, for example
+the activity tools, the assistant also keeps a short note of what you are doing, for example
 scanning bios on a planet or running a massacre stack, and the route that
 you are flying. It reads the note when a conversation starts, so it knows
 after `/new` or a long break. Set `resumeHours` to change the 12 hours.
@@ -213,16 +228,26 @@ with its whole `env`, sync password included. That copy is written to
 
 ## Permissions
 
-On first run the overlay asks how Claude should run tools, and saves the answer
-as `claude.permissionMode` in `settings.json`:
+On first run the overlay asks how the assistant should run tools, and saves the
+answer as `claude.permissionMode` or `codex.permissionMode` in `settings.json`.
+Codex is asked the first time it runs.
 
-- **Ask me** (`default`): the overlay shows each tool that your Claude Code
-  rules do not already allow, and you answer it.
-- **Auto** (`auto`): a classifier reviews each action, but it runs a command
-  that you ask for explicitly without asking you first. In testing, auto mode
-  ran `curl … | sh` when asked to, with no prompt. Claude also acts on text it
-  reads, such as tool results, so be careful what you ask it to do. The status
-  line shows **AUTO** while auto mode is on.
+- **Ask me** (`default`): the overlay shows each tool that the assistant's own
+  rules do not already allow (with Claude Code, your permission rules), and you
+  answer it.
+- **Auto** (`auto`): with Claude Code, a classifier reviews each action, but it
+  runs a command that you ask for explicitly without asking you first. In
+  testing, auto mode
+  ran `curl … | sh` when asked to, with no prompt. The assistant also acts on
+  text it reads, such as tool results, so be careful what you ask it to do. The
+  status line shows **AUTO** while auto mode is on.
+
+With Codex, both modes keep its sandbox to ED Chat's data folder: a command or a
+file change outside it comes to the approval card. **Auto** lets Codex decide
+inside the sandbox; **Ask me** asks before anything Codex does not know to be
+safe. Codex never brings MCP tool calls such as ed-mcp to the card. With Claude
+Code, your own permission rules decide: in Ask me mode each ed-mcp tool asks
+until you allow it, for example with Ctrl+Alt+A until `/new`.
 
 An approval card shows the tool, up to three lines of what it will do, and
 `⚠ runs a shell command` for shell tools. It plays a sound (`approval.sound`)
@@ -252,13 +277,14 @@ Changes apply when you save the file. The file is plain JSON. Settings for
 `claude` or `codex` apply after `/new`; the overlay shows, for example,
 `ⓘ claude settings apply after /new`.
 
-You can also ask Claude, for example "what is my bio threshold?" or "only show
-bio planets worth 2M or more". Claude knows where `settings.json` is and reads
+You can also ask the assistant, for example "what is my bio threshold?" or "only
+show bio planets worth 2M or more". It knows where `settings.json` is and reads
 `settings.schema.json`, which describes each setting with its default and
-limits. It does not change the settings marked player only: `claude`,
-`approval`, `safety`, `journalDir` and `hud.edMcpDataDir`. Change those yourself
+limits. It does not change the settings marked player only: `agent`,
+`resumeHours`, `claude`, `codex`, `approval`, `safety`, `journalDir` and
+`hud.edMcpDataDir`. Change those yourself
 from the tray menu, **Open settings**. ED Chat also checks: when one of these
-settings changes in the file, by your edit or Claude's, ED Chat keeps the old
+settings changes in the file, by your edit or the assistant's, ED Chat keeps the old
 value and asks whether to apply the change. **Undo** puts the old value back in
 the file. The other changes in the same save apply at once. ED Chat keeps the
 values you last applied in `state.json`, so a change that is still unanswered
@@ -314,11 +340,12 @@ A position chosen with the hotkeys or by dragging is saved in `state.json`, unti
 ## Troubleshooting
 
 The first line of the overlay shows problems. If ed-mcp is added but does not
-start, the overlay shows `⚠ ed-mcp failed to start; run claude mcp list`.
+start, the overlay shows `⚠ ed-mcp failed to start; run claude mcp list` (or
+`codex mcp list`).
 Click the message to copy the command. If
 the overlay cannot start at all, it shows an error dialog. The log is
 `%APPDATA%\ed-chat\logs\overlay.log`. It does not record your messages or
-Claude's replies. When the `claude` CLI stops, the log keeps its last error
+the assistant's replies. When the CLI stops, the log keeps its last error
 lines, cut to 160 characters each, and those can quote part of a request. Check
 the log before you share it.
 
@@ -351,9 +378,10 @@ For a signed install, use the
 
 ## Privacy
 
-ED Chat has no telemetry. It passes your messages to the Claude Code CLI on
-your PC, which sends them to Anthropic. See [PRIVACY.md](PRIVACY.md).
+ED Chat has no telemetry. It passes your messages to the assistant's CLI on
+your PC, which sends them to its company: Anthropic for Claude Code, OpenAI for
+Codex. See [PRIVACY.md](PRIVACY.md).
 
-Each message also carries a short note of the game state, so Claude does not
+Each message also carries a short note of the game state, so the assistant does not
 plan from an older turn: your system and nearby body, what the activity panel
 shows, and your route. It comes from the same journal data the panel reads.

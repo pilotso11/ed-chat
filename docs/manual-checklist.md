@@ -40,3 +40,31 @@ next to each item.
 - [ ] A position chosen by hotkey survives a restart.
 - [ ] `settings.json` edits apply without a restart; a broken edit shows a warning.
 - [ ] The ed-mcp warning shows when ed-mcp is not added for the user.
+
+## Codex (each release that changes the Codex backend)
+
+Run with the Codex CLI installed and logged in (`codex login`), ed-mcp set up in only
+one of the two CLIs.
+
+- [ ] `/codex` posts `Switched to Codex.`, and `/version` names codex and its version.
+- [ ] The first switch asks how Codex should run tools; the answer is in
+      `codex.permissionMode`, and `claude.permissionMode` is unchanged.
+- [ ] A question that needs ed-mcp (for example "where am I?") gets an answer from it,
+      with ed-mcp set up only in Claude Code. No "ed-mcp not connected" notice shows.
+- [ ] A reply streams into the card, and its chips copy.
+- [ ] Asking for a command outside ED Chat's folder shows the approval card with the
+      command; Ctrl+Alt+N declines it and the reply goes on.
+- [ ] Ctrl+Alt+A on a card allows that kind of tool until `/new`.
+- [ ] Ctrl+Alt+X stops a reply, and a message sent right after it is answered.
+- [ ] `/new` starts a new conversation; the history shows only the new turns.
+- [ ] Quit after a reply and start again within 12 hours: the Codex conversation resumes.
+- [ ] Without the Windows sandbox installed: write down what Codex reports, for the spec.
+
+## Switching
+
+- [ ] `/claude` and `/codex` switch back and forth; each resumes its own conversation.
+- [ ] The tray's Assistant submenu shows a check on the running assistant and switches.
+- [ ] A switch while a reply streams stops it, and withdraws an open approval card.
+- [ ] A switch while `settings.json` has an error says to fix it first.
+- [ ] With only Codex installed and no `%APPDATA%\ed-chat\state.json`, the first start
+      uses Codex. With both installed, it uses Claude and says once how to switch.
