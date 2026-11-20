@@ -232,10 +232,12 @@ On first run the overlay asks how the assistant should run tools, and saves the
 answer as `claude.permissionMode` or `codex.permissionMode` in `settings.json`.
 Codex is asked the first time it runs.
 
-- **Ask me** (`default`): the overlay shows each tool that your Claude Code
-  rules do not already allow, and you answer it.
-- **Auto** (`auto`): a classifier reviews each action, but it runs a command
-  that you ask for explicitly without asking you first. In testing, auto mode
+- **Ask me** (`default`): the overlay shows each tool that the assistant's own
+  rules do not already allow (with Claude Code, your permission rules), and you
+  answer it.
+- **Auto** (`auto`): with Claude Code, a classifier reviews each action, but it
+  runs a command that you ask for explicitly without asking you first. In
+  testing, auto mode
   ran `curl … | sh` when asked to, with no prompt. The assistant also acts on
   text it reads, such as tool results, so be careful what you ask it to do. The
   status line shows **AUTO** while auto mode is on.
