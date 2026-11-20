@@ -143,25 +143,51 @@ describe("ed-mcp on a copy of its data", () => {
     expect(edMcpDataDir({ env: { ED_MCP_SYNC_DIR: "D:\\Sync" } }, {}, home, "win32")).toBe(
       "D:\\Sync",
     );
+    // ed-mcp names its folder ed-mcp, with no -nodejs suffix.
     expect(edMcpDataDir({ env: {} }, { APPDATA: "C:\\AD" }, home, "win32")).toBe(
-      "C:\\AD\\ed-mcp-nodejs\\Config",
+      "C:\\AD\\ed-mcp\\Config",
     );
     expect(edMcpDataDir({ env: { ED_MCP_SYNC_DIR: " " } }, {}, "/home/c", "linux")).toBe(
-      "/home/c/.config/ed-mcp-nodejs",
+      "/home/c/.config/ed-mcp",
     );
+    // As ed-mcp reads it: ~ is home, and a relative path is refused.
+    expect(edMcpDataDir({ env: { ED_MCP_SYNC_DIR: "~/Sync" } }, {}, home, "win32")).toBe(
+      "C:\\Users\\cmdr\\Sync",
+    );
+    expect(edMcpDataDir({ env: { ED_MCP_SYNC_DIR: "Sync" } }, {}, home, "win32")).toBeNull();
   });
 
-  it("points the definition at the copy, and keeps the rest of it", () => {
+  it("points the definition at the copy, and its config and cache at the sandbox", () => {
     const def = {
       source: "claudeUser" as const,
       command: "node",
       args: ["x.js"],
       env: { ED_MCP_SYNC_DIR: "D:\\Sync", ED_MCP_SYNC_PASSWORD: "secret-password" },
     };
-    expect(isolatedEdMcp(def, "T:\\copy")).toEqual({
+    const win = isolatedEdMcp(
+      def,
+      "T:\\copy",
+      "T:\\box",
+      { LOCALAPPDATA: "C:\\LA" },
+      "C:\\U",
+      "win32",
+    );
+    expect(win).toEqual({
       command: "node",
       args: ["x.js"],
-      env: { ED_MCP_SYNC_DIR: "T:\\copy", ED_MCP_SYNC_PASSWORD: "secret-password" },
+      env: {
+        ED_MCP_SYNC_DIR: "T:\\copy",
+        ED_MCP_SYNC_PASSWORD: "secret-password",
+        APPDATA: "T:\\box\\Roaming",
+        LOCALAPPDATA: "T:\\box\\Local",
+        npm_config_cache: "C:\\LA\\npm-cache",
+      },
+    });
+    const linux = isolatedEdMcp(def, "/t/copy", "/t/box", {}, "/home/c", "linux");
+    expect(linux.env).toMatchObject({
+      ED_MCP_SYNC_DIR: "/t/copy",
+      XDG_CONFIG_HOME: "/t/box/config",
+      XDG_CACHE_HOME: "/t/box/cache",
     });
   });
 });

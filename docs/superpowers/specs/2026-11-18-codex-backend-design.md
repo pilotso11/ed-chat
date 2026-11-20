@@ -162,9 +162,13 @@ permission mode and extra arguments from the player's `settings.json`. It runs i
 folder, with a copy of `settings.json` and its schema, so a settings change touches only the
 copy. Each question starts a new conversation. Approvals are declined and counted, except ed-mcp
 tools, which are allowed. Both assistants run the player's ed-mcp definition on a copy of its
-data (activity note, plans, preferences), with `--strict-mcp-config` for Claude, so a question
-that saves something changes only the copy; the first real run, before this, overwrote the
-player's activity note. A definition that runs as a command is needed (not the plugin alone).
+data (activity note, plans, preferences), made fresh for each run, with `--strict-mcp-config`
+for Claude, so a question that saves something changes only that copy; the first real run,
+before this, overwrote the player's activity note. Secrets are not copied, and ed-mcp's config
+and cache folders are moved into the temp folder (APPDATA and LOCALAPPDATA on Windows, the XDG
+folders on Linux), so the assistants run as a player with no stored keys or Frontier login: a
+login refreshed in a copy would spend the real one. npm keeps its own cache. A definition that
+runs as a command is needed (not the plugin alone); macOS is not supported.
 No `[Game state]` note is sent. The Markdown report goes to the temp folder, or to
 `--out <file>` (never inside the repo), with the raw numbers in a `.json` file next to it.
 `--timeout <seconds>` (default 300) limits each reply. Ctrl+C stops every CLI and writes what

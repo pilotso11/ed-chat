@@ -181,42 +181,62 @@ export function edChatDataDir(
 
 /**
  * Where an ed-mcp definition keeps the player's notes and plans: its sync folder, else ed-mcp's
- * own config folder (env-paths "ed-mcp-nodejs", as ed-mcp uses).
+ * own config folder (env-paths("ed-mcp", { suffix: "" }), as ed-mcp names it). A sync folder
+ * is read as ed-mcp reads it: ~ is the home folder, and a relative path is refused (null).
  */
 export function edMcpDataDir(
   def: { env: Record<string, string> },
   env: NodeJS.ProcessEnv,
   home: string,
   platform: NodeJS.Platform,
-): string {
+): string | null {
+  const p = platform === "win32" ? path.win32 : path.posix;
   const sync = def.env.ED_MCP_SYNC_DIR?.trim();
-  if (sync) return sync;
+  if (sync) {
+    const tilde = /^~(?:[/\\]|$)/.exec(sync);
+    if (tilde) return p.join(home, sync.slice(tilde[0].length));
+    return p.isAbsolute(sync) ? p.resolve(sync) : null;
+  }
   if (platform === "win32")
-    return path.win32.join(
-      env.APPDATA || path.win32.join(home, "AppData", "Roaming"),
-      "ed-mcp-nodejs",
-      "Config",
-    );
-  if (platform === "darwin")
-    return path.posix.join(home, "Library", "Preferences", "ed-mcp-nodejs");
-  return path.posix.join(env.XDG_CONFIG_HOME || path.posix.join(home, ".config"), "ed-mcp-nodejs");
+    return p.join(env.APPDATA || p.join(home, "AppData", "Roaming"), "ed-mcp", "Config");
+  if (platform === "darwin") return p.join(home, "Library", "Preferences", "ed-mcp");
+  return p.join(env.XDG_CONFIG_HOME || p.join(home, ".config"), "ed-mcp");
 }
 
-/** The files in ed-mcp's data folder that a question can change, and the encrypted keys. */
-export const ED_MCP_DATA_FILES = [
-  "activity.json",
-  "plans.json",
-  "plans",
-  "preferences.json",
-  "secrets.enc",
-];
+/**
+ * The files in ed-mcp's data folder that a question can change. Secrets (API keys, the
+ * Frontier login) are not copied: a refreshed login saved only in a copy would spend the
+ * player's real one. The assistants run as a player with no stored keys.
+ */
+export const ED_MCP_DATA_FILES = ["activity.json", "plans.json", "plans", "preferences.json"];
 
 /**
  * The player's ed-mcp, run on a copy of its data: a question that saves a plan or a note
- * changes only the copy. Both assistants get this one definition.
+ * changes only the copy. Its config and cache folders (secrets.json, locks, cache) are moved
+ * into the sandbox too, so nothing of the player's ed-mcp state is read or written. npm keeps
+ * its own cache, so npx does not fetch ed-mcp again.
  */
-export function isolatedEdMcp(def: EdMcpDefinition, dataCopy: string): CliMcpServer {
-  return forCli({ ...def, env: { ...def.env, ED_MCP_SYNC_DIR: dataCopy } })!;
+export function isolatedEdMcp(
+  def: EdMcpDefinition,
+  dataCopy: string,
+  sandbox: string,
+  env: NodeJS.ProcessEnv,
+  home: string,
+  platform: NodeJS.Platform,
+): CliMcpServer {
+  const p = platform === "win32" ? path.win32 : path.posix;
+  const dirs: Record<string, string> =
+    platform === "win32"
+      ? {
+          APPDATA: p.join(sandbox, "Roaming"),
+          LOCALAPPDATA: p.join(sandbox, "Local"),
+          npm_config_cache: p.join(
+            env.LOCALAPPDATA || p.join(home, "AppData", "Local"),
+            "npm-cache",
+          ),
+        }
+      : { XDG_CONFIG_HOME: p.join(sandbox, "config"), XDG_CACHE_HOME: p.join(sandbox, "cache") };
+  return forCli({ ...def, env: { ...def.env, ...dirs, ED_MCP_SYNC_DIR: dataCopy } })!;
 }
 
 export interface ApprovalAsked {

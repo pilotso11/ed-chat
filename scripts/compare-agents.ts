@@ -142,6 +142,18 @@ if (!edMcpDef) {
   process.exit(2);
 }
 const edMcpSource = edMcpDataDir(edMcpDef, process.env, os.homedir(), process.platform);
+if (!edMcpSource) {
+  console.error(
+    `ed-mcp's ED_MCP_SYNC_DIR is not an absolute path or one starting with ~: ${edMcpDef.env.ED_MCP_SYNC_DIR}`,
+  );
+  process.exit(2);
+}
+if (process.platform === "darwin") {
+  // ed-mcp's config folder on macOS follows HOME, which cannot be moved without moving the
+  // journal too.
+  console.error("compare-agents runs on Windows and Linux only: it cannot sandbox ed-mcp here.");
+  process.exit(2);
+}
 const edMcpNote = `ed-mcp from ${edMcpDef.source}, on a copy of its data`;
 const resolvers: Record<AgentId, (p: string | null) => ResolvedCommand | null> = {
   claude: (p) => resolveClaude(p),
@@ -277,14 +289,35 @@ try {
   const workspace = path.join(tempRoot, "workspace");
   const settingsFile = path.join(tempRoot, "settings.json");
   await mkdir(workspace);
-  // ed-mcp's notes and plans, copied: a question that saves something changes only the copy.
+  // ed-mcp's notes and plans are copied fresh for each run (below), into this folder; its
+  // config and cache folders go in the sandbox.
   const edMcpData = path.join(tempRoot, "ed-mcp-data");
-  await mkdir(edMcpData);
-  for (const f of ED_MCP_DATA_FILES) {
-    const from = path.join(edMcpSource, f);
-    if (existsSync(from)) await cp(from, path.join(edMcpData, f), { recursive: true });
-  }
-  const edMcp = isolatedEdMcp(edMcpDef, edMcpData);
+  const edMcp = isolatedEdMcp(
+    edMcpDef,
+    edMcpData,
+    path.join(tempRoot, "ed-mcp-sandbox"),
+    process.env,
+    os.homedir(),
+    process.platform,
+  );
+  let copied = 0;
+  const copyEdMcpData = async () => {
+    await rm(edMcpData, { recursive: true, force: true });
+    await mkdir(edMcpData, { recursive: true });
+    copied = 0;
+    for (const f of ED_MCP_DATA_FILES) {
+      const from = path.join(edMcpSource, f);
+      if (!existsSync(from)) continue;
+      await cp(from, path.join(edMcpData, f), { recursive: true });
+      copied++;
+    }
+  };
+  await copyEdMcpData();
+  if (!copied)
+    console.error(
+      `Nothing of ed-mcp's data was found in ${edMcpSource}: the assistants answer as a ` +
+        "player with no plans, notes or preferences.",
+    );
   await writeFile(path.join(tempRoot, SCHEMA_FILE), settingsSchemaText());
   await writeFile(path.join(tempRoot, DEFAULTS_FILE), defaultSettingsText());
 
@@ -311,6 +344,8 @@ try {
     // A fresh copy for each run: a settings change by one assistant must not carry over to
     // the next, which would then find the change already made.
     await writeFile(settingsFile, settingsText ?? newSettingsText());
+    // And ed-mcp's data, so a plan or note saved in one run is not there in the next.
+    await copyEdMcpData();
     const entry: AgentRun = {
       agent,
       model,
