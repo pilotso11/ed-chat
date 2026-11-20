@@ -729,6 +729,34 @@ describe("CodexSession", () => {
     expect(reply.result).toEqual({ action: "accept", content: {}, _meta: { persist: "session" } });
   });
 
+  it("answers allow until /new as a plain accept when Codex offers no session memory", async () => {
+    const { s, events, received } = await setup({
+      mode: "mcp-approval-other-nopersist",
+      approve: async () => "acceptForSession",
+    });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    const reply = (await received()).find((m) => m.id === "srv-5" && !m.method)!;
+    expect(reply.result).toEqual({ action: "accept", content: {}, _meta: null });
+  });
+
+  it("declines a withdrawn MCP tool approval in elicitation form", async () => {
+    let card: CodexApproval | null = null;
+    const { s, received } = await setup({
+      mode: "mcp-approval-other",
+      approve: (r) => {
+        card = r;
+        return new Promise(() => {});
+      },
+    });
+    s.send("hi");
+    await until(() => card !== null);
+    s.newSession();
+    await until(async () => (await received()).some((m) => m.id === "srv-5" && !m.method));
+    const reply = (await received()).find((m) => m.id === "srv-5" && !m.method)!;
+    expect(reply.result).toEqual({ action: "decline", content: null, _meta: null });
+  });
+
   it("declines MCP elicitation", async () => {
     const { s, events, received } = await setup({ mode: "elicit" });
     s.send("hi");

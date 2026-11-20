@@ -338,8 +338,9 @@ function approvalList(a: ApprovalAsked[]): string {
 }
 
 /** How a run is named in the report: the assistant, and its model when one was set. */
+// Escaped like the table cells: the model is free text from --run.
 export const runLabel = (r: AgentRun): string =>
-  r.model ? `${NAMES[r.agent]} (${r.model})` : NAMES[r.agent];
+  cell(r.model ? `${NAMES[r.agent]} (${r.model})` : NAMES[r.agent]);
 
 /** The Markdown report: a summary, a table per assistant, then each question's replies side by side. */
 export function buildReport(run: CompareRun): string {

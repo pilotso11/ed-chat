@@ -154,6 +154,8 @@ if (process.platform === "darwin") {
   console.error("compare-agents runs on Windows and Linux only: it cannot sandbox ed-mcp here.");
   process.exit(2);
 }
+// Codex still loads the player's other MCP servers from config.toml (only ed-mcp is replaced);
+// a tool of theirs that would change something asks, and the script declines it.
 const edMcpNote = `ed-mcp from ${edMcpDef.source}, on a copy of its data`;
 const resolvers: Record<AgentId, (p: string | null) => ResolvedCommand | null> = {
   claude: (p) => resolveClaude(p),

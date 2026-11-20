@@ -159,7 +159,7 @@ function playTurn(threadId, turnId) {
     return;
   }
   // Codex asks before an MCP tool that is not read-only, in the shape the real app-server uses.
-  if (mode === "mcp-approval-ed" || mode === "mcp-approval-other") {
+  if (mode === "mcp-approval-ed" || mode.startsWith("mcp-approval-other")) {
     const serverName = mode === "mcp-approval-ed" ? "ed-mcp" : "other";
     waiting.set("srv-5", () =>
       note("turn/completed", {
@@ -177,7 +177,8 @@ function playTurn(threadId, turnId) {
         mode: "form",
         _meta: {
           codex_approval_kind: "mcp_tool_call",
-          persist: ["session", "always"],
+          // mcp-approval-other-nopersist: Codex offers no session memory.
+          persist: mode === "mcp-approval-other-nopersist" ? [] : ["session", "always"],
           tool_name: "activity_set",
           tool_params_display: [{ name: "summary", value: "probe test", display_name: "summary" }],
         },

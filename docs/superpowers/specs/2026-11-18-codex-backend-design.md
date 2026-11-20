@@ -168,7 +168,9 @@ before this, overwrote the player's activity note. Secrets are not copied, and e
 and cache folders are moved into the temp folder (APPDATA and LOCALAPPDATA on Windows, the XDG
 folders on Linux), so the assistants run as a player with no stored keys or Frontier login: a
 login refreshed in a copy would spend the real one. npm keeps its own cache. A definition that
-runs as a command is needed (not the plugin alone); macOS is not supported.
+runs as a command is needed (not the plugin alone); macOS is not supported. Codex still loads the
+player's other MCP servers from `config.toml` (only ed-mcp is replaced); a tool of theirs that
+would change something asks, and the script declines it.
 No `[Game state]` note is sent. The Markdown report goes to the temp folder, or to
 `--out <file>` (never inside the repo), with the raw numbers in a `.json` file next to it.
 `--timeout <seconds>` (default 300) limits each reply. Ctrl+C stops every CLI and writes what
