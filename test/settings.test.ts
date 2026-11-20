@@ -168,7 +168,9 @@ describe("settings dictionary", () => {
     for (const p of ["journalDir", "hud.edMcpDataDir", "safety.blockWhenInDanger"])
       expect(readOnly).toContain(p);
     expect(readOnly).not.toContain("hud.bioMin");
-    expect(readOnly).not.toContain("hotkeys.openChat");
+    // The keys that answer approval cards, and so every hotkey.
+    for (const p of ["hotkeys", "hotkeys.approve", "hotkeys.alwaysAllow", "hotkeys.openChat"])
+      expect(readOnly).toContain(p);
     const claude = all.find(([p]) => p === "claude")![1];
     expect(claude.description).toContain(PLAYER_ONLY_NOTE);
   });

@@ -23,10 +23,13 @@ const position = (what: string, prefix: string): Record<string, SettingEntry> =>
 });
 
 export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
+  // Player-only: the approve and always-allow keys answer approval cards, so an assistant that
+  // rebinds them could have the player allow its next request with a key they press anyway.
   hotkeys: {
     text:
       "Hotkeys. Each takes one key, such as Ctrl+Alt+C, or a list of keys for the same action. " +
       "Keys use Electron accelerator names.",
+    playerOnly: true,
   },
   "hotkeys.scope": {
     text:

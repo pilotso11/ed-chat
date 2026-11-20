@@ -137,7 +137,14 @@ function playTurn(threadId, turnId) {
       id,
       method: file ? "item/fileChange/requestApproval" : "item/commandExecution/requestApproval",
       params: file
-        ? { threadId, turnId, itemId, reason: "outside the workspace" }
+        ? {
+            threadId,
+            turnId,
+            itemId,
+            reason: "outside the workspace",
+            // FAKE_GRANT_ROOT: a folder that the request asks write access to.
+            ...(process.env.FAKE_GRANT_ROOT ? { grantRoot: process.env.FAKE_GRANT_ROOT } : {}),
+          }
         : { threadId, turnId, itemId, command: "powershell.exe -Command dir C:\\", cwd: "C:\\" },
     });
     return;

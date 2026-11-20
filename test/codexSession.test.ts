@@ -27,6 +27,8 @@ interface Setup {
   autoEditFiles?: string[];
   /** The changes of file-approval's fileChange item, given the session's folder. */
   changes?: (dir: string) => unknown[];
+  /** The folder that file-approval's request asks write access to, given the session's folder. */
+  grantRoot?: (dir: string) => string;
 }
 
 async function setup(o: Setup = {}) {
@@ -54,6 +56,7 @@ async function setup(o: Setup = {}) {
       FAKE_MODE: o.mode ?? "ok",
       FAKE_LOG: log,
       ...(o.changes ? { FAKE_CHANGES: JSON.stringify(o.changes(dir)) } : {}),
+      ...(o.grantRoot ? { FAKE_GRANT_ROOT: o.grantRoot(dir) } : {}),
     },
   });
   sessions.push(s);
@@ -644,18 +647,21 @@ describe("CodexSession", () => {
     const update = (p: string, move_path: string | null = null) => ({
       path: p,
       kind: { type: "update", move_path },
+      diff: "@@ -1 +1 @@\n-{}\n+{}\n",
     });
     // Asks the session about a file change, given the session's folder; the card's requests,
     // and the answer Codex got.
     async function edit(
       changes: (dir: string) => unknown[],
       permissionMode: "auto" | "default" = "auto",
+      grantRoot?: (dir: string) => string,
     ) {
       const r = await setup({
         mode: "file-approval",
         permissionMode,
         autoEditFiles: ["settings.json"],
         changes,
+        grantRoot,
       });
       r.s.send("edit");
       await until(() => has(r.events, "result"));
@@ -694,9 +700,21 @@ describe("CodexSession", () => {
       ["an add", (d) => [{ path: settings(d), kind: { type: "add" } }]],
       ["a delete", (d) => [{ path: settings(d), kind: { type: "delete" } }]],
       ["no kind", (d) => [{ path: settings(d) }]],
+      ["a move beside the path", (d) => [{ ...update(settings(d)), move_to: other(d) }]],
       ["a second file", (d) => [update(settings(d)), update(other(d))]],
     ])("shows the card for %s", async (_, changes) => {
       expect((await edit(changes)).asked).toHaveLength(1);
+    });
+
+    // A grant lets Codex write anywhere in the folder, not only the file in the change.
+    it("shows the card for write access to a folder", async () => {
+      const r = await edit(
+        (d) => [update(settings(d))],
+        "auto",
+        (d) => d,
+      );
+      expect(r.asked).toHaveLength(1);
+      expect(r.answer).not.toEqual({ decision: "accept" });
     });
 
     // \x\y is on the drive of whichever folder the patch is applied in.
