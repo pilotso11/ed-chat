@@ -25,8 +25,8 @@ interface Setup {
   interruptGraceMs?: number;
   /** Files that auto mode may change without a card, relative to the session's folder. */
   autoEditFiles?: string[];
-  /** The changes of file-approval's fileChange item. */
-  changes?: unknown[];
+  /** The changes of file-approval's fileChange item, given the session's folder. */
+  changes?: (dir: string) => unknown[];
 }
 
 async function setup(o: Setup = {}) {
@@ -53,7 +53,7 @@ async function setup(o: Setup = {}) {
       FAKE_FIXTURE: fixture,
       FAKE_MODE: o.mode ?? "ok",
       FAKE_LOG: log,
-      ...(o.changes ? { FAKE_CHANGES: JSON.stringify(o.changes) } : {}),
+      ...(o.changes ? { FAKE_CHANGES: JSON.stringify(o.changes(dir)) } : {}),
     },
   });
   sessions.push(s);
@@ -646,12 +646,15 @@ describe("CodexSession", () => {
       kind: { type: "update", move_path },
     });
     // Asks the session about a file change; the card's requests, and the answer Codex got.
-    async function edit(changes: unknown[], permissionMode: "auto" | "default" = "auto") {
+    async function edit(
+      changes: unknown[] | ((dir: string) => unknown[]),
+      permissionMode: "auto" | "default" = "auto",
+    ) {
       const r = await setup({
         mode: "file-approval",
         permissionMode,
         autoEditFiles: ["settings.json"],
-        changes,
+        changes: typeof changes === "function" ? changes : () => changes,
       });
       r.s.send("edit");
       await until(() => has(r.events, "result"));
@@ -667,6 +670,14 @@ describe("CodexSession", () => {
       });
     });
 
+    it("accepts the file by its absolute path, in another case on Windows", async () => {
+      const absolute = (dir: string) => {
+        const p = path.join(dir, "settings.json");
+        return process.platform === "win32" ? p.toUpperCase() : p;
+      };
+      expect((await edit((dir) => [update(absolute(dir))])).asked).toEqual([]);
+    });
+
     it("shows the card in default mode", async () => {
       expect((await edit([update("settings.json")], "default")).asked).toHaveLength(1);
     });
@@ -675,6 +686,7 @@ describe("CodexSession", () => {
       for (const changes of [
         [update("approval-mcp.json")],
         [update("settings.json", "approval-mcp.json")],
+        [{ path: "settings.json", kind: { type: "update", movePath: "approval-mcp.json" } }],
         [{ path: "settings.json", kind: { type: "add" } }],
         [{ path: "settings.json", kind: { type: "delete" } }],
         [{ path: "settings.json" }],

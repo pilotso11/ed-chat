@@ -581,14 +581,15 @@ export class CodexSession implements AgentBackend {
             paths: item.changes.flatMap((c) =>
               isRecord(c) && typeof c.path === "string" ? [c.path] : [],
             ),
-            // A move names its new path in move_path; an add or a delete is not an edit.
+            // A move names its new path in move_path; an add or a delete is not an edit. Any
+            // other field set in kind is taken as a move too, in case Codex renames it.
             updatesOnly: item.changes.every(
               (c) =>
                 isRecord(c) &&
                 typeof c.path === "string" &&
                 isRecord(c.kind) &&
                 c.kind.type === "update" &&
-                (c.kind.move_path === undefined || c.kind.move_path === null),
+                Object.entries(c.kind).every(([k, v]) => k === "type" || v == null),
             ),
           });
         break;
