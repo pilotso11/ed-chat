@@ -647,6 +647,7 @@ export class CodexSession implements AgentBackend {
       case "item/fileChange/requestApproval": {
         const itemId = str(p.itemId);
         const change = (itemId && this.fileChanges.get(itemId)) || null;
+        if (itemId) this.fileChanges.delete(itemId);
         const paths = change?.paths ?? [];
         const root = str(p.grantRoot);
         const allowed = this.opts.autoEditFiles ?? [];
