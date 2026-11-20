@@ -643,8 +643,10 @@ export class CodexSession implements AgentBackend {
           return;
         }
         // In auto mode ed-mcp's tools run without a card. In Ask me mode they come to the card
-        // like any tool, as Claude Code's do.
-        if (server === "ed-mcp" && this.thread.approvalPolicy === "on-request") {
+        // like any tool, as Claude Code's do. The mode is the one the thread runs with, as Codex
+        // gave it at thread/start or thread/resume, not a setting changed since (it applies
+        // after /new).
+        if (server === "ed-mcp" && this.events.permissionMode === "auto") {
           rpc.respond(id, { action: "accept", content: {}, _meta: null });
           return;
         }
