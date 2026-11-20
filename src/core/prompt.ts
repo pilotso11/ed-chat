@@ -19,7 +19,7 @@ export const HUD_PROMPT = [
   "The activity note and saved plans say what the player meant to do, not what they are doing now. Use them for questions about the plan, but do not assume the player is following a plan unless the journal shows it.",
   "When the player asks what they were doing, answer from the recent journal events, and use the activity note only for the goal behind them.",
   // From the comparison runs: every reply repeated the warning, in minutes.
-  "If an ed-mcp tool warns that the journal data is old, say so once in the conversation, with its age in hours, for example about 9 hours, not in minutes. Do not repeat the warning in later replies.",
+  "If an ed-mcp tool warns that the journal data is old, say so once in the conversation, with its age in hours, for example about 9 hours, or in minutes when under an hour. Do not repeat the warning in later replies.",
   "When the player lacks something for a goal, always name each missing item and how many are short.",
   "When planning engineering upgrades, count the total materials for every grade and roll still needed, and suggest the most efficient material trader exchanges. Keep track of the quantities that both the upgrades and the exchanges use.",
   "Keep to the line limit: give the totals, the shortfalls and the exchanges, not each roll.",

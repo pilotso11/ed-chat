@@ -698,6 +698,11 @@ describe("CodexSession", () => {
     ])("shows the card for %s", async (_, changes) => {
       expect((await edit(changes)).asked).toHaveLength(1);
     });
+
+    // \x\y is on the drive of whichever folder the patch is applied in.
+    it.runIf(process.platform === "win32")("shows the card for a path with no drive", async () => {
+      expect((await edit((d) => [update(settings(d).slice(2))])).asked).toHaveLength(1);
+    });
   });
 
   it("withdraws the approval card when the reply is stopped", async () => {

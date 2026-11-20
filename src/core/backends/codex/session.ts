@@ -55,6 +55,11 @@ function samePath(a: string, b: string): boolean {
   return process.platform === "win32" ? n(a).toLowerCase() === n(b).toLowerCase() : n(a) === n(b);
 }
 
+// An absolute path that names its drive on Windows: \x\y is on the drive of the folder it is
+// used in, which can differ from ED Chat's.
+const fullPath = (p: string) =>
+  process.platform === "win32" ? /^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/])/.test(p) : path.isAbsolute(p);
+
 const sameCommand = (a: BackendCommand, b: BackendCommand) =>
   a.command === b.command &&
   a.shell === b.shell &&
@@ -646,8 +651,8 @@ export class CodexSession implements AgentBackend {
           !root &&
           change?.updatesOnly &&
           paths.length &&
-          // Absolute paths only: a relative one depends on the folder the patch was applied in.
-          paths.every((f) => path.isAbsolute(f) && allowed.some((a) => samePath(f, a)))
+          // Full paths only: a relative one depends on the folder the patch was applied in.
+          paths.every((f) => fullPath(f) && allowed.some((a) => samePath(f, a)))
         ) {
           rpc.respond(id, { decision: "accept" });
           return;
