@@ -345,7 +345,7 @@ export function buildReport(run: CompareRun): string {
 
   out.push("## Replies", "");
   for (const q of run.questions) {
-    // Escaped like the table cells: a line break or a leading # must not break the layout.
+    // Escaped like the table cells: a line break, a | or HTML must not break the layout.
     out.push(`### ${q.id}. ${cell(q.topic ? `${q.topic}: ` : "")}${cell(q.text)}`, "");
     out.push(`| ${ran.map((r) => NAMES[r.agent]).join(" | ")} |`);
     out.push(`|${ran.map(() => "---").join("|")}|`);

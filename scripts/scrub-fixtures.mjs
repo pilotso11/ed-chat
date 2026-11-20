@@ -5,7 +5,15 @@
 // ids stay as they are. Safe to run more than once.
 // The commander name comes from --commander, else ED_COMMANDER, else the newest game journal.
 // Usage: node scripts/scrub-fixtures.mjs [--commander <name>]
-import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -46,17 +54,37 @@ export function makeScrubber({ home, user, commander, fid, commanders = [], fids
       `(?<!__)(?<!(?<!\\\\)[\\p{L}\\p{N}])${s.trim().split(/\s+/).map(escapeRe).join("\\s+")}(?![\\p{L}\\p{N}])(?!-mcp)`,
       "giu",
     );
-  // Every commander the player has: a machine with two game accounts records either.
-  const names = [...new Set([commander, ...commanders].filter(Boolean))];
+  // Every commander the player has: a machine with two game accounts records either. Longest
+  // first, so a name or FID that starts another does not cut the longer one in two. The
+  // placeholders themselves are not names to scrub.
+  const byLength = (xs) =>
+    [...new Set(xs.filter(Boolean).map((x) => x.trim()))].sort((a, b) => b.length - a.length);
+  const names = byLength([commander, ...commanders]).filter((n) => !sameName(n, "Jameson"));
+  const allFids = byLength([fid, ...fids]).filter((f) => f !== "F0000000");
   for (const name of names) rules.push([word(name), "Jameson"]);
-  for (const f of new Set([fid, ...fids].filter(Boolean)))
-    rules.push([new RegExp(escapeRe(f), "g"), "F0000000"]);
+  for (const f of allFids) rules.push([new RegExp(escapeRe(f), "gi"), "F0000000"]);
   if (user) rules.push([word(user), "player"]);
-  /** What of the names and FIDs is still in the text, to check the result. */
-  const leaks = (s) => [
-    ...names.filter((n) => word(n).test(s)),
-    ...[fid, ...fids].filter((f) => f && s.includes(f)),
-  ];
+  /**
+   * The names and FIDs still in the text. Looser than the rules on purpose: any case, any
+   * spacing, no exceptions for tool names or escapes, so a spelling the rules missed shows.
+   * ed-mcp's own names are taken out first, so a commander called Ed is not a false alarm.
+   */
+  const leaks = (s) => {
+    const t = s.replace(/mcp__ed-mcp__|ed-mcp|ed_chat|ed_overlay/gi, " ");
+    // A name of four letters or more is looked for anywhere; a shorter one only as a word, or
+    // it would be found inside other words.
+    const loose = (n) => {
+      const body = n.split(/\s+/).map(escapeRe).join("\\s*");
+      return new RegExp(
+        n.length >= 4 ? body : `(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`,
+        "iu",
+      );
+    };
+    return [
+      ...names.filter((n) => loose(n).test(t)),
+      ...allFids.filter((f) => t.toLowerCase().includes(f.toLowerCase())),
+    ];
+  };
   const text = (s) => rules.reduce((acc, [re, to]) => acc.replace(re, to), s);
   const json = (v) => {
     if (typeof v === "string") return text(v);
@@ -154,24 +182,30 @@ export function commandersFromJournals(dir) {
   } catch {
     return [];
   }
+  // One entry per commander and FID: two accounts can have the same commander name.
   const found = new Map();
+  const head = Buffer.alloc(16_384);
   for (const f of files) {
-    let head;
+    let lines;
     try {
-      head = readFileSync(path.join(dir, f), "utf8").split("\n", 30);
+      const fd = openSync(path.join(dir, f), "r");
+      try {
+        const n = readSync(fd, head, 0, head.length, 0);
+        lines = head.subarray(0, n).toString("utf8").split("\n", 30);
+      } finally {
+        closeSync(fd);
+      }
     } catch {
       continue;
     }
-    for (const line of head) {
+    for (const line of lines) {
       if (!/"event":\s*"(Commander|LoadGame)"/.test(line)) continue;
       try {
         const e = JSON.parse(line);
         const name = e.event === "Commander" ? e.Name : e.Commander;
-        if (typeof name === "string" && name) {
-          const key = name.trim().toLowerCase();
-          const fid = typeof e.FID === "string" ? e.FID : found.get(key)?.fid;
-          found.set(key, { name, fid });
-        }
+        if (typeof name !== "string" || !name) continue;
+        const fid = typeof e.FID === "string" ? e.FID : undefined;
+        found.set(`${name.trim().replace(/\s+/g, " ").toLowerCase()}\n${fid ?? ""}`, { name, fid });
       } catch {
         // A line cut short while the game wrote it.
       }

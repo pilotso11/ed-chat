@@ -179,11 +179,17 @@ describe("commanderFromJournal", () => {
         '{"event":"Fileheader"}\n{"event":"LoadGame","FID":"F2","Commander":"New"}\n',
       );
       expect(commanderFromJournal(dir)).toEqual({ name: "New", fid: "F2" });
-      // Every commander, for a machine with two game accounts.
+      // Every commander, for a machine with two game accounts, and both FIDs when two accounts
+      // have the same commander name.
+      await writeFile(
+        path.join(dir, "Journal.2026-11-19T120000.01.log"),
+        '{"event":"LoadGame","FID":"F3","Commander":"new"}\n',
+      );
       expect(commandersFromJournals(dir)).toEqual(
         expect.arrayContaining([
           { name: "Old", fid: "F1" },
           { name: "New", fid: "F2" },
+          { name: "new", fid: "F3" },
         ]),
       );
     } finally {
@@ -198,6 +204,26 @@ describe("commanderFromJournal", () => {
     );
     expect(s.leaks("all clean, Jameson")).toEqual([]);
     expect(s.leaks("CMDR old and F2")).toEqual(["Old", "F2"]);
+  });
+
+  it("scrubs a longer name or FID before one that starts it", () => {
+    const s = makeScrubber({ commanders: ["New", "New Horizon"], fids: ["F123", "F1234"] });
+    const out = s.text("CMDR New Horizon F1234, CMDR New F123");
+    expect(out).toBe("CMDR Jameson F0000000, CMDR Jameson F0000000");
+    expect(s.leaks(out)).toEqual([]);
+  });
+
+  it("finds a spelling the rules skip, but not ed-mcp's own names", () => {
+    const s = makeScrubber({ user: "seth", commanders: ["Hawk Eye", "Ed"], fids: ["F7654321"] });
+    // Right after __, and joined: the rules leave these, the check finds them.
+    expect(s.leaks("tmp__hawk eye and hawkeye")).toEqual(["Hawk Eye"]);
+    expect(s.leaks("f7654321")).toEqual(["F7654321"]);
+    expect(s.leaks("mcp__ed-mcp__journal_status and ed_overlay")).toEqual([]);
+  });
+
+  it("does not scrub or report the placeholders themselves", () => {
+    const s = makeScrubber({ commander: "Jameson", fid: "F0000000" });
+    expect(s.leaks(s.text("hi Jameson F0000000"))).toEqual([]);
   });
 
   it("gives nothing for a missing folder", () => {
