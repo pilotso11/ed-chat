@@ -292,7 +292,8 @@ function main(argv) {
       const left = scrub.leaks(out);
       if (left.length) {
         leaked = true;
-        console.error(`NOT CLEAN ${sub}/${name}: still holds ${left.length} name(s) or FID(s)`);
+        // Named, so whoever scrubs by hand knows what to look for (this runs only locally).
+        console.error(`NOT CLEAN ${sub}/${name}: still holds ${left.join(", ")}`);
       } else console.log(`scrubbed ${sub}/${name}`);
     }
   }
