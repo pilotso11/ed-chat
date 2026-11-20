@@ -9,7 +9,8 @@ import { RpcClient, RpcError, type RequestId } from "./rpc.js";
 
 /** A shell command or a file change that Codex wants the player to allow. */
 export interface CodexApproval {
-  toolName: "shell" | "edit";
+  /** shell, edit, or an MCP tool as mcp__<server>__<tool>, like Claude's names. */
+  toolName: string;
   summary: string;
   shell: boolean;
   /** Aborted when Codex no longer waits: the turn ended or the request was resolved. */
@@ -54,6 +55,9 @@ const sameCommand = (a: BackendCommand, b: BackendCommand) =>
   a.args.length === b.args.length &&
   a.args.every((x, i) => x === b.args[i]);
 
+// The answer that declines an elicitation.
+const ELICIT_DECLINE = { action: "decline", content: null, _meta: null };
+
 // thread/resume for a thread with no saved rollout: -32600 "no rollout found for thread id …".
 const isGone = (e: RpcError) => e.code === -32600 && /no rollout/i.test(e.message);
 
@@ -92,7 +96,10 @@ export class CodexSession implements AgentBackend {
   private startTimer: NodeJS.Timeout | undefined;
   // Each open approval request, with the process it came from, so a withdrawn card is
   // declined there.
-  private readonly approvals = new Map<RequestId, { ctl: AbortController; rpc: RpcClient }>();
+  private readonly approvals = new Map<
+    RequestId,
+    { ctl: AbortController; rpc: RpcClient; decline: unknown }
+  >();
   // Paths of each file change, for the approval card: the request itself names none.
   private readonly fileChanges = new Map<string, string[]>();
   // Threads that /new left: what still arrives for them is dropped, even before the new thread
@@ -231,7 +238,7 @@ export class CodexSession implements AgentBackend {
   private abortApprovals(): void {
     for (const [id, a] of this.approvals) {
       a.ctl.abort();
-      if (a.rpc === this.rpc) a.rpc.respond(id, { decision: "decline" });
+      if (a.rpc === this.rpc) a.rpc.respond(id, a.decline);
     }
     this.approvals.clear();
   }
@@ -599,6 +606,10 @@ export class CodexSession implements AgentBackend {
       rpc.respond(id, { decision: "decline" });
       return;
     }
+    if ((this.isLeft(p) || this.cancelling) && method === "mcpServer/elicitation/request") {
+      rpc.respond(id, ELICIT_DECLINE);
+      return;
+    }
     switch (method) {
       case "item/commandExecution/requestApproval": {
         const command = str(p.command);
@@ -620,18 +631,72 @@ export class CodexSession implements AgentBackend {
         this.ask(rpc, id, { toolName: "edit", summary: cut(summary), shell: false });
         return;
       }
-      // ed-mcp does not use elicitation; nothing else is answered for now.
-      case "mcpServer/elicitation/request":
-        rpc.respond(id, { action: "decline", content: null, _meta: null });
+      // Codex asks before an MCP tool that is not read-only (activity_set, plan_upsert) with an
+      // elicitation that carries codex_approval_kind "mcp_tool_call". Any other elicitation (a
+      // form an MCP server asks the player to fill in) is declined.
+      case "mcpServer/elicitation/request": {
+        const meta = isRecord(p._meta) ? p._meta : {};
+        const server = str(p.serverName);
+        const tool = str(meta.tool_name);
+        if (meta.codex_approval_kind !== "mcp_tool_call" || !server || !tool) {
+          rpc.respond(id, ELICIT_DECLINE);
+          return;
+        }
+        // In auto mode ed-mcp's tools run without a card. In Ask me mode they come to the card
+        // like any tool, as Claude Code's do. The mode is the one the thread runs with, as Codex
+        // gave it at thread/start or thread/resume, not a setting changed since (it applies
+        // after /new).
+        if (server === "ed-mcp" && this.events.permissionMode === "auto") {
+          rpc.respond(id, { action: "accept", content: {}, _meta: null });
+          return;
+        }
+        // "Allow until /new" is passed on only when Codex offers to keep the answer that long.
+        const offers = Array.isArray(meta.persist) ? meta.persist : [];
+        const shown = Array.isArray(meta.tool_params_display)
+          ? meta.tool_params_display.flatMap((x) =>
+              isRecord(x) && typeof x.name === "string"
+                ? [`${x.name}: ${typeof x.value === "string" ? x.value : JSON.stringify(x.value)}`]
+                : [],
+            )
+          : [];
+        this.ask(
+          rpc,
+          id,
+          {
+            toolName: `mcp__${server}__${tool}`,
+            summary: cut(shown.join(", ") || (str(p.message) ?? tool)),
+            shell: false,
+          },
+          (d) =>
+            d === "decline"
+              ? ELICIT_DECLINE
+              : {
+                  action: "accept",
+                  content: {},
+                  _meta:
+                    d === "acceptForSession" && offers.includes("session")
+                      ? { persist: "session" }
+                      : null,
+                },
+          ELICIT_DECLINE,
+        );
         return;
+      }
       default:
         rpc.respondError(id, -32601, `ED Chat does not handle ${method}`);
     }
   }
 
-  private ask(rpc: RpcClient, id: RequestId, r: Omit<CodexApproval, "signal">): void {
+  private ask(
+    rpc: RpcClient,
+    id: RequestId,
+    r: Omit<CodexApproval, "signal">,
+    // The answer in the shape the request takes: a decision, or an elicitation action.
+    answer: (d: CodexDecision) => unknown = (decision) => ({ decision }),
+    decline: unknown = { decision: "decline" },
+  ): void {
     const ctl = new AbortController();
-    this.approvals.set(id, { ctl, rpc });
+    this.approvals.set(id, { ctl, rpc, decline });
     this.opts
       .approve({ ...r, signal: ctl.signal })
       .catch((): CodexDecision => "decline")
@@ -640,7 +705,7 @@ export class CodexSession implements AgentBackend {
         if (this.approvals.get(id)?.ctl === ctl) this.approvals.delete(id);
         // Codex stopped waiting, or the process has gone.
         if (ctl.signal.aborted || this.rpc !== rpc) return;
-        rpc.respond(id, { decision });
+        rpc.respond(id, answer(decision));
       });
   }
 }

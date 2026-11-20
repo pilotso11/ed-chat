@@ -5,7 +5,8 @@ import {
   buildReport,
   cell,
   edChatDataDir,
-  edMcpPlan,
+  edMcpDataDir,
+  isolatedEdMcp,
   isInside,
   jsonPathFor,
   median,
@@ -25,6 +26,7 @@ describe("parseArgs", () => {
       ok: true,
       options: {
         only: null,
+        runs: null,
         questions: "q.json",
         out: "/tmp/r.md",
         timeoutSec: 300,
@@ -43,6 +45,7 @@ describe("parseArgs", () => {
       ok: true,
       options: {
         only: "codex",
+        runs: null,
         questions: "mine.json",
         out: "o.md",
         timeoutSec: 60,
@@ -51,6 +54,22 @@ describe("parseArgs", () => {
       },
     });
     expect(parseArgs(["-h"], defaults)).toMatchObject({ ok: true, options: { help: true } });
+  });
+
+  it("reads --run, with and without a model, in order", () => {
+    const r = parseArgs(
+      ["--run", "claude:sonnet", "--run=claude:opus", "--run", "codex"],
+      defaults,
+    );
+    expect(r.ok && r.options.runs).toEqual([
+      { agent: "claude", model: "sonnet" },
+      { agent: "claude", model: "opus" },
+      { agent: "codex" },
+    ]);
+    expect(parseArgs(["--run", "gpt"], defaults)).toMatchObject({ ok: false });
+    expect(parseArgs(["--only", "codex", "--run", "claude"], defaults)).toMatchObject({
+      ok: false,
+    });
   });
 
   it("refuses an unknown assistant, a missing value and an unknown argument", () => {
@@ -118,43 +137,58 @@ describe("paths", () => {
   });
 });
 
-describe("edMcpPlan", () => {
-  const ws = path.resolve("/tmp/compare/workspace");
-  const edChatWs = path.resolve("/appdata/ed-chat/workspace");
-  const def = (command: string) => ({ "ed-mcp": { command, args: [], env: {} } });
-
-  it("adds nothing when the assistant has its own", () => {
-    const claudeJson = JSON.stringify({ mcpServers: def("user-ed-mcp") });
-    expect(edMcpPlan("claude", { claudeJson }, ws, edChatWs)).toEqual({
-      server: null,
-      note: "Claude's own config",
-    });
+describe("ed-mcp on a copy of its data", () => {
+  it("finds the data folder: the sync folder, else ed-mcp's own config folder", () => {
+    const home = "C:\\Users\\cmdr";
+    expect(edMcpDataDir({ env: { ED_MCP_SYNC_DIR: "D:\\Sync" } }, {}, home, "win32")).toBe(
+      "D:\\Sync",
+    );
+    // ed-mcp names its folder ed-mcp, with no -nodejs suffix.
+    expect(edMcpDataDir({ env: {} }, { APPDATA: "C:\\AD" }, home, "win32")).toBe(
+      "C:\\AD\\ed-mcp\\Config",
+    );
+    expect(edMcpDataDir({ env: { ED_MCP_SYNC_DIR: " " } }, {}, "/home/c", "linux")).toBe(
+      "/home/c/.config/ed-mcp",
+    );
+    // As ed-mcp reads it: ~ is home, and a relative path is refused.
+    expect(edMcpDataDir({ env: { ED_MCP_SYNC_DIR: "~/Sync" } }, {}, home, "win32")).toBe(
+      "C:\\Users\\cmdr\\Sync",
+    );
+    expect(edMcpDataDir({ env: { ED_MCP_SYNC_DIR: "Sync" } }, {}, home, "win32")).toBeNull();
   });
 
-  it("gives Codex the one Claude runs", () => {
-    const claudeJson = JSON.stringify({ mcpServers: def("user-ed-mcp") });
-    expect(edMcpPlan("codex", { claudeJson }, ws, edChatWs)).toEqual({
-      server: { command: "user-ed-mcp", args: [], env: {} },
-      note: "added by ED Chat, from claudeUser",
-    });
-  });
-
-  it("adds Claude's project entry for ED Chat's workspace, which the temp folder does not see", () => {
-    const claudeJson = JSON.stringify({
-      projects: {
-        "/elsewhere": { mcpServers: def("other-project") },
-        [edChatWs]: { mcpServers: def("ed-chat-project") },
+  it("points the definition at the copy, and its config and cache at the sandbox", () => {
+    const def = {
+      source: "claudeUser" as const,
+      command: "node",
+      args: ["x.js"],
+      env: { ED_MCP_SYNC_DIR: "D:\\Sync", ED_MCP_SYNC_PASSWORD: "secret-password" },
+    };
+    const win = isolatedEdMcp(
+      def,
+      "T:\\copy",
+      "T:\\box",
+      { LOCALAPPDATA: "C:\\LA" },
+      "C:\\U",
+      "win32",
+    );
+    expect(win).toEqual({
+      command: "node",
+      args: ["x.js"],
+      env: {
+        ED_MCP_SYNC_DIR: "T:\\copy",
+        ED_MCP_SYNC_PASSWORD: "secret-password",
+        APPDATA: "T:\\box\\Roaming",
+        LOCALAPPDATA: "T:\\box\\Local",
+        npm_config_cache: "C:\\LA\\npm-cache",
       },
     });
-    expect(edMcpPlan("claude", { claudeJson }, ws, edChatWs)).toMatchObject({
-      server: { command: "ed-chat-project" },
-      note: "added by ED Chat, from claudeProject",
+    const linux = isolatedEdMcp(def, "/t/copy", "/t/box", {}, "/home/c", "linux");
+    expect(linux.env).toMatchObject({
+      ED_MCP_SYNC_DIR: "/t/copy",
+      XDG_CONFIG_HOME: "/t/box/config",
+      XDG_CACHE_HOME: "/t/box/cache",
     });
-  });
-
-  it("says when there is none", () => {
-    expect(edMcpPlan("codex", {}, ws, edChatWs).server).toBeNull();
-    expect(edMcpPlan("codex", {}, ws, edChatWs).note).toMatch(/^none added/);
   });
 });
 
@@ -172,6 +206,7 @@ const result = (id: number, o: Partial<QuestionResult> = {}): QuestionResult => 
 
 const claudeRun: AgentRun = {
   agent: "claude",
+  model: null,
   command: "claude.exe",
   version: "2.1.308",
   permissionMode: "auto",
@@ -199,6 +234,7 @@ const claudeRun: AgentRun = {
 
 const codexRun: AgentRun = {
   agent: "codex",
+  model: null,
   command: "codex.exe",
   version: "0.170.0",
   permissionMode: "auto",
@@ -260,6 +296,18 @@ describe("summaries", () => {
 
 describe("buildReport", () => {
   const report = buildReport(run);
+
+  it("names each run with its model, so two runs of one assistant stay apart", () => {
+    const report = buildReport({
+      ...run,
+      runs: [
+        { ...claudeRun, model: "sonnet" },
+        { ...claudeRun, model: "opus" },
+      ],
+    });
+    expect(report).toContain("| | Claude (sonnet) | Claude (opus) |");
+    expect(report).toContain("model sonnet");
+  });
 
   it("has a summary with a column per assistant", () => {
     expect(report).toContain("| | Claude | Codex |");

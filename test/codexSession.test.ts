@@ -17,6 +17,7 @@ const sessions: CodexSession[] = [];
 
 interface Setup {
   mode?: string;
+  permissionMode?: "auto" | "default";
   startTimeoutMs?: number;
   resumeId?: string | null;
   approve?: Approver;
@@ -33,7 +34,7 @@ async function setup(o: Setup = {}) {
     args: [fake],
     cwd: dir,
     resumeId: o.resumeId ?? null,
-    thread: codexThreadSettings({ permissionMode: "default", cwd: dir }),
+    thread: codexThreadSettings({ permissionMode: o.permissionMode ?? "default", cwd: dir }),
     approve:
       o.approve ??
       (async (r) => {
@@ -686,6 +687,84 @@ describe("CodexSession", () => {
     await new Promise((r) => setTimeout(r, 100));
     expect((await received()).some((m) => m.id === "srv-1")).toBe(false);
     expect(s.busy).toBe(true);
+  });
+
+  it("brings an ed-mcp tool to the card in Ask me mode, as Claude Code does", async () => {
+    const { s, events, received, asked } = await setup({ mode: "mcp-approval-ed" });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    expect(asked[0]).toMatchObject({ toolName: "mcp__ed-mcp__activity_set" });
+    const declined = (await received()).find((m) => m.id === "srv-5" && !m.method)!;
+    expect(declined.result).toEqual({ action: "decline", content: null, _meta: null });
+  });
+
+  it("runs an ed-mcp tool that Codex asks about with no card in auto mode", async () => {
+    const { s, events, received, asked } = await setup({
+      mode: "mcp-approval-ed",
+      permissionMode: "auto",
+    });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    const reply = (await received()).find((m) => m.id === "srv-5" && !m.method)!;
+    expect(reply.result).toEqual({ action: "accept", content: {}, _meta: null });
+    expect(asked).toHaveLength(0);
+  });
+
+  it("brings another MCP server's tool to the card, and answers in elicitation form", async () => {
+    const { s, events, received, asked } = await setup({
+      mode: "mcp-approval-other",
+      approve: async (r) => {
+        asked.push(r);
+        return "acceptForSession";
+      },
+    });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    expect(asked[0]).toMatchObject({
+      toolName: "mcp__other__activity_set",
+      summary: "summary: probe test",
+      shell: false,
+    });
+    const reply = (await received()).find((m) => m.id === "srv-5" && !m.method)!;
+    expect(reply.result).toEqual({ action: "accept", content: {}, _meta: { persist: "session" } });
+  });
+
+  it("brings another server's tool to the card in auto mode too: only ed-mcp skips it", async () => {
+    const { s, events, asked } = await setup({
+      mode: "mcp-approval-other",
+      permissionMode: "auto",
+    });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    expect(asked[0]).toMatchObject({ toolName: "mcp__other__activity_set" });
+  });
+
+  it("answers allow until /new as a plain accept when Codex offers no session memory", async () => {
+    const { s, events, received } = await setup({
+      mode: "mcp-approval-other-nopersist",
+      approve: async () => "acceptForSession",
+    });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    const reply = (await received()).find((m) => m.id === "srv-5" && !m.method)!;
+    expect(reply.result).toEqual({ action: "accept", content: {}, _meta: null });
+  });
+
+  it("declines a withdrawn MCP tool approval in elicitation form", async () => {
+    let card: CodexApproval | null = null;
+    const { s, received } = await setup({
+      mode: "mcp-approval-other",
+      approve: (r) => {
+        card = r;
+        return new Promise(() => {});
+      },
+    });
+    s.send("hi");
+    await until(() => card !== null);
+    s.newSession();
+    await until(async () => (await received()).some((m) => m.id === "srv-5" && !m.method));
+    const reply = (await received()).find((m) => m.id === "srv-5" && !m.method)!;
+    expect(reply.result).toEqual({ action: "decline", content: null, _meta: null });
   });
 
   it("declines MCP elicitation", async () => {

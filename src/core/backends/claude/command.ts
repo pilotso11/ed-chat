@@ -38,6 +38,8 @@ export function resolveClaude(
 
 export function buildClaudeArgs(o: {
   permissionMode: "auto" | "default";
+  /** null: Claude Code's own default. */
+  model?: string | null;
   mcpConfigFile: string;
   extraArgs: string[];
   /** ED Chat's settings.json, which the player can ask Claude to show or change. */
@@ -60,6 +62,7 @@ export function buildClaudeArgs(o: {
     o.mcpConfigFile,
     "--permission-prompt-tool",
     APPROVAL_TOOL,
+    ...(o.model ? ["--model", o.model] : []),
     ...o.extraArgs,
   ];
 }

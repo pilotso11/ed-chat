@@ -208,6 +208,12 @@ describe("codex command", () => {
     expect(codexThreadSettings({ permissionMode: "default", cwd }).approvalPolicy).toBe(
       "untrusted",
     );
+    expect(codexThreadSettings({ permissionMode: "auto", cwd, model: "gpt-x" }).model).toBe(
+      "gpt-x",
+    );
+    expect(codexThreadSettings({ permissionMode: "auto", cwd, model: null })).not.toHaveProperty(
+      "model",
+    );
     expect(permissionModeOf("on-request")).toBe("auto");
     expect(permissionModeOf("untrusted")).toBe("default");
     expect(permissionModeOf("never")).toBe("never");

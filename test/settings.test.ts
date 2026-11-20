@@ -30,8 +30,11 @@ describe("parseSettings", () => {
     });
     const cli = { path: null, permissionMode: "auto", extraArgs: [] };
     expect(DEFAULT_SETTINGS).toMatchObject({ agent: "claude", resumeHours: 12 });
-    expect(DEFAULT_SETTINGS.claude).toEqual(cli);
-    expect(DEFAULT_SETTINGS.codex).toEqual(cli);
+    expect(DEFAULT_SETTINGS.claude).toEqual({ ...cli, model: "sonnet" });
+    expect(DEFAULT_SETTINGS.codex).toEqual({ ...cli, model: "gpt-6.1-terra" });
+    // null leaves the model to the CLI's own config.
+    const own = parseSettings('{"claude":{"model":null}}');
+    expect(own.ok && own.settings.claude.model).toBeNull();
   });
 
   it("loads claude.resumeHours from an older file at the top level", () => {

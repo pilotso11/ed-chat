@@ -733,6 +733,7 @@ async function main(): Promise<void> {
       id === "claude"
         ? buildClaudeArgs({
             permissionMode: s.claude.permissionMode,
+            model: s.claude.model,
             mcpConfigFile,
             extraArgs: s.claude.extraArgs,
             settingsFile,
@@ -744,6 +745,7 @@ async function main(): Promise<void> {
   const codexThread = (s: Settings) =>
     codexThreadSettings({
       permissionMode: s.codex.permissionMode,
+      model: s.codex.model,
       cwd: workspace,
       settingsFile,
       edMcp: codexEdMcp,

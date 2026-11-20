@@ -2,8 +2,8 @@
 // a report with both replies side by side. It spends tokens: see --help, and try --dry-run first.
 // Usage: npx tsx scripts/compare-agents.ts [--only claude|codex] [--questions f] [--out f] [--dry-run]
 import { execFile } from "node:child_process";
-import { rmSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync, rmSync } from "node:fs";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +21,7 @@ import {
 import { CodexSession } from "../src/core/backends/codex/session.js";
 import { outDirProblem } from "./codex-probe.mjs";
 import { parseCliVersion, quoteForCmd, type ResolvedCommand } from "../src/core/cli.js";
-import { claudeMcpConfig, readAgentConfigs } from "../src/core/edMcp.js";
+import { claudeMcpConfig, findEdMcp, readAgentConfigs } from "../src/core/edMcp.js";
 import {
   DEFAULTS_FILE,
   DEFAULT_SETTINGS,
@@ -35,9 +35,12 @@ import {
 import {
   AGENT_IDS,
   USAGE,
+  type RunSpec,
   buildReport,
   edChatDataDir,
-  edMcpPlan,
+  ED_MCP_DATA_FILES,
+  edMcpDataDir,
+  isolatedEdMcp,
   isInside,
   jsonPathFor,
   parseArgs,
@@ -128,6 +131,32 @@ if (settingsText !== null) {
 
 const configs = await readAgentConfigs();
 const edChatWorkspace = path.join(dataDir, "workspace");
+// The player's ed-mcp, which both assistants run on a copy of its data. A definition that
+// runs as a command is needed for that; the plugin alone cannot be redirected.
+const edMcpDef = findEdMcp(configs, edChatWorkspace);
+if (!edMcpDef) {
+  console.error(
+    "No ed-mcp definition that runs as a command (claude mcp add or codex mcp add): the " +
+      "comparison runs ed-mcp on a copy of its data, so it needs one.",
+  );
+  process.exit(2);
+}
+const edMcpSource = edMcpDataDir(edMcpDef, process.env, os.homedir(), process.platform);
+if (!edMcpSource) {
+  console.error(
+    `ed-mcp's ED_MCP_SYNC_DIR is not an absolute path or one starting with ~: ${edMcpDef.env.ED_MCP_SYNC_DIR}`,
+  );
+  process.exit(2);
+}
+if (process.platform === "darwin") {
+  // ed-mcp's config folder on macOS follows HOME, which cannot be moved without moving the
+  // journal too.
+  console.error("compare-agents runs on Windows and Linux only: it cannot sandbox ed-mcp here.");
+  process.exit(2);
+}
+// Codex still loads the player's other MCP servers from config.toml (only ed-mcp is replaced);
+// a tool of theirs that would change something asks, and the script declines it.
+const edMcpNote = `ed-mcp from ${edMcpDef.source}, on a copy of its data`;
 const resolvers: Record<AgentId, (p: string | null) => ResolvedCommand | null> = {
   claude: (p) => resolveClaude(p),
   codex: (p) => resolveCodex(p),
@@ -135,10 +164,14 @@ const resolvers: Record<AgentId, (p: string | null) => ResolvedCommand | null> =
 
 interface Plan {
   agent: AgentId;
+  model: string | null;
   cli: ResolvedCommand | null;
 }
-const plans: Plan[] = (opts.only ? [opts.only] : AGENT_IDS).map((agent) => ({
+const specs: RunSpec[] =
+  opts.runs ?? (opts.only ? [opts.only] : AGENT_IDS).map((agent) => ({ agent }));
+const plans: Plan[] = specs.map(({ agent, model }) => ({
   agent,
+  model: model ?? settings[agent].model,
   cli: resolvers[agent](settings[agent].path),
 }));
 
@@ -147,7 +180,7 @@ if (opts.dryRun) {
   console.log(`Questions (${questions.length}) from ${opts.questions}:`);
   for (const q of questions) console.log(`  ${q.id}. [${q.topic}] ${q.text}`);
   const ws = path.join(os.tmpdir(), "ed-chat-compare-XXXX", "workspace");
-  for (const { agent, cli } of plans) {
+  for (const { agent, model, cli } of plans) {
     if (!cli) {
       console.log(`\n${agent}: not installed, skipped`);
       continue;
@@ -157,15 +190,17 @@ if (opts.dryRun) {
       agent === "claude"
         ? buildClaudeArgs({
             permissionMode: s.permissionMode,
+            model,
             mcpConfigFile: "<temp>/approval-mcp.json",
-            extraArgs: s.extraArgs,
+            extraArgs: [...s.extraArgs, "--strict-mcp-config"],
             settingsFile: "<temp>/settings.json",
           })
         : buildCodexArgs({ extraArgs: s.extraArgs });
     console.log(`\n${agent}: would run ${cli.command}${cli.shell ? " (through cmd)" : ""}`);
     console.log(`  args: ${args.map(short).join(" ")}`);
+    console.log(`  model: ${model ?? "the CLI's default"}`);
     console.log(`  permission mode: ${s.permissionMode}`);
-    console.log(`  ed-mcp: ${edMcpPlan(agent, configs, ws, edChatWorkspace).note}`);
+    console.log(`  ed-mcp: ${edMcpNote}`);
   }
   console.log(`\nReport: ${out}\nNumbers: ${jsonOut}`);
   process.exit(0);
@@ -256,7 +291,40 @@ try {
   const workspace = path.join(tempRoot, "workspace");
   const settingsFile = path.join(tempRoot, "settings.json");
   await mkdir(workspace);
-  await writeFile(settingsFile, settingsText ?? newSettingsText());
+  // ed-mcp's notes and plans are copied fresh for each run (below), into this folder; its
+  // config and cache folders go in the sandbox.
+  const edMcpData = path.join(tempRoot, "ed-mcp-data");
+  const edMcpSandbox = path.join(tempRoot, "ed-mcp-sandbox");
+  const edMcp = isolatedEdMcp(
+    edMcpDef,
+    edMcpData,
+    edMcpSandbox,
+    process.env,
+    os.homedir(),
+    process.platform,
+  );
+  let copied = 0;
+  // Fresh for each run: the data, and an empty sandbox (config, cache), so every run starts
+  // the same way and none finds what an earlier one saved or downloaded. The previous run's
+  // ed-mcp may take a moment to stop, so removal retries.
+  const copyEdMcpData = async () => {
+    for (const dir of [edMcpData, edMcpSandbox])
+      await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+    await mkdir(edMcpData, { recursive: true });
+    copied = 0;
+    for (const f of ED_MCP_DATA_FILES) {
+      const from = path.join(edMcpSource, f);
+      if (!existsSync(from)) continue;
+      await cp(from, path.join(edMcpData, f), { recursive: true });
+      copied++;
+    }
+  };
+  await copyEdMcpData();
+  if (!copied)
+    console.error(
+      `Nothing of ed-mcp's data was found in ${edMcpSource}: the assistants answer as a ` +
+        "player with no plans, notes or preferences.",
+    );
   await writeFile(path.join(tempRoot, SCHEMA_FILE), settingsSchemaText());
   await writeFile(path.join(tempRoot, DEFAULTS_FILE), defaultSettingsText());
 
@@ -277,16 +345,21 @@ try {
     onSettled: () => {},
   });
 
-  for (const { agent, cli } of plans) {
+  for (const { agent, model, cli } of plans) {
     if (interrupted.signal.aborted) break;
     const s = settings[agent];
-    const plan = edMcpPlan(agent, configs, workspace, edChatWorkspace);
+    // A fresh copy for each run: a settings change by one assistant must not carry over to
+    // the next, which would then find the change already made.
+    await writeFile(settingsFile, settingsText ?? newSettingsText());
+    // And ed-mcp's data, so a plan or note saved in one run is not there in the next.
+    await copyEdMcpData();
     const entry: AgentRun = {
       agent,
+      model,
       command: cli?.command ?? null,
       version: null,
       permissionMode: s.permissionMode,
-      edMcp: plan.note,
+      edMcp: edMcpNote,
       results: [],
     };
     run.runs.push(entry);
@@ -301,12 +374,15 @@ try {
       approvalServer = new ApprovalServer(broker);
       await approvalServer.start();
       const mcpConfigFile = path.join(tempRoot, "approval-mcp.json");
-      const config = claudeMcpConfig(approvalServer.mcpConfig().mcpServers, plan.server);
+      const config = claudeMcpConfig(approvalServer.mcpConfig().mcpServers, edMcp);
       await writeFile(mcpConfigFile, JSON.stringify(config));
       const args = buildClaudeArgs({
         permissionMode: s.permissionMode,
+        model,
         mcpConfigFile,
-        extraArgs: s.extraArgs,
+        // Only the servers in --mcp-config: the player's own ed-mcp, on the real data, must
+        // not run next to the copy.
+        extraArgs: [...s.extraArgs, "--strict-mcp-config"],
         settingsFile,
       });
       session = new ClaudeSession({ ...cli, args, cwd: workspace });
@@ -317,9 +393,10 @@ try {
         cwd: workspace,
         thread: codexThreadSettings({
           permissionMode: s.permissionMode,
+          model,
           cwd: workspace,
           settingsFile,
-          edMcp: plan.server,
+          edMcp,
         }),
         approve: brokerApprover(broker),
       });

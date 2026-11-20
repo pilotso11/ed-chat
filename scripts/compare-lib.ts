@@ -3,12 +3,11 @@
 import path from "node:path";
 import type { AgentId } from "../src/core/backend.js";
 import {
-  edMcpToAdd,
   findEdMcp,
   forCli,
-  hasOwnEdMcp,
   type AgentConfigs,
   type CliMcpServer,
+  type EdMcpDefinition,
 } from "../src/core/edMcp.js";
 
 export const AGENT_IDS: AgentId[] = ["claude", "codex"];
@@ -22,6 +21,9 @@ a new conversation. Approvals are declined. This spends tokens on each assistant
 
 Options:
   --only claude|codex   Run one assistant only.
+  --run <agent>[:model] Run this assistant with this model; give it more than once to compare
+                        models, for example --run claude:sonnet --run claude:opus --run codex.
+                        Without a model, the model in ED Chat's settings is used.
   --questions <file>    A JSON list of { "topic", "text" } (default scripts/compare-questions.json).
   --out <file>          The Markdown report (default in the temp folder). The raw numbers go
                         next to it, with .json. It must be outside the repo.
@@ -29,8 +31,16 @@ Options:
   --dry-run             Print what would run, and start no CLI.
   --help                Show this message.`;
 
+/** One assistant to run, with a model that overrides the one in ED Chat's settings. */
+export interface RunSpec {
+  agent: AgentId;
+  model?: string;
+}
+
 export interface CompareOptions {
   only: AgentId | null;
+  /** From --run, in order; null when none was given. */
+  runs: RunSpec[] | null;
   questions: string;
   out: string;
   timeoutSec: number;
@@ -47,6 +57,7 @@ export function parseArgs(
 ): ParseResult {
   const o: CompareOptions = {
     only: null,
+    runs: null,
     questions: defaults.questions,
     out: defaults.out,
     timeoutSec: 300,
@@ -80,6 +91,15 @@ export function parseArgs(
         o.only = v;
         break;
       }
+      case "--run": {
+        const v = value();
+        const m = v ? /^(claude|codex)(?::(.+))?$/.exec(v) : null;
+        if (!m) return { ok: false, error: "--run takes claude or codex, and :model if wanted" };
+        const spec: RunSpec = { agent: m[1] as AgentId };
+        if (m[2]) spec.model = m[2];
+        (o.runs ??= []).push(spec);
+        break;
+      }
       case "--questions": {
         const v = value();
         if (!v) return { ok: false, error: "--questions takes a file" };
@@ -103,6 +123,7 @@ export function parseArgs(
         return { ok: false, error: `unknown argument: ${arg}` };
     }
   }
+  if (o.only && o.runs) return { ok: false, error: "give --only or --run, not both" };
   return { ok: true, options: o };
 }
 
@@ -158,33 +179,64 @@ export function edChatDataDir(
   return p.join(env.XDG_CONFIG_HOME || p.join(home, ".config"), "ed-chat");
 }
 
-export interface EdMcpPlan {
-  /** Passed to the assistant; null when it has its own, or none is found. */
-  server: CliMcpServer | null;
-  /** For the report: where the assistant's ed-mcp comes from. */
-  note: string;
+/**
+ * Where an ed-mcp definition keeps the player's notes and plans: its sync folder, else ed-mcp's
+ * own config folder (env-paths("ed-mcp", { suffix: "" }), as ed-mcp names it). A sync folder
+ * is read as ed-mcp reads it: ~ is the home folder, and a relative path is refused (null).
+ */
+export function edMcpDataDir(
+  def: { env: Record<string, string> },
+  env: NodeJS.ProcessEnv,
+  home: string,
+  platform: NodeJS.Platform,
+): string | null {
+  const p = platform === "win32" ? path.win32 : path.posix;
+  const sync = def.env.ED_MCP_SYNC_DIR?.trim();
+  if (sync) {
+    const tilde = /^~(?:[/\\]|$)/.exec(sync);
+    if (tilde) return p.join(home, sync.slice(tilde[0].length));
+    return p.isAbsolute(sync) ? p.resolve(sync) : null;
+  }
+  if (platform === "win32")
+    return p.join(env.APPDATA || p.join(home, "AppData", "Roaming"), "ed-mcp", "Config");
+  if (platform === "darwin") return p.join(home, "Library", "Preferences", "ed-mcp");
+  return p.join(env.XDG_CONFIG_HOME || p.join(home, ".config"), "ed-mcp");
 }
 
 /**
- * The ed-mcp that main would give the assistant. The script runs in another folder, so
- * Claude does not see a project entry for ED Chat's own workspace there: that entry is then
- * added, as the definition main would rank first.
+ * The files in ed-mcp's data folder that a question can change. Secrets (API keys, the
+ * Frontier login) are not copied: a refreshed login saved only in a copy would spend the
+ * player's real one. The assistants run as a player with no stored keys.
  */
-export function edMcpPlan(
-  agent: AgentId,
-  c: AgentConfigs,
-  workspace: string,
-  edChatWorkspace: string,
-): EdMcpPlan {
-  if (hasOwnEdMcp(agent, c, workspace))
-    return { server: null, note: `${NAMES[agent]}'s own config` };
-  // None at all, or the assistant's own is switched off or in a file that cannot be read.
-  if (!edMcpToAdd(agent, c, workspace))
-    return { server: null, note: "none added: none found, or its own is off or unreadable" };
-  const add = findEdMcp(c, edChatWorkspace);
-  return add
-    ? { server: forCli(add), note: `added by ED Chat, from ${add.source}` }
-    : { server: null, note: "none found" };
+export const ED_MCP_DATA_FILES = ["activity.json", "plans.json", "plans", "preferences.json"];
+
+/**
+ * The player's ed-mcp, run on a copy of its data: a question that saves a plan or a note
+ * changes only the copy. Its config and cache folders (secrets.json, locks, cache) are moved
+ * into the sandbox too, so nothing of the player's ed-mcp state is read or written. npm keeps
+ * its own cache, so npx does not fetch ed-mcp again.
+ */
+export function isolatedEdMcp(
+  def: EdMcpDefinition,
+  dataCopy: string,
+  sandbox: string,
+  env: NodeJS.ProcessEnv,
+  home: string,
+  platform: NodeJS.Platform,
+): CliMcpServer {
+  const p = platform === "win32" ? path.win32 : path.posix;
+  const dirs: Record<string, string> =
+    platform === "win32"
+      ? {
+          APPDATA: p.join(sandbox, "Roaming"),
+          LOCALAPPDATA: p.join(sandbox, "Local"),
+          npm_config_cache: p.join(
+            env.LOCALAPPDATA || p.join(home, "AppData", "Local"),
+            "npm-cache",
+          ),
+        }
+      : { XDG_CONFIG_HOME: p.join(sandbox, "config"), XDG_CACHE_HOME: p.join(sandbox, "cache") };
+  return forCli({ ...def, env: { ...def.env, ...dirs, ED_MCP_SYNC_DIR: dataCopy } })!;
 }
 
 export interface ApprovalAsked {
@@ -210,6 +262,8 @@ export interface QuestionResult {
 
 export interface AgentRun {
   agent: AgentId;
+  /** The model asked for, or null for the CLI's own default. */
+  model: string | null;
   /** The CLI started, or null when it is not installed. */
   command: string | null;
   version: string | null;
@@ -283,6 +337,11 @@ function approvalList(a: ApprovalAsked[]): string {
   return a.length ? a.map((x) => `${x.tool} (${x.decision}): ${x.summary}`).join("; ") : "none";
 }
 
+/** How a run is named in the report: the assistant, and its model when one was set. */
+// Escaped like the table cells: the model is free text from --run.
+export const runLabel = (r: AgentRun): string =>
+  cell(r.model ? `${NAMES[r.agent]} (${r.model})` : NAMES[r.agent]);
+
 /** The Markdown report: a summary, a table per assistant, then each question's replies side by side. */
 export function buildReport(run: CompareRun): string {
   const ran = run.runs.filter((r) => !r.skipped);
@@ -298,8 +357,8 @@ export function buildReport(run: CompareRun): string {
   for (const r of run.runs) {
     const what = r.skipped
       ? `skipped: ${r.skipped}`
-      : `${r.command}${r.version ? ` (${r.version})` : ""}, permission mode ${r.permissionMode}, ed-mcp: ${r.edMcp}`;
-    out.push(`- **${NAMES[r.agent]}**: ${cell(what)}`);
+      : `${r.command}${r.version ? ` (${r.version})` : ""}, model ${r.model ?? "the CLI's default"}, permission mode ${r.permissionMode}, ed-mcp: ${r.edMcp}`;
+    out.push(`- **${runLabel(r)}**: ${cell(what)}`);
   }
   out.push("");
   if (!ran.length) {
@@ -309,7 +368,7 @@ export function buildReport(run: CompareRun): string {
 
   out.push("## Summary", "");
   const sums = ran.map(summarizeRun);
-  out.push(`| | ${ran.map((r) => NAMES[r.agent]).join(" | ")} |`);
+  out.push(`| | ${ran.map(runLabel).join(" | ")} |`);
   out.push(`|---|${ran.map(() => "---").join("|")}|`);
   const row = (label: string, f: (s: RunSummary) => string) =>
     out.push(`| ${label} | ${sums.map(f).join(" | ")} |`);
@@ -325,7 +384,7 @@ export function buildReport(run: CompareRun): string {
 
   const byId = (r: AgentRun, id: number) => r.results.find((x) => x.questionId === id);
   for (const r of ran) {
-    out.push(`## ${NAMES[r.agent]}`, "");
+    out.push(`## ${runLabel(r)}`, "");
     out.push("| # | Topic | Tools | Approvals | Chars | First text | Total | Error |");
     out.push("|---|---|---|---|---|---|---|---|");
     for (const q of run.questions) {
@@ -347,7 +406,7 @@ export function buildReport(run: CompareRun): string {
   for (const q of run.questions) {
     // Escaped like the table cells: a line break, a | or HTML must not break the layout.
     out.push(`### ${q.id}. ${cell(q.topic ? `${q.topic}: ` : "")}${cell(q.text)}`, "");
-    out.push(`| ${ran.map((r) => NAMES[r.agent]).join(" | ")} |`);
+    out.push(`| ${ran.map(runLabel).join(" | ")} |`);
     out.push(`|${ran.map(() => "---").join("|")}|`);
     const results = ran.map((r) => byId(r, q.id));
     const replyCell = (x: QuestionResult | undefined) => {

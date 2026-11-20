@@ -160,9 +160,18 @@ Then run it without `--dry-run`. This spends tokens on both assistants. The ques
 `--only codex` runs one assistant. Each CLI is found as ED Chat finds it, with the path,
 permission mode and extra arguments from the player's `settings.json`. It runs in a new temp
 folder, with a copy of `settings.json` and its schema, so a settings change touches only the
-copy. Each question starts a new conversation. Approvals are declined and counted; ed-mcp tools
-do not ask, and they use the player's real ed-mcp data, so a question that asks ed-mcp to save
-something (a plan, a preference) saves it. No `[Game state]` note is sent. The Markdown report goes to the temp folder, or to
+copy. Each question starts a new conversation. Approvals are declined and counted, except ed-mcp
+tools, which are allowed. Both assistants run the player's ed-mcp definition on a copy of its
+data (activity note, plans, preferences), made fresh for each run, with `--strict-mcp-config`
+for Claude, so a question that saves something changes only that copy; the first real run,
+before this, overwrote the player's activity note. Secrets are not copied, and ed-mcp's config
+and cache folders are moved into the temp folder (APPDATA and LOCALAPPDATA on Windows, the XDG
+folders on Linux), so the assistants run as a player with no stored keys or Frontier login: a
+login refreshed in a copy would spend the real one. npm keeps its own cache. A definition that
+runs as a command is needed (not the plugin alone); macOS is not supported. Codex still loads the
+player's other MCP servers from `config.toml` (only ed-mcp is replaced); a tool of theirs that
+would change something asks, and the script declines it.
+No `[Game state]` note is sent. The Markdown report goes to the temp folder, or to
 `--out <file>` (never inside the repo), with the raw numbers in a `.json` file next to it.
 `--timeout <seconds>` (default 300) limits each reply. Ctrl+C stops every CLI and writes what
 was recorded. The pure parts are in `scripts/compare-lib.ts`, tested in
@@ -316,3 +325,18 @@ Notes from the probe:
 - The scrubber replaces every commander found in the journals (a machine can have two game
   accounts), with their FIDs, and checks each file afterwards: a name or FID that is still
   there stops it with an error instead of "scrubbed".
+
+## Follow-ups after Part 5
+
+- The first real comparison (Opus 5.5 against gpt-6.1-terra at low effort) found that Codex
+  asks before an MCP tool that is not read-only, with `mcpServer/elicitation/request` and
+  `_meta.codex_approval_kind: "mcp_tool_call"` (with `tool_name`, `tool_params_display`).
+  ED Chat declined every one, so ed-mcp tools such as `activity_set` failed. ED Chat now
+  accepts these for ed-mcp in auto mode, and in Ask me mode brings them to the card, as Claude
+  Code does; another server's tool always comes to the card, as `mcp__<server>__<tool>`.
+  "Allow until /new" answers `persist: "session"` only when the request offers it. Any other
+  elicitation is still declined.
+- `claude.model` (default `sonnet`) and `codex.model` (default `gpt-6.1-terra`) choose the
+  model; `null` leaves the CLI's own default. Both are player-only, as their groups are.
+- compare-agents takes `--run <agent>[:model]`, more than once, to compare models; each run
+  gets a fresh copy of settings.json, and the report names each run's model.
