@@ -240,9 +240,13 @@ describe("commanderFromJournal", () => {
     }
   });
 
-  it("does not replace a commander named like a word the recordings use", () => {
-    const s = makeScrubber({ commander: "User" });
-    expect(s.text('{"type":"user"}')).toBe('{"type":"user"}');
+  it("does not replace a commander named like a word the recordings use, and says so", () => {
+    for (const commander of ["User", "Owner", "System", "Home"]) {
+      const s = makeScrubber({ commander });
+      expect(s.text('{"type":"user"} /home/player')).toBe('{"type":"user"} /home/player');
+      expect(s.unscrubbable).toEqual([commander]);
+    }
+    expect(makeScrubber({ commander: "Star" }).unscrubbable).toEqual([]);
   });
 
   it("leaves a user name that the recordings use as a word to the home folder rule", () => {

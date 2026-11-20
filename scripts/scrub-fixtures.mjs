@@ -71,11 +71,14 @@ export function makeScrubber({ home, user, commander, fid, commanders = [], fids
   // placeholders themselves are not names to scrub.
   const byLength = (xs) =>
     [...new Set(xs.filter(Boolean).map((x) => x.trim()))].sort((a, b) => b.length - a.length);
-  // A commander named like a placeholder or a word the recordings use (User, System) is not
-  // replaced as a word: it would break the fixtures, and could not be told from the placeholder.
-  const names = byLength([commander, ...commanders]).filter(
-    (n) => !sameName(n, "Jameson") && !PROTOCOL_WORDS.has(n.toLowerCase()),
-  );
+  // A commander named like a word the recordings use (User, System) or the home placeholder
+  // cannot be replaced as a word without breaking the fixtures, nor checked: such a name is
+  // listed in unscrubbable, and the script stops for a check by hand. Jameson is the
+  // placeholder itself, so there is nothing to replace.
+  const candidates = byLength([commander, ...commanders]).filter((n) => !sameName(n, "Jameson"));
+  const isWord = (n) => PROTOCOL_WORDS.has(n.toLowerCase()) || n.toLowerCase() === "home";
+  const unscrubbable = candidates.filter(isWord);
+  const names = candidates.filter((n) => !isWord(n));
   const allFids = byLength([fid, ...fids]).filter((f) => f !== "F0000000");
   for (const name of names) rules.push([word(name), "Jameson"]);
   for (const f of allFids) rules.push([new RegExp(escapeRe(f), "gi"), "F0000000"]);
@@ -110,7 +113,7 @@ export function makeScrubber({ home, user, commander, fid, commanders = [], fids
     }
     return v;
   };
-  return { text, json, leaks };
+  return { text, json, leaks, unscrubbable };
 }
 
 /** Scrubs one parsed line of a Claude stream-json recording. */
@@ -260,6 +263,13 @@ function main(argv) {
     commanders: all.map((c) => c.name),
     fids: all.flatMap((c) => (c.fid ? [c.fid] : [])),
   });
+  if (scrub.unscrubbable.length) {
+    console.error(
+      `Commander name(s) that are also words the recordings use: ${scrub.unscrubbable.join(", ")}. ` +
+        "Nothing is written; scrub these fixtures by hand.",
+    );
+    process.exit(1);
+  }
   let leaked = false;
   const fixtures = path.join(import.meta.dirname, "..", "test", "fixtures");
   for (const [sub, scrubLines] of [

@@ -4,6 +4,8 @@ export interface Scrubber {
   json<T>(v: T): T;
   /** The names and FIDs still in the text. */
   leaks(s: string): string[];
+  /** Commander names that are also words the recordings use: not replaced, check by hand. */
+  unscrubbable: string[];
 }
 export function makeScrubber(who: {
   home?: string;
