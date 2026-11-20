@@ -17,6 +17,7 @@ const sessions: CodexSession[] = [];
 
 interface Setup {
   mode?: string;
+  permissionMode?: "auto" | "default";
   startTimeoutMs?: number;
   resumeId?: string | null;
   approve?: Approver;
@@ -33,7 +34,7 @@ async function setup(o: Setup = {}) {
     args: [fake],
     cwd: dir,
     resumeId: o.resumeId ?? null,
-    thread: codexThreadSettings({ permissionMode: "default", cwd: dir }),
+    thread: codexThreadSettings({ permissionMode: o.permissionMode ?? "default", cwd: dir }),
     approve:
       o.approve ??
       (async (r) => {
@@ -688,8 +689,20 @@ describe("CodexSession", () => {
     expect(s.busy).toBe(true);
   });
 
-  it("runs an ed-mcp tool that Codex asks about, with no card", async () => {
+  it("brings an ed-mcp tool to the card in Ask me mode, as Claude Code does", async () => {
     const { s, events, received, asked } = await setup({ mode: "mcp-approval-ed" });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    expect(asked[0]).toMatchObject({ toolName: "mcp__ed-mcp__activity_set" });
+    const declined = (await received()).find((m) => m.id === "srv-5" && !m.method)!;
+    expect(declined.result).toEqual({ action: "decline", content: null, _meta: null });
+  });
+
+  it("runs an ed-mcp tool that Codex asks about with no card in auto mode", async () => {
+    const { s, events, received, asked } = await setup({
+      mode: "mcp-approval-ed",
+      permissionMode: "auto",
+    });
     s.send("hi");
     await until(() => has(events, "result"));
     const reply = (await received()).find((m) => m.id === "srv-5" && !m.method)!;

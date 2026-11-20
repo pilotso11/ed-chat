@@ -124,6 +124,7 @@ export function parseArgs(
         return { ok: false, error: `unknown argument: ${arg}` };
     }
   }
+  if (o.only && o.runs) return { ok: false, error: "give --only or --run, not both" };
   return { ok: true, options: o };
 }
 
@@ -306,11 +307,11 @@ function approvalList(a: ApprovalAsked[]): string {
   return a.length ? a.map((x) => `${x.tool} (${x.decision}): ${x.summary}`).join("; ") : "none";
 }
 
-/** The Markdown report: a summary, a table per assistant, then each question's replies side by side. */
 /** How a run is named in the report: the assistant, and its model when one was set. */
 export const runLabel = (r: AgentRun): string =>
   r.model ? `${NAMES[r.agent]} (${r.model})` : NAMES[r.agent];
 
+/** The Markdown report: a summary, a table per assistant, then each question's replies side by side. */
 export function buildReport(run: CompareRun): string {
   const ran = run.runs.filter((r) => !r.skipped);
   const out: string[] = [];

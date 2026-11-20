@@ -632,9 +632,8 @@ export class CodexSession implements AgentBackend {
         return;
       }
       // Codex asks before an MCP tool that is not read-only (activity_set, plan_upsert) with an
-      // elicitation that carries codex_approval_kind "mcp_tool_call". ed-mcp's tools run without
-      // a card, as with Claude; another server's tool goes to the card. Any other elicitation
-      // (a form an MCP server asks the player to fill in) is declined.
+      // elicitation that carries codex_approval_kind "mcp_tool_call". Any other elicitation (a
+      // form an MCP server asks the player to fill in) is declined.
       case "mcpServer/elicitation/request": {
         const meta = isRecord(p._meta) ? p._meta : {};
         const server = str(p.serverName);
@@ -643,10 +642,14 @@ export class CodexSession implements AgentBackend {
           rpc.respond(id, ELICIT_DECLINE);
           return;
         }
-        if (server === "ed-mcp") {
+        // In auto mode ed-mcp's tools run without a card. In Ask me mode they come to the card
+        // like any tool, as Claude Code's do.
+        if (server === "ed-mcp" && this.thread.approvalPolicy === "on-request") {
           rpc.respond(id, { action: "accept", content: {}, _meta: null });
           return;
         }
+        // "Allow until /new" is passed on only when Codex offers to keep the answer that long.
+        const offers = Array.isArray(meta.persist) ? meta.persist : [];
         const shown = Array.isArray(meta.tool_params_display)
           ? meta.tool_params_display.flatMap((x) =>
               isRecord(x) && typeof x.name === "string"
@@ -668,7 +671,10 @@ export class CodexSession implements AgentBackend {
               : {
                   action: "accept",
                   content: {},
-                  _meta: d === "acceptForSession" ? { persist: "session" } : null,
+                  _meta:
+                    d === "acceptForSession" && offers.includes("session")
+                      ? { persist: "session" }
+                      : null,
                 },
           ELICIT_DECLINE,
         );

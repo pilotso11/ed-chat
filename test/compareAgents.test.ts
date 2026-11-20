@@ -66,6 +66,9 @@ describe("parseArgs", () => {
       { agent: "codex" },
     ]);
     expect(parseArgs(["--run", "gpt"], defaults)).toMatchObject({ ok: false });
+    expect(parseArgs(["--only", "codex", "--run", "claude"], defaults)).toMatchObject({
+      ok: false,
+    });
   });
 
   it("refuses an unknown assistant, a missing value and an unknown argument", () => {

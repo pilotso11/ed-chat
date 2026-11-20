@@ -323,8 +323,10 @@ Notes from the probe:
   asks before an MCP tool that is not read-only, with `mcpServer/elicitation/request` and
   `_meta.codex_approval_kind: "mcp_tool_call"` (with `tool_name`, `tool_params_display`).
   ED Chat declined every one, so ed-mcp tools such as `activity_set` failed. ED Chat now
-  accepts these for ed-mcp, as with Claude, and brings another server's tool to the card as
-  `mcp__<server>__<tool>`. Any other elicitation is still declined.
+  accepts these for ed-mcp in auto mode, and in Ask me mode brings them to the card, as Claude
+  Code does; another server's tool always comes to the card, as `mcp__<server>__<tool>`.
+  "Allow until /new" answers `persist: "session"` only when the request offers it. Any other
+  elicitation is still declined.
 - `claude.model` (default `sonnet`) and `codex.model` (default `gpt-6.1-terra`) choose the
   model; `null` leaves the CLI's own default. Both are player-only, as their groups are.
 - compare-agents takes `--run <agent>[:model]`, more than once, to compare models; each run

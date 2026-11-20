@@ -91,8 +91,8 @@ const HudSchema = z.strictObject({
   edMcpDataDir: z.string().min(1).nullable().default(null),
 });
 
-// How ED Chat starts each CLI. The same fields for both.
-// The same fields for both; model differs by its default. null leaves the CLI's own default.
+// How ED Chat starts each CLI: the same fields for both; model differs by its default. null
+// leaves the CLI's own default.
 const cliSchema = (model: string) =>
   z.strictObject({
     path: z.string().min(1).nullable().default(null),
