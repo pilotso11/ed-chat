@@ -8,6 +8,7 @@ import {
 } from "../src/core/playerOnly.js";
 import { PlayerOnlyGuard, type PlayerOnlyHost } from "../src/core/playerOnlyGuard.js";
 import { parseSettings, type Settings } from "../src/core/settings.js";
+import { PLAYER_ONLY_PATHS } from "../src/core/settingsDictionary.js";
 
 describe("player-only values", () => {
   it("reads only the player-only settings, as the file sets them", () => {
@@ -95,6 +96,29 @@ describe("PlayerOnlyGuard", () => {
     const g = new PlayerOnlyGuard(host, null);
     expect(g.values).toEqual({ claude: { permissionMode: "default" } });
     expect(h.saved).toEqual([{ claude: { permissionMode: "default" } }]);
+  });
+
+  it("keeps the values of a setting that became player-only since the last run", () => {
+    const { h, host } = fakeHost(
+      '{"hotkeys":{"openChat":"F9"},"claude":{"permissionMode":"auto"}}',
+    );
+    const saved = { claude: { permissionMode: "default" } };
+    const g = new PlayerOnlyGuard(
+      host,
+      saved,
+      PLAYER_ONLY_PATHS.filter((p) => p !== "hotkeys"),
+    );
+    // The hotkeys in the file are kept; the change to claude still waits for the player.
+    expect(g.values).toEqual({ ...saved, hotkeys: { openChat: "F9" } });
+    expect(h.saved).toEqual([g.values]);
+    expect(g.effective()!.hotkeys.openChat).toBe("F9");
+    expect(g.effective()!.claude.permissionMode).toBe("default");
+  });
+
+  it("does not save again when the saved values cover every player-only path", () => {
+    const { h, host } = fakeHost(START);
+    new PlayerOnlyGuard(host, { claude: { permissionMode: "default" } }, PLAYER_ONLY_PATHS);
+    expect(h.saved).toEqual([]);
   });
 
   it("applies the other settings of a save at once and keeps the player-only ones", async () => {

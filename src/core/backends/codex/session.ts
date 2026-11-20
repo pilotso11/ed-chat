@@ -111,8 +111,8 @@ export class CodexSession implements AgentBackend {
     RequestId,
     { ctl: AbortController; rpc: RpcClient; decline: unknown }
   >();
-  // Paths of each file change, for the approval card: the request itself names none.
-  // Each fileChange item's paths, and whether every change is an update in place.
+  // Each fileChange item's paths, for the approval card (the request itself names none), and
+  // whether every change is an update in place.
   private readonly fileChanges = new Map<string, { paths: string[]; updatesOnly: boolean }>();
   // Threads that /new left: what still arrives for them is dropped, even before the new thread
   // has an id.

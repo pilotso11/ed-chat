@@ -116,6 +116,7 @@ import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.j
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
 import { currentStop, nextStopAfter, previousStop, todoStops } from "../core/hud/panels.js";
 import { PlayerOnlyGuard } from "../core/playerOnlyGuard.js";
+import { PLAYER_ONLY_PATHS } from "../core/settingsDictionary.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
 import { fetchLatestEdMcp, versionText, type Versions } from "../core/version.js";
 import { IPC } from "../shared/ipc.js";
@@ -225,13 +226,15 @@ async function main(): Promise<void> {
           key: "playerOnly",
           text: on ? "⚠ settings.json: a change waits for your answer" : null,
         }),
-      save: (values) => {
-        saved = { ...saved, playerOnly: values };
+      save: (values, paths) => {
+        saved = { ...saved, playerOnly: values, playerOnlyPaths: [...paths] };
         writeState();
       },
       log: (level, text) => log.log(level, text),
     },
     saved.playerOnly ?? null,
+    // Values saved before the paths were kept cover every player-only path but hotkeys.
+    saved.playerOnlyPaths ?? PLAYER_ONLY_PATHS.filter((p) => p !== "hotkeys"),
   );
   let settings: Settings = playerOnly.effective() ?? settingsStore.settings;
   let position: Position;

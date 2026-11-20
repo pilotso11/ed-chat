@@ -7,6 +7,7 @@ import {
   withValues,
 } from "./playerOnly.js";
 import type { Settings } from "./settings.js";
+import { PLAYER_ONLY_PATHS } from "./settingsDictionary.js";
 
 export interface PlayerOnlyHost {
   /** settings.json as last read, without a BOM. */
@@ -21,8 +22,8 @@ export interface PlayerOnlyHost {
   ask(lines: string[]): Promise<boolean>;
   /** A change waits for the player's answer, or no longer does. */
   waiting(on: boolean): void;
-  /** Keeps the applied values across restarts. */
-  save(values: PlayerOnlyValues): void;
+  /** Keeps the applied values across restarts, with the player-only paths they cover. */
+  save(values: PlayerOnlyValues, paths: readonly string[]): void;
   log(level: "info" | "warn", text: string): void;
 }
 
@@ -35,14 +36,24 @@ export class PlayerOnlyGuard {
   private asking = false;
   private applied: PlayerOnlyValues;
 
-  /** applied: the values saved at the last run, or null on the first run of this version. */
+  /**
+   * applied: the values saved at the last run, or null on the first run of this version.
+   * covers: the player-only paths those values cover; a version can add some.
+   */
   constructor(
     private readonly host: PlayerOnlyHost,
     applied: PlayerOnlyValues | null,
+    covers: readonly string[] = PLAYER_ONLY_PATHS,
   ) {
-    this.applied = applied ?? playerOnlyValues(host.fileText());
     // The first run of this version has nothing saved, so it trusts the file it starts with.
-    if (!applied) host.save(this.applied);
+    // A setting that became player-only since the values were saved is trusted the same way,
+    // or an upgrade would take back what the player had set.
+    const added = applied ? PLAYER_ONLY_PATHS.filter((p) => !covers.includes(p)) : [];
+    const file = playerOnlyValues(host.fileText());
+    this.applied = applied ?? file;
+    for (const p of added) this.applied = valuesWith(this.applied, p, file[p]);
+    if (!applied || added.length || covers.length !== PLAYER_ONLY_PATHS.length)
+      host.save(this.applied, PLAYER_ONLY_PATHS);
   }
 
   /** The values in use. */
@@ -96,7 +107,7 @@ export class PlayerOnlyGuard {
 
   private trust(values: PlayerOnlyValues): void {
     this.applied = values;
-    this.host.save(values);
+    this.host.save(values, PLAYER_ONLY_PATHS);
   }
 
   private async askLoop(): Promise<void> {
