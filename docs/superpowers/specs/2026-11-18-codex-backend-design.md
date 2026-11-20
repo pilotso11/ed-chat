@@ -160,9 +160,12 @@ Then run it without `--dry-run`. This spends tokens on both assistants. The ques
 `--only codex` runs one assistant. Each CLI is found as ED Chat finds it, with the path,
 permission mode and extra arguments from the player's `settings.json`. It runs in a new temp
 folder, with a copy of `settings.json` and its schema, so a settings change touches only the
-copy. Each question starts a new conversation. Approvals are declined and counted; ed-mcp tools
-do not ask, and they use the player's real ed-mcp data, so a question that asks ed-mcp to save
-something (a plan, a preference) saves it. No `[Game state]` note is sent. The Markdown report goes to the temp folder, or to
+copy. Each question starts a new conversation. Approvals are declined and counted, except ed-mcp
+tools, which are allowed. Both assistants run the player's ed-mcp definition on a copy of its
+data (activity note, plans, preferences), with `--strict-mcp-config` for Claude, so a question
+that saves something changes only the copy; the first real run, before this, overwrote the
+player's activity note. A definition that runs as a command is needed (not the plugin alone).
+No `[Game state]` note is sent. The Markdown report goes to the temp folder, or to
 `--out <file>` (never inside the repo), with the raw numbers in a `.json` file next to it.
 `--timeout <seconds>` (default 300) limits each reply. Ctrl+C stops every CLI and writes what
 was recorded. The pure parts are in `scripts/compare-lib.ts`, tested in

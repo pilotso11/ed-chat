@@ -2,8 +2,8 @@
 // a report with both replies side by side. It spends tokens: see --help, and try --dry-run first.
 // Usage: npx tsx scripts/compare-agents.ts [--only claude|codex] [--questions f] [--out f] [--dry-run]
 import { execFile } from "node:child_process";
-import { rmSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync, rmSync } from "node:fs";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +21,7 @@ import {
 import { CodexSession } from "../src/core/backends/codex/session.js";
 import { outDirProblem } from "./codex-probe.mjs";
 import { parseCliVersion, quoteForCmd, type ResolvedCommand } from "../src/core/cli.js";
-import { claudeMcpConfig, readAgentConfigs } from "../src/core/edMcp.js";
+import { claudeMcpConfig, findEdMcp, readAgentConfigs } from "../src/core/edMcp.js";
 import {
   DEFAULTS_FILE,
   DEFAULT_SETTINGS,
@@ -38,7 +38,9 @@ import {
   type RunSpec,
   buildReport,
   edChatDataDir,
-  edMcpPlan,
+  ED_MCP_DATA_FILES,
+  edMcpDataDir,
+  isolatedEdMcp,
   isInside,
   jsonPathFor,
   parseArgs,
@@ -129,6 +131,18 @@ if (settingsText !== null) {
 
 const configs = await readAgentConfigs();
 const edChatWorkspace = path.join(dataDir, "workspace");
+// The player's ed-mcp, which both assistants run on a copy of its data. A definition that
+// runs as a command is needed for that; the plugin alone cannot be redirected.
+const edMcpDef = findEdMcp(configs, edChatWorkspace);
+if (!edMcpDef) {
+  console.error(
+    "No ed-mcp definition that runs as a command (claude mcp add or codex mcp add): the " +
+      "comparison runs ed-mcp on a copy of its data, so it needs one.",
+  );
+  process.exit(2);
+}
+const edMcpSource = edMcpDataDir(edMcpDef, process.env, os.homedir(), process.platform);
+const edMcpNote = `ed-mcp from ${edMcpDef.source}, on a copy of its data`;
 const resolvers: Record<AgentId, (p: string | null) => ResolvedCommand | null> = {
   claude: (p) => resolveClaude(p),
   codex: (p) => resolveCodex(p),
@@ -164,7 +178,7 @@ if (opts.dryRun) {
             permissionMode: s.permissionMode,
             model,
             mcpConfigFile: "<temp>/approval-mcp.json",
-            extraArgs: s.extraArgs,
+            extraArgs: [...s.extraArgs, "--strict-mcp-config"],
             settingsFile: "<temp>/settings.json",
           })
         : buildCodexArgs({ extraArgs: s.extraArgs });
@@ -172,7 +186,7 @@ if (opts.dryRun) {
     console.log(`  args: ${args.map(short).join(" ")}`);
     console.log(`  model: ${model ?? "the CLI's default"}`);
     console.log(`  permission mode: ${s.permissionMode}`);
-    console.log(`  ed-mcp: ${edMcpPlan(agent, configs, ws, edChatWorkspace).note}`);
+    console.log(`  ed-mcp: ${edMcpNote}`);
   }
   console.log(`\nReport: ${out}\nNumbers: ${jsonOut}`);
   process.exit(0);
@@ -263,6 +277,14 @@ try {
   const workspace = path.join(tempRoot, "workspace");
   const settingsFile = path.join(tempRoot, "settings.json");
   await mkdir(workspace);
+  // ed-mcp's notes and plans, copied: a question that saves something changes only the copy.
+  const edMcpData = path.join(tempRoot, "ed-mcp-data");
+  await mkdir(edMcpData);
+  for (const f of ED_MCP_DATA_FILES) {
+    const from = path.join(edMcpSource, f);
+    if (existsSync(from)) await cp(from, path.join(edMcpData, f), { recursive: true });
+  }
+  const edMcp = isolatedEdMcp(edMcpDef, edMcpData);
   await writeFile(path.join(tempRoot, SCHEMA_FILE), settingsSchemaText());
   await writeFile(path.join(tempRoot, DEFAULTS_FILE), defaultSettingsText());
 
@@ -289,14 +311,13 @@ try {
     // A fresh copy for each run: a settings change by one assistant must not carry over to
     // the next, which would then find the change already made.
     await writeFile(settingsFile, settingsText ?? newSettingsText());
-    const plan = edMcpPlan(agent, configs, workspace, edChatWorkspace);
     const entry: AgentRun = {
       agent,
       model,
       command: cli?.command ?? null,
       version: null,
       permissionMode: s.permissionMode,
-      edMcp: plan.note,
+      edMcp: edMcpNote,
       results: [],
     };
     run.runs.push(entry);
@@ -311,13 +332,15 @@ try {
       approvalServer = new ApprovalServer(broker);
       await approvalServer.start();
       const mcpConfigFile = path.join(tempRoot, "approval-mcp.json");
-      const config = claudeMcpConfig(approvalServer.mcpConfig().mcpServers, plan.server);
+      const config = claudeMcpConfig(approvalServer.mcpConfig().mcpServers, edMcp);
       await writeFile(mcpConfigFile, JSON.stringify(config));
       const args = buildClaudeArgs({
         permissionMode: s.permissionMode,
         model,
         mcpConfigFile,
-        extraArgs: s.extraArgs,
+        // Only the servers in --mcp-config: the player's own ed-mcp, on the real data, must
+        // not run next to the copy.
+        extraArgs: [...s.extraArgs, "--strict-mcp-config"],
         settingsFile,
       });
       session = new ClaudeSession({ ...cli, args, cwd: workspace });
@@ -331,7 +354,7 @@ try {
           model,
           cwd: workspace,
           settingsFile,
-          edMcp: plan.server,
+          edMcp,
         }),
         approve: brokerApprover(broker),
       });

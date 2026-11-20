@@ -3,12 +3,11 @@
 import path from "node:path";
 import type { AgentId } from "../src/core/backend.js";
 import {
-  edMcpToAdd,
   findEdMcp,
   forCli,
-  hasOwnEdMcp,
   type AgentConfigs,
   type CliMcpServer,
+  type EdMcpDefinition,
 } from "../src/core/edMcp.js";
 
 export const AGENT_IDS: AgentId[] = ["claude", "codex"];
@@ -180,33 +179,44 @@ export function edChatDataDir(
   return p.join(env.XDG_CONFIG_HOME || p.join(home, ".config"), "ed-chat");
 }
 
-export interface EdMcpPlan {
-  /** Passed to the assistant; null when it has its own, or none is found. */
-  server: CliMcpServer | null;
-  /** For the report: where the assistant's ed-mcp comes from. */
-  note: string;
+/**
+ * Where an ed-mcp definition keeps the player's notes and plans: its sync folder, else ed-mcp's
+ * own config folder (env-paths "ed-mcp-nodejs", as ed-mcp uses).
+ */
+export function edMcpDataDir(
+  def: { env: Record<string, string> },
+  env: NodeJS.ProcessEnv,
+  home: string,
+  platform: NodeJS.Platform,
+): string {
+  const sync = def.env.ED_MCP_SYNC_DIR?.trim();
+  if (sync) return sync;
+  if (platform === "win32")
+    return path.win32.join(
+      env.APPDATA || path.win32.join(home, "AppData", "Roaming"),
+      "ed-mcp-nodejs",
+      "Config",
+    );
+  if (platform === "darwin")
+    return path.posix.join(home, "Library", "Preferences", "ed-mcp-nodejs");
+  return path.posix.join(env.XDG_CONFIG_HOME || path.posix.join(home, ".config"), "ed-mcp-nodejs");
 }
 
+/** The files in ed-mcp's data folder that a question can change, and the encrypted keys. */
+export const ED_MCP_DATA_FILES = [
+  "activity.json",
+  "plans.json",
+  "plans",
+  "preferences.json",
+  "secrets.enc",
+];
+
 /**
- * The ed-mcp that main would give the assistant. The script runs in another folder, so
- * Claude does not see a project entry for ED Chat's own workspace there: that entry is then
- * added, as the definition main would rank first.
+ * The player's ed-mcp, run on a copy of its data: a question that saves a plan or a note
+ * changes only the copy. Both assistants get this one definition.
  */
-export function edMcpPlan(
-  agent: AgentId,
-  c: AgentConfigs,
-  workspace: string,
-  edChatWorkspace: string,
-): EdMcpPlan {
-  if (hasOwnEdMcp(agent, c, workspace))
-    return { server: null, note: `${NAMES[agent]}'s own config` };
-  // None at all, or the assistant's own is switched off or in a file that cannot be read.
-  if (!edMcpToAdd(agent, c, workspace))
-    return { server: null, note: "none added: none found, or its own is off or unreadable" };
-  const add = findEdMcp(c, edChatWorkspace);
-  return add
-    ? { server: forCli(add), note: `added by ED Chat, from ${add.source}` }
-    : { server: null, note: "none found" };
+export function isolatedEdMcp(def: EdMcpDefinition, dataCopy: string): CliMcpServer {
+  return forCli({ ...def, env: { ...def.env, ED_MCP_SYNC_DIR: dataCopy } })!;
 }
 
 export interface ApprovalAsked {

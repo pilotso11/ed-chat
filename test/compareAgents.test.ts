@@ -5,7 +5,8 @@ import {
   buildReport,
   cell,
   edChatDataDir,
-  edMcpPlan,
+  edMcpDataDir,
+  isolatedEdMcp,
   isInside,
   jsonPathFor,
   median,
@@ -136,43 +137,32 @@ describe("paths", () => {
   });
 });
 
-describe("edMcpPlan", () => {
-  const ws = path.resolve("/tmp/compare/workspace");
-  const edChatWs = path.resolve("/appdata/ed-chat/workspace");
-  const def = (command: string) => ({ "ed-mcp": { command, args: [], env: {} } });
-
-  it("adds nothing when the assistant has its own", () => {
-    const claudeJson = JSON.stringify({ mcpServers: def("user-ed-mcp") });
-    expect(edMcpPlan("claude", { claudeJson }, ws, edChatWs)).toEqual({
-      server: null,
-      note: "Claude's own config",
-    });
+describe("ed-mcp on a copy of its data", () => {
+  it("finds the data folder: the sync folder, else ed-mcp's own config folder", () => {
+    const home = "C:\\Users\\cmdr";
+    expect(edMcpDataDir({ env: { ED_MCP_SYNC_DIR: "D:\\Sync" } }, {}, home, "win32")).toBe(
+      "D:\\Sync",
+    );
+    expect(edMcpDataDir({ env: {} }, { APPDATA: "C:\\AD" }, home, "win32")).toBe(
+      "C:\\AD\\ed-mcp-nodejs\\Config",
+    );
+    expect(edMcpDataDir({ env: { ED_MCP_SYNC_DIR: " " } }, {}, "/home/c", "linux")).toBe(
+      "/home/c/.config/ed-mcp-nodejs",
+    );
   });
 
-  it("gives Codex the one Claude runs", () => {
-    const claudeJson = JSON.stringify({ mcpServers: def("user-ed-mcp") });
-    expect(edMcpPlan("codex", { claudeJson }, ws, edChatWs)).toEqual({
-      server: { command: "user-ed-mcp", args: [], env: {} },
-      note: "added by ED Chat, from claudeUser",
+  it("points the definition at the copy, and keeps the rest of it", () => {
+    const def = {
+      source: "claudeUser" as const,
+      command: "node",
+      args: ["x.js"],
+      env: { ED_MCP_SYNC_DIR: "D:\\Sync", ED_MCP_SYNC_PASSWORD: "secret-password" },
+    };
+    expect(isolatedEdMcp(def, "T:\\copy")).toEqual({
+      command: "node",
+      args: ["x.js"],
+      env: { ED_MCP_SYNC_DIR: "T:\\copy", ED_MCP_SYNC_PASSWORD: "secret-password" },
     });
-  });
-
-  it("adds Claude's project entry for ED Chat's workspace, which the temp folder does not see", () => {
-    const claudeJson = JSON.stringify({
-      projects: {
-        "/elsewhere": { mcpServers: def("other-project") },
-        [edChatWs]: { mcpServers: def("ed-chat-project") },
-      },
-    });
-    expect(edMcpPlan("claude", { claudeJson }, ws, edChatWs)).toMatchObject({
-      server: { command: "ed-chat-project" },
-      note: "added by ED Chat, from claudeProject",
-    });
-  });
-
-  it("says when there is none", () => {
-    expect(edMcpPlan("codex", {}, ws, edChatWs).server).toBeNull();
-    expect(edMcpPlan("codex", {}, ws, edChatWs).note).toMatch(/^none added/);
   });
 });
 
