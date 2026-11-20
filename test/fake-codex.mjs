@@ -101,7 +101,7 @@ function playTurn(threadId, turnId) {
         item: {
           type: "fileChange",
           id: itemId,
-          changes: [{ path: "C:/x/a.txt" }],
+          changes: [{ path: process.env.FAKE_EDIT_PATH ?? "C:/x/a.txt" }],
           status: "inProgress",
         },
       });

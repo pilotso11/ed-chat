@@ -771,6 +771,7 @@ async function main(): Promise<void> {
             resumeId: resumeFrom,
             thread: codexThread(settings),
             approve: brokerApprover(approvals),
+            autoEditFiles: [settingsFile],
             clientVersion: app.getVersion(),
           });
     // Shown at the first ready: the CLI confirms the conversation only then.

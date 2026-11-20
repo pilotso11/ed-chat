@@ -23,6 +23,10 @@ interface Setup {
   approve?: Approver;
   command?: string;
   interruptGraceMs?: number;
+  /** Files that auto mode may change without a card, relative to the session's folder. */
+  autoEditFiles?: string[];
+  /** The file that file-approval changes, relative to the session's folder. */
+  editPath?: string;
 }
 
 async function setup(o: Setup = {}) {
@@ -43,7 +47,14 @@ async function setup(o: Setup = {}) {
       }),
     interruptGraceMs: o.interruptGraceMs,
     startTimeoutMs: o.startTimeoutMs,
-    env: { ...process.env, FAKE_FIXTURE: fixture, FAKE_MODE: o.mode ?? "ok", FAKE_LOG: log },
+    autoEditFiles: o.autoEditFiles?.map((f) => path.join(dir, f)),
+    env: {
+      ...process.env,
+      FAKE_FIXTURE: fixture,
+      FAKE_MODE: o.mode ?? "ok",
+      FAKE_LOG: log,
+      ...(o.editPath ? { FAKE_EDIT_PATH: o.editPath } : {}),
+    },
   });
   sessions.push(s);
   const events: BackendEvent[] = [];
@@ -627,6 +638,34 @@ describe("CodexSession", () => {
     expect(reply.result).toEqual({ decision: "decline" });
     expect(events.find((e) => e.type === "result")).toMatchObject({ denials: ["edit"] });
     expect(events.find((e) => e.type === "toolEnd")).toMatchObject({ name: "edit", isError: true });
+  });
+
+  it("accepts an edit of settings.json alone without a card, in auto mode only", async () => {
+    // Relative to the thread's folder, as Codex can name it.
+    const settings = { autoEditFiles: ["settings.json"], editPath: "settings.json" };
+    const auto = await setup({ ...settings, mode: "file-approval", permissionMode: "auto" });
+    auto.s.send("edit");
+    await until(() => has(auto.events, "result"));
+    expect(auto.asked).toEqual([]);
+    const reply = (await auto.received()).find((m) => m.id === "srv-1" && !m.method)!;
+    expect(reply.result).toEqual({ decision: "accept" });
+
+    const asks = await setup({ ...settings, mode: "file-approval", permissionMode: "default" });
+    asks.s.send("edit");
+    await until(() => has(asks.events, "result"));
+    expect(asks.asked).toHaveLength(1);
+  });
+
+  it("shows the card in auto mode for an edit of any other file", async () => {
+    const { s, events, asked } = await setup({
+      mode: "file-approval",
+      permissionMode: "auto",
+      autoEditFiles: ["settings.json"],
+      editPath: "approval-mcp.json",
+    });
+    s.send("edit");
+    await until(() => has(events, "result"));
+    expect(asked).toHaveLength(1);
   });
 
   it("withdraws the approval card when the reply is stopped", async () => {

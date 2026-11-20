@@ -31,6 +31,11 @@ export interface CodexSessionOptions {
   resumeId?: string | null;
   thread: ThreadSettings;
   approve: Approver;
+  /**
+   * Files that Codex may change without a card in auto mode, such as ED Chat's settings.json:
+   * a file change that touches only these is accepted. Claude can change them in auto mode too.
+   */
+  autoEditFiles?: string[];
   /** ED Chat's version, for initialize. */
   clientVersion?: string;
   /** How long a stopped turn may take to end before the process is restarted. */
@@ -623,6 +628,16 @@ export class CodexSession implements AgentBackend {
         const itemId = str(p.itemId);
         const paths = (itemId && this.fileChanges.get(itemId)) || [];
         const root = str(p.grantRoot);
+        const allowed = this.opts.autoEditFiles ?? [];
+        if (
+          this.events.permissionMode === "auto" &&
+          !root &&
+          paths.length &&
+          paths.every((f) => allowed.some((a) => samePath(path.resolve(this.thread.cwd, f), a)))
+        ) {
+          rpc.respond(id, { decision: "accept" });
+          return;
+        }
         const summary = root
           ? `write access to ${root}`
           : paths.length
