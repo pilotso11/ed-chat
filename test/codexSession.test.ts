@@ -25,8 +25,8 @@ interface Setup {
   interruptGraceMs?: number;
   /** Files that auto mode may change without a card, relative to the session's folder. */
   autoEditFiles?: string[];
-  /** The file that file-approval changes, relative to the session's folder. */
-  editPath?: string;
+  /** The changes of file-approval's fileChange item. */
+  changes?: unknown[];
 }
 
 async function setup(o: Setup = {}) {
@@ -53,7 +53,7 @@ async function setup(o: Setup = {}) {
       FAKE_FIXTURE: fixture,
       FAKE_MODE: o.mode ?? "ok",
       FAKE_LOG: log,
-      ...(o.editPath ? { FAKE_EDIT_PATH: o.editPath } : {}),
+      ...(o.changes ? { FAKE_CHANGES: JSON.stringify(o.changes) } : {}),
     },
   });
   sessions.push(s);
@@ -640,32 +640,48 @@ describe("CodexSession", () => {
     expect(events.find((e) => e.type === "toolEnd")).toMatchObject({ name: "edit", isError: true });
   });
 
-  it("accepts an edit of settings.json alone without a card, in auto mode only", async () => {
-    // Relative to the thread's folder, as Codex can name it.
-    const settings = { autoEditFiles: ["settings.json"], editPath: "settings.json" };
-    const auto = await setup({ ...settings, mode: "file-approval", permissionMode: "auto" });
-    auto.s.send("edit");
-    await until(() => has(auto.events, "result"));
-    expect(auto.asked).toEqual([]);
-    const reply = (await auto.received()).find((m) => m.id === "srv-1" && !m.method)!;
-    expect(reply.result).toEqual({ decision: "accept" });
-
-    const asks = await setup({ ...settings, mode: "file-approval", permissionMode: "default" });
-    asks.s.send("edit");
-    await until(() => has(asks.events, "result"));
-    expect(asks.asked).toHaveLength(1);
-  });
-
-  it("shows the card in auto mode for an edit of any other file", async () => {
-    const { s, events, asked } = await setup({
-      mode: "file-approval",
-      permissionMode: "auto",
-      autoEditFiles: ["settings.json"],
-      editPath: "approval-mcp.json",
+  describe("auto mode and an edit of settings.json", () => {
+    const update = (p: string, move_path: string | null = null) => ({
+      path: p,
+      kind: { type: "update", move_path },
     });
-    s.send("edit");
-    await until(() => has(events, "result"));
-    expect(asked).toHaveLength(1);
+    // Asks the session about a file change; the card's requests, and the answer Codex got.
+    async function edit(changes: unknown[], permissionMode: "auto" | "default" = "auto") {
+      const r = await setup({
+        mode: "file-approval",
+        permissionMode,
+        autoEditFiles: ["settings.json"],
+        changes,
+      });
+      r.s.send("edit");
+      await until(() => has(r.events, "result"));
+      const reply = (await r.received()).find((m) => m.id === "srv-1" && !m.method)!;
+      return { asked: r.asked, answer: reply.result };
+    }
+
+    it("accepts an update of settings.json alone without a card", async () => {
+      // Relative to the thread's folder, as Codex can name it.
+      expect(await edit([update("settings.json")])).toEqual({
+        asked: [],
+        answer: { decision: "accept" },
+      });
+    });
+
+    it("shows the card in default mode", async () => {
+      expect((await edit([update("settings.json")], "default")).asked).toHaveLength(1);
+    });
+
+    it("shows the card for another file, a move, an add, a delete or a second file", async () => {
+      for (const changes of [
+        [update("approval-mcp.json")],
+        [update("settings.json", "approval-mcp.json")],
+        [{ path: "settings.json", kind: { type: "add" } }],
+        [{ path: "settings.json", kind: { type: "delete" } }],
+        [{ path: "settings.json" }],
+        [update("settings.json"), update("approval-mcp.json")],
+      ])
+        expect((await edit(changes)).asked, JSON.stringify(changes)).toHaveLength(1);
+    });
   });
 
   it("withdraws the approval card when the reply is stopped", async () => {

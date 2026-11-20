@@ -101,7 +101,10 @@ function playTurn(threadId, turnId) {
         item: {
           type: "fileChange",
           id: itemId,
-          changes: [{ path: process.env.FAKE_EDIT_PATH ?? "C:/x/a.txt" }],
+          // FAKE_CHANGES: the changes as JSON, for example an edit of settings.json.
+          changes: process.env.FAKE_CHANGES
+            ? JSON.parse(process.env.FAKE_CHANGES)
+            : [{ path: "C:/x/a.txt", kind: { type: "update", move_path: null } }],
           status: "inProgress",
         },
       });

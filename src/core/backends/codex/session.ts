@@ -32,8 +32,9 @@ export interface CodexSessionOptions {
   thread: ThreadSettings;
   approve: Approver;
   /**
-   * Files that Codex may change without a card in auto mode, such as ED Chat's settings.json:
-   * a file change that touches only these is accepted. Claude can change them in auto mode too.
+   * Files that Codex may update in place without a card in auto mode, such as ED Chat's
+   * settings.json: a file change that only updates these, with no add, delete or move, is
+   * accepted. Any other change shows the card.
    */
   autoEditFiles?: string[];
   /** ED Chat's version, for initialize. */
@@ -106,7 +107,8 @@ export class CodexSession implements AgentBackend {
     { ctl: AbortController; rpc: RpcClient; decline: unknown }
   >();
   // Paths of each file change, for the approval card: the request itself names none.
-  private readonly fileChanges = new Map<string, string[]>();
+  // Each fileChange item's paths, and whether every change is an update in place.
+  private readonly fileChanges = new Map<string, { paths: string[]; updatesOnly: boolean }>();
   // Threads that /new left: what still arrives for them is dropped, even before the new thread
   // has an id.
   private readonly leftThreads = new Set<string>();
@@ -575,12 +577,20 @@ export class CodexSession implements AgentBackend {
           typeof item.id === "string" &&
           Array.isArray(item.changes)
         )
-          this.fileChanges.set(
-            item.id,
-            item.changes.flatMap((c) =>
+          this.fileChanges.set(item.id, {
+            paths: item.changes.flatMap((c) =>
               isRecord(c) && typeof c.path === "string" ? [c.path] : [],
             ),
-          );
+            // A move names its new path in move_path; an add or a delete is not an edit.
+            updatesOnly: item.changes.every(
+              (c) =>
+                isRecord(c) &&
+                typeof c.path === "string" &&
+                isRecord(c.kind) &&
+                c.kind.type === "update" &&
+                (c.kind.move_path === undefined || c.kind.move_path === null),
+            ),
+          });
         break;
       }
     }
@@ -626,12 +636,14 @@ export class CodexSession implements AgentBackend {
       }
       case "item/fileChange/requestApproval": {
         const itemId = str(p.itemId);
-        const paths = (itemId && this.fileChanges.get(itemId)) || [];
+        const change = (itemId && this.fileChanges.get(itemId)) || null;
+        const paths = change?.paths ?? [];
         const root = str(p.grantRoot);
         const allowed = this.opts.autoEditFiles ?? [];
         if (
           this.events.permissionMode === "auto" &&
           !root &&
+          change?.updatesOnly &&
           paths.length &&
           paths.every((f) => allowed.some((a) => samePath(path.resolve(this.thread.cwd, f), a)))
         ) {

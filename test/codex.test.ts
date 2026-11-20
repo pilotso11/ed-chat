@@ -242,6 +242,8 @@ describe("codex command", () => {
     });
     expect(s.developerInstructions).toContain("⟦");
     expect(s.developerInstructions).toContain("C:\\s.json");
+    // A file edit is what auto mode can accept without a card.
+    expect(s.developerInstructions).toContain("with a file edit (apply_patch), not with a shell");
   });
 });
 
