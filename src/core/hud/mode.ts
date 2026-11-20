@@ -43,13 +43,14 @@ export const LAPSE_JUMPS = 5;
  */
 export function journalMode(events: JournalEvent[], massacreActive: boolean): Choice | null {
   const bio = new Set<string>();
-  let mode: HudModeId | null = null;
+  // Exploration and exobiology, followed through every event. Massacre is kept apart: while a
+  // stack is open it wins, and once it is handed in this mode is current, with whatever the
+  // player scanned since, not the mode from before the missions.
+  let mode: "exploration" | "exobiology" | null = null;
   let at = 0;
-  // The mode before massacre, to go back to when the stack is handed in.
-  let before: { mode: HudModeId | null; at: number } = { mode: null, at: 0 };
-  const set = (m: HudModeId, e: JournalEvent) => {
-    if (m === "massacre" && mode !== "massacre") before = { mode, at };
-    if (m === "exploration" || m === "exobiology") jumps = 0;
+  let massacreAt: number | null = null;
+  const set = (m: "exploration" | "exobiology", e: JournalEvent) => {
+    jumps = 0;
     mode = m;
     at = Date.parse(e.timestamp) || at;
   };
@@ -63,13 +64,13 @@ export function journalMode(events: JournalEvent[], massacreActive: boolean): Ch
         if (mode === "exploration" && jumps >= LAPSE_JUMPS) mode = null;
         break;
       case "MissionAccepted":
-        if (isMassacre(e)) set("massacre", e);
+        if (isMassacre(e)) massacreAt = Date.parse(e.timestamp) || massacreAt;
         break;
       case "FSSDiscoveryScan":
-        if (mode !== "massacre") set("exploration", e);
+        set("exploration", e);
         break;
       case "Scan":
-        if (e.ScanType === "Detailed" && mode !== "massacre") set("exploration", e);
+        if (e.ScanType === "Detailed") set("exploration", e);
         break;
       case "FSSBodySignals":
       case "SAASignalsFound":
@@ -77,20 +78,17 @@ export function journalMode(events: JournalEvent[], massacreActive: boolean): Ch
         break;
       case "ApproachBody":
       case "Touchdown":
-        if (bio.has(key) && mode !== "massacre") set("exobiology", e);
+        if (bio.has(key)) set("exobiology", e);
         break;
       case "ScanOrganic":
-        if (mode !== "massacre") set("exobiology", e);
+        set("exobiology", e);
         break;
       case "LeaveBody":
         if (mode === "exobiology") set("exploration", e);
         break;
     }
   }
-  if (mode === "massacre" && !massacreActive) {
-    mode = before.mode;
-    at = before.at;
-  }
+  if (massacreActive && massacreAt !== null) return { mode: "massacre", at: massacreAt };
   return mode ? { mode, at } : null;
 }
 

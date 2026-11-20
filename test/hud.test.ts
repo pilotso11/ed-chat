@@ -39,10 +39,17 @@ describe("journalMode", () => {
     expect(journalMode([massacreAccepted()], true)?.mode).toBe("massacre");
   });
 
-  it("goes back to the mode before massacre once the stack is handed in", () => {
+  it("shows the exploration mode once the stack is handed in", () => {
     const events = [ev("FSSDiscoveryScan", { SystemAddress: 1 }), massacreAccepted()];
     expect(journalMode(events, false)?.mode).toBe("exploration");
     expect(journalMode([massacreAccepted()], false)).toBeNull();
+  });
+
+  it("keeps what was scanned during and after a finished massacre stack", () => {
+    // The panel showed the activity note's mode instead, since this came out empty.
+    const events = [massacreAccepted(), ev("ScanOrganic", { ScanType: "Log" })];
+    expect(journalMode(events, false)?.mode).toBe("exobiology");
+    expect(journalMode(events, true)?.mode).toBe("massacre");
   });
 
   it("does not leave massacre mode for a scan while missions are open", () => {
