@@ -112,6 +112,26 @@ describe("secretsOf and makeRedactor", () => {
     expect(secretsOf({ args }).sort()).toEqual(["k1", "t1"]);
   });
 
+  it("still knows secret flags whose word only starts with or holds a secret word", () => {
+    const flags = [
+      "--authorization",
+      "--passphrase",
+      "--oauth",
+      "--apitoken",
+      "--APIToken",
+      "--tokens",
+      "--secrets",
+      "--SYNCPASSWORD",
+      "--client-secret",
+      "--credentials",
+      "--db-pass",
+      "--pass",
+    ];
+    for (const flag of flags) expect(secretsOf({ args: [flag, "v1"] }), flag).toEqual(["v1"]);
+    for (const flag of ["--author", "--authors", "--passthrough", "--pass-through", "--passes"])
+      expect(secretsOf({ args: [flag, "v1"] }), flag).toEqual([]);
+  });
+
   it("redacts a path in any slash, escaping and case", () => {
     const redact = makeRedactor(secretsOf(ed));
     for (const spelling of [

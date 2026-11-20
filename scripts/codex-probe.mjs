@@ -58,9 +58,12 @@ export function outDirProblem(p, { run = runGit, env = process.env } = {}) {
 export const isTurnCompleted = (m, turnId) =>
   m?.method === "turn/completed" && !!turnId && m.params?.turn?.id === turnId;
 
-// Flags and names whose value is a secret, by whole word: --password and authToken are, but
-// --author and --passthrough are not.
-const SECRET_WORDS = new Set(["pass", "passwd", "password", "secret", "token", "auth", "cred"]);
+// Flags and names whose value is a secret. Each word (split at - _ = and capitals) is looked
+// at: one that holds password, passwd, passphrase, secret, token or apikey, or starts with
+// auth, oauth, cred or pass, is a secret, unless it is one of the words that only look like
+// one. When unsure, a value is redacted: a recording with too much hidden is safe.
+const NOT_SECRET =
+  /^(author(s|ed|ing|ship)?|passthrough|passive\w*|passenger\w*|passage\w*|pass(es|ed|ing)?)$/;
 const SECRET_NAME = {
   test(name) {
     const words = String(name)
@@ -70,9 +73,10 @@ const SECRET_NAME = {
       .filter(Boolean);
     return words.some(
       (w, i) =>
-        SECRET_WORDS.has(w) ||
-        /^credentials?$/.test(w) ||
-        w === "apikey" ||
+        (w === "pass" && i === words.length - 1) ||
+        (!NOT_SECRET.test(w) &&
+          (/password|passwd|passphrase|secret|token|apikey/.test(w) ||
+            /^(auth|oauth|cred|pass)/.test(w))) ||
         (w === "api" && words[i + 1] === "key"),
     );
   },
