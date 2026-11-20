@@ -9,6 +9,16 @@ import {
 import type { Settings } from "./settings.js";
 import { PLAYER_ONLY_PATHS } from "./settingsDictionary.js";
 
+/** Whether settings.json text is a JSON object. */
+function parses(text: string): boolean {
+  try {
+    const v: unknown = JSON.parse(text);
+    return !!v && typeof v === "object" && !Array.isArray(v);
+  } catch {
+    return false;
+  }
+}
+
 export interface PlayerOnlyHost {
   /** settings.json as last read, without a BOM. */
   fileText(): string;
@@ -43,14 +53,16 @@ export class PlayerOnlyGuard {
   constructor(
     private readonly host: PlayerOnlyHost,
     applied: PlayerOnlyValues | null,
-    covers: readonly string[] = PLAYER_ONLY_PATHS,
+    covers: readonly string[],
   ) {
     // The first run of this version has nothing saved, so it trusts the file it starts with.
     // A setting that became player-only since the values were saved is trusted the same way,
-    // or an upgrade would take back what the player had set.
-    const added = applied ? PLAYER_ONLY_PATHS.filter((p) => !covers.includes(p)) : [];
+    // or an upgrade would take back what the player had set. A file that does not parse waits
+    // for the next start, so the player's values are not lost to a half-saved edit.
     const file = playerOnlyValues(host.fileText());
     this.applied = applied ?? file;
+    if (applied && !parses(host.fileText())) return;
+    const added = applied ? PLAYER_ONLY_PATHS.filter((p) => !covers.includes(p)) : [];
     for (const p of added) this.applied = valuesWith(this.applied, p, file[p]);
     if (!applied || added.length || covers.length !== PLAYER_ONLY_PATHS.length)
       host.save(this.applied, PLAYER_ONLY_PATHS);
