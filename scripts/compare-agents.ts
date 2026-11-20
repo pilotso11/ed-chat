@@ -292,17 +292,22 @@ try {
   // ed-mcp's notes and plans are copied fresh for each run (below), into this folder; its
   // config and cache folders go in the sandbox.
   const edMcpData = path.join(tempRoot, "ed-mcp-data");
+  const edMcpSandbox = path.join(tempRoot, "ed-mcp-sandbox");
   const edMcp = isolatedEdMcp(
     edMcpDef,
     edMcpData,
-    path.join(tempRoot, "ed-mcp-sandbox"),
+    edMcpSandbox,
     process.env,
     os.homedir(),
     process.platform,
   );
   let copied = 0;
+  // Fresh for each run: the data, and an empty sandbox (config, cache), so every run starts
+  // the same way and none finds what an earlier one saved or downloaded. The previous run's
+  // ed-mcp may take a moment to stop, so removal retries.
   const copyEdMcpData = async () => {
-    await rm(edMcpData, { recursive: true, force: true });
+    for (const dir of [edMcpData, edMcpSandbox])
+      await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
     await mkdir(edMcpData, { recursive: true });
     copied = 0;
     for (const f of ED_MCP_DATA_FILES) {
