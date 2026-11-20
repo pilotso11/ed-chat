@@ -645,54 +645,58 @@ describe("CodexSession", () => {
       path: p,
       kind: { type: "update", move_path },
     });
-    // Asks the session about a file change; the card's requests, and the answer Codex got.
+    // Asks the session about a file change, given the session's folder; the card's requests,
+    // and the answer Codex got.
     async function edit(
-      changes: unknown[] | ((dir: string) => unknown[]),
+      changes: (dir: string) => unknown[],
       permissionMode: "auto" | "default" = "auto",
     ) {
       const r = await setup({
         mode: "file-approval",
         permissionMode,
         autoEditFiles: ["settings.json"],
-        changes: typeof changes === "function" ? changes : () => changes,
+        changes,
       });
       r.s.send("edit");
       await until(() => has(r.events, "result"));
       const reply = (await r.received()).find((m) => m.id === "srv-1" && !m.method)!;
       return { asked: r.asked, answer: reply.result };
     }
+    const settings = (dir: string) => path.join(dir, "settings.json");
+    const other = (dir: string) => path.join(dir, "approval-mcp.json");
 
     it("accepts an update of settings.json alone without a card", async () => {
-      // Relative to the thread's folder, as Codex can name it.
-      expect(await edit([update("settings.json")])).toEqual({
+      expect(await edit((d) => [update(settings(d))])).toEqual({
         asked: [],
         answer: { decision: "accept" },
       });
     });
 
-    it("accepts the file by its absolute path, in another case on Windows", async () => {
-      const absolute = (dir: string) => {
-        const p = path.join(dir, "settings.json");
-        return process.platform === "win32" ? p.toUpperCase() : p;
-      };
-      expect((await edit((dir) => [update(absolute(dir))])).asked).toEqual([]);
+    it("matches the path in another case on Windows", async () => {
+      const upper = (d: string) =>
+        process.platform === "win32" ? settings(d).toUpperCase() : settings(d);
+      expect((await edit((d) => [update(upper(d))])).asked).toEqual([]);
     });
 
     it("shows the card in default mode", async () => {
-      expect((await edit([update("settings.json")], "default")).asked).toHaveLength(1);
+      expect((await edit((d) => [update(settings(d))], "default")).asked).toHaveLength(1);
     });
 
-    it("shows the card for another file, a move, an add, a delete or a second file", async () => {
-      for (const changes of [
-        [update("approval-mcp.json")],
-        [update("settings.json", "approval-mcp.json")],
-        [{ path: "settings.json", kind: { type: "update", movePath: "approval-mcp.json" } }],
-        [{ path: "settings.json", kind: { type: "add" } }],
-        [{ path: "settings.json", kind: { type: "delete" } }],
-        [{ path: "settings.json" }],
-        [update("settings.json"), update("approval-mcp.json")],
-      ])
-        expect((await edit(changes)).asked, JSON.stringify(changes)).toHaveLength(1);
+    // A relative path depends on the folder the patch was applied in.
+    it.each<[string, (d: string) => unknown[]]>([
+      ["another file", (d) => [update(other(d))]],
+      ["a relative path", () => [update("settings.json")]],
+      ["a move", (d) => [update(settings(d), other(d))]],
+      [
+        "a move in another field",
+        (d) => [{ path: settings(d), kind: { type: "update", movePath: other(d) } }],
+      ],
+      ["an add", (d) => [{ path: settings(d), kind: { type: "add" } }]],
+      ["a delete", (d) => [{ path: settings(d), kind: { type: "delete" } }]],
+      ["no kind", (d) => [{ path: settings(d) }]],
+      ["a second file", (d) => [update(settings(d)), update(other(d))]],
+    ])("shows the card for %s", async (_, changes) => {
+      expect((await edit(changes)).asked).toHaveLength(1);
     });
   });
 

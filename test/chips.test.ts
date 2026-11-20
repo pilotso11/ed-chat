@@ -75,7 +75,7 @@ describe("HUD_PROMPT", () => {
     expect(HUD_PROMPT).toContain("⟦");
     // A cmd.exe command line holds at most 8191 characters, and the prompt shares it with the
     // settings instructions, paths and the player's extra arguments.
-    expect(HUD_PROMPT.length).toBeLessThan(5000);
+    expect(HUD_PROMPT.length).toBeLessThan(3500);
   });
 
   it("tells Claude to use a working ed-mcp when another copy failed", () => {
@@ -93,7 +93,9 @@ describe("HUD_PROMPT", () => {
   it("tells Claude to read and save the activity, mark route stops, and read the journal with ed-mcp", () => {
     expect(HUD_PROMPT).toMatch(/if activity_get is listed, call it/);
     expect(HUD_PROMPT).toMatch(/save it with activity_set if it is listed/);
-    expect(HUD_PROMPT).toMatch(/Do not assume the player is following a plan/);
+    expect(HUD_PROMPT).toMatch(
+      /do not assume the player is following a plan unless the journal shows it/,
+    );
     expect(HUD_PROMPT).toMatch(/answer from the recent journal events/);
     expect(HUD_PROMPT).toMatch(/say so once in the conversation, with its age in hours/);
     expect(HUD_PROMPT).toMatch(/name each missing item and how many are short/);

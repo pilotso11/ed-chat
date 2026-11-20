@@ -646,7 +646,8 @@ export class CodexSession implements AgentBackend {
           !root &&
           change?.updatesOnly &&
           paths.length &&
-          paths.every((f) => allowed.some((a) => samePath(path.resolve(this.thread.cwd, f), a)))
+          // Absolute paths only: a relative one depends on the folder the patch was applied in.
+          paths.every((f) => path.isAbsolute(f) && allowed.some((a) => samePath(f, a)))
         ) {
           rpc.respond(id, { decision: "accept" });
           return;
