@@ -729,6 +729,16 @@ describe("CodexSession", () => {
     expect(reply.result).toEqual({ action: "accept", content: {}, _meta: { persist: "session" } });
   });
 
+  it("brings another server's tool to the card in auto mode too: only ed-mcp skips it", async () => {
+    const { s, events, asked } = await setup({
+      mode: "mcp-approval-other",
+      permissionMode: "auto",
+    });
+    s.send("hi");
+    await until(() => has(events, "result"));
+    expect(asked[0]).toMatchObject({ toolName: "mcp__other__activity_set" });
+  });
+
   it("answers allow until /new as a plain accept when Codex offers no session memory", async () => {
     const { s, events, received } = await setup({
       mode: "mcp-approval-other-nopersist",
