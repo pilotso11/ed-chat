@@ -249,9 +249,16 @@ describe("commanderFromJournal", () => {
     expect(makeScrubber({ commander: "Star" }).unscrubbable).toEqual([]);
   });
 
-  it("leaves a user name that the recordings use as a word to the home folder rule", () => {
+  it("does not replace a user name that the recordings use as a word, and says so", () => {
     const s = makeScrubber({ home: "C:\\Users\\User", user: "User" });
     expect(s.text('{"type":"user"} C:\\Users\\User\\x')).toBe('{"type":"user"} /home/player\\x');
+    expect(s.unscrubbable).toEqual(["User"]);
+  });
+
+  it("checks the user name too, in the spellings the rules skip", () => {
+    const s = makeScrubber({ user: "seth" });
+    expect(s.leaks(s.text("host SETH-PC, seth@pc"))).toEqual([]);
+    expect(s.leaks("tmp__seth and seth-mcp")).toEqual(["seth"]);
   });
 
   it("does not scrub or report the placeholders themselves", () => {

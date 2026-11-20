@@ -98,6 +98,20 @@ describe("secretsOf and makeRedactor", () => {
     ]);
   });
 
+  it("knows a secret flag by whole word, not by a part of another word", () => {
+    const args = [
+      "--author",
+      "Jane",
+      "--passthrough",
+      "on",
+      "--authToken",
+      "t1",
+      "--api-key",
+      "k1",
+    ];
+    expect(secretsOf({ args }).sort()).toEqual(["k1", "t1"]);
+  });
+
   it("redacts a path in any slash, escaping and case", () => {
     const redact = makeRedactor(secretsOf(ed));
     for (const spelling of [

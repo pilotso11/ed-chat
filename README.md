@@ -245,7 +245,9 @@ Codex is asked the first time it runs.
 With Codex, both modes keep its sandbox to ED Chat's data folder: a command or a
 file change outside it comes to the approval card. **Auto** lets Codex decide
 inside the sandbox; **Ask me** asks before anything Codex does not know to be
-safe. ed-mcp tools run without a card with either assistant.
+safe. Codex never brings MCP tool calls such as ed-mcp to the card. With Claude
+Code, your own permission rules decide: in Ask me mode each ed-mcp tool asks
+until you allow it, for example with Ctrl+Alt+A until `/new`.
 
 An approval card shows the tool, up to three lines of what it will do, and
 `⚠ runs a shell command` for shell tools. It plays a sound (`approval.sound`)

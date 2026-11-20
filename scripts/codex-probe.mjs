@@ -58,8 +58,25 @@ export function outDirProblem(p, { run = runGit, env = process.env } = {}) {
 export const isTurnCompleted = (m, turnId) =>
   m?.method === "turn/completed" && !!turnId && m.params?.turn?.id === turnId;
 
-// Flags and names whose value is a secret.
-const SECRET_NAME = /pass(word)?|secret|token|api[-_]?key|auth|cred/i;
+// Flags and names whose value is a secret, by whole word: --password and authToken are, but
+// --author and --passthrough are not.
+const SECRET_WORDS = new Set(["pass", "passwd", "password", "secret", "token", "auth", "cred"]);
+const SECRET_NAME = {
+  test(name) {
+    const words = String(name)
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+    return words.some(
+      (w, i) =>
+        SECRET_WORDS.has(w) ||
+        /^credentials?$/.test(w) ||
+        w === "apikey" ||
+        (w === "api" && words[i + 1] === "key"),
+    );
+  },
+};
 
 /**
  * The values to redact from ed-mcp's definition. From env: the password at any length, other

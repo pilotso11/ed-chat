@@ -34,7 +34,8 @@ const PRIVATE_METHOD = /^(account|remoteControl)\//;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // A run of slashes or backslashes: one path separator in any spelling, JSON-escaped or not.
 const SEP = "(?:\\\\+|/)+";
-// Words the recordings use for roles and fields; a user name like these is not replaced as a word.
+// Words the recordings use for roles and fields. A user or commander named like one cannot be
+// replaced as a word, so the script stops for a check by hand.
 const PROTOCOL_WORDS = new Set([
   "user",
   "assistant",
@@ -77,22 +78,26 @@ export function makeScrubber({ home, user, commander, fid, commanders = [], fids
   // placeholder itself, so there is nothing to replace.
   const candidates = byLength([commander, ...commanders]).filter((n) => !sameName(n, "Jameson"));
   const isWord = (n) => PROTOCOL_WORDS.has(n.toLowerCase()) || n.toLowerCase() === "home";
-  const unscrubbable = candidates.filter(isWord);
+  // The user name the same way: an account called Owner or User shows up in host names and
+  // other paths too, which the home folder rule does not reach.
+  const userWord = !!user && isWord(user) && !sameName(user, "player");
+  const unscrubbable = [...candidates.filter(isWord), ...(userWord ? [user.trim()] : [])];
   const names = candidates.filter((n) => !isWord(n));
   const allFids = byLength([fid, ...fids]).filter((f) => f !== "F0000000");
   for (const name of names) rules.push([word(name), "Jameson"]);
   for (const f of allFids) rules.push([new RegExp(escapeRe(f), "gi"), "F0000000"]);
-  // A user name that is also a word the recordings use ("type":"user") is left to the home
-  // folder rule: replacing it would break the fixtures.
-  if (user && !PROTOCOL_WORDS.has(user.toLowerCase())) rules.push([word(user), "player"]);
+  // A user name that is also a word the recordings use ("type":"user") is not replaced: that
+  // would break the fixtures. It is in unscrubbable, so the script stops instead.
+  const userName = user && !isWord(user) ? user.trim() : null;
+  if (userName) rules.push([word(userName), "player"]);
   /**
-   * The names and FIDs still in the text. Looser than the rules: any case, any spacing, and a
-   * name joined by __, - or _ to other words. ed-mcp's and ED Chat's own names and the home
-   * placeholder are taken out first, so a commander called Ed or Home is not a false alarm.
+   * The names, user name and FIDs still in the text. Looser than the rules: any case, any
+   * spacing, and a name joined by __, - or _ to other words. ed-mcp's and ED Chat's own names
+   * and the home path placeholder are taken out first, so a commander called Ed is not a false
+   * alarm. The other placeholders need no removing: names are matched as whole words and a
+   * name equal to a placeholder is never scrubbed, so Jameson Smith or Soloplayer is found.
    */
   const leaks = (s) => {
-    // The placeholders need no removing: names are matched as whole words, and a name equal to a
-    // placeholder is not scrubbed. So Jameson Smith or Soloplayer, left behind, is still found.
     const t = s.replace(/mcp__ed-mcp__|ed-mcp|ed_chat|ed_overlay|\/home\/player|F0000000/gi, " ");
     const loose = (n) =>
       new RegExp(
@@ -101,6 +106,7 @@ export function makeScrubber({ home, user, commander, fid, commanders = [], fids
       );
     return [
       ...names.filter((n) => loose(n).test(t)),
+      ...(userName && loose(userName).test(t) ? [userName] : []),
       ...allFids.filter((f) => t.toLowerCase().includes(f.toLowerCase())),
     ];
   };
@@ -265,7 +271,7 @@ function main(argv) {
   });
   if (scrub.unscrubbable.length) {
     console.error(
-      `Commander name(s) that are also words the recordings use: ${scrub.unscrubbable.join(", ")}. ` +
+      `Name(s) that are also words the recordings use: ${scrub.unscrubbable.join(", ")}. ` +
         "Nothing is written; scrub these fixtures by hand.",
     );
     process.exit(1);
