@@ -58,6 +58,12 @@ describe("makeScrubber", () => {
     );
   });
 
+  it("replaces a multi-word commander name written with a joiner, and checks for it", () => {
+    const joined = ["Hawk-Eye", "Hawk_Eye", "Hawk.Eye", "Hawk/Eye", "Hawk\\Eye", "hawk  eye"];
+    for (const spelling of joined) expect(scrub.text(`plan ${spelling}.json`)).toContain("Jameson");
+    expect(scrub.leaks("tmp__Hawk-Eye")).toEqual(["Hawk Eye"]);
+  });
+
   it("replaces a commander name as a whole word only", () => {
     const s = makeScrubber({ commander: "Al" });
     expect(s.text("Al found salt. al.")).toBe("Jameson found salt. Jameson.");

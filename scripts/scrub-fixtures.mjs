@@ -34,6 +34,9 @@ const PRIVATE_METHOD = /^(account|remoteControl)\//;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // A run of slashes or backslashes: one path separator in any spelling, JSON-escaped or not.
 const SEP = "(?:\\\\+|/)+";
+// Between the words of a multi-word name: a space, or a joiner that a file or host name uses
+// (Hawk-Eye, Hawk_Eye, Hawk.Eye, Hawk/Eye, Hawk\Eye).
+const JOIN = "[\\s._/\\\\-]";
 // Words the recordings use for roles and fields. A user or commander named like one cannot be
 // replaced as a word, so the script stops for a check by hand.
 const PROTOCOL_WORDS = new Set([
@@ -64,7 +67,11 @@ export function makeScrubber({ home, user, commander, fid, commanders = [], fids
   // names (mcp__ed-mcp__…, ed_overlay, ed_chat) are not a name either.
   const word = (s) =>
     new RegExp(
-      `(?<!__)(?<!(?<!\\\\)[\\p{L}\\p{N}])${s.trim().split(/\s+/).map(escapeRe).join("\\s+")}(?![\\p{L}\\p{N}])(?!-mcp|_overlay|_chat)`,
+      `(?<!__)(?<!(?<!\\\\)[\\p{L}\\p{N}])${s
+        .trim()
+        .split(/\s+/)
+        .map(escapeRe)
+        .join(JOIN + "+")}(?![\\p{L}\\p{N}])(?!-mcp|_overlay|_chat)`,
       "giu",
     );
   // Every commander the player has: a machine with two game accounts records either. Longest
@@ -101,7 +108,10 @@ export function makeScrubber({ home, user, commander, fid, commanders = [], fids
     const t = s.replace(/mcp__ed-mcp__|ed-mcp|ed_chat|ed_overlay|\/home\/player|F0000000/gi, " ");
     const loose = (n) =>
       new RegExp(
-        `(?<!(?<!\\\\)[\\p{L}\\p{N}])${n.split(/\s+/).map(escapeRe).join("\\s*")}(?![\\p{L}\\p{N}])`,
+        `(?<!(?<!\\\\)[\\p{L}\\p{N}])${n
+          .split(/\s+/)
+          .map(escapeRe)
+          .join(JOIN + "*")}(?![\\p{L}\\p{N}])`,
         "iu",
       );
     return [
