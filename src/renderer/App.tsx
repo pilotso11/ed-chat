@@ -50,21 +50,38 @@ function ChipButton({ chip }: { chip: Chip }) {
   );
 }
 
+function NoticeText({ text }: { text: string }) {
+  return <>{text.split("`").map((p, i) => (i % 2 ? <code key={i}>{p}</code> : p))}</>;
+}
+
+// Its own component: when the notice under the pointer changes to one without a command, it
+// unmounts, and the game gets its clicks back.
+function CopyableNotice({ text }: { text: string }) {
+  const target = useClickTarget();
+  return (
+    <span
+      className="notice copyable"
+      title="Click to copy the command"
+      {...target}
+      onClick={() => window.overlay.copyNotice()}
+    >
+      <NoticeText text={text} />
+    </span>
+  );
+}
+
 // A command in backticks shows as code; a click copies it. "+n" lists every notice.
 function NoticeView({ notice }: { notice: NonNullable<ViewModel["notice"]> }) {
-  const target = useClickTarget();
   const more = useClickTarget();
-  const parts = notice.text.split("`");
   return (
     <span className="notices">
-      <span
-        className={notice.command ? "notice copyable" : "notice"}
-        title={notice.command ? "Click to copy the command" : notice.text}
-        {...(notice.command ? target : {})}
-        onClick={notice.command ? () => window.overlay.copyNotice() : undefined}
-      >
-        {parts.map((p, i) => (i % 2 ? <code key={i}>{p}</code> : p))}
-      </span>
+      {notice.command ? (
+        <CopyableNotice text={notice.text} />
+      ) : (
+        <span className="notice" title={notice.text}>
+          <NoticeText text={notice.text} />
+        </span>
+      )}
       {notice.more > 0 && (
         <button
           className="more-notices"

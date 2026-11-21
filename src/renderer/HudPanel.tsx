@@ -17,12 +17,11 @@ export function HudPanel() {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const report = () => {
+    // Observing reports the first size too.
+    const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
       window.overlay.reportHudSize(r.width, r.height);
-    };
-    report();
-    const ro = new ResizeObserver(report);
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);

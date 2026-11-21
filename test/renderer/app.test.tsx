@@ -131,6 +131,16 @@ describe("notices", () => {
 });
 
 describe("click targets", () => {
+  it("gives the clicks back when the hovered notice loses its command", () => {
+    const { $, overlay } = setup({
+      notice: { text: "Run `npx ed-mcp setup`", command: "npx ed-mcp setup", more: 0 },
+    });
+    fireEvent.mouseEnter($(".notice")!);
+    expect(overlay.hover.mock.calls).toEqual([[true]]);
+    overlay.view(baseView({ notice: { text: "copied Sol", command: null, more: 0 } }));
+    expect(overlay.hover.mock.calls).toEqual([[true], [false]]);
+  });
+
   it("takes clicks while any nested target is hovered", () => {
     const { $, overlay } = setup({
       mode: "card",
@@ -399,7 +409,8 @@ describe("hotkeys while the overlay has focus", () => {
     // jsdom reports AltGr as typed: what the overlay must leave alone.
     expect(altGr.getModifierState("AltGraph")).toBe(true);
     window.dispatchEvent(altGr);
-    fireEvent.keyDown(window, { key: "x", code: "KeyX" });
+    // fireEvent returns false when the event was cancelled.
+    expect(fireEvent.keyDown(window, { key: "x", code: "KeyX" })).toBe(true);
     expect(overlay.chord).not.toHaveBeenCalled();
     expect(altGr.defaultPrevented).toBe(false);
   });
