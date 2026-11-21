@@ -182,6 +182,8 @@ const resolvers: Record<AgentId, (p: string | null) => ResolvedCommand | null> =
 };
 
 interface Plan {
+  /** The provider's --run name, unique where its display name may not be. */
+  providerKey: string | null;
   agent: AgentId;
   model: string | null;
   cli: ResolvedCommand | null;
@@ -218,6 +220,7 @@ const plans: Plan[] = specs.map(({ agent, model, provider }) => ({
   model: model ?? settings[agent].model,
   cli: resolvers[agent](settings[agent].path),
   provider: provider ? providers.get(provider)! : null,
+  providerKey: provider ?? null,
 }));
 
 /**
@@ -411,7 +414,7 @@ try {
     onSettled: () => {},
   });
 
-  for (const { agent, model, cli, provider } of plans) {
+  for (const { agent, model, cli, provider, providerKey } of plans) {
     if (interrupted.signal.aborted) break;
     const s = runSettings(agent, provider);
     const entry: AgentRun = {
@@ -425,7 +428,7 @@ try {
     };
     // Checked when the provider files were read: a provider run always has its endpoint.
     const endpoint = provider?.[agent]?.baseUrl;
-    if (provider) entry.via = provider.name;
+    if (providerKey) entry.via = providerKey;
     if (endpoint) entry.endpoint = endpoint;
     run.runs.push(entry);
     if (!cli) {
@@ -534,12 +537,13 @@ try {
   if (run.runs.length) {
     try {
       await mkdir(path.dirname(out), { recursive: true });
-      // A reply can quote the key (a model that prints its environment): it goes from both.
-      await writeFile(out, redactKey(buildReport(run), testKey));
-      // Each string before it is written, so a key that JSON escapes is found too.
-      const redacted = (_: string, v: unknown) =>
-        typeof v === "string" ? redactKey(v, testKey) : v;
-      await writeFile(jsonOut, JSON.stringify(run, redacted, 2) + "\n");
+      // A reply can quote the key (a model that prints its environment). Every string goes
+      // before either report is built, so escaping in Markdown or JSON cannot hide a copy.
+      const clean = JSON.parse(
+        JSON.stringify(run, (_, v: unknown) => (typeof v === "string" ? redactKey(v, testKey) : v)),
+      ) as CompareRun;
+      await writeFile(out, buildReport(clean));
+      await writeFile(jsonOut, JSON.stringify(clean, null, 2) + "\n");
       console.error(`Report: ${out}\nNumbers: ${jsonOut}`);
     } catch (err) {
       failed = true;

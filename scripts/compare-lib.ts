@@ -292,6 +292,8 @@ export function parseProvider(json: string): TestProvider {
       // The run goes to baseUrl: not to Bedrock, Vertex or another cloud of the player's.
       if (/^(CLAUDE_CODE_USE_|AWS_|CLOUD_ML_|ANTHROPIC_VERTEX_|ANTHROPIC_BEDROCK_)/i.test(k))
         throw new Error(`the provider's claude.env must not send the run elsewhere: ${k}`);
+      // A proxy or Node option could read the key or send it somewhere else.
+      if (/PROXY$|^NODE_/i.test(k)) throw new Error(`the provider's claude.env must not set ${k}`);
       env[k] = String(v);
     }
     out.claude = { baseUrl: claude.baseUrl as string, env, ...mode(claude) };
@@ -315,36 +317,63 @@ export function parseProvider(json: string): TestProvider {
 /** The provider name in the test CODEX_HOME's config.toml. */
 const CODEX_TEST_PROVIDER = "ed-chat-test";
 
-// The player's login, routing and model variables, which a run through a provider must not
-// use: another key or base URL, Bedrock or Vertex instead of the endpoint, or their own model
-// names. Matched by prefix, so a variable added in a later CLI release goes too.
-// CLAUDE_CODE_* also holds the player's tuning (output and thinking limits, effort) and, when
-// the script runs inside Claude Code, that session's own variables.
-const LOGIN_PREFIXES = [
-  "ANTHROPIC_",
-  "CLAUDE_CODE_",
-  "CLAUDE_CONFIG_DIR",
-  "MAX_THINKING_TOKENS",
-  "API_TIMEOUT_MS",
-  "DISABLE_PROMPT_CACHING",
-  "CLOUD_ML_REGION",
-  "AWS_BEARER_TOKEN_BEDROCK",
-  "OPENAI_",
-  "CODEX_",
-  "AZURE_OPENAI_",
-];
-// Where Claude Code finds Git Bash on Windows: a path, not a login or a choice of model.
-const KEEP_VARS = ["CLAUDE_CODE_GIT_BASH_PATH"];
-const isLoginVar = (name: string) => {
+// What a run through a provider takes from the player's environment: an allow list, so a
+// login, routing, model or tuning variable of the player's, or one a later CLI release adds,
+// never reaches it. Only what Windows, Node, npx (for ed-mcp), the network and Git Bash need.
+const ALLOWED_VARS = new Set([
+  // Windows
+  "PATH",
+  "PATHEXT",
+  "SYSTEMROOT",
+  "SYSTEMDRIVE",
+  "WINDIR",
+  "COMSPEC",
+  "OS",
+  "PROCESSOR_ARCHITECTURE",
+  "NUMBER_OF_PROCESSORS",
+  "COMPUTERNAME",
+  "PROGRAMDATA",
+  "PROGRAMFILES",
+  "PROGRAMFILES(X86)",
+  "PROGRAMW6432",
+  "COMMONPROGRAMFILES",
+  "COMMONPROGRAMFILES(X86)",
+  "ALLUSERSPROFILE",
+  "PUBLIC",
+  // The user's folders
+  "USERPROFILE",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "HOME",
+  "USERNAME",
+  "USER",
+  "LOGNAME",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+  "SHELL",
+  "LANG",
+  "TERM",
+  // The network: a proxy or company CA the machine needs to reach the endpoint
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "NODE_EXTRA_CA_CERTS",
+  "SSL_CERT_FILE",
+  // Where Claude Code finds Git Bash on Windows
+  "CLAUDE_CODE_GIT_BASH_PATH",
+]);
+const isAllowedVar = (name: string) => {
   const n = name.toUpperCase();
-  return !KEEP_VARS.includes(n) && LOGIN_PREFIXES.some((p) => n.startsWith(p));
+  return ALLOWED_VARS.has(n) || n.startsWith("LC_");
 };
 
 /**
  * The environment for a CLI run through a provider. home is an empty folder that becomes the
  * CLI's config folder, so it finds none of the player's login, settings or history, and writes
- * nothing to theirs. Windows names are case-insensitive, so the player's own login variables
- * go whatever their case.
+ * nothing to theirs. Of the player's own environment it gets only ALLOWED_VARS.
  */
 export function testProviderEnv(
   agent: AgentId,
@@ -354,15 +383,16 @@ export function testProviderEnv(
   env: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
-  for (const [k, v] of Object.entries(withoutTestKey(env))) if (!isLoginVar(k)) out[k] = v;
+  for (const [k, v] of Object.entries(env)) if (isAllowedVar(k)) out[k] = v;
   if (agent === "claude") {
     const c = provider.claude;
     if (!c) throw new Error(`${provider.name} has no claude endpoint`);
     return {
       ...out,
-      // No update checks or telemetry to Anthropic: the run talks to the provider only.
-      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
       ...c.env,
+      // No update checks or telemetry to Anthropic: the run talks to the provider only. After
+      // the provider's own values, so it cannot turn them back on.
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
       CLAUDE_CONFIG_DIR: home,
       ANTHROPIC_BASE_URL: c.baseUrl,
       // The only place the key goes for Claude.

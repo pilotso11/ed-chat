@@ -189,6 +189,10 @@ describe("providers", () => {
       parseProvider(JSON.stringify({ claude: { baseUrl: "http://localhost:4000" } })).claude
         ?.baseUrl,
     ).toBe("http://localhost:4000");
+    for (const name of ["HTTPS_PROXY", "NODE_OPTIONS"])
+      expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "x" } } })).toThrow(
+        /must not set/,
+      );
     for (const name of ["CLAUDE_CODE_USE_BEDROCK", "AWS_REGION", "ANTHROPIC_VERTEX_PROJECT_ID"])
       expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "1" } } })).toThrow(
         /elsewhere/,
@@ -237,6 +241,9 @@ describe("providers", () => {
     CLAUDE_CODE_USE_BEDROCK: "1",
     CLAUDE_CODE_SUBAGENT_MODEL: "player-subagent",
     CLAUDE_CODE_MESSAGING_TOKEN: "parent-session",
+    CLAUDECODE: "1",
+    MCP_TIMEOUT: "99",
+    Https_Proxy: "http://proxy:8080",
     MAX_THINKING_TOKENS: "64000",
     CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe",
     ANTHROPIC_MODEL: "player-model",
@@ -255,8 +262,9 @@ describe("providers", () => {
       PATH: "C:\\bin",
       // Kept: where Claude Code finds Git Bash, not a login.
       CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe",
-      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+      Https_Proxy: "http://proxy:8080",
       ANTHROPIC_DEFAULT_SONNET_MODEL: "glm",
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
       CLAUDE_CONFIG_DIR: "T:\\claude-home",
       ANTHROPIC_BASE_URL: "https://a.example/anthropic",
       ANTHROPIC_AUTH_TOKEN: "k1",
@@ -267,6 +275,7 @@ describe("providers", () => {
     expect(testProviderEnv("codex", provider, "k2", "T:\\codex-home", playerEnv)).toEqual({
       PATH: "C:\\bin",
       CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe",
+      Https_Proxy: "http://proxy:8080",
       CODEX_HOME: "T:\\codex-home",
       [TEST_KEY_ENV]: "k2",
     });
