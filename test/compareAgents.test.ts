@@ -216,6 +216,9 @@ describe("providers", () => {
     );
     expect(parse({ codex: { baseUrl: "https://b.example", models: {} } })).toThrow(/not a list/);
     expect(parse({ codex: { baseUrl: "https://b.example", models: [] } })).toThrow(/not a list/);
+    expect(
+      parse({ codex: { baseUrl: "https://b.example", models: [{ name: "glm-5.3" }] } }),
+    ).toThrow(/not a list/);
     expect(parse({ codex: { baseUrl: "https://b.example", models: ["glm"] } })).toThrow(
       /not a list/,
     );

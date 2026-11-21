@@ -303,7 +303,14 @@ export function parseProvider(json: string): TestProvider {
       models !== null &&
       (!Array.isArray(models) ||
         !models.length ||
-        models.some((m) => typeof m !== "object" || m === null || Array.isArray(m)))
+        // Codex finds a model by its slug, and the script checks --run's model against it.
+        models.some(
+          (m) =>
+            typeof m !== "object" ||
+            m === null ||
+            Array.isArray(m) ||
+            typeof (m as { slug?: unknown }).slug !== "string",
+        ))
     )
       throw new Error("the provider's codex.models is not a list of models");
     out.codex = { baseUrl: codex.baseUrl as string, models, ...mode(codex) };
@@ -328,25 +335,22 @@ const ALLOWED_VARS = new Set([
   "COMSPEC",
   "OS",
   "PROCESSOR_ARCHITECTURE",
+  "PROCESSOR_IDENTIFIER",
   "NUMBER_OF_PROCESSORS",
   "COMPUTERNAME",
+  "USERDOMAIN",
+  "PSMODULEPATH",
   "PROGRAMDATA",
   "PROGRAMFILES",
   "PROGRAMFILES(X86)",
+  "PROGRAMFILES(ARM)",
   "PROGRAMW6432",
   "COMMONPROGRAMFILES",
   "COMMONPROGRAMFILES(X86)",
+  "COMMONPROGRAMW6432",
   "ALLUSERSPROFILE",
   "PUBLIC",
-  "USERDOMAIN",
-  "PROCESSOR_IDENTIFIER",
-  "PSMODULEPATH",
-  "COMMONPROGRAMW6432",
-  "PROGRAMFILES(ARM)",
-  "XDG_RUNTIME_DIR",
-  "XDG_CONFIG_HOME",
-  "XDG_DATA_HOME",
-  // The user's folders
+  // The user's folders and session
   "USERPROFILE",
   "HOMEDRIVE",
   "HOMEPATH",
@@ -362,19 +366,23 @@ const ALLOWED_VARS = new Set([
   "SHELL",
   "LANG",
   "TERM",
+  // Linux and macOS folders
+  "XDG_RUNTIME_DIR",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_CACHE_HOME",
   // The network: a proxy or company CA the machine needs to reach the endpoint
   "HTTP_PROXY",
   "HTTPS_PROXY",
+  "ALL_PROXY",
   "NO_PROXY",
   "NODE_EXTRA_CA_CERTS",
   "SSL_CERT_FILE",
   "SSL_CERT_DIR",
-  "ALL_PROXY",
   "REQUESTS_CA_BUNDLE",
   "CURL_CA_BUNDLE",
-  "XDG_CACHE_HOME",
-  "NVM_DIR",
   // Node version managers, for node and npx (ed-mcp)
+  "NVM_DIR",
   "NVM_HOME",
   "NVM_SYMLINK",
   "VOLTA_HOME",
