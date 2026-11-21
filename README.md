@@ -366,7 +366,9 @@ conversation, ED Chat still resumes it, but the history view starts empty.
   `coverage/`.
 - `npm run test:e2e`: builds the app, then runs the Playwright tests in `e2e/`. They start
   ED Chat in Electron with a fake Claude CLI and temporary folders, so they do not touch your
-  settings, your journal or your Claude login.
+  settings, your journal or your Claude login. Its windows do show on screen, over whatever is
+  in front, so the tests refuse to run while Elite is running; set `E2E_FORCE=1` to run them
+  anyway. `npm run check` does not run them.
 
 CI runs `npm run check`, then the Playwright tests on the app that its installer build made,
 and shows the coverage summary on each run. The release workflow attaches `coverage.json`

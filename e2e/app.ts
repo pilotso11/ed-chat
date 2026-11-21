@@ -14,6 +14,11 @@ export interface TestApp {
   hud: Page;
   /** The Elite journal folder the app reads. */
   journalDir: string;
+  /**
+   * With holdVersion, the fake CLI holds its --version answer until this is called; it resolves
+   * once the answer is written, plus a moment for the app to handle it.
+   */
+  releaseVersion(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -23,13 +28,14 @@ export interface TestApp {
  * nothing reaches the player's own setup or an API.
  */
 export async function launch(
-  opts: { fixture?: string; journal?: object[]; versionDelayMs?: number } = {},
+  opts: { fixture?: string; journal?: object[]; holdVersion?: boolean } = {},
 ): Promise<TestApp> {
   const root = await mkdtemp(path.join(tmpdir(), "edchat-e2e-"));
   const home = path.join(root, "home");
   const appData = path.join(home, "AppData", "Roaming");
   const localAppData = path.join(home, "AppData", "Local");
   const journalDir = path.join(root, "journal");
+  const versionGate = path.join(root, "version-gate");
   const dataDir = path.join(appData, "ed-chat");
   for (const d of [localAppData, journalDir, dataDir]) await mkdir(d, { recursive: true });
 
@@ -87,7 +93,7 @@ export async function launch(
     // Only Windows' own folders, so no installed Claude or Codex is found on PATH.
     PATH: [`${systemRoot}\\System32`, systemRoot].join(";"),
     FAKE_VERSION: TESTED_CLI_VERSION,
-    FAKE_VERSION_DELAY_MS: String(opts.versionDelayMs ?? 0),
+    ...(opts.holdVersion ? { FAKE_VERSION_GATE: versionGate } : {}),
     FAKE_FIXTURE: path.join(
       ROOT,
       "test",
@@ -111,7 +117,10 @@ export async function launch(
   try {
     await app.evaluate((_e, file) => {
       const fs = process.getBuiltinModule("node:fs");
-      process.on("uncaughtException", (err) => fs.appendFileSync(file, `${err.stack ?? err}\n`));
+      const record = (err: unknown) =>
+        fs.appendFileSync(file, `${err instanceof Error ? err.stack : String(err)}\n`);
+      process.on("uncaughtException", record);
+      process.on("unhandledRejection", record);
     }, errorFile);
     // Electron finds the roaming AppData folder from the profile (USERPROFILE), not from
     // APPDATA, so this checks that the app's data really is in the temporary folder.
@@ -137,12 +146,27 @@ export async function launch(
       chat,
       hud,
       journalDir,
+      async releaseVersion() {
+        await writeFile(versionGate, "");
+        const deadline = Date.now() + 10_000;
+        const answered = () =>
+          readFile(`${versionGate}.done`).then(
+            () => true,
+            () => false,
+          );
+        while (!(await answered())) {
+          if (Date.now() > deadline) throw new Error("the fake CLI never answered --version");
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      },
       async close() {
         let errors = "";
         try {
           await app.close();
-          errors = await readFile(errorFile, "utf8").catch(() => "");
         } finally {
+          // Read even when closing failed: the errors may say why.
+          errors = await readFile(errorFile, "utf8").catch(() => "");
           // A folder Windows still holds must not fail a test that passed.
           await cleanUp().catch(() => {});
         }

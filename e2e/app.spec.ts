@@ -78,13 +78,14 @@ test("shows the activity panel for a body being sampled", async () => {
 
 test("survives the Claude version check answering after the windows are gone", async () => {
   // Quitting closes the windows first; a CLI answering in between must not draw to them. The
-  // windows are destroyed here with the app still running, so the late answer always lands.
-  // close() fails on any main-process error, such as drawing to a destroyed window.
-  t = await launch({ versionDelayMs: 1_500 });
+  // fake holds its answer until the windows are destroyed, with the app still running, so the
+  // late answer always lands. close() fails on any main-process error, such as drawing to a
+  // destroyed window.
+  t = await launch({ holdVersion: true });
   await t.app.evaluate(({ app, BrowserWindow }) => {
     // Kept running, as a slow quit is, instead of quitting with the last window.
     app.on("window-all-closed", () => {});
     for (const w of BrowserWindow.getAllWindows()) w.destroy();
   });
-  await new Promise((r) => setTimeout(r, 3_000));
+  await t.releaseVersion();
 });

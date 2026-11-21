@@ -336,7 +336,7 @@ async function main(): Promise<void> {
   let dragging = false;
 
   function reposition(): void {
-    if (dragging) return;
+    if (dragging || windowsGone()) return;
     const display = chooseDisplay(
       screen.getAllDisplays(),
       screen.getPrimaryDisplay(),
@@ -363,6 +363,7 @@ async function main(): Promise<void> {
   let dragTimer: NodeJS.Timeout | undefined;
   function finishDrag(): void {
     dragging = false;
+    if (windowsGone()) return;
     const b = win.getBounds();
     // No real move: apply any height change that waited for the drag.
     if (placed && b.x === placed.x && b.y === placed.y) return reposition();
@@ -399,6 +400,7 @@ async function main(): Promise<void> {
   // Focus and topmost.
   const win32 = process.platform === "win32" ? loadWin32() : null;
   const overlayHwnd = () => {
+    if (win.isDestroyed()) return 0;
     const b = win.getNativeWindowHandle();
     return b.length >= 8 ? Number(b.readBigUInt64LE()) : b.readUInt32LE();
   };
@@ -1581,7 +1583,15 @@ async function main(): Promise<void> {
   // After the first foreground check, so the list shows which keys other apps hold.
   if (settings.startup.showKeys) setTimeout(showKeys, 1_000);
 
-  app.on("will-quit", () => {
+  // Everything that could still reach the windows stops as soon as quitting starts, or as soon
+  // as a window closes: will-quit comes only after the windows are gone. Once only.
+  let stopped = false;
+  function shutDown(): void {
+    if (stopped) return;
+    stopped = true;
+    clearTimeout(dragTimer);
+    screen.off("display-removed", placeAll);
+    screen.off("display-metrics-changed", placeAll);
     trayIcon.destroy();
     globalShortcut.unregisterAll();
     focus?.stop();
@@ -1590,5 +1600,9 @@ async function main(): Promise<void> {
     settingsStore.unwatch();
     session?.stop();
     void approval.stop();
-  });
+  }
+  app.on("before-quit", shutDown);
+  win.on("closed", shutDown);
+  hudWin.on("closed", shutDown);
+  app.on("will-quit", shutDown);
 }
