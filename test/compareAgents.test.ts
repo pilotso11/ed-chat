@@ -13,6 +13,7 @@ import {
   median,
   parseArgs,
   parseProvider,
+  redactKey,
   providerHomesDir,
   parseQuestions,
   summarizeRun,
@@ -122,6 +123,23 @@ describe("providers", () => {
     expect(parseArgs(["--provider"], defaults)).toMatchObject({ ok: false });
   });
 
+  it("keeps an @ in a model id that names no provider, and takes any file name", () => {
+    const runs = (...argv: string[]) => {
+      const r = parseArgs(argv, defaults);
+      return r.ok ? r.options.runs : r.error;
+    };
+    expect(runs("--run", "claude:claude-sonnet-4@20250514")).toEqual([
+      { agent: "claude", model: "claude-sonnet-4@20250514" },
+    ]);
+    expect(runs("--provider", "zai.json", "--run", "claude:claude-sonnet-4@20250514@zai")).toEqual([
+      { agent: "claude", model: "claude-sonnet-4@20250514", provider: "zai" },
+    ]);
+    // --provider after --run, and a file name with a space.
+    expect(runs("--run", "codex:glm@my zai", "--provider", "dir/my zai.json")).toEqual([
+      { agent: "codex", model: "glm", provider: "my zai" },
+    ]);
+  });
+
   it("refuses an unknown provider, an unused one, two of one name, and Codex with no model", () => {
     const err = (...argv: string[]) => {
       const r = parseArgs(argv, defaults);
@@ -182,6 +200,11 @@ describe("providers", () => {
   };
   const playerEnv = {
     PATH: "C:\\bin",
+    CLAUDE_CODE_USE_BEDROCK: "1",
+    ANTHROPIC_MODEL: "player-model",
+    AWS_BEARER_TOKEN_BEDROCK: "player-bedrock",
+    OPENAI_ORG_ID: "player-org",
+    [TEST_KEY_ENV]: "k-from-shell",
     ANTHROPIC_API_KEY: "player-anthropic",
     Claude_Config_Dir: "C:\\Users\\p\\.claude-alt",
     CLAUDE_CODE_OAUTH_TOKEN: "player-oauth",
@@ -219,6 +242,13 @@ describe("providers", () => {
     expect(providerHomesDir({}, "/home/p", "linux", "run1")).toBe(
       "/home/p/.cache/ed-chat-compare/run1",
     );
+  });
+
+  it("takes the key out of every copy in a report", () => {
+    expect(redactKey("env: KEY=sk.1 and again sk.1", "sk.1")).toBe(
+      "env: KEY=<key> and again <key>",
+    );
+    expect(redactKey("no key here", "")).toBe("no key here");
   });
 
   it("writes a Codex provider that reads the key from the environment, not the file", () => {

@@ -42,6 +42,7 @@ import {
   parseProvider,
   providerHomesDir,
   providerName,
+  redactKey,
   type TestProvider,
   type RunSpec,
   buildReport,
@@ -194,6 +195,13 @@ for (const file of opts.providers) {
     process.exit(2);
   }
 }
+// A run through a provider never falls back to the player's own login, so one the provider
+// cannot serve stops the comparison here, before any tokens are spent.
+for (const { agent, provider } of specs)
+  if (provider && !providers.get(provider)![agent]) {
+    console.error(`--run ${agent}@${provider}: ${provider} has no ${agent} endpoint`);
+    process.exit(2);
+  }
 const testKey = process.env[TEST_KEY_ENV]?.trim() ?? "";
 if (providers.size && !testKey && !opts.dryRun) {
   console.error(`--provider was given: set ${TEST_KEY_ENV} to the provider's key.`);
@@ -239,7 +247,6 @@ if (opts.dryRun) {
     console.log(`  permission mode: ${s.permissionMode}`);
     console.log(`  ed-mcp: ${edMcpNote}`);
     const endpoint = provider?.[agent]?.baseUrl;
-    if (provider && !endpoint) console.log(`  skipped: ${provider.name} has no ${agent} endpoint`);
     if (endpoint)
       console.log(
         `  endpoint: ${provider!.name}, ${endpoint}, key from ${TEST_KEY_ENV}` +
@@ -251,13 +258,13 @@ if (opts.dryRun) {
   process.exit(0);
 }
 
-function cliVersion(cli: ResolvedCommand): Promise<string | null> {
+function cliVersion(cli: ResolvedCommand, env?: NodeJS.ProcessEnv): Promise<string | null> {
   return new Promise((resolve) => {
     const file = cli.shell ? quoteForCmd(cli.command) : cli.command;
     execFile(
       file,
       ["--version"],
-      { shell: cli.shell, windowsHide: true, timeout: 15_000 },
+      { shell: cli.shell, windowsHide: true, timeout: 15_000, env: env ?? process.env },
       (err, stdout) => resolve(err ? null : (parseCliVersion(stdout)?.join(".") ?? null)),
     );
   });
@@ -393,11 +400,6 @@ try {
   for (const { agent, model, cli, provider } of plans) {
     if (interrupted.signal.aborted) break;
     const s = runSettings(agent, provider);
-    // A fresh copy for each run: a settings change by one assistant must not carry over to
-    // the next, which would then find the change already made.
-    await writeFile(settingsFile, settingsText ?? newSettingsText());
-    // And ed-mcp's data, so a plan or note saved in one run is not there in the next.
-    await copyEdMcpData();
     const entry: AgentRun = {
       agent,
       model,
@@ -407,22 +409,21 @@ try {
       edMcp: edMcpNote,
       results: [],
     };
+    // Checked when the provider files were read: a provider run always has its endpoint.
     const endpoint = provider?.[agent]?.baseUrl;
     if (provider) entry.via = provider.name;
     if (endpoint) entry.endpoint = endpoint;
-    // A run through a provider never falls back to the player's own login.
-    if (provider && !endpoint) {
-      entry.skipped = `${provider.name} has no ${agent} endpoint`;
-      console.error(`${agent}: ${entry.skipped}, skipped`);
-      continue;
-    }
     run.runs.push(entry);
     if (!cli) {
       entry.skipped = "not installed";
       console.error(`${agent}: not installed, skipped`);
       continue;
     }
-    entry.version = await cliVersion(cli);
+    // A fresh copy for each run: a settings change by one assistant must not carry over to
+    // the next, which would then find the change already made.
+    await writeFile(settingsFile, settingsText ?? newSettingsText());
+    // And ed-mcp's data, so a plan or note saved in one run is not there in the next.
+    await copyEdMcpData();
     // Through a test endpoint: an empty config folder for the CLI, fresh for each run, so
     // nothing of the player's login, settings or history is read, and nothing is written there.
     let env: NodeJS.ProcessEnv | undefined;
@@ -444,6 +445,8 @@ try {
       }
       env = testProviderEnv(agent, provider, testKey, home, process.env);
     }
+    // With the run's environment, so a provider run does not touch the player's config folder.
+    entry.version = await cliVersion(cli, env);
     let session: AgentBackend;
     if (agent === "claude") {
       approvalServer = new ApprovalServer(broker);
@@ -512,8 +515,9 @@ try {
   if (run.runs.length) {
     try {
       await mkdir(path.dirname(out), { recursive: true });
-      await writeFile(out, buildReport(run));
-      await writeFile(jsonOut, JSON.stringify(run, null, 2) + "\n");
+      // A reply can quote the key (a model that prints its environment): it goes from both.
+      await writeFile(out, redactKey(buildReport(run), testKey));
+      await writeFile(jsonOut, redactKey(JSON.stringify(run, null, 2), testKey) + "\n");
       console.error(`Report: ${out}\nNumbers: ${jsonOut}`);
     } catch (err) {
       failed = true;

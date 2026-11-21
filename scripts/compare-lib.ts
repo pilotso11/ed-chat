@@ -26,7 +26,8 @@ Options:
                         models, for example --run claude:sonnet --run claude:opus --run codex.
                         Without a model, the model in ED Chat's settings is used. With
                         @provider, the run goes through that provider (see --provider), for
-                        example --run claude@zai --run codex:glm-5.3@zai.
+                        example --run claude@zai --run codex:glm-5.3@zai. An @ that does not
+                        name a --provider is part of the model, as in claude:model@20250514.
   --provider <file>     A third-party endpoint that --run <agent>@<name> can use instead of the
                         player's own login; <name> is the file name without .json, for example
                         scripts/providers/zai.json gives zai. Give it more than once for more
@@ -38,16 +39,6 @@ Options:
   --out <file>          The Markdown report (default in the temp folder). The raw numbers go
                         next to it, with .json. It must be outside the repo.
   --timeout <seconds>   How long one reply may take (default 300).
-  --questions <file>    A JSON list of { "topic", "text" } (default scripts/compare-questions.json).
-  --out <file>          The Markdown report (default in the temp folder). The raw numbers go
-                        next to it, with .json. It must be outside the repo.
-  --timeout <seconds>   How long one reply may take (default 300).
-  --provider <file>     Run the assistants through a third-party endpoint instead of the
-                        player's own login, for example scripts/providers/zai.json. Its key is
-                        read from ED_CHAT_TEST_API_KEY. Each CLI gets an empty config folder of
-                        its own in the temp folder: the player's login, settings and history
-                        are not read or changed. An assistant the file does not name is
-                        skipped. Codex needs a model then: --run codex:<model>.
   --dry-run             Print what would run, and start no CLI.
   --help                Show this message.`;
 
@@ -118,7 +109,9 @@ export function parseArgs(
       }
       case "--run": {
         const v = value();
-        const m = v ? /^(claude|codex)(?::([^@]+))?(?:@([\w.-]+))?$/.exec(v) : null;
+        // The provider is split off after all --provider files are known: a model id can
+        // hold an @ too (claude-sonnet-4@20250514).
+        const m = v ? /^(claude|codex)(?::(.+)|@(.+))?$/.exec(v) : null;
         if (!m)
           return {
             ok: false,
@@ -164,6 +157,11 @@ export function parseArgs(
   const dup = names.find((n, i) => names.indexOf(n) !== i);
   if (dup) return { ok: false, error: `two --provider files are named ${dup}` };
   for (const r of o.runs ?? []) {
+    const at = r.model?.lastIndexOf("@") ?? -1;
+    if (r.model && at > 0 && names.includes(r.model.slice(at + 1))) {
+      r.provider = r.model.slice(at + 1);
+      r.model = r.model.slice(0, at);
+    }
     if (r.provider && !names.includes(r.provider))
       return {
         ok: false,
@@ -286,18 +284,24 @@ export function parseProvider(json: string): TestProvider {
 /** The provider name in the test CODEX_HOME's config.toml. */
 const CODEX_TEST_PROVIDER = "ed-chat-test";
 
-// The player's login and config locations, which a run through a provider must not use.
-const LOGIN_VARS = new Set([
-  "ANTHROPIC_API_KEY",
-  "ANTHROPIC_AUTH_TOKEN",
-  "ANTHROPIC_BASE_URL",
-  "CLAUDE_CODE_OAUTH_TOKEN",
+// The player's login, routing and model variables, which a run through a provider must not
+// use: another key or base URL, Bedrock or Vertex instead of the endpoint, or their own model
+// names. Matched by prefix, so a variable added in a later CLI release goes too.
+const LOGIN_PREFIXES = [
+  "ANTHROPIC_",
+  "CLAUDE_CODE_USE_",
+  "CLAUDE_CODE_OAUTH",
   "CLAUDE_CONFIG_DIR",
-  "CODEX_API_KEY",
-  "CODEX_HOME",
-  "OPENAI_API_KEY",
-  "OPENAI_BASE_URL",
-]);
+  "CLOUD_ML_REGION",
+  "AWS_BEARER_TOKEN_BEDROCK",
+  "OPENAI_",
+  "CODEX_",
+  "AZURE_OPENAI_",
+];
+const isLoginVar = (name: string) => {
+  const n = name.toUpperCase();
+  return LOGIN_PREFIXES.some((p) => n.startsWith(p));
+};
 
 /**
  * The environment for a CLI run through a provider. home is an empty folder that becomes the
@@ -313,7 +317,8 @@ export function testProviderEnv(
   env: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
-  for (const [k, v] of Object.entries(env)) if (!LOGIN_VARS.has(k.toUpperCase())) out[k] = v;
+  for (const [k, v] of Object.entries(env))
+    if (!isLoginVar(k) && k.toUpperCase() !== TEST_KEY_ENV) out[k] = v;
   if (agent === "claude") {
     const c = provider.claude;
     if (!c) throw new Error(`${provider.name} has no claude endpoint`);
@@ -324,11 +329,18 @@ export function testProviderEnv(
       ...c.env,
       CLAUDE_CONFIG_DIR: home,
       ANTHROPIC_BASE_URL: c.baseUrl,
+      // The only place the key goes for Claude.
       ANTHROPIC_AUTH_TOKEN: key,
     };
   }
   if (!provider.codex) throw new Error(`${provider.name} has no codex endpoint`);
+  // config.toml's env_key names this variable, so Codex reads the key from it.
   return { ...out, CODEX_HOME: home, [TEST_KEY_ENV]: key };
+}
+
+/** text with every copy of key replaced, so a reply that quotes the key keeps it out of a report. */
+export function redactKey(text: string, key: string): string {
+  return key ? text.split(key).join("<key>") : text;
 }
 
 /**
