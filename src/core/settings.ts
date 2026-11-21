@@ -60,7 +60,7 @@ const positionSchema = (anchor: Anchor, offsetY: number) =>
 export const PositionSchema = positionSchema("bottom-left", 24);
 export type Position = z.infer<typeof PositionSchema>;
 
-export const HUD_MODES = ["massacre", "exploration", "exobiology", "route"] as const;
+export const HUD_MODES = ["massacre", "exploration", "exobiology", "mining", "route"] as const;
 export type HudModeId = (typeof HUD_MODES)[number];
 
 const HudSchema = z.strictObject({
@@ -74,6 +74,7 @@ const HudSchema = z.strictObject({
       massacre: z.boolean().default(true),
       exploration: z.boolean().default(true),
       exobiology: z.boolean().default(true),
+      mining: z.boolean().default(true),
       route: z.boolean().default(true),
     })
     .prefault({}),
@@ -86,6 +87,28 @@ const HudSchema = z.strictObject({
   // Planets with biological signals worth less than this are left off the exploration panel.
   // Before the species are known, a planet is judged by the least its genera can be worth.
   bioMin: z.number().int().min(0).default(5_000_000),
+  mining: z
+    .strictObject({
+      // The least percentage of each commodity in a prospected rock that is worth mining.
+      targets: z.record(z.string().min(1), z.number().min(0).max(100)).default({
+        Platinum: 20,
+        Painite: 25,
+        Osmium: 25,
+        "Low Temperature Diamonds": 25,
+        Bromellite: 25,
+        Tritium: 30,
+      }),
+      // Sell from your fleet carrier: buyers are searched around the carrier, for what is in the
+      // hold and what was moved to the carrier this session.
+      useCarrier: z.boolean().default(false),
+      // Include other players' fleet carriers as buyers.
+      carrierMarkets: z.boolean().default(false),
+      sellRadiusLy: z.number().positive().max(1000).default(100),
+      carrierRadiusLy: z.number().positive().max(1000).default(500),
+      // Buyers whose Spansh market data is older than this are left out.
+      maxPriceAgeDays: z.number().positive().max(90).default(7),
+    })
+    .prefault({}),
   // The ed-mcp sync folder, for the activity note and plans. null: read it from the ed-mcp
   // that the assistant runs (edMcp.ts), else ed-mcp's own config folder.
   edMcpDataDir: z.string().min(1).nullable().default(null),

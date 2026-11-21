@@ -111,6 +111,7 @@ import {
 } from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
+import { SellPrices, postSpansh } from "../core/hud/sell.js";
 import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
@@ -498,6 +499,12 @@ async function main(): Promise<void> {
   // Activity panel.
   let hudSize = { width: 0, height: 0 };
   let hudData: FeedData | null = null;
+  // Where to sell mined cargo, searched on Spansh only while the mining panel shows.
+  const sellPrices = new SellPrices(postSpansh, {
+    onError: (m) => log.log("warn", `panel spansh prices: ${m}`),
+  });
+  // The panel's last copy for the galaxy map, so each is copied once.
+  let hudCopied: string | null = null;
   // The panel's last view, for the game note sent with each message.
   let lastHudView: HudView | null = null;
   // When the feed last read the game, so a note is never sent from a stopped feed.
@@ -546,6 +553,9 @@ async function main(): Promise<void> {
       hotkey: hudChoice(),
       settings: settings.hud,
       now: Date.now(),
+      sell: settings.hud.spansh
+        ? (q: Parameters<SellPrices["get"]>[0]) => sellPrices.get(q)
+        : undefined,
     };
     const k = settings.hotkeys;
     const first = (x: Parameters<typeof keyList>[0]) => keyList(x)[0];
@@ -554,6 +564,13 @@ async function main(): Promise<void> {
       : null;
     const view = buildHud(input, moveHint);
     lastHudView = view;
+    const copy = view.panel?.copy ?? null;
+    const copyId = copy ? `${copy.key}|${copy.text}` : null;
+    if (copy && copyId !== hudCopied) {
+      clipboard.writeText(copy.text);
+      flash("copy", `📋 ${copy.note}`, 6_000);
+    }
+    hudCopied = copyId;
     const mode = String(currentMode(input));
     if (mode !== hudMode) {
       hudMode = mode;

@@ -10,6 +10,20 @@ export const HUD_EVENTS = [
   "MultiSellExplorationData",
   "NavRoute",
   "NavRouteClear",
+  // Mining and the fleet carrier.
+  "ProspectedAsteroid",
+  "MiningRefined",
+  "AsteroidCracked",
+  "LaunchDrone",
+  "SupercruiseExit",
+  "MarketBuy",
+  "MarketSell",
+  "CargoTransfer",
+  "CarrierBuy",
+  "CarrierStats",
+  "CarrierLocation",
+  "CarrierJumpRequest",
+  "CarrierJumpCancelled",
 ] as const;
 
 export interface Choice {
@@ -37,20 +51,29 @@ export const LAPSE_JUMPS = 5;
 /**
  * The mode the journal asks for, and when it asked. Massacre missions turn on massacre mode;
  * a discovery scan or a detailed scan turns on exploration; a body with biological signals, or
- * a bio sample, turns on exobiology. A jump alone starts nothing, and LAPSE_JUMPS jumps with no
- * scan end exploration.
+ * a bio sample, turns on exobiology; a prospector, a prospect, refining or a cracked asteroid
+ * turns on mining. A jump alone starts nothing, and LAPSE_JUMPS jumps with no scan end
+ * exploration. A jump ends mining unless mined cargo is still aboard, to sell.
  * `massacreActive` is whether a massacre mission is still open now (from ed-mcp's massacre()).
+ * `minedAboard` is whether the hold has mined commodities now.
  */
-export function journalMode(events: JournalEvent[], massacreActive: boolean): Choice | null {
+export function journalMode(
+  events: JournalEvent[],
+  massacreActive: boolean,
+  minedAboard = false,
+): Choice | null {
   const bio = new Set<string>();
   // Exploration and exobiology, followed through every event, before and during a stack.
   // Massacre is kept apart: while a stack is open it wins, and once it is handed in this mode is
   // current, as if there had been no missions.
-  let mode: "exploration" | "exobiology" | null = null;
+  let mode: "exploration" | "exobiology" | "mining" | null = null;
   let at = 0;
   let massacreAt: number | null = null;
-  const set = (m: "exploration" | "exobiology") => {
+  // Whether the ship left the system after the last mining event.
+  let leftMining = false;
+  const set = (m: "exploration" | "exobiology" | "mining") => {
     jumps = 0;
+    leftMining = false;
     mode = m;
     at = last;
   };
@@ -63,8 +86,18 @@ export function journalMode(events: JournalEvent[], massacreActive: boolean): Ch
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     switch (e.event) {
       case "FSDJump":
-        jumps++;
+      case "CarrierJump":
+        if (e.event === "FSDJump") jumps++;
         if (mode === "exploration" && jumps >= LAPSE_JUMPS) mode = null;
+        if (mode === "mining") leftMining = true;
+        break;
+      case "ProspectedAsteroid":
+      case "MiningRefined":
+      case "AsteroidCracked":
+        set("mining");
+        break;
+      case "LaunchDrone":
+        if (e.Type === "Prospector") set("mining");
         break;
       case "MissionAccepted":
         // An acceptance with no readable time still counts, dated by the newest readable event.
@@ -93,6 +126,7 @@ export function journalMode(events: JournalEvent[], massacreActive: boolean): Ch
     }
   }
   if (massacreActive && massacreAt !== null) return { mode: "massacre", at: massacreAt };
+  if (mode === "mining" && leftMining && !minedAboard) return null;
   return mode ? { mode, at } : null;
 }
 
@@ -119,6 +153,7 @@ export function noteMode(kind: string | undefined): HudModeId | null {
     case "massacre":
     case "exploration":
     case "exobiology":
+    case "mining":
       return kind;
     default:
       return null;

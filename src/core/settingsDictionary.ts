@@ -151,6 +151,9 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "hud.modes.massacre": { text: "Massacre mission kills and stacks." },
   "hud.modes.exploration": { text: "Bodies in the system worth scanning and mapping." },
   "hud.modes.exobiology": { text: "Biological samples on the planet." },
+  "hud.modes.mining": {
+    text: "The last prospected rock, the hold and limpets, and where to sell what you mined.",
+  },
   "hud.modes.route": { text: "The stops of the current route plan." },
   "hud.valuableMin": {
     text:
@@ -160,13 +163,42 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "hud.spansh": {
     text:
       "Look up each system's planets on Spansh when you arrive, to show valuable worlds " +
-      "before they are scanned. Only the system's ID is sent.",
+      "before they are scanned, and buyers for mined cargo. Only the system's ID is sent, or " +
+      "for buyers the system name and the commodity.",
   },
   "hud.bioMin": {
     text:
       "Credits. Planets with biological signals worth less than this are left off the " +
       "exploration panel. Before the species are known, a planet is judged by the least its " +
       "genera can be worth.",
+  },
+  "hud.mining": { text: "The mining panel." },
+  "hud.mining.targets": {
+    text:
+      "The least percentage of each commodity in a prospected rock that is worth mining, by " +
+      'English commodity name, such as { "Platinum": 20 }. Other commodities are shown but ' +
+      "never marked worth mining.",
+  },
+  "hud.mining.useCarrier": {
+    text:
+      "Sell from your fleet carrier: search for buyers around the carrier, for the hold and " +
+      "what you moved to the carrier this session.",
+  },
+  "hud.mining.carrierMarkets": {
+    text: "Include other players' fleet carriers as buyers. Their prices change often.",
+  },
+  "hud.mining.sellRadiusLy": {
+    text:
+      "Light years from the ship to search for buyers on Spansh. Only the system name and the " +
+      "commodity are sent. Uses hud.spansh.",
+  },
+  "hud.mining.carrierRadiusLy": {
+    text: "Light years from the carrier to search for buyers when hud.mining.useCarrier is on.",
+  },
+  "hud.mining.maxPriceAgeDays": {
+    text:
+      "Days. Buyers whose Spansh market data is older than this are left out. A price over a " +
+      "day old shows its age.",
   },
   "hud.edMcpDataDir": {
     text: "The ed-mcp sync folder. null finds it where ed-mcp is set up for Claude Code or Codex.",

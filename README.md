@@ -187,6 +187,17 @@ front.
   Genera not started show their likely species. The system's Earth-like,
   water and ammonia worlds, terraformables and other bio planets stay listed
   below.
+- **Mining:** turns on when you launch a prospector, prospect, refine or crack
+  a rock. It shows the last prospected rock against `hud.mining.targets` (MINE or
+  skip, and any motherlode), the ring's hotspots, the hold, limpets left, tons
+  refined per hour, and what you refined this session with its likely value. It
+  also suggests where to sell what is in the hold: the best price on
+  [Spansh](https://spansh.co.uk) that has a pad for your ship and takes the whole
+  load, and a nearer station that pays at least 90% of that. When the hold fills,
+  the best buyer's system is copied for the galaxy map. With
+  `hud.mining.useCarrier`, the search is around your fleet carrier and includes
+  what you moved to it this session. After a jump, the panel stays on while mined
+  cargo is aboard.
 - **Route:** the current stop of the active ed-mcp plan (with its body or
   station, what it is for and the jumps left on the plotted route), the next
   stop, and how many stops follow. It shows under the other panels too. When you arrive in
@@ -354,10 +365,15 @@ next start.
 | `hud.position` | `top-right`, 24, 120 | Where the panel sits, like `position` |
 | `hud.width` | `380` | Least panel width in pixels at font size 15. The panel grows so long names fit |
 | `hud.fontSize` / `hud.backgroundOpacity` | `15` / `0.55` | Panel text size and background |
-| `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology` or `route` |
+| `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology`, `mining` or `route` |
 | `hud.valuableMin` | `500000` | Bodies worth less when mapped are left off the exploration panel. Those with geological signals are counted on one line |
 | `hud.bioMin` | `5000000` | Planets whose likely species are worth less than this in total are left off the exploration panel |
-| `hud.spansh` | `true` | Look up each system's planets on Spansh when you arrive. Only the system's ID is sent |
+| `hud.spansh` | `true` | Look up each system's planets on Spansh when you arrive, and buyers for mined cargo. Only the system's ID, or for buyers the system name and commodity, is sent |
+| `hud.mining.targets` | Platinum 20, Painite 25, … | The least percentage of each commodity in a rock that is worth mining |
+| `hud.mining.useCarrier` | `false` | Sell from your fleet carrier: search for buyers around it |
+| `hud.mining.carrierMarkets` | `false` | Include other players' fleet carriers as buyers |
+| `hud.mining.sellRadiusLy` / `carrierRadiusLy` | `100` / `500` | How far to search for buyers from the ship, or from the carrier |
+| `hud.mining.maxPriceAgeDays` | `7` | Leave out buyers with older Spansh market data |
 | `hud.edMcpDataDir` | `null` | The ed-mcp sync folder; `null` finds it in ed-mcp's setup |
 
 With the chat open you can also drag the overlay by its status line. It snaps

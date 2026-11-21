@@ -1,0 +1,247 @@
+# Activity HUD: passenger, trade and mining panels
+
+Date: 2026-11-21
+Status: mining implemented (this PR); passenger and trade proposed. Follows the activity HUD spec
+(2026-11-15), which lists mining as a follow-on.
+
+## Purpose
+
+The panel has modes for massacre stacks, exploration and exobiology. Passenger runs, trade runs
+and mining are the other common money loops, and each has the same problem: the player keeps
+state in their head (who goes where, what to buy at this stop, is this rock worth it) or in a
+tool outside the game.
+
+## What already exists
+
+- **Stop order.** ed-mcp already optimises stops. `missions_route` orders passenger, delivery and
+  hand-in stops against deadlines (exact up to 12 stops). `trade_route` and `trade_loops` find
+  multi-hop runs and repeatable loops. Claude calls these; the panel does not, since the panel
+  makes no Claude calls and the solvers need Spansh coordinates and market data.
+- **Next hop and copy.** The route rows show the current and next stop of the active plan.
+  Arriving at a stop copies the next stop's system, and `routeNext` / `routePrev` step through
+  the plan. A plan stop already has the kinds `mission`, `hand_in`, `trade` and `mining`.
+- **Missions.** ed-mcp's journal state keeps each mission's destination, passenger count, VIP and
+  wanted flags, commodity, count, reward and expiry.
+
+So the work is mostly to join these up: the solvers save their order as the active plan, and the
+panel shows what to do at each stop. The route rows then give the next hop and the copy for free.
+
+## Decisions
+
+- **Claude optimises, the panel follows.** The panel stays deterministic. When the plan no longer
+  matches the missions or the hold (a new mission, a mission gone), the panel says so
+  ("route stale: 2 new missions") and the player asks Claude to re-route. The panel does not
+  re-solve on its own.
+- **The solvers save plans.** `missions_route`, `trade_route` and `trade_loops` gain
+  `save_to_plan`, as `route_stops` has. Saving sets the activity note's `plan_id` and `kind`, so
+  the panel follows at once.
+- **Mining needs no ed-mcp change.** It reads journal events and `Cargo.json` only.
+
+## Part 1: ed-mcp
+
+- `missions_route`, `trade_route` and `trade_loops` gain `save_to_plan: boolean` (default false)
+  and an optional `plan_id`. The saved plan has one stop per station in visit order, with
+  `kind`, a `label` such as "Drop 4 passengers (2 VIP)" or "Buy 720 t Gold", and the route.
+- `StopSchema` gains an optional `cargo` list, so the panel can check the hold against the plan:
+
+  ```ts
+  cargo: z.array(z.object({
+    commodity: z.string().min(1),
+    action: z.enum(["buy", "sell"]),
+    amount: z.number().int().positive(),
+    price: z.number().optional(),        // the planned unit price
+    mission_id: z.number().int().optional(),
+  })).optional()
+  ```
+
+  and `missions` (mission IDs the stop serves). Both are optional, so old files load.
+- A plan gains an optional `repeat: boolean` for trade loops: when the last stop is done, every
+  stop goes back to todo and a lap count goes up.
+- The activity note's `kind` gains `passenger`, `trade` and `mining`.
+- The journal library exports the mission list (`JournalState.missions` is already typed).
+- This is a minor version (new optional fields and exports). ED Chat pins the new version.
+
+## Part 2: ED Chat panels
+
+### Settings
+
+`hud.modes` gains `passenger`, `trade` and `mining` (default true). Mining, as built:
+
+```json
+"mining": {
+  "targets": { "Platinum": 20, "Painite": 25, "Osmium": 25, "Low Temperature Diamonds": 25,
+               "Bromellite": 25, "Tritium": 30 },
+  "useCarrier": false,
+  "carrierMarkets": false,
+  "sellRadiusLy": 100,
+  "carrierRadiusLy": 500,
+  "maxPriceAgeDays": 7
+}
+```
+
+- `targets`: the least percentage of each commodity, by English name, that is worth mining.
+- `useCarrier`: sell from the player's fleet carrier (see Fleet carrier below).
+- `carrierMarkets`: include other players' carriers as buyers. Off by default: their buy orders
+  change often and Spansh's copy is often old.
+- `maxPriceAgeDays`: 7, not ed-mcp's 2. In November 2026 Spansh went three days with no new
+  market data, and a 2-day limit found no buyer at all. A price over a day old shows its age.
+
+### Mode rules
+
+| Source | Sets | Ends when |
+|---|---|---|
+| `MissionAccepted` with `PassengerCount` | passenger | no passenger mission left |
+| `MarketBuy` while the hold has no mission cargo, or a plan stop of kind `trade` | trade | hold empty and no trade stop to do, or 5 jumps with no market trade |
+| `ProspectedAsteroid`, `LaunchDrone` of type `Prospector`, `MiningRefined`, `AsteroidCracked` | mining | a jump (`FSDJump`, or `CarrierJump` aboard), unless mined cargo is still in the hold |
+| The activity note's `kind` | that mode | |
+
+Massacre still wins while a stack is open. Passenger and trade are both "a run": when both are on
+(passengers taken on a trade run), the panel shows trade with a passenger footer line.
+
+### Passenger panel
+
+```
+PASSENGERS                         14/16 berths · 18.4M
+Ochosi · Perez Market          6 (2 VIP)   ⚠ 3h 10m
+Ngalinn · Haber Hub            4           1d 2h
+Wolf 397 · Brooks Estate       4 wanted    2d 5h
+● Ochosi · Perez Market                    4 jumps
+▸ Ngalinn · Haber Hub
+route stale: 1 new mission
+```
+
+- One row per destination station, in plan order when there is a plan: passengers, VIP and
+  wanted flags, and the soonest expiry. The expiry turns amber when the route's estimated arrival
+  is near or after it.
+- The header shows berths used (from the passenger missions) out of the cabins fitted (from the
+  `Loadout` modules), and the total reward.
+- **Stale.** The plan is stale when a passenger mission is not in any stop's `missions`, or a
+  stop serves only missions that are gone. The line names the change.
+- Delivery missions (`Commodity` and `Count`) show the same way, as "Deliver 32 t Gold", since
+  `missions_route` routes them together.
+
+### Trade panel
+
+```
+TRADE  Loop: Kremainn ⇄ Wolf 397              lap 3 · 41.2M/h
+● Kremainn · Wohler Terminal                  BUY  720 t Gold
+  hold 0/720 · price 9,410 (plan 9,380)
+▸ Wolf 397 · Brooks Estate                    SELL 720 t Gold
+Session: 31.6M profit · 46m
+```
+
+- The current stop's action from its `cargo`: what to buy or sell and how much. While docked at
+  that stop, the second line shows the hold against the plan, and the price in `Market.json`
+  against the planned price, so a market that has moved is visible before buying.
+- `MarketBuy` and `MarketSell` keep the session's profit: each sale's total less the average cost
+  paid for those tons. Profit per hour is over the time since the first trade of the session.
+- When the stop's action is done (hold filled, or the commodity sold), the panel marks the stop
+  done through the `PlanStore`, as `routeNext` does, and copies the next system. Undocking with
+  the action not done leaves the stop open.
+- For a loop, finishing the last stop starts the next lap.
+- Price data from Spansh can be hours old. When the plan's price age is over a day, the header
+  shows it ("prices 30h old").
+
+### Mining panel (built)
+
+```
+MINING · 2 A Ring                                     48 t/h
+Platinum 31.4% · High                                   MINE
+  Gallite 5.0%
+Hotspots: Platinum ×2 · Painite
+Hold 256/256 t                        0 t free · 10 limpets
+Sell Platinum 246 t                           244k · 12 ly
+  Haber Hub, Ngalinn
+  or nearer                                   230k · 4 ly
+  Brooks Estate, Wolf 397
+Refined: Platinum 74 t · Osmium 12 t                 ~21.8M
+Session: 23 prospected · 4 worth mining · 1 motherlode
+```
+
+- The newest `ProspectedAsteroid` since arriving in the system: the material that best clears its
+  target (else the richest), its content and what is left of the rock, and MINE (green) or skip
+  (dim). The other materials wrap below. A motherlode shows in amber with "crack".
+- The ring comes from `SupercruiseExit` (`BodyType: PlanetaryRing`), `AsteroidCracked` or
+  `Status.json`. Its hotspots come from the ring's `SAASignalsFound`.
+- The hold, from `Cargo.json` through ed-mcp's journal state, against the `Loadout` capacity, and
+  the limpets. Amber with no space or no limpets.
+- Tons per hour: `MiningRefined` events over the last 15 minutes, or since mining started if that
+  is shorter (at least 3 minutes). None when nothing was refined for 15 minutes.
+- **Where to sell.** For the three mined commodities with the most tons aboard, a Spansh station
+  search near the ship (`sellRadiusLy`), sorted by sale price, with buyers that have the market
+  filter's demand and are newer than `maxPriceAgeDays`. Only the system name and commodity are
+  sent. The search runs only while the mining panel shows, is kept for 30 minutes, and is retried
+  after 5 minutes when it fails.
+  - The pick is the best price at a station with a pad for the ship (from the ship type) that
+    takes the whole load, else the best price. A nearer station that pays at least 90% of it is
+    shown below. A station whose demand is less than the load says so.
+  - The value of what was refined this session uses the picked prices.
+  - When the hold fills, the best buyer's system is copied for the galaxy map, with a note in
+    the chat strip, once per system and buyer.
+- The panel's rows go to Claude in the game note, so Claude can plan the sale route with
+  `commodity_prices` and the plan tools.
+
+### Fleet carrier
+
+Many miners fill the hold, drop the load on their own carrier in the same system, and sell the
+whole stock later, either by jumping the carrier near a buyer or by carrying it over.
+
+- The carrier is the newest `FleetCarrier` in `CarrierBuy`, `CarrierStats` or `CarrierLocation`.
+  `CarrierLocation` is written at each login, so the carrier's system is always known. A
+  `CarrierJumpRequest` shows "→ destination" until its `DepartureTime` (or 15 minutes after the
+  request in older journals), then the carrier is in the new system. `CarrierJumpCancelled`
+  undoes it.
+- Cargo moved this game session: `CargoTransfer` to and from the carrier, and `MarketSell` /
+  `MarketBuy` at the carrier's own market (its `MarketID` is the carrier ID). The game does not
+  log what other players sell to or buy from the carrier, so this is "moved this session", not
+  the stock. Free space is the newest `CarrierStats` less the moves since.
+- With `useCarrier`, the buyer search is around the carrier (`carrierRadiusLy`, 500 ly, about
+  one laden carrier jump) for the hold plus what was moved, and a full hold copies nothing,
+  since the load goes to the carrier. The player's own carrier is never suggested as a buyer.
+
+### Trade with a fleet carrier (proposal)
+
+A carrier trade run is different from a ship run: the carrier is the hold, and the ship shuttles
+between it and a station in the same system.
+
+- **Loading.** The carrier sits by a source station. The ship buys at the station and moves the
+  cargo to the carrier (`CargoTransfer`), or the carrier's buy order fills it. The panel shows
+  the carrier's progress toward the plan's tonnage, the trips left at the ship's capacity, and
+  the free space.
+- **Moving.** The carrier jumps to the sell system: the panel shows "→ system" and the departure
+  time, and when the jump is done it copies nothing (the ship is aboard).
+- **Selling.** The ship carries loads from the carrier to the station, or the carrier's sell
+  order runs while the player does something else. Profit is the sale less the cost basis.
+- **Plan.** The trade tools gain a carrier option: legs are carrier jumps (500 ly each, limited by
+  tritium, 15 minutes of countdown and jump), and the run is ranked by profit per hour including
+  the shuttle trips. A plan stop gets a `carrier: true` flag, so the route rows show "carrier
+  jump" rather than a ship route.
+- **Tritium.** Jumps cost fuel. `CarrierStats.FuelLevel` and the jump distance give the jumps
+  left, and tritium mined or bought can be moved to the carrier's fuel.
+
+## Code layout
+
+As before: a rule per mode in `mode.ts`, a panel function in `panels.ts` (or a file per mode if
+`panels.ts` grows past easy reading), and tests from journal event sequences. New `HUD_EVENTS`:
+`MarketBuy`, `MarketSell`, `ProspectedAsteroid`, `MiningRefined`, `LaunchDrone`, `Passengers`.
+The feed reads `Cargo.json` and `Market.json` as it reads `Status.json`.
+
+## Order of work
+
+1. **Mining.** ED Chat only. No ed-mcp release needed. Built in this PR, with the carrier.
+2. **Passengers.** ed-mcp: `save_to_plan` on `missions_route`, stop `missions`, the mission
+   export. ED Chat: the panel and the stale rule.
+3. **Trade.** ed-mcp: stop `cargo`, plan `repeat`, `save_to_plan` on the two trade tools. ED Chat:
+   the panel, auto-advance on a finished action.
+
+Each is its own PR, as the HUD spec says for follow-on modes.
+
+## Open questions
+
+- Should the panel mark trade stops done on its own (on a finished buy or sell), or only with
+  `routeNext`? Proposed: on its own, since the journal shows the action clearly.
+- Passenger missions to a station the player is docked at, but not yet completed (the hand-in is
+  in the mission board): show as "hand in here"?
+- ed-mcp's `commodity_prices` keeps a 2-day default age. While Spansh's market data lags, as it
+  did in November 2026, it finds nothing. Raise it, or retry with a longer age before saying
+  "no stations"?

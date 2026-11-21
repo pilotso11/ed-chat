@@ -1,0 +1,697 @@
+import type { JournalEvent, JournalState } from "ed-mcp/journal";
+import type { Settings } from "../settings.js";
+import { credits, shortBody, type HudRow, type PanelView } from "./panels.js";
+import type { SellHit, SellLookup, SellQuery } from "./sell.js";
+
+type Obj = Record<string, unknown>;
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+const objs = (v: unknown): Obj[] =>
+  Array.isArray(v) ? v.filter((x): x is Obj => typeof x === "object" && x !== null) : [];
+
+// ---------- Commodity names ----------
+
+/**
+ * What mining gives, by commodityKey(), in English as the market and Spansh spell it. The journal
+ * names these several ways: "$platinum_name;", "LowTemperatureDiamond", "Low Temperature
+ * Diamonds", "opal".
+ */
+const MINED: Record<string, string> = {
+  alexandrite: "Alexandrite",
+  bauxite: "Bauxite",
+  benitoite: "Benitoite",
+  bertrandite: "Bertrandite",
+  bromellite: "Bromellite",
+  cobalt: "Cobalt",
+  coltan: "Coltan",
+  cryolite: "Cryolite",
+  gallite: "Gallite",
+  gold: "Gold",
+  goslarite: "Goslarite",
+  grandidierite: "Grandidierite",
+  hydrogenperoxide: "Hydrogen Peroxide",
+  indite: "Indite",
+  jadeite: "Jadeite",
+  lepidolite: "Lepidolite",
+  liquidoxygen: "Liquid oxygen",
+  lithiumhydroxide: "Lithium Hydroxide",
+  lowtemperaturediamond: "Low Temperature Diamonds",
+  methaneclathrate: "Methane Clathrate",
+  methanolmonohydratecrystals: "Methanol Monohydrate Crystals",
+  moissanite: "Moissanite",
+  monazite: "Monazite",
+  musgravite: "Musgravite",
+  opal: "Void Opals",
+  osmium: "Osmium",
+  painite: "Painite",
+  palladium: "Palladium",
+  platinum: "Platinum",
+  praseodymium: "Praseodymium",
+  pyrophyllite: "Pyrophyllite",
+  rhodplumsite: "Rhodplumsite",
+  rutile: "Rutile",
+  samarium: "Samarium",
+  serendibite: "Serendibite",
+  silver: "Silver",
+  taaffeite: "Taaffeite",
+  thorium: "Thorium",
+  tritium: "Tritium",
+  uraninite: "Uraninite",
+  water: "Water",
+};
+
+const ALIASES: Record<string, string> = {
+  lowtemperaturediamonds: "lowtemperaturediamond",
+  lowtempdiamonds: "lowtemperaturediamond",
+  voidopal: "opal",
+  voidopals: "opal",
+  limpet: "drones",
+  limpets: "drones",
+};
+
+/** One key for each way the journal names a commodity: "$platinum_name;" and "Platinum" match. */
+export function commodityKey(name: string): string {
+  const k = name
+    .toLowerCase()
+    .replace(/^\$/, "")
+    .replace(/_name;$/, "")
+    .replace(/[^a-z]/g, "");
+  return ALIASES[k] ?? k;
+}
+
+/** The commodity's English name; an unknown one is spaced out from its journal name. */
+export function commodityName(key: string, fallback?: string): string {
+  if (MINED[key]) return MINED[key];
+  const f = (fallback ?? key).replace(/^\$|_name;$/g, "").replace(/([a-z])([A-Z])/g, "$1 $2");
+  return f.charAt(0).toUpperCase() + f.slice(1);
+}
+
+export const isMined = (key: string) => key in MINED;
+
+// ---------- The journal ----------
+
+export interface Prospect {
+  at: number;
+  /** Highest proportion first. */
+  materials: { key: string; name: string; percent: number }[];
+  content: "High" | "Medium" | "Low" | null;
+  remaining: number | null;
+  motherlode: string | null;
+}
+
+export interface MiningState {
+  /** The ring being mined, when the journal or Status.json says. */
+  ring: string | null;
+  /** The newest prospect since arriving in the system. */
+  prospect: Prospect | null;
+  /** This game session's prospects, for the counts. */
+  prospects: Prospect[];
+  cracked: number;
+  /** The ring's hotspots, from its surface scan. */
+  hotspots: { name: string; count: number }[];
+  /** Tons refined this game session, by commodityKey(). */
+  refined: Map<string, number>;
+  /** Tons per hour, over the last 15 minutes of mining; null when too little to say. */
+  rate: number | null;
+}
+
+const RATE_WINDOW_MS = 15 * 60_000;
+const RATE_MIN_MS = 3 * 60_000;
+
+function prospectOf(e: JournalEvent, at: number): Prospect {
+  const materials = objs(e.Materials)
+    .map((m) => {
+      const raw = str(m.Name) ?? "";
+      const key = commodityKey(raw);
+      return {
+        key,
+        name: commodityName(key, str(m.Name_Localised) ?? raw),
+        percent: num(m.Proportion) ?? 0,
+      };
+    })
+    .sort((a, b) => b.percent - a.percent);
+  const c = /High|Medium|Low/.exec(String(e.Content ?? ""))?.[0] as Prospect["content"];
+  const ml = str(e.MotherlodeMaterial);
+  return {
+    at,
+    materials,
+    content: c ?? null,
+    remaining: num(e.Remaining),
+    motherlode: ml
+      ? commodityName(commodityKey(ml), str(e.MotherlodeMaterial_Localised) ?? ml)
+      : null,
+  };
+}
+
+/** What the journal says about mining: this session, and since arriving in the system. */
+export function miningState(
+  events: JournalEvent[],
+  now: number,
+  statusBody: string | null = null,
+): MiningState {
+  const prospects: Prospect[] = [];
+  const refined = new Map<string, number>();
+  const refinedAt: number[] = [];
+  let prospect: Prospect | null = null;
+  let ring: string | null = null;
+  let cracked = 0;
+  let stintStart: number | null = null;
+  let last = 0;
+  const rings = new Map<string, { name: string; count: number }[]>();
+  for (const e of events) {
+    last = Date.parse(e.timestamp) || last;
+    switch (e.event) {
+      case "LoadGame":
+        prospects.length = 0;
+        refined.clear();
+        refinedAt.length = 0;
+        cracked = 0;
+        prospect = null;
+        ring = null;
+        stintStart = null;
+        break;
+      case "FSDJump":
+      case "CarrierJump":
+      case "Location":
+        prospect = null;
+        ring = null;
+        stintStart = null;
+        break;
+      case "SupercruiseExit":
+        if (e.BodyType === "PlanetaryRing") ring = str(e.Body);
+        break;
+      case "SAASignalsFound": {
+        const body = str(e.BodyName);
+        if (!body || !/ring$/i.test(body)) break;
+        rings.set(
+          body.toLowerCase(),
+          objs(e.Signals).map((s) => {
+            const t = str(s.Type) ?? "";
+            return {
+              name: commodityName(commodityKey(t), str(s.Type_Localised) ?? t),
+              count: num(s.Count) ?? 1,
+            };
+          }),
+        );
+        break;
+      }
+      case "ProspectedAsteroid":
+        prospect = prospectOf(e, last);
+        prospects.push(prospect);
+        stintStart ??= last;
+        break;
+      case "AsteroidCracked":
+        cracked++;
+        ring = str(e.Body) ?? ring;
+        stintStart ??= last;
+        break;
+      case "MiningRefined": {
+        const key = commodityKey(str(e.Type) ?? str(e.Type_Localised) ?? "");
+        refined.set(key, (refined.get(key) ?? 0) + 1);
+        refinedAt.push(last);
+        stintStart ??= last;
+        break;
+      }
+      case "LaunchDrone":
+        if (e.Type === "Prospector") stintStart ??= last;
+        break;
+    }
+  }
+  if (statusBody && /ring$/i.test(statusBody)) ring = statusBody;
+  let rate: number | null = null;
+  const lastRefined = refinedAt.at(-1);
+  if (stintStart !== null && lastRefined !== undefined && now - lastRefined < RATE_WINDOW_MS) {
+    const span = Math.min(RATE_WINDOW_MS, now - stintStart);
+    const tons = refinedAt.filter((t) => t > now - span).length;
+    if (span >= RATE_MIN_MS) rate = Math.round((tons / span) * 3_600_000);
+  }
+  return {
+    ring,
+    prospect,
+    prospects,
+    cracked,
+    hotspots: (ring && rings.get(ring.toLowerCase())) || [],
+    refined,
+    rate,
+  };
+}
+
+/** Mined commodities in the ship's hold, by commodityKey(), and the limpets. */
+export function holdOf(cargo: JournalState["cargo"]): {
+  mined: Map<string, number>;
+  limpets: number;
+  used: number;
+} {
+  const mined = new Map<string, number>();
+  let limpets = 0;
+  let used = 0;
+  for (const c of cargo) {
+    used += c.count;
+    const key = commodityKey(c.name);
+    if (key === "drones") limpets += c.count;
+    else if (c.mission_id === null && isMined(key)) mined.set(key, (mined.get(key) ?? 0) + c.count);
+  }
+  return { mined, limpets, used };
+}
+
+// ---------- The fleet carrier ----------
+
+export interface Carrier {
+  id: number;
+  callsign: string | null;
+  name: string | null;
+  /** Where it is, or will be once a jump that has left lands. */
+  system: string | null;
+  /** A jump booked and not yet left. */
+  jumping: { system: string; departs: number | null } | null;
+  /** From the newest carrier management screen, less the cargo moved since. */
+  freeSpace: number | null;
+  /** Mined commodities moved to the carrier this game session, by commodityKey(). */
+  moved: Map<string, number>;
+}
+
+/** A jump booked without a departure time leaves about this long after it is booked. */
+const CARRIER_COUNTDOWN_MS = 15 * 60_000;
+
+const isFleetCarrier = (e: JournalEvent) =>
+  e.CarrierType === undefined || e.CarrierType === "FleetCarrier";
+
+/** The player's own fleet carrier, from the journal; null when the journal never shows one. */
+export function carrierState(events: JournalEvent[], now: number): Carrier | null {
+  let id: number | null = null;
+  for (const e of events) {
+    if (
+      (e.event === "CarrierBuy" || e.event === "CarrierStats" || e.event === "CarrierLocation") &&
+      isFleetCarrier(e)
+    ) {
+      id = num(e.CarrierID) ?? id;
+    }
+  }
+  if (id === null) return null;
+  const c: Carrier = {
+    id,
+    callsign: null,
+    name: null,
+    system: null,
+    jumping: null,
+    freeSpace: null,
+    moved: new Map(),
+  };
+  // A booked jump, held in an object so the closures below see its changes.
+  const jump: { pending: { system: string; departs: number } | null } = { pending: null };
+  let last = 0;
+  const move = (name: string, tons: number) => {
+    const key = commodityKey(name);
+    if (c.freeSpace !== null) c.freeSpace -= tons;
+    if (isMined(key)) c.moved.set(key, Math.max(0, (c.moved.get(key) ?? 0) + tons));
+  };
+  const land = () => {
+    if (jump.pending && last >= jump.pending.departs) {
+      c.system = jump.pending.system;
+      jump.pending = null;
+    }
+  };
+  for (const e of events) {
+    last = Date.parse(e.timestamp) || last;
+    land();
+    const mine = num(e.CarrierID) === id || num(e.MarketID) === id;
+    switch (e.event) {
+      case "LoadGame":
+        c.moved.clear();
+        break;
+      case "CarrierBuy":
+        if (mine) {
+          c.callsign = str(e.Callsign) ?? c.callsign;
+          c.system = str(e.Location) ?? c.system;
+        }
+        break;
+      case "CarrierStats":
+        if (mine) {
+          c.callsign = str(e.Callsign) ?? c.callsign;
+          c.name = str(e.Name) ?? c.name;
+          c.freeSpace = num((e.SpaceUsage as Obj | undefined)?.FreeSpace);
+        }
+        break;
+      case "CarrierLocation":
+        if (mine) c.system = str(e.StarSystem) ?? c.system;
+        break;
+      case "CarrierJumpRequest":
+        if (mine && str(e.SystemName)) {
+          const departs = Date.parse(String(e.DepartureTime ?? ""));
+          jump.pending = {
+            system: str(e.SystemName)!,
+            departs: Number.isNaN(departs) ? last + CARRIER_COUNTDOWN_MS : departs,
+          };
+        }
+        break;
+      case "CarrierJumpCancelled":
+        if (mine) jump.pending = null;
+        break;
+      case "Docked":
+        if (mine) {
+          c.system = str(e.StarSystem) ?? c.system;
+          c.callsign = str(e.StationName) ?? c.callsign;
+        }
+        break;
+      case "CarrierJump":
+        if (mine) {
+          c.system = str(e.StarSystem) ?? c.system;
+          jump.pending = null;
+        }
+        break;
+      case "CargoTransfer":
+        for (const t of objs(e.Transfers)) {
+          const tons = num(t.Count) ?? 0;
+          const name = str(t.Type) ?? "";
+          if (t.Direction === "tocarrier") move(name, tons);
+          else if (t.Direction === "toship") move(name, -tons);
+        }
+        break;
+      case "MarketSell":
+        // Selling to the carrier's own buy order moves the cargo onto it.
+        if (mine) move(str(e.Type) ?? "", num(e.Count) ?? 0);
+        break;
+      case "MarketBuy":
+        if (mine) move(str(e.Type) ?? "", -(num(e.Count) ?? 0));
+        break;
+    }
+  }
+  last = Math.max(last, now);
+  land();
+  if (jump.pending) c.jumping = { ...jump.pending };
+  return c;
+}
+
+// ---------- Where to sell ----------
+
+const LARGE = new Set([
+  "anaconda",
+  "belugaliner",
+  "cutter",
+  "empire_trader",
+  "explorer_nx",
+  "federation_corvette",
+  "orca",
+  "panthermkii",
+  "type7",
+  "type9",
+  "type9_military",
+]);
+const SMALL = new Set([
+  "adder",
+  "cobramkiii",
+  "cobramkiv",
+  "cobramkv",
+  "diamondback",
+  "diamondbackxl",
+  "dolphin",
+  "eagle",
+  "empire_courier",
+  "empire_eagle",
+  "hauler",
+  "sidewinder",
+  "viper",
+  "viper_mkiv",
+  "vulture",
+]);
+
+/** The landing pad the ship needs; null when the ship type is unknown. */
+export function padFor(shipType: string | null): "L" | "M" | "S" | null {
+  if (!shipType) return null;
+  const t = shipType.toLowerCase();
+  if (LARGE.has(t)) return "L";
+  if (SMALL.has(t)) return "S";
+  return "M";
+}
+
+const fits = (h: SellHit, pad: "L" | "M" | "S" | null) =>
+  pad === "L" ? h.largePad : pad === "M" ? h.largePad || h.mediumPad : true;
+
+/** A place that pays nearly as much is worth a shorter trip. */
+const NEAR_SHARE = 0.9;
+
+/**
+ * The best price that takes the whole load (else the best price), and a nearer station paying
+ * at least 90% of it. The player's own carrier is left out: selling to it moves no money.
+ */
+export function pickSell(
+  hits: SellHit[],
+  tons: number,
+  pad: "L" | "M" | "S" | null,
+  ownCarrier: number | null,
+): { best: SellHit; near: SellHit | null } | null {
+  const ok = hits.filter((h) => fits(h, pad) && (ownCarrier === null || h.marketId !== ownCarrier));
+  if (!ok.length) return null;
+  const takesAll = ok.filter((h) => h.demand === null || h.demand >= tons);
+  const pool = takesAll.length ? takesAll : ok;
+  const best = [...pool].sort((a, b) => b.price - a.price || a.distanceLy - b.distanceLy)[0]!;
+  const near =
+    [...pool]
+      .filter(
+        (h) => h !== best && h.distanceLy < best.distanceLy && h.price >= best.price * NEAR_SHARE,
+      )
+      .sort((a, b) => a.distanceLy - b.distanceLy)[0] ?? null;
+  return { best, near };
+}
+
+export interface ToSell {
+  key: string;
+  name: string;
+  tons: number;
+  query: SellQuery;
+}
+
+const MAX_SELL_ROWS = 3;
+
+/**
+ * What to look up a buyer for: the mined commodities in the hold, plus those moved to the carrier
+ * when selling from it, most tons first. Searched around the carrier when selling from it, else
+ * around the ship.
+ */
+export function sellQueries(input: {
+  system: string | null;
+  hold: Map<string, number>;
+  carrier: Carrier | null;
+  shipType: string | null;
+  settings: Settings["hud"]["mining"];
+}): ToSell[] {
+  const s = input.settings;
+  const fromCarrier = s.useCarrier && input.carrier?.system ? input.carrier : null;
+  const near = fromCarrier?.system ?? input.system;
+  if (!near) return [];
+  const tons = new Map(input.hold);
+  for (const [k, n] of fromCarrier?.moved ?? []) tons.set(k, (tons.get(k) ?? 0) + n);
+  return [...tons]
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, MAX_SELL_ROWS)
+    .map(([key, n]) => ({
+      key,
+      name: commodityName(key),
+      tons: n,
+      query: {
+        near,
+        commodity: commodityName(key),
+        radiusLy: fromCarrier ? s.carrierRadiusLy : s.sellRadiusLy,
+        largePad: padFor(input.shipType) === "L",
+        carriers: s.carrierMarkets,
+        maxAgeDays: s.maxPriceAgeDays,
+      },
+    }));
+}
+
+// ---------- The panel ----------
+
+/** The prospect's material that best clears its target, else its richest; null when none listed. */
+export function judge(
+  p: Prospect,
+  targets: Record<string, number>,
+): { name: string; percent: number; worth: boolean } | null {
+  const t = new Map(Object.entries(targets).map(([k, v]) => [commodityKey(k), v]));
+  let best: { name: string; percent: number; worth: boolean; score: number } | null = null;
+  for (const m of p.materials) {
+    const min = t.get(m.key);
+    const score = min === undefined ? -1 : m.percent / Math.max(min, 0.01);
+    const worth = min !== undefined && m.percent >= min;
+    if (!best || score > best.score) best = { name: m.name, percent: m.percent, worth, score };
+  }
+  return best && { name: best.name, percent: best.percent, worth: best.worth };
+}
+
+/** How old a price is, once over a day: "3d old". */
+function priceAge(h: SellHit, now: number): string | null {
+  const t = h.updatedAt ? Date.parse(h.updatedAt) : NaN;
+  const days = Math.floor((now - t) / 86_400_000);
+  return days >= 1 ? `${days}d old` : null;
+}
+
+const ly = (n: number) => `${n < 10 ? n.toFixed(1) : Math.round(n)} ly`;
+const pct = (n: number) => `${n.toFixed(1)}%`;
+
+export function miningPanel(input: {
+  system: string | null;
+  state: MiningState;
+  cargo: JournalState["cargo"];
+  capacity: number | null;
+  shipType: string | null;
+  carrier: Carrier | null;
+  settings: Settings["hud"]["mining"];
+  now: number;
+  /** Spansh's sale prices; none when the lookup is off. */
+  sell?: (q: SellQuery) => SellLookup;
+}): PanelView {
+  const { state, settings } = input;
+  const rows: HudRow[] = [];
+  const p = state.prospect;
+  if (p) {
+    const j = judge(p, settings.targets);
+    const left =
+      p.remaining !== null && p.remaining < 100 ? ` · ${Math.round(p.remaining)}% left` : "";
+    if (j) {
+      const others = p.materials
+        .filter((m) => m.name !== j.name)
+        .map((m) => `${m.name} ${pct(m.percent)}`);
+      rows.push({
+        text: `${j.name} ${pct(j.percent)}${p.content ? ` · ${p.content}` : ""}${left}`,
+        right: j.worth ? "MINE" : "skip",
+        tone: j.worth ? "good" : "dim",
+        ...(others.length ? { detail: others.join(" · ") } : {}),
+      });
+    }
+    if (p.motherlode)
+      rows.push({ text: `Motherlode: ${p.motherlode}`, right: "crack", tone: "warn" });
+  } else {
+    rows.push({ text: "Prospect a rock", tone: "dim" });
+  }
+  if (state.hotspots.length) {
+    const spots = state.hotspots.map((h) => `${h.name}${h.count > 1 ? ` ×${h.count}` : ""}`);
+    rows.push({ text: `Hotspots: ${spots.join(" · ")}`, tone: "dim" });
+  }
+
+  const hold = holdOf(input.cargo);
+  const free = input.capacity !== null ? Math.max(0, input.capacity - hold.used) : null;
+  rows.push({
+    text: input.capacity !== null ? `Hold ${hold.used}/${input.capacity} t` : `Hold ${hold.used} t`,
+    right: [free !== null ? `${free} t free` : null, `${hold.limpets} limpets`]
+      .filter(Boolean)
+      .join(" · "),
+    tone: free === 0 || hold.limpets === 0 ? "warn" : undefined,
+    ...(input.capacity ? { bar: Math.min(1, hold.used / input.capacity) } : {}),
+  });
+
+  const carrier = settings.useCarrier ? input.carrier : null;
+  if (settings.useCarrier) {
+    if (!carrier) {
+      rows.push({
+        text: "Carrier: not in the journal yet. Log in or open carrier management",
+        tone: "dim",
+      });
+    } else {
+      const moved = [...carrier.moved.values()].reduce((n, t) => n + t, 0);
+      const where = carrier.jumping
+        ? `→ ${carrier.jumping.system}`
+        : (carrier.system ?? "location unknown");
+      rows.push({
+        text: [`Carrier${carrier.callsign ? ` ${carrier.callsign}` : ""}`, where].join(" · "),
+        right: [
+          moved ? `${moved} t moved` : null,
+          carrier.freeSpace !== null ? `${carrier.freeSpace.toLocaleString("en-US")} t free` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      });
+    }
+  }
+
+  // Where to sell: the best price and a nearer place paying nearly as much.
+  const toSell = sellQueries({
+    system: input.system,
+    hold: hold.mined,
+    carrier: input.carrier,
+    shipType: input.shipType,
+    settings,
+  });
+  const pad = padFor(input.shipType);
+  const prices = new Map<string, number>();
+  let copy: PanelView["copy"];
+  for (const t of toSell) {
+    const found = input.sell?.(t.query);
+    if (!found) continue;
+    if (found === "pending" || found === "failed") {
+      rows.push({
+        text: `Sell ${t.name} ${t.tons} t`,
+        right: found === "pending" ? "looking up…" : "Spansh lookup failed",
+        tone: "dim",
+      });
+      continue;
+    }
+    const pick = pickSell(found, t.tons, pad, input.carrier?.id ?? null);
+    if (!pick) {
+      rows.push({
+        text: `Sell ${t.name} ${t.tons} t`,
+        right: `no buyer within ${t.query.radiusLy} ly`,
+        tone: "dim",
+      });
+      continue;
+    }
+    prices.set(t.key, pick.best.price);
+    const place = (h: SellHit) =>
+      [
+        `${h.station}${h.carrier ? " (carrier)" : ""}, ${h.system}`,
+        h.demand !== null && h.demand < t.tons ? `demand ${h.demand}` : null,
+        priceAge(h, input.now),
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    rows.push({
+      text: `Sell ${t.name} ${t.tons} t`,
+      right: `${credits(pick.best.price)} · ${ly(pick.best.distanceLy)}`,
+      detail: place(pick.best),
+      tone: "accent",
+    });
+    if (pick.near) {
+      rows.push({
+        text: "  or nearer",
+        right: `${credits(pick.near.price)} · ${ly(pick.near.distanceLy)}`,
+        detail: place(pick.near),
+        tone: "dim",
+      });
+    }
+    // A full hold copies the best buyer's system for the galaxy map, unless the load goes to the
+    // carrier.
+    if (!copy && !carrier && free === 0 && pick.best.system !== input.system) {
+      copy = {
+        key: `hold-full|${input.system}|${pick.best.system}`,
+        text: pick.best.system,
+        note: `hold full: ${t.name} sells best at ${pick.best.station}, ${pick.best.system} (copied)`,
+      };
+    }
+  }
+
+  const refined = [...state.refined].sort((a, b) => b[1] - a[1]);
+  if (refined.length) {
+    const worth = refined.reduce((n, [k, t]) => n + (prices.get(k) ?? 0) * t, 0);
+    rows.push({
+      text: `Refined: ${refined.map(([k, t]) => `${commodityName(k)} ${t} t`).join(" · ")}`,
+      right: worth ? `~${credits(worth)}` : undefined,
+    });
+  }
+
+  const worthCount = state.prospects.filter((x) => judge(x, settings.targets)?.worth).length;
+  const motherlodes = state.prospects.filter((x) => x.motherlode).length;
+  const session = [
+    state.prospects.length ? `${state.prospects.length} prospected` : null,
+    state.prospects.length ? `${worthCount} worth mining` : null,
+    motherlodes ? `${motherlodes} motherlode${motherlodes === 1 ? "" : "s"}` : null,
+    state.cracked ? `${state.cracked} cracked` : null,
+  ].filter(Boolean);
+  return {
+    mode: "mining",
+    title: "MINING",
+    subtitle: state.ring ? shortBody(state.ring, input.system) : (input.system ?? undefined),
+    right: state.rate !== null ? `${state.rate} t/h` : undefined,
+    rows,
+    footer: session.length ? [`Session: ${session.join(" · ")}`] : [],
+    ...(copy ? { copy } : {}),
+  };
+}
