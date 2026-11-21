@@ -591,12 +591,15 @@ async function main(): Promise<void> {
   async function stepRoute(dir: 1 | -1): Promise<void> {
     const plans = hudPlans;
     const plan = plans ? hudData?.plan : null;
-    const step = routeStep(plan, dir);
-    if ("notice" in step) return flash("route", step.notice, 3_000);
-    await plans!.updateStop(plan!.id, { index: step.update.index }, { status: step.update.status });
+    const change = routeStep(plan, dir);
+    if ("notice" in change) return flash("route", change.notice, 3_000);
+    // routeStep gives an update only for a plan, and there is a plan only with its store.
+    if (!plans || !plan) return;
+    const { index, status } = change.update;
+    await plans.updateStop(plan.id, { index }, { status });
     // Read the plan back rather than through pollHud(), which skips while the timer's poll runs
     // and would leave the plan from before the change.
-    const now = await plans!.get(plan!.id).catch(() => null);
+    const now = await plans.get(plan.id).catch(() => null);
     void pollHud();
     const system = currentSystem(now);
     if (system) {
@@ -784,8 +787,8 @@ async function main(): Promise<void> {
       firstRun,
       settingsText: settingsStore.text,
       settingsBroken: settingsStore.broken,
-      claudeFound: !!CLIS.claude.resolve(settings.claude.path),
-      codexFound: !!CLIS.codex.resolve(settings.codex.path),
+      claudeFound: () => !!CLIS.claude.resolve(settings.claude.path),
+      codexFound: () => !!CLIS.codex.resolve(settings.codex.path),
       hintShown: !!saved.agentHintShown,
     });
     if (choice === "codex") await chooseAgent("codex");

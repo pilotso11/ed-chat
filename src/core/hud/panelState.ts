@@ -13,7 +13,7 @@ export function hotkeyChoice(saved: SavedState): HudInput["hotkey"] {
   return saved.hudMode ? { mode: saved.hudMode.mode, at: Date.parse(saved.hudMode.at) } : null;
 }
 
-/** The panel's input before the feed's first read: nothing from the game. */
+/** The panel's input: the feed's data, or nothing from the game before its first read. */
 export function hudInput(
   data: FeedData | null,
   saved: SavedState,

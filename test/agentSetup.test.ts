@@ -71,8 +71,8 @@ describe("first run", () => {
     firstRun: true,
     settingsText: "{}",
     settingsBroken: false,
-    claudeFound: false,
-    codexFound: true,
+    claudeFound: () => false,
+    codexFound: () => true,
     hintShown: false,
   };
 
@@ -81,13 +81,28 @@ describe("first run", () => {
   });
 
   it("keeps Claude and hints once when both are installed", () => {
-    expect(firstRunChoice({ ...base, claudeFound: true })).toBe("hint");
-    expect(firstRunChoice({ ...base, claudeFound: true, hintShown: true })).toBeNull();
+    expect(firstRunChoice({ ...base, claudeFound: () => true })).toBe("hint");
+    expect(firstRunChoice({ ...base, claudeFound: () => true, hintShown: true })).toBeNull();
   });
 
   it("keeps Claude when Codex is not installed", () => {
-    expect(firstRunChoice({ ...base, claudeFound: true, codexFound: false })).toBeNull();
-    expect(firstRunChoice({ ...base, codexFound: false })).toBeNull();
+    expect(
+      firstRunChoice({ ...base, claudeFound: () => true, codexFound: () => false }),
+    ).toBeNull();
+    expect(firstRunChoice({ ...base, codexFound: () => false })).toBeNull();
+  });
+
+  it("looks for the CLIs only when the choice depends on them", () => {
+    let looked = 0;
+    const found = () => (looked++, true);
+    firstRunChoice({ ...base, firstRun: false, claudeFound: found, codexFound: found });
+    firstRunChoice({
+      ...base,
+      settingsText: '{"agent":"codex"}',
+      claudeFound: found,
+      codexFound: found,
+    });
+    expect(looked).toBe(0);
   });
 
   it("does nothing after the first run, or when settings.json chose or cannot be read", () => {

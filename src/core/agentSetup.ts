@@ -52,8 +52,9 @@ export function firstRunChoice(c: {
   firstRun: boolean;
   settingsText: string;
   settingsBroken: boolean;
-  claudeFound: boolean;
-  codexFound: boolean;
+  /** Looked up only when the choice depends on them: a lookup searches PATH. */
+  claudeFound: () => boolean;
+  codexFound: () => boolean;
   hintShown: boolean;
 }): "codex" | "hint" | null {
   if (!c.firstRun || c.settingsBroken) return null;
@@ -63,9 +64,9 @@ export function firstRunChoice(c: {
   } catch {
     return null;
   }
-  if (c.codexFound && !c.claudeFound) return "codex";
-  if (c.codexFound && c.claudeFound && !c.hintShown) return "hint";
-  return null;
+  if (!c.codexFound()) return null;
+  if (!c.claudeFound()) return "codex";
+  return c.hintShown ? null : "hint";
 }
 
 /** Where Elite writes its journal, unless the settings say otherwise. */
