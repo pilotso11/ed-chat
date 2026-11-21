@@ -5,7 +5,7 @@
 // then npm run compare:providers (add -- --dry-run to see the runs first).
 import { execFile } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, rmdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -434,7 +434,7 @@ try {
         process.platform,
         path.basename(tempRoot),
       );
-      const home = path.join(homesRoot, `${agent}-home`);
+      const home = path.join(homesRoot, `${run.runs.length}-${agent}-home`);
       await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
       await mkdir(home, { recursive: true });
       if (agent === "codex") {
@@ -493,7 +493,7 @@ try {
         const r = await ask(session, q, asked);
         entry.results.push(r);
         console.error(
-          `  ${r.isError ? `error: ${r.error}` : `${r.replyChars} chars`}, ` +
+          `  ${r.isError ? `error: ${redactKey(r.error ?? "", testKey)}` : `${r.replyChars} chars`}, ` +
             `${(r.totalMs / 1000).toFixed(1)} s, tools: ${r.tools.join(", ") || "none"}`,
         );
       }
@@ -531,6 +531,8 @@ try {
       await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }).catch(
         (err: unknown) => console.error(`could not remove ${dir}: ${String(err)}`),
       );
+  // ed-chat-compare itself, when no other run is using it: rmdir removes only an empty folder.
+  if (homesRoot) await rmdir(path.dirname(homesRoot)).catch(() => {});
 }
 process.exitCode = interrupted.signal.aborted ? 130 : failed ? 1 : 0;
 // A handle left open (a late taskkill, a socket) must not keep the script running.

@@ -158,9 +158,18 @@ export function parseArgs(
   if (dup) return { ok: false, error: `two --provider files are named ${dup}` };
   for (const r of o.runs ?? []) {
     const at = r.model?.lastIndexOf("@") ?? -1;
-    if (r.model && at > 0 && names.includes(r.model.slice(at + 1))) {
-      r.provider = r.model.slice(at + 1);
-      r.model = r.model.slice(0, at);
+    if (r.model && at > 0) {
+      const tail = r.model.slice(at + 1);
+      if (names.includes(tail)) {
+        r.provider = tail;
+        r.model = r.model.slice(0, at);
+      } else if (!/^\d+$/.test(tail))
+        // Only a version such as @20250514 stays in a model id: a misspelt or missing
+        // provider must not run on the player's own login.
+        return {
+          ok: false,
+          error: `--run ${r.agent}:${r.model}: no --provider is named ${tail}`,
+        };
     }
     if (r.provider && !names.includes(r.provider))
       return {
@@ -266,6 +275,9 @@ export function parseProvider(json: string): TestProvider {
         throw new Error(`the provider's claude.env.${k} is not a string`);
       if (CLAUDE_OWN_VARS.includes(k.toUpperCase()))
         throw new Error(`the provider's claude.env must not set ${k}: the script sets it`);
+      // The file is checked in: a key goes in ED_CHAT_TEST_API_KEY, never here.
+      if (/(KEY|TOKEN|SECRET|PASSWORD)$/i.test(k))
+        throw new Error(`the provider's claude.env must not hold a credential: ${k}`);
       env[k] = String(v);
     }
     out.claude = { baseUrl: claude.baseUrl as string, env, ...mode(claude) };
@@ -338,9 +350,14 @@ export function testProviderEnv(
   return { ...out, CODEX_HOME: home, [TEST_KEY_ENV]: key };
 }
 
-/** text with every copy of key replaced, so a reply that quotes the key keeps it out of a report. */
+/**
+ * text with every copy of key replaced, so a reply that quotes the key keeps it out of a report.
+ * The long parts of a key with dots (z.ai's <id>.<secret>) go too, as a reply may quote one.
+ */
 export function redactKey(text: string, key: string): string {
-  return key ? text.split(key).join("<key>") : text;
+  if (!key) return text;
+  const parts = [key, ...key.split(".").filter((p) => p.length >= 16 && p !== key)];
+  return parts.reduce((t, p) => t.split(p).join("<key>"), text);
 }
 
 /**

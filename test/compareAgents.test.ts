@@ -152,6 +152,11 @@ describe("providers", () => {
       err("--provider", "a/zai.json", "--provider", "b/zai.json", "--run", "claude@zai"),
     ).toMatch(/two --provider files are named zai/);
     expect(err("--provider", "zai.json", "--run", "codex@zai")).toMatch(/needs a model/);
+    // A misspelt or missing provider after a model never runs on the player's own login.
+    expect(err("--run", "codex:glm-5.3@zai")).toMatch(/no --provider is named zai/);
+    expect(err("--provider", "zai.json", "--run", "codex:glm-5.3@zia")).toMatch(
+      /no --provider is named zia/,
+    );
   });
 
   it("reads the checked-in z.ai file, with no key in it", async () => {
@@ -181,6 +186,10 @@ describe("providers", () => {
     );
     expect(parse({ codex: { baseUrl: "https://b.example", models: {} } })).toThrow(/not a list/);
     expect(parse({ name: "x" })).toThrow(/neither/);
+    for (const name of ["ANTHROPIC_API_KEY", "SOME_TOKEN", "a_secret", "DB_PASSWORD"])
+      expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "x" } } })).toThrow(
+        /credential/,
+      );
     expect(parse({ codex: { baseUrl: "https://b.example", permissionMode: "yolo" } })).toThrow(
       /auto or default/,
     );
@@ -249,6 +258,10 @@ describe("providers", () => {
       "env: KEY=<key> and again <key>",
     );
     expect(redactKey("no key here", "")).toBe("no key here");
+    const zai = "0123456789abcdef0123.ABCDEFGHIJKLMNOP";
+    expect(redactKey(`id 0123456789abcdef0123, secret ABCDEFGHIJKLMNOP`, zai)).toBe(
+      "id <key>, secret <key>",
+    );
   });
 
   it("writes a Codex provider that reads the key from the environment, not the file", () => {
