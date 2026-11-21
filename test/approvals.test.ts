@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { ApprovalBroker, type ApprovalRequest, type Outcome } from "../src/core/approvals.js";
+import {
+  ApprovalBroker,
+  approvalAnswers,
+  type ApprovalRequest,
+  type Outcome,
+} from "../src/core/approvals.js";
 
 const brokers: ApprovalBroker[] = [];
 // Settles what a failed test left open, so no 5-second timer outlives it.
@@ -48,5 +53,38 @@ describe("ApprovalBroker", () => {
     b.answer(requests[1]!.id, "deny");
     expect(await one).toBe("allow");
     expect(await two).toBe("deny");
+  });
+});
+
+describe("approvalAnswers", () => {
+  const req = (id: string, toolName: string): ApprovalRequest => ({
+    id,
+    toolName,
+    summary: "",
+    shell: false,
+    deadline: 0,
+  });
+  const a = req("a", "Bash");
+  const queue = [a, req("b", "Read"), req("c", "Bash")];
+
+  it("allows or denies the one request", () => {
+    expect(approvalAnswers(a, queue, "approve")).toEqual({
+      allowTool: null,
+      answers: [["a", "allow"]],
+    });
+    expect(approvalAnswers(a, queue, "deny")).toEqual({
+      allowTool: null,
+      answers: [["a", "deny"]],
+    });
+  });
+
+  it("always: allows the tool, and the same tool's requests already waiting", () => {
+    expect(approvalAnswers(a, queue, "alwaysAllow")).toEqual({
+      allowTool: "Bash",
+      answers: [
+        ["a", "allowSession"],
+        ["c", "allowSession"],
+      ],
+    });
   });
 });

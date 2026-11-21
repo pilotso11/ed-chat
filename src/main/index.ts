@@ -15,43 +15,43 @@ import {
   screen,
   shell,
   type BrowserWindow,
+  type MenuItemConstructorOptions,
 } from "electron";
 import { chooseDisplay, place, snap, step } from "../core/anchor.js";
+import {
+  agentArgs,
+  blockedFor as blockedBy,
+  displaySettingsFile,
+  firstRunChoice,
+  journalDir as journalDirOf,
+  localCommand,
+  settingsChange,
+} from "../core/agentSetup.js";
 import {
   AGENTS,
   notFoundText,
   type AgentBackend,
   type AgentId,
-  type AgentInfo,
   type BackendEvent,
 } from "../core/backend.js";
-import { ApprovalBroker } from "../core/approvals.js";
+import { ApprovalBroker, approvalAnswers } from "../core/approvals.js";
 import { ApprovalServer } from "../core/backends/claude/approvalServer.js";
-import { chipLabel, withTargets, type Chip, type StopTarget } from "../core/chips.js";
+import { chipCopy, withTargets, type Chip, type StopTarget } from "../core/chips.js";
 import {
   TESTED_CLI_VERSION,
-  buildClaudeArgs,
   claudeLookup,
   resolveClaude,
 } from "../core/backends/claude/command.js";
 import { ClaudeSession } from "../core/backends/claude/session.js";
 import {
   TESTED_CODEX_VERSION,
-  buildCodexArgs,
   codexLookup,
   codexThreadSettings,
   resolveCodex,
 } from "../core/backends/codex/command.js";
 import { brokerApprover } from "../core/backends/codex/approvals.js";
 import { CodexSession } from "../core/backends/codex/session.js";
-import {
-  isOlder,
-  lookedIn,
-  parseCliVersion,
-  quoteForCmd,
-  type CliLookup,
-  type ResolvedCommand,
-} from "../core/cli.js";
+import { lookedIn, quoteForCmd, type CliLookup, type ResolvedCommand } from "../core/cli.js";
 import {
   INITIAL_STATE,
   answerAllowed,
@@ -77,14 +77,7 @@ import {
   type HotkeyAction,
 } from "../core/hotkeys.js";
 import { Logger } from "../core/logger.js";
-import {
-  HUD_MODES,
-  keyList,
-  parseSettings,
-  setsKey,
-  type Position,
-  type Settings,
-} from "../core/settings.js";
+import { parseSettings, setsKey, type Position, type Settings } from "../core/settings.js";
 import { StatusWatcher, fullscreenMode } from "../core/status.js";
 import {
   HistoryStore,
@@ -112,13 +105,33 @@ import {
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
+import { hudInput, hudVisible, moveHint, nextHudMode } from "../core/hud/panelState.js";
+import { arrivalCopy, currentSystem, routeStep } from "../core/hud/routeSteps.js";
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
-import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
-import { currentStop, nextStopAfter, previousStop, todoStops } from "../core/hud/panels.js";
+import { HUD_EVENTS } from "../core/hud/mode.js";
+import { todoStops } from "../core/hud/panels.js";
+import { noticeMenuItems, trayItems, type TrayAction, type TrayItem } from "../core/menus.js";
+import {
+  COMMAND_COPIED,
+  FULLSCREEN,
+  IN_DANGER,
+  PLAYER_ONLY_WAITING,
+  REFOCUS,
+  RESUMED,
+  RESUME_FAILED,
+  busyText,
+  edMcpNotice,
+  gaveUpText,
+  hotkeysNotice,
+  modeNotice,
+  scopeNotice,
+  versionNotice,
+} from "../core/notices.js";
+import { displaySetting, hudWindowSize, onNextDisplay, overlaySize } from "../core/placement.js";
 import { PlayerOnlyGuard } from "../core/playerOnlyGuard.js";
 import { PLAYER_ONLY_PATHS_V0_5 } from "../core/settingsDictionary.js";
-import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
-import { fetchLatestEdMcp, versionText, type Versions } from "../core/version.js";
+import { buildView, pickNotice, shortTool } from "../core/view.js";
+import { fetchLatestEdMcp, freshLatest, versionText, type Versions } from "../core/version.js";
 import { IPC } from "../shared/ipc.js";
 import {
   answerArg,
@@ -129,7 +142,7 @@ import {
   heightArg,
   hotkeysWanted,
   textArg,
-} from "./guards.js";
+} from "../core/guards.js";
 import { loadWin32 } from "./win32.js";
 import { applyWindow, createOverlayWindow } from "./window.js";
 
@@ -160,21 +173,7 @@ const CLIS: Record<
   },
 };
 
-// A command in backticks is copied when the player clicks the notice.
-const edMcpMissing = (command: string) => `⚠ ed-mcp not connected; click to copy \`${command}\``;
-const edMcpFailed = (a: AgentInfo) => `⚠ ed-mcp failed to start; run \`${a.mcpListCommand}\``;
-const edMcpAuth = (a: AgentInfo) => `⚠ ed-mcp needs authentication; run \`${a.mcpListCommand}\``;
-const SCOPE_GAME = "ⓘ hotkeys work while Elite is in front";
-const COMMAND_COPIED = "📋 copied; paste it in a terminal";
 const KEYS_SECONDS = 15;
-const FULLSCREEN = "⚠ Elite is in fullscreen; switch to Borderless to see the overlay";
-const REFOCUS = "⚠ click the game to refocus";
-const IN_DANGER = "⛔ in danger: chat blocked";
-const NO_AUTO = "⚠ auto mode unavailable, using manual approvals";
-const busyText = (a: AgentInfo) => `⚠ ${a.name} is busy`;
-const gaveUpText = (a: AgentInfo) => `⚠ ${a.name} keeps stopping`;
-const RESUMED = "↺ resumed your last conversation";
-const RESUME_FAILED = "ⓘ could not resume the last conversation; started a new one";
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -224,7 +223,7 @@ async function main(): Promise<void> {
         dispatch({
           type: "notice",
           key: "playerOnly",
-          text: on ? "⚠ settings.json: a change waits for your answer" : null,
+          text: on ? PLAYER_ONLY_WAITING : null,
         }),
       save: (values, paths) => {
         saved = { ...saved, playerOnly: values, playerOnlyPaths: [...paths] };
@@ -342,8 +341,7 @@ async function main(): Promise<void> {
       screen.getPrimaryDisplay(),
       position.display,
     );
-    const width = Math.round(settings.card.width * (settings.style.fontSize / 14));
-    const size = { width, height: Math.max(24, Math.ceil(contentHeight)) };
+    const size = overlaySize(settings, contentHeight);
     const { x, y } = place(
       position.anchor,
       position.offsetX,
@@ -368,13 +366,7 @@ async function main(): Promise<void> {
     // No real move: apply any height change that waited for the drag.
     if (placed && b.x === placed.x && b.y === placed.y) return reposition();
     const d = screen.getDisplayMatching(b);
-    const display =
-      d.id === screen.getPrimaryDisplay().id
-        ? ("primary" as const)
-        : Math.max(
-            0,
-            screen.getAllDisplays().findIndex((x) => x.id === d.id),
-          );
+    const display = displaySetting(d, screen.getAllDisplays(), screen.getPrimaryDisplay());
     void movePosition({ ...position, ...snap(b, d.workArea), display });
   }
   win.on("will-move", () => {
@@ -418,9 +410,7 @@ async function main(): Promise<void> {
     dispatch({
       type: "notice",
       key: "hotkeys",
-      text: failed.length
-        ? `⚠ ${failed.length} hotkey${failed.length > 1 ? "s" : ""} not working; see tray menu`
-        : null,
+      text: hotkeysNotice(failed),
     });
     if (state.keys)
       dispatch({
@@ -468,9 +458,9 @@ async function main(): Promise<void> {
     if (want && !hotkeys.active) reportHotkeys(hotkeys.activate());
     if (!want && hotkeys.active) hotkeys.deactivate();
     // Without this, a hotkey pressed away from the game does nothing and says nothing.
-    const scopeNotice = want ? undefined : SCOPE_GAME;
-    if (state.notices.scope !== scopeNotice)
-      dispatch({ type: "notice", key: "scope", text: scopeNotice ?? null });
+    const scope = scopeNotice(want);
+    if ((state.notices.scope ?? null) !== scope)
+      dispatch({ type: "notice", key: "scope", text: scope });
   }
   const focus = win32 ? new FocusManager(win32, { overlayHwnd, onChange: onForeground }) : null;
 
@@ -515,10 +505,7 @@ async function main(): Promise<void> {
       screen.getPrimaryDisplay(),
       hudPosition.display,
     );
-    // The panel is at least hud.width wide, and grows so long names fit, up to the screen width.
-    const least = Math.round(settings.hud.width * (settings.hud.fontSize / 15));
-    const width = Math.min(display.workArea.width, Math.max(least, Math.ceil(hudSize.width)));
-    const size = { width, height: Math.max(8, Math.ceil(hudSize.height)) };
+    const size = hudWindowSize(settings.hud, hudSize, display.workArea.width);
     const { x, y } = place(
       hudPosition.anchor,
       hudPosition.offsetX,
@@ -529,44 +516,17 @@ async function main(): Promise<void> {
     hudWin.setBounds({ x, y, ...size });
   }
 
-  const hudChoice = () =>
-    saved.hudMode ? { mode: saved.hudMode.mode, at: Date.parse(saved.hudMode.at) } : null;
-
   function renderHud(): void {
     if (windowsGone()) return;
-    const input = {
-      journal: null,
-      status: null,
-      nav: null,
-      activity: null,
-      plan: null,
-      samples: new Map(),
-      known: null,
-      ...hudData,
-      hotkey: hudChoice(),
-      settings: settings.hud,
-      now: Date.now(),
-    };
-    const k = settings.hotkeys;
-    const first = (x: Parameters<typeof keyList>[0]) => keyList(x)[0];
-    const moveHint = hudMoving
-      ? `Move panel: ${first(k.moveUp)} / ${first(k.moveDown)} / ${first(k.moveLeft)} / ${first(k.moveRight)} · monitor ${first(k.nextDisplay)}`
-      : null;
-    const view = buildHud(input, moveHint);
+    const input = hudInput(hudData, saved, settings.hud, Date.now());
+    const view = buildHud(input, hudMoving ? moveHint(settings.hotkeys) : null);
     lastHudView = view;
     const mode = String(currentMode(input));
     if (mode !== hudMode) {
       hudMode = mode;
       log.log("info", `panel mode: ${mode}`);
     }
-    const f = focus?.current ?? null;
-    // Shown over the game only, like the hotkeys in game scope.
-    const gameUp = !f || f.isGame || f.isOverlay;
-    const show =
-      settings.hud.enabled &&
-      !saved.hudHidden &&
-      gameUp &&
-      (view.panel !== null || view.route !== null || hudMoving);
+    const show = hudVisible(settings.hud, saved, focus?.current ?? null, view, hudMoving);
     hudWin.webContents.send(IPC.hud, view);
     if (show !== hudShown) {
       hudShown = show;
@@ -622,38 +582,26 @@ async function main(): Promise<void> {
 
   // Arriving in the current stop's system copies the next stop's system for the galaxy map.
   function onArrival(system: string): void {
-    const plan = hudData?.plan;
-    if (!plan) return;
-    const i = currentStop(plan);
-    if (i === null || plan.stops[i]!.system.toLowerCase() !== system.toLowerCase()) return;
-    const j = nextStopAfter(plan, i);
-    if (j === null) return;
-    const next = plan.stops[j]!;
-    clipboard.writeText(next.system);
-    flash("copy", `📋 next stop copied: ${next.system}`, 4_000);
+    const next = arrivalCopy(hudData?.plan, system);
+    if (!next) return;
+    clipboard.writeText(next);
+    flash("copy", `📋 next stop copied: ${next}`, 4_000);
   }
 
   async function stepRoute(dir: 1 | -1): Promise<void> {
-    const plan = hudData?.plan;
-    if (!plan || !hudPlans) return flash("route", "ⓘ no active route plan", 3_000);
-    const i = currentStop(plan);
-    if (dir === 1) {
-      if (i === null) return flash("route", "ⓘ route finished", 3_000);
-      await hudPlans.updateStop(plan.id, { index: i }, { status: "done" });
-    } else {
-      // The stop done last before the current one, in visit order, goes back to todo.
-      const prev = previousStop(plan);
-      if (prev === null) return flash("route", "ⓘ at the first stop", 3_000);
-      await hudPlans.updateStop(plan.id, { index: prev }, { status: "todo" });
-    }
+    const plans = hudPlans;
+    const plan = plans ? hudData?.plan : null;
+    const step = routeStep(plan, dir);
+    if ("notice" in step) return flash("route", step.notice, 3_000);
+    await plans!.updateStop(plan!.id, { index: step.update.index }, { status: step.update.status });
     // Read the plan back rather than through pollHud(), which skips while the timer's poll runs
     // and would leave the plan from before the change.
-    const now = await hudPlans.get(plan.id).catch(() => null);
+    const now = await plans!.get(plan!.id).catch(() => null);
     void pollHud();
-    const cur = now ? currentStop(now) : null;
-    if (now && cur !== null) {
-      clipboard.writeText(now.stops[cur]!.system);
-      flash("copy", `📋 copied ${now.stops[cur]!.system}`, 3_000);
+    const system = currentSystem(now);
+    if (system) {
+      clipboard.writeText(system);
+      flash("copy", `📋 copied ${system}`, 3_000);
     }
   }
 
@@ -730,7 +678,8 @@ async function main(): Promise<void> {
     log.log("warn", `data folder: ${message(err)}`);
     dataBlocked = `⚠ Can't write to ${dataDir}: ${message(err)}`;
   }
-  const blockedFor = (id: AgentId) => dataBlocked ?? (id === "claude" ? approvalBlocked : null);
+  const blockedFor = (id: AgentId) =>
+    blockedBy(id, { data: dataBlocked, approval: approvalBlocked });
   const notFound = () =>
     blockedFor(agentId) ??
     notFoundText(agent, lookedIn(CLIS[agentId].lookup(), settings[agentId].path));
@@ -739,17 +688,7 @@ async function main(): Promise<void> {
     if (blockedFor(id)) return null;
     const resolved = CLIS[id].resolve(s[id].path);
     if (!resolved) return null;
-    const args =
-      id === "claude"
-        ? buildClaudeArgs({
-            permissionMode: s.claude.permissionMode,
-            model: s.claude.model,
-            mcpConfigFile,
-            extraArgs: s.claude.extraArgs,
-            settingsFile,
-          })
-        : buildCodexArgs({ extraArgs: s.codex.extraArgs });
-    return { ...resolved, args };
+    return { ...resolved, args: agentArgs(id, s, { mcpConfigFile, settingsFile }) };
   };
   // What each Codex thread starts with; a change applies to the next thread.
   const codexThread = (s: Settings) =>
@@ -841,17 +780,16 @@ async function main(): Promise<void> {
   // With both, Claude stays, and the player hears how to switch. A file that names the agent
   // has chosen already.
   async function firstRunAgent(): Promise<void> {
-    if (!firstRun || settingsStore.broken) return;
-    try {
-      const raw = JSON.parse(settingsStore.text) as Record<string, unknown>;
-      if ("agent" in raw) return;
-    } catch {
-      return;
-    }
-    const claude = !!CLIS.claude.resolve(settings.claude.path);
-    const codex = !!CLIS.codex.resolve(settings.codex.path);
-    if (codex && !claude) await chooseAgent("codex");
-    else if (codex && claude && !saved.agentHintShown) {
+    const choice = firstRunChoice({
+      firstRun,
+      settingsText: settingsStore.text,
+      settingsBroken: settingsStore.broken,
+      claudeFound: !!CLIS.claude.resolve(settings.claude.path),
+      codexFound: !!CLIS.codex.resolve(settings.codex.path),
+      hintShown: !!saved.agentHintShown,
+    });
+    if (choice === "codex") await chooseAgent("codex");
+    else if (choice === "hint") {
       flash("agent", "ⓘ Codex is installed too: type /codex to switch", 12_000);
       saved = { ...saved, agentHintShown: true };
       writeState();
@@ -900,25 +838,13 @@ async function main(): Promise<void> {
           dispatch({
             type: "notice",
             key: "edmcp",
-            text:
-              ed === "missing"
-                ? edMcpMissing(setupCommand())
-                : ed === "failed"
-                  ? edMcpFailed(agent)
-                  : ed === "needsAuth"
-                    ? edMcpAuth(agent)
-                    : null,
+            text: edMcpNotice(ed, agent, setupCommand()),
           });
         }
         dispatch({
           type: "notice",
           key: "mode",
-          text:
-            settings[agentId].permissionMode === "auto" &&
-            e.permissionMode &&
-            e.permissionMode !== "auto"
-              ? NO_AUTO
-              : null,
+          text: modeNotice(settings[agentId].permissionMode, e.permissionMode),
         });
         break;
       case "result":
@@ -974,18 +900,9 @@ async function main(): Promise<void> {
     const n = ++versionCheck;
     execFile(file, ["--version"], { shell, windowsHide: true }, (err, stdout) => {
       if (n !== versionCheck) return;
-      const v = err ? null : parseCliVersion(stdout);
-      cliVersion = v ? v.join(".") : null;
-      const testedText = CLIS[agentId].tested;
-      const tested = parseCliVersion(testedText)!;
-      dispatch({
-        type: "notice",
-        key: "version",
-        text:
-          v && isOlder(v, tested)
-            ? `⚠ ${agent.cli} ${v.join(".")} is older than ${testedText}; run \`${agent.updateCommand}\``
-            : null,
-      });
+      const v = versionNotice(err ? null : stdout, CLIS[agentId].tested, agent);
+      cliVersion = v.version;
+      dispatch({ type: "notice", key: "version", text: v.notice });
     });
   }
 
@@ -1086,14 +1003,10 @@ async function main(): Promise<void> {
     const req = state.approvals.find((r) => r.id === id);
     if (!req) return;
     if (!answerAllowed(a, id, shownApproval, Date.now())) return;
-    if (a === "alwaysAllow") approvals.allowTool(req.toolName);
-    approvals.answer(id, a === "deny" ? "deny" : a === "alwaysAllow" ? "allowSession" : "allow");
-    if (a === "alwaysAllow") {
-      // Requests for the same tool that already wait in the queue are allowed too.
-      for (const r of state.approvals)
-        if (r.toolName === req.toolName) approvals.answer(r.id, "allowSession");
-      flash("approval", `✓ ${shortTool(req.toolName)} allowed until /new`, 4_000);
-    }
+    const { allowTool, answers } = approvalAnswers(req, state.approvals, a);
+    if (allowTool) approvals.allowTool(allowTool);
+    for (const [rid, d] of answers) approvals.answer(rid, d);
+    if (allowTool) flash("approval", `✓ ${shortTool(allowTool)} allowed until /new`, 4_000);
   }
 
   let keysTimer: NodeJS.Timeout | undefined;
@@ -1112,7 +1025,6 @@ async function main(): Promise<void> {
 
   // The npm lookup is cached, so asking again does not wait on the network.
   let edMcpLatest: { version: string | null; at: number } | null = null;
-  const LATEST_TTL_MS = 10 * 60_000;
 
   function showVersion(): boolean {
     if (state.session === "thinking") {
@@ -1125,7 +1037,7 @@ async function main(): Promise<void> {
       [agentId]: cliVersion,
       edMcpStatus,
     };
-    const cached = edMcpLatest && Date.now() - edMcpLatest.at < LATEST_TTL_MS ? edMcpLatest : null;
+    const cached = freshLatest(edMcpLatest, Date.now());
     const first = versionText({ ...base, edMcpLatest: cached ? cached.version : "checking" });
     dispatch({ type: "localReply", text: first });
     scheduleFade();
@@ -1146,11 +1058,12 @@ async function main(): Promise<void> {
     const t = text.trim();
     if (!t) return false;
     // ED Chat's own commands. They do not reach the assistant.
-    if (t === "/new" || t === "/version" || t === "/claude" || t === "/codex") {
-      if (t === "/new") newConversation();
-      else if (t === "/version") {
+    const command = localCommand(t);
+    if (command) {
+      if (command === "/new") newConversation();
+      else if (command === "/version") {
         if (!showVersion()) return false;
-      } else if (!(await chooseAgent(t === "/claude" ? "claude" : "codex"))) return false;
+      } else if (!(await chooseAgent(command === "/claude" ? "claude" : "codex"))) return false;
       const ok = await giveFocusBack();
       dispatch({ type: "closeChat" });
       if (ok) void settleFocus();
@@ -1179,14 +1092,9 @@ async function main(): Promise<void> {
   }
 
   function copyChip(n: number): void {
-    const chips = withTargets(currentChips(state), chipStops);
-    const chip = chips[n - 1];
-    if (!chip) {
-      const has = chips.length ? `the reply has ${chips.length}` : "the reply has none";
-      return flash("copy", `📋 no chip ${n}; ${has}`, 2_000);
-    }
-    clipboard.writeText(chip.text);
-    flash("copy", `📋 copied ${chip.text}${chip.detail ? ` (for ${chip.detail})` : ""}`, 2_000);
+    const c = chipCopy(withTargets(currentChips(state), chipStops), n);
+    if (c.text !== null) clipboard.writeText(c.text);
+    flash("copy", c.notice, 2_000);
   }
 
   // The player starts reading now, so the card gets a full fade time. A reply still arriving
@@ -1256,13 +1164,8 @@ async function main(): Promise<void> {
         if (hudMoving) return moveHud({ ...hudPosition, anchor: step(hudPosition.anchor, a.dir) });
         return movePosition({ ...position, anchor: step(position.anchor, a.dir) });
       case "nextDisplay": {
-        const all = screen.getAllDisplays();
         const pos = hudMoving ? hudPosition : position;
-        const now =
-          pos.display === "primary"
-            ? all.findIndex((d) => d.id === screen.getPrimaryDisplay().id)
-            : pos.display;
-        const next = { ...pos, display: (Math.max(0, now) + 1) % all.length };
+        const next = onNextDisplay(pos, screen.getAllDisplays(), screen.getPrimaryDisplay());
         return hudMoving ? moveHud(next) : movePosition(next);
       }
       case "hudToggle":
@@ -1271,15 +1174,10 @@ async function main(): Promise<void> {
         flash("hud", saved.hudHidden ? "ⓘ activity panel hidden" : "ⓘ activity panel shown", 2_000);
         return renderHud();
       case "hudMode": {
-        const enabled = HUD_MODES.filter((m) => settings.hud.modes[m]);
-        const next = cycleMode(saved.hudMode?.mode ?? "auto", enabled);
-        const { hudMode: _m, ...rest } = saved;
-        saved =
-          next === "auto"
-            ? { ...rest, hudHidden: false }
-            : { ...rest, hudHidden: false, hudMode: { mode: next, at: new Date().toISOString() } };
+        const next = nextHudMode(saved, settings.hud, new Date());
+        saved = next.saved;
         writeState();
-        flash("hud", `ⓘ panel: ${next}`, 2_000);
+        flash("hud", `ⓘ panel: ${next.mode}`, 2_000);
         return renderHud();
       }
       case "hudMove":
@@ -1366,9 +1264,7 @@ async function main(): Promise<void> {
   win.webContents.on("did-finish-load", render);
 
   // Game files.
-  const journalDir = (s: Settings) =>
-    s.journalDir ??
-    path.join(os.homedir(), "Saved Games", "Frontier Developments", "Elite Dangerous");
+  const journalDir = (s: Settings) => journalDirOf(s, os.homedir());
   let status = new StatusWatcher(path.join(journalDir(settings), "Status.json"), (flags) =>
     dispatch({ type: "flags", flags }),
   );
@@ -1378,14 +1274,7 @@ async function main(): Promise<void> {
   const hudTimer = setInterval(() => void pollHud(), 1_000);
   void pollHud();
 
-  const displayXml = path.join(
-    process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"),
-    "Frontier Developments",
-    "Elite Dangerous",
-    "Options",
-    "Graphics",
-    "DisplaySettings.xml",
-  );
+  const displayXml = displaySettingsFile(process.env.LOCALAPPDATA, os.homedir());
   const checkFullscreen = async () => {
     const xml = await readFile(displayXml, "utf8").catch(() => "");
     dispatch({
@@ -1439,15 +1328,12 @@ async function main(): Promise<void> {
     ({ position, saved } = effectivePosition(settings.position, saved));
     ({ position: hudPosition, saved } = effectiveHudPosition(settings.hud.position, saved));
     writeState();
-    if (
-      journalDir(old) !== journalDir(settings) ||
-      old.hud.edMcpDataDir !== settings.hud.edMcpDataDir ||
-      old.hud.spansh !== settings.hud.spansh
-    ) {
+    const change = settingsChange(old, settings, agentId, os.homedir());
+    if (change.reopenFeed) {
       void openHudFeed().then(pollHud, (err) => log.log("warn", `panel: ${message(err)}`));
     }
-    if (old.agent !== settings.agent) void switchAgent(settings.agent);
-    else if (JSON.stringify(old[agentId]) !== JSON.stringify(settings[agentId])) {
+    if (change.switchAgent) void switchAgent(settings.agent);
+    else if (change.agentSettings) {
       const c = agentCommand(settings);
       dispatch({ type: "notice", key: "claude", text: c ? null : notFound() });
       // /version must not report the binary that is no longer configured.
@@ -1459,7 +1345,7 @@ async function main(): Promise<void> {
         flash("agentSettings", `ⓘ ${agent.cli} settings apply after /new`, 6_000);
       } else if (c && agentStarted && !switchInProgress) startSession(c);
     }
-    if (journalDir(old) !== journalDir(settings)) {
+    if (change.journal) {
       status.stop();
       // Flags from the old journal folder no longer describe the ship.
       dispatch({ type: "flags", flags: null });
@@ -1479,8 +1365,6 @@ async function main(): Promise<void> {
   const trayIconFile = app.isPackaged
     ? path.join(process.resourcesPath, "tray.png")
     : path.join(app.getAppPath(), "resources", "tray.png");
-  // A menu label treats & as a mnemonic marker.
-  const label = (s: string) => s.replace(/&/g, "&&");
 
   function showHotkeyProblems(): void {
     void dialog
@@ -1503,65 +1387,66 @@ async function main(): Promise<void> {
 
   function noticeMenu(): Menu {
     return Menu.buildFromTemplate(
-      Object.entries(state.notices).map(([key, text]) => {
-        const command = noticeCommand(key, text);
-        return {
-          label: label(command ? `${text.replace(/`/g, "")}  (click to copy)` : text),
-          click: () => {
-            if (!command) return;
-            clipboard.writeText(command);
-            flash("copy", COMMAND_COPIED, 3_000);
-          },
-        };
-      }),
+      noticeMenuItems(state.notices).map(({ label, command }) => ({
+        label,
+        click: () => {
+          if (!command) return;
+          clipboard.writeText(command);
+          flash("copy", COMMAND_COPIED, 3_000);
+        },
+      })),
     );
   }
 
+  function runTray(a: TrayAction): void {
+    switch (a.type) {
+      case "copyChip":
+        return copyChip(a.n);
+      case "openChat":
+        return runAction({ type: "openChat" }, "tray");
+      case "newConversation":
+        return newConversation();
+      case "chooseAgent":
+        return void chooseAgent(a.id);
+      case "showKeys":
+        return showKeys();
+      case "hotkeyProblems":
+        return showHotkeyProblems();
+      case "toggleIcon":
+        return runAction({ type: "toggleIcon" }, "tray");
+      case "toggleOverlay":
+        runAction({ type: "toggleOverlay" }, "tray");
+        return trayIcon.setToolTip(state.visible ? "ED Chat" : "ED Chat (minimized)");
+      case "openSettings":
+        return openPath(settingsFile);
+      case "openLogs":
+        return openPath(logDir);
+      case "quit":
+        return app.quit();
+    }
+  }
+  const menuTemplate = (items: TrayItem[]): MenuItemConstructorOptions[] =>
+    items.map((i): MenuItemConstructorOptions =>
+      "separator" in i
+        ? { type: "separator" }
+        : "submenu" in i
+          ? { label: i.label, submenu: menuTemplate(i.submenu) }
+          : {
+              label: i.label,
+              ...(i.kind ? { type: i.kind, checked: i.checked } : {}),
+              click: () => runTray(i.action),
+            },
+    );
   // Built when opened, so the chips and problems are current.
   function trayMenu(): Menu {
-    const chips = withTargets(currentChips(state), chipStops);
-    const tray = (a: HotkeyAction) => () => runAction(a, "tray");
-    return Menu.buildFromTemplate([
-      ...chips.map((c) => ({
-        label: label(`Copy ${c.n}: ${chipLabel(c)}`),
-        click: () => copyChip(c.n),
-      })),
-      ...(chips.length ? [{ type: "separator" as const }] : []),
-      { label: "Open chat", click: tray({ type: "openChat" }) },
-      { label: "New conversation", click: newConversation },
-      {
-        label: "Assistant",
-        submenu: (["claude", "codex"] as const).map((id) => ({
-          label: AGENTS[id].name,
-          type: "radio" as const,
-          checked: agentId === id,
-          click: () => void chooseAgent(id),
-        })),
-      },
-      { label: "Show hotkeys", click: showKeys },
-      ...(failedHotkeys.length
-        ? [{ label: `Hotkey problems (${failedHotkeys.length})…`, click: showHotkeyProblems }]
-        : []),
-      { type: "separator" },
-      {
-        label: "Icon mode",
-        type: "checkbox",
-        checked: state.iconMode,
-        click: tray({ type: "toggleIcon" }),
-      },
-      // Minimized, the overlay still shows the chat and approvals, and the hotkeys still work.
-      {
-        label: state.visible ? "Minimize to tray" : "Restore overlay",
-        click: () => {
-          runAction({ type: "toggleOverlay" }, "tray");
-          trayIcon.setToolTip(state.visible ? "ED Chat" : "ED Chat (minimized)");
-        },
-      },
-      { label: "Open settings", click: () => openPath(settingsFile) },
-      { label: "Open log folder", click: () => openPath(logDir) },
-      { type: "separator" },
-      { label: "Quit", click: () => app.quit() },
-    ]);
+    const items = trayItems({
+      chips: withTargets(currentChips(state), chipStops),
+      agentId,
+      failedHotkeys: failedHotkeys.length,
+      iconMode: state.iconMode,
+      visible: state.visible,
+    });
+    return Menu.buildFromTemplate(menuTemplate(items));
   }
 
   const trayIcon = new Tray(nativeImage.createFromPath(trayIconFile));

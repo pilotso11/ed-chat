@@ -9,7 +9,7 @@ import {
   heightArg,
   hotkeysWanted,
   textArg,
-} from "../src/main/guards.js";
+} from "../src/core/guards.js";
 
 const fg = (isGame: boolean, isOverlay: boolean) => ({
   hwnd: 1,
