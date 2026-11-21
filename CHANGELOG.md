@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.0](https://github.com/pilotso11/ed-chat/compare/v0.5.0...v0.6.0) (2026-11-21)
+
+
+### Features
+
+* choose Claude Code or Codex, and switch with /claude, /codex or the tray (Part 4) ([#51](https://github.com/pilotso11/ed-chat/issues/51)) ([c6a7eac](https://github.com/pilotso11/ed-chat/commit/c6a7eaca53ac2bc8164e927d2644091a1b165a1e))
+* Codex backend (Part 2), not yet wired into main ([#49](https://github.com/pilotso11/ed-chat/issues/49)) ([eac43f6](https://github.com/pilotso11/ed-chat/commit/eac43f6c9f27a2af0ffb2534ffd062637dff07f8))
+* Codex docs, fixture scrubbing and a Claude/Codex answer comparison (Part 5) ([#53](https://github.com/pilotso11/ed-chat/issues/53)) ([be2a567](https://github.com/pilotso11/ed-chat/commit/be2a567ae1b0db9bc56d5c461283c1a27ec955c9))
+* run ed-mcp tools Codex asks about, and choose each assistant's model ([#54](https://github.com/pilotso11/ed-chat/issues/54)) ([d11ef6c](https://github.com/pilotso11/ed-chat/commit/d11ef6c65d2c594a7ab838c93e77fd17b4407c9a))
+* set up ed-mcp once, for Claude Code or Codex (Part 3) ([#50](https://github.com/pilotso11/ed-chat/issues/50)) ([0c5e8e2](https://github.com/pilotso11/ed-chat/commit/0c5e8e2800ecd71a98c958329502aabfcf3c1dd6))
+* with Codex in auto mode, ED Chat's settings change without an approval card; hotkeys are now player-only ([#56](https://github.com/pilotso11/ed-chat/issues/56)) ([717db3c](https://github.com/pilotso11/ed-chat/commit/717db3c6b6b185225b0d3225e036f2842196243f))
+
+
+### Bug Fixes
+
+* better HUD answers: plans and activity notes are goals, not proof; old data warned once; missing items counted ([#56](https://github.com/pilotso11/ed-chat/issues/56)) ([717db3c](https://github.com/pilotso11/ed-chat/commit/717db3c6b6b185225b0d3225e036f2842196243f))
+* improve Codex answers about engineering and materials ([#59](https://github.com/pilotso11/ed-chat/issues/59)) ([e72b3e6](https://github.com/pilotso11/ed-chat/commit/e72b3e6b0dfc6a98f6de7230eadb2bdf328d5366))
+* run ed-mcp 0.8.0 (genus sample distances) ([#58](https://github.com/pilotso11/ed-chat/issues/58)) ([559fb80](https://github.com/pilotso11/ed-chat/commit/559fb80d44905c8c9e713ab30f7a2f9772890542))
+* the panel keeps scans and samples made after a massacre stack ([#57](https://github.com/pilotso11/ed-chat/issues/57)) ([1d9cecf](https://github.com/pilotso11/ed-chat/commit/1d9cecff7b35cbb37d7ab446776cc1faaab407af))
+
 ## [0.5.0](https://github.com/pilotso11/ed-chat/compare/v0.4.0...v0.5.0) (2026-11-17)
 
 
