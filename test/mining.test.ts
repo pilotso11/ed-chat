@@ -10,6 +10,7 @@ import {
   miningPanel,
   miningState,
   minedWaiting,
+  refinedKinds,
   padFor,
   pickSell,
   sellQueries,
@@ -278,7 +279,7 @@ describe("where to sell", () => {
       ["Osmium", 80, "HIP 1", 100],
       ["Platinum", 50, "HIP 1", 100],
     ]);
-    expect(ship[0]!.query.largePad).toBe(true);
+    expect(ship[0]!.query.pad).toBe("L");
     const fromCarrier = sellQueries({
       system: "HIP 1",
       hold,
@@ -290,7 +291,7 @@ describe("where to sell", () => {
       ["Platinum", 350, "Belach", 500],
       ["Osmium", 80, "Belach", 500],
     ]);
-    expect(fromCarrier[0]!.query.largePad).toBe(false);
+    expect(fromCarrier[0]!.query.pad).toBe("M");
   });
 });
 
@@ -465,7 +466,7 @@ describe("Spansh sale prices", () => {
         near: "Sol",
         commodity: "Platinum",
         radiusLy: 100,
-        largePad: true,
+        pad: "L",
         carriers: false,
         maxAgeDays: 2,
       },
@@ -484,7 +485,7 @@ describe("Spansh sale prices", () => {
         near: "Sol",
         commodity: "Platinum",
         radiusLy: 100,
-        largePad: false,
+        pad: null,
         carriers: true,
         maxAgeDays: 2,
       },
@@ -492,6 +493,11 @@ describe("Spansh sale prices", () => {
     ) as { filters: Record<string, unknown> };
     expect(withCarriers.filters.type).toBeUndefined();
     expect(withCarriers.filters.has_large_pad).toBeUndefined();
+    const medium = sellSearchBody(
+      { near: "Sol", commodity: "Gold", radiusLy: 50, pad: "M", carriers: true, maxAgeDays: 2 },
+      T0,
+    ) as { filters: Record<string, unknown> };
+    expect(medium.filters.medium_pads).toEqual({ comparison: "<=>", value: [1, 1000] });
   });
 
   it("reads the stations that buy", () => {
@@ -541,7 +547,7 @@ describe("Spansh sale prices", () => {
       near: "Sol",
       commodity: "Platinum",
       radiusLy: 100,
-      largePad: false,
+      pad: null,
       carriers: false,
       maxAgeDays: 2,
     };
@@ -697,7 +703,7 @@ describe("after the review", () => {
 
   it("copies a full hold's buyer only while mining, keyed by the buyer", () => {
     const here = panel([prospect([["Platinum", 30]])]);
-    expect(here.copy?.key).toBe("hold-full|Haber Hub|Ngalinn");
+    expect(here.copy?.key).toBe("hold-full|0|Haber Hub|Ngalinn");
     // After a jump toward the buyer the route copies the next stop instead.
     const away = panel([prospect([["Platinum", 30]]), ev("FSDJump")], { system: "Other" });
     expect(away.copy).toBeUndefined();
@@ -805,7 +811,7 @@ describe("after the review", () => {
       near: `S${i}`,
       commodity: "Platinum",
       radiusLy: 100,
-      largePad: false,
+      pad: null,
       carriers: false,
       maxAgeDays: 7,
     });
@@ -814,5 +820,70 @@ describe("after the review", () => {
     const failed = (prices as unknown as { failed: Map<string, number> }).failed;
     expect(failed.size).toBeLessThanOrEqual(50);
     now += 1;
+  });
+});
+
+describe("after the third review", () => {
+  it("searches from the mining system on the way to the buyer", () => {
+    const events = [
+      ev("FSDJump", { StarSystem: "HIP 1" }),
+      refined("Platinum"),
+      ev("FSDJump", { StarSystem: "Wolf 397" }),
+    ];
+    const state = miningState(events, T0 + t * 1000);
+    expect(state.system).toBe("HIP 1");
+    const seen: string[] = [];
+    const p = miningPanel({
+      system: "Wolf 397",
+      state,
+      events,
+      cargo: [{ name: "platinum", count: 5, stolen: false, mission_id: null }],
+      capacity: 10,
+      shipType: "python",
+      carrier: null,
+      settings: M,
+      now: T0 + t * 1000,
+      sell: (q) => {
+        seen.push(q.near);
+        return [hit({})];
+      },
+    });
+    expect(seen).toEqual(["HIP 1"]);
+    expect(p.rows.find((r) => r.text.startsWith("Sell"))?.right).toBe("200k · 10 ly from HIP 1");
+  });
+
+  it("copies again after a sale, for the next full hold", () => {
+    const base = [
+      ev("FSDJump", { StarSystem: "HIP 1" }),
+      refined("Platinum"),
+      prospect([["Platinum", 30]]),
+    ];
+    const panel = (events: JournalEvent[]) =>
+      miningPanel({
+        system: "HIP 1",
+        state: miningState(events, T0 + t * 1000),
+        events,
+        cargo: [{ name: "platinum", count: 10, stolen: false, mission_id: null }],
+        capacity: 10,
+        shipType: null,
+        carrier: null,
+        settings: M,
+        now: T0 + t * 1000,
+        sell: () => [hit({ station: "X", system: "Y" })],
+      });
+    const first = panel(base).copy?.key;
+    const second = panel([...base, ev("MarketSell", { Type: "platinum", Count: 10 })]).copy?.key;
+    expect(first).toBe("hold-full|0|X|Y");
+    expect(second).toBe("hold-full|1|X|Y");
+  });
+
+  it("forgets commodities refined more than a day ago, and unreadable ones", () => {
+    const old = {
+      timestamp: new Date(T0 - 2 * 86_400_000).toISOString(),
+      event: "MiningRefined",
+      Type: "$gold_name;",
+    };
+    const kinds = refinedKinds([old, refined("Platinum"), ev("MiningRefined", {})], T0 + t * 1000);
+    expect([...kinds]).toEqual(["platinum"]);
   });
 });

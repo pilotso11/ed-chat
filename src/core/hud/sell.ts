@@ -22,8 +22,8 @@ export interface SellQuery {
   /** The English commodity name, as Spansh spells it. */
   commodity: string;
   radiusLy: number;
-  /** Only stations with a large pad. */
-  largePad: boolean;
+  /** The pad the ship needs: only stations with one; null for any. */
+  pad: "L" | "M" | "S" | null;
   /** Include other players' fleet carriers. */
   carriers: boolean;
   maxAgeDays: number;
@@ -65,7 +65,9 @@ export function sellSearchBody(q: SellQuery, now: number): unknown {
     },
     market: [{ name: q.commodity, sell_price: range(1), demand: range(1) }],
   };
-  if (q.largePad) filters.has_large_pad = { value: true };
+  if (q.pad === "L") filters.has_large_pad = { value: true };
+  // A medium ship can use a large pad too, but stations with large pads and no medium are rare.
+  if (q.pad === "M") filters.medium_pads = { comparison: "<=>", value: [1, 1000] };
   if (!q.carriers) filters.type = { value: NON_CARRIER_TYPES };
   return {
     filters,

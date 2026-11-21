@@ -87,7 +87,10 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
   if (input.hotkey?.mode === "off") return "off";
   const j = input.journal;
   const groups = j ? massacre(j.missions, j.events).groups : [];
-  const minedAboard = j ? minedWaiting(j.cargo, j.events, input.now, input.settings.mining) : false;
+  const minedAboard =
+    j && input.settings.modes.mining
+      ? minedWaiting(j.cargo, j.events, input.now, input.settings.mining)
+      : false;
   const fromJournal = j ? journalMode(j.events, groups.length > 0, minedAboard) : null;
   const m = noteMode(input.activity?.kind);
   const fromNote =

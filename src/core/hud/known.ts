@@ -147,7 +147,11 @@ export async function spanshJson(
 ): Promise<unknown> {
   const res = await fetch(url, {
     ...init,
-    headers: { "User-Agent": "ED-Chat", ...(init.headers as Record<string, string>) },
+    headers: (() => {
+      const h = new Headers(init.headers);
+      h.set("User-Agent", "ED-Chat");
+      return h;
+    })(),
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (res.status === 404) return {};
