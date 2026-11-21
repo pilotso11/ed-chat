@@ -216,6 +216,56 @@ export function providerHomesDir(
   return p.join(base, "ed-chat-compare", run);
 }
 
+/**
+ * Why the runs cannot go ahead, or null. A run through a provider never falls back to the
+ * player's own login, so one that its provider cannot serve stops the comparison before any
+ * tokens are spent: no endpoint for the assistant, or a Codex model the catalog lacks.
+ */
+export function providerRunsProblem(
+  specs: RunSpec[],
+  providers: ReadonlyMap<string, TestProvider>,
+): string | null {
+  for (const { agent, model, provider: name } of specs) {
+    if (!name) continue;
+    const provider = providers.get(name);
+    if (!provider) return `--run ${agent}@${name}: no --provider is named ${name}`;
+    if (!provider[agent]) return `--run ${agent}@${name}: ${name} has no ${agent} endpoint`;
+    // Codex takes only the models in the provider's catalog, when it has one.
+    const catalog = agent === "codex" ? provider.codex?.models : null;
+    if (catalog) {
+      const slugs = catalog.map((m) => (m as { slug: string }).slug);
+      if (!model || !slugs.includes(model))
+        return `--run codex:${model ?? ""}@${name}: ${name} has ${slugs.join(", ")}`;
+    }
+  }
+  return null;
+}
+
+/** Why the provider key cannot be used, or null. A dry run needs none. */
+export function testKeyProblem(key: string, hasProviders: boolean, dryRun: boolean): string | null {
+  if (!hasProviders) return null;
+  if (!key)
+    return dryRun ? null : `--provider was given: set ${TEST_KEY_ENV} to the provider's key.`;
+  if (key.length < MIN_KEY_LENGTH)
+    return `${TEST_KEY_ENV} is too short to be a key (${key.length} characters).`;
+  return null;
+}
+
+/**
+ * ED Chat's settings for one CLI, as a run uses them. A run through a provider takes the
+ * provider's permission mode when it sets one, and none of ED Chat's extra arguments: one such
+ * as -c model_provider=… or --model would send it somewhere other than the provider.
+ */
+export function runCliSettings<S extends { permissionMode: string; extraArgs: string[] }>(
+  s: S,
+  agent: AgentId,
+  provider: TestProvider | null,
+): S {
+  if (!provider) return s;
+  const mode = provider[agent]?.permissionMode;
+  return { ...s, extraArgs: [], ...(mode ? { permissionMode: mode } : {}) };
+}
+
 /** The name --run uses for a provider file: its file name without .json. */
 export const providerName = (file: string): string => path.basename(file).replace(/\.json$/i, "");
 
@@ -260,12 +310,19 @@ export function parseProvider(json: string): TestProvider {
   }
   const r = (data ?? {}) as Record<string, unknown>;
   const out: TestProvider = { name: typeof r.name === "string" && r.name ? r.name : "provider" };
+  // A misspelt key (permissionmode) would be dropped without a word: it is refused instead.
+  const known = (o: Record<string, unknown>, keys: string[], where: string) => {
+    const extra = Object.keys(o).find((k) => !keys.includes(k));
+    if (extra) throw new Error(`the provider's ${where} has an unknown key: ${extra}`);
+  };
+  known(r, ["name", "claude", "codex"], "file");
   const section = (agent: AgentId): Record<string, unknown> | null => {
     const v = r[agent];
     if (v === undefined) return null;
     if (typeof v !== "object" || v === null || Array.isArray(v))
       throw new Error(`the provider's ${agent} is not an object`);
     const o = v as Record<string, unknown>;
+    known(o, ["baseUrl", "permissionMode", agent === "claude" ? "env" : "models"], agent);
     if (!isHttpUrl(o.baseUrl))
       throw new Error(`the provider's ${agent}.baseUrl is not an https URL (or http to localhost)`);
     if (

@@ -40,6 +40,9 @@ import {
   USAGE,
   codexTestConfig,
   parseProvider,
+  providerRunsProblem,
+  runCliSettings,
+  testKeyProblem,
   providerHomesDir,
   providerName,
   MIN_KEY_LENGTH,
@@ -204,31 +207,17 @@ for (const file of opts.providers) {
     process.exit(2);
   }
 }
-// A run through a provider never falls back to the player's own login, so one the provider
-// cannot serve stops the comparison here, before any tokens are spent.
-for (const { agent, model, provider } of specs) {
-  if (!provider) continue;
-  if (!providers.get(provider)![agent]) {
-    console.error(`--run ${agent}@${provider}: ${provider} has no ${agent} endpoint`);
-    process.exit(2);
-  }
-  // Codex takes only the models in the provider's catalog, when it has one.
-  const catalog = providers.get(provider)!.codex?.models;
-  if (agent === "codex" && catalog) {
-    const slugs = catalog.map((m) => (m as { slug?: unknown }).slug);
-    if (!slugs.includes(model)) {
-      console.error(`--run codex:${model}@${provider}: ${provider} has ${slugs.join(", ")}`);
-      process.exit(2);
-    }
-  }
-}
-const testKey = process.env[TEST_KEY_ENV]?.trim() ?? "";
-if (providers.size && !testKey && !opts.dryRun) {
-  console.error(`--provider was given: set ${TEST_KEY_ENV} to the provider's key.`);
+// A run through a provider never falls back to the player's own login: one it cannot serve
+// stops here, before any tokens are spent.
+const runsProblem = providerRunsProblem(specs, providers);
+if (runsProblem) {
+  console.error(runsProblem);
   process.exit(2);
 }
-if (providers.size && testKey && testKey.length < MIN_KEY_LENGTH) {
-  console.error(`${TEST_KEY_ENV} is too short to be a key (${testKey.length} characters).`);
+const testKey = process.env[TEST_KEY_ENV]?.trim() ?? "";
+const keyProblem = testKeyProblem(testKey, providers.size > 0, opts.dryRun);
+if (keyProblem) {
+  console.error(keyProblem);
   process.exit(2);
 }
 const plans: Plan[] = specs.map(({ agent, model, provider }) => ({
@@ -239,18 +228,9 @@ const plans: Plan[] = specs.map(({ agent, model, provider }) => ({
   providerKey: provider ?? null,
 }));
 
-/**
- * ED Chat's extra arguments for the CLI, which a run through a provider does not get: one such
- * as -c model_provider=… or --model would send it somewhere other than the provider.
- */
-function cliArgs(s: Settings[AgentId], provider: TestProvider | null): string[] {
-  return provider ? [] : s.extraArgs;
-}
-
-/** ED Chat's settings for a run, with the provider's permission mode when it sets one. */
+/** ED Chat's settings for a run (runCliSettings). */
 function runSettings(agent: AgentId, provider: TestProvider | null): Settings[AgentId] {
-  const mode = provider?.[agent]?.permissionMode;
-  return mode ? { ...settings[agent], permissionMode: mode } : settings[agent];
+  return runCliSettings(settings[agent], agent, provider);
 }
 
 if (opts.dryRun) {
@@ -270,10 +250,10 @@ if (opts.dryRun) {
             permissionMode: s.permissionMode,
             model,
             mcpConfigFile: "<temp>/approval-mcp.json",
-            extraArgs: [...cliArgs(s, provider), "--strict-mcp-config"],
+            extraArgs: [...s.extraArgs, "--strict-mcp-config"],
             settingsFile: "<temp>/settings.json",
           })
-        : buildCodexArgs({ extraArgs: cliArgs(s, provider) });
+        : buildCodexArgs({ extraArgs: s.extraArgs });
     console.log(`\n${agent}: would run ${cli.command}${cli.shell ? " (through cmd)" : ""}`);
     console.log(`  args: ${args.map(short).join(" ")}`);
     console.log(`  model: ${model ?? "the CLI's default"}`);
@@ -497,14 +477,14 @@ try {
         mcpConfigFile,
         // Only the servers in --mcp-config: the player's own ed-mcp, on the real data, must
         // not run next to the copy.
-        extraArgs: [...cliArgs(s, provider), "--strict-mcp-config"],
+        extraArgs: [...s.extraArgs, "--strict-mcp-config"],
         settingsFile,
       });
       session = new ClaudeSession({ ...cli, args, cwd: workspace, env });
     } else {
       session = new CodexSession({
         ...cli,
-        args: buildCodexArgs({ extraArgs: cliArgs(s, provider) }),
+        args: buildCodexArgs({ extraArgs: s.extraArgs }),
         cwd: workspace,
         env,
         thread: codexThreadSettings({

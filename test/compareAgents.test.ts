@@ -13,6 +13,9 @@ import {
   median,
   parseArgs,
   parseProvider,
+  providerRunsProblem,
+  runCliSettings,
+  testKeyProblem,
   redactKey,
   withoutTestKey,
   providerHomesDir,
@@ -226,6 +229,14 @@ describe("providers", () => {
       /env is not an object/,
     );
     expect(parse({ name: "x" })).toThrow(/neither/);
+    // A misspelt key is refused, not dropped.
+    expect(parse({ claude: { baseUrl: "https://a.example", permissionmode: "default" } })).toThrow(
+      /unknown key: permissionmode/,
+    );
+    expect(parse({ codex: { baseUrl: "https://b.example", env: {} } })).toThrow(/unknown key: env/);
+    expect(parse({ nmae: "x", claude: { baseUrl: "https://a.example" } })).toThrow(
+      /unknown key: nmae/,
+    );
     for (const name of ["ANTHROPIC_API_KEY", "SOME_TOKEN", "a_secret", "DB_PASSWORD"])
       expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "x" } } })).toThrow(
         /must not set/,
@@ -313,6 +324,66 @@ describe("providers", () => {
     expect(withoutTestKey({ PATH: "p", [TEST_KEY_ENV]: "k", ed_chat_test_api_key: "k" })).toEqual({
       PATH: "p",
     });
+  });
+
+  it("stops a run its provider cannot serve, before any CLI starts", () => {
+    const zai: TestProvider = {
+      name: "z.ai",
+      claude: { baseUrl: "https://a.example", env: {} },
+      codex: { baseUrl: "https://b.example", models: [{ slug: "glm-5.3" }] },
+    };
+    const claudeOnly: TestProvider = {
+      name: "c",
+      claude: { baseUrl: "https://a.example", env: {} },
+    };
+    const providers = new Map([
+      ["zai", zai],
+      ["c", claudeOnly],
+    ]);
+    expect(
+      providerRunsProblem(
+        [
+          { agent: "claude", model: "sonnet" },
+          { agent: "codex", model: "glm-5.3", provider: "zai" },
+        ],
+        providers,
+      ),
+    ).toBeNull();
+    expect(
+      providerRunsProblem([{ agent: "codex", model: "glm-5.4", provider: "zai" }], providers),
+    ).toBe("--run codex:glm-5.4@zai: zai has glm-5.3");
+    expect(providerRunsProblem([{ agent: "codex", model: "m", provider: "c" }], providers)).toMatch(
+      /c has no codex endpoint/,
+    );
+    expect(
+      providerRunsProblem([{ agent: "claude", model: "m", provider: "x" }], providers),
+    ).toMatch(/no --provider is named x/);
+  });
+
+  it("needs a key of a real length when a provider is given, except for a dry run", () => {
+    const key = "0123456789abcdef.0123";
+    expect(testKeyProblem("", false, false)).toBeNull();
+    expect(testKeyProblem("", true, true)).toBeNull();
+    expect(testKeyProblem("", true, false)).toMatch(/set ED_CHAT_TEST_API_KEY/);
+    expect(testKeyProblem("short", true, false)).toMatch(/too short/);
+    expect(testKeyProblem("short", true, true)).toMatch(/too short/);
+    expect(testKeyProblem(key, true, false)).toBeNull();
+  });
+
+  it("gives a provider run none of ED Chat's extra CLI arguments, and its permission mode", () => {
+    const s = { permissionMode: "auto", extraArgs: ["-c", "model_provider=openai"], model: "m" };
+    const p: TestProvider = {
+      name: "p",
+      claude: { baseUrl: "https://a.example", env: {}, permissionMode: "default" },
+      codex: { baseUrl: "https://b.example", models: null },
+    };
+    expect(runCliSettings(s, "claude", null)).toBe(s);
+    expect(runCliSettings(s, "claude", p)).toEqual({
+      ...s,
+      extraArgs: [],
+      permissionMode: "default",
+    });
+    expect(runCliSettings(s, "codex", p)).toEqual({ ...s, extraArgs: [] });
   });
 
   it("takes the key out of every copy in a report", () => {
