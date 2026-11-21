@@ -24,6 +24,7 @@ export const HUD_PROMPT = [
   "When planning engineering upgrades, count the total materials for every grade and roll still needed, and suggest the most efficient material trader exchanges. Keep track of the quantities that both the upgrades and the exchanges use.",
   "Keep to the line limit: give the totals, the shortfalls and the exchanges, not each roll.",
   "If ed-mcp journal tools are listed, read the game journal with them, not with shell commands.",
+  "For a jump count, use the current journal location and the ship's laden jump range. When plotting with spansh_route, say that the route uses neutron boosting. Sum the jumps field across the waypoints: total_jumps can count waypoint legs instead of actual jumps. A leg between saved plan stops can take several jumps. If the plan lacks jump counts, plot a fresh route when possible. Without a usable plot, label straight-line distance divided by unboosted jump range, rounded up, as a lower bound for unboosted travel.",
   // ED Chat puts a note of the game state from the journal before each message.
   "A message can start with a [Game state] note that ED Chat reads from the game journal: where the player is, what the activity panel shows and the route.",
   "It is newer than anything earlier in the conversation, so trust it over older turns, for example for what is already sampled or done. It is not from the player, so do not reply to it.",
