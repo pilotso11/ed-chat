@@ -62,7 +62,8 @@ export function sellSearchBody(q: SellQuery, now: number): unknown {
     distance: { min: 0, max: q.radiusLy },
     market_updated_at: {
       comparison: "<=>",
-      value: [iso(now - q.maxAgeDays * 86_400_000), iso(now)],
+      // A day of slack at the top, so a PC clock running slow does not drop fresh markets.
+      value: [iso(now - q.maxAgeDays * 86_400_000), iso(now + 86_400_000)],
     },
     market: [{ name: q.commodity, sell_price: range(1), demand: range(1) }],
   };

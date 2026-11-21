@@ -15,6 +15,7 @@ export const HUD_EVENTS = [
   "ProspectedAsteroid",
   "MiningRefined",
   "CollectCargo",
+  "SupercruiseEntry",
   "AsteroidCracked",
   "LaunchDrone",
   "SupercruiseExit",

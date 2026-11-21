@@ -504,8 +504,7 @@ async function main(): Promise<void> {
     onError: (m) => log.log("warn", `panel spansh prices: ${m}`),
   });
   // The panel's last copy for the galaxy map, so each is copied once.
-  // Undefined until the journal is read: a hold already full when ED Chat starts copies nothing.
-  let hudCopied: string | null | undefined;
+  let hudCopied: string | null = null;
   // The panel's last view, for the game note sent with each message.
   let lastHudView: HudView | null = null;
   // When the feed last read the game, so a note is never sent from a stopped feed.
@@ -573,14 +572,13 @@ async function main(): Promise<void> {
     lastHudView = view;
     const copy = visible ? (view.panel?.copy ?? null) : null;
     const copyId = copy ? copy.key : null;
-    if (copy && hudCopied !== undefined && copyId !== hudCopied) {
+    if (copy && copyId !== hudCopied) {
       clipboard.writeText(copy.text);
       flash("copy", `📋 ${copy.note}`, 6_000);
     }
     // Kept through gaps (a hidden panel, a hold no longer full, a search in progress), so the same
     // buyer is copied once.
     if (copyId) hudCopied = copyId;
-    else if (hudCopied === undefined && hudData?.journal) hudCopied = null;
     const mode = String(view.mode ?? null);
     if (mode !== hudMode) {
       hudMode = mode;

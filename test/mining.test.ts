@@ -474,7 +474,7 @@ describe("Spansh sale prices", () => {
     ) as { filters: Record<string, unknown>; sort: unknown; reference_system: string };
     expect(body.filters.market_updated_at).toEqual({
       comparison: "<=>",
-      value: ["2026-11-19T10:00:00Z", "2026-11-21T10:00:00Z"],
+      value: ["2026-11-19T10:00:00Z", "2026-11-22T10:00:00Z"],
     });
     expect(body.reference_system).toBe("Sol");
     expect(body.filters.has_large_pad).toEqual({ value: true });
@@ -974,5 +974,25 @@ describe("after the fifth review", () => {
 
   it("knows the newer small hulls", () => {
     expect(padFor("smallcombat01_nx")).toBe("S");
+  });
+});
+
+describe("after the sixth review", () => {
+  it("does not count a canister salvaged away from mining", () => {
+    const salvage = [ev("FSDJump", { StarSystem: "X" }), ev("CollectCargo", { Type: "gold" })];
+    expect([...refinedKinds(salvage)]).toEqual([]);
+    const cracked = [ev("AsteroidCracked", { Body: "R" }), ev("CollectCargo", { Type: "gold" })];
+    expect([...refinedKinds(cracked)]).toEqual(["gold"]);
+  });
+
+  it("stops mining in the ring on entering supercruise or docking", () => {
+    const events = [
+      ev("SupercruiseExit", { Body: "X 1 A Ring", BodyType: "PlanetaryRing" }),
+      prospect([["Platinum", 30]]),
+      ev("Docked", { StationName: "Port" }),
+    ];
+    const s = miningState(events, T0 + t * 1000);
+    expect([s.ring, s.prospect]).toEqual([null, null]);
+    expect(s.prospects).toHaveLength(1);
   });
 });

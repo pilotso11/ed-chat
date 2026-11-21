@@ -204,6 +204,12 @@ export function miningState(
       case "SupercruiseExit":
         if (e.BodyType === "PlanetaryRing") ring = str(e.Body);
         break;
+      case "SupercruiseEntry":
+      case "Docked":
+        // Left the ring: no longer mining here, though the session's counts stay.
+        ring = null;
+        prospect = null;
+        break;
       case "SAASignalsFound": {
         const body = str(e.BodyName);
         if (!body || !/ring$/i.test(body)) break;
@@ -276,13 +282,21 @@ export function refinedKinds(events: JournalEvent[]): Set<string> {
   if (memo) return memo;
   const own = ownCarrierId(events);
   const kinds = new Set<string>();
+  // Mining in this system since arriving: fragments collected now come from rocks.
+  let cracking = false;
   for (const e of events) {
     if (e.event === "MiningRefined") {
+      cracking = true;
       const key = commodityKey(str(e.Type) ?? str(e.Type_Localised) ?? "");
       if (key) kinds.add(key);
     } else if (e.event === "CollectCargo") {
+      // Fragments from a cracked core; a canister salvaged elsewhere is not mined.
       const key = commodityKey(str(e.Type) ?? "");
-      if (isMined(key) && e.Stolen !== true) kinds.add(key);
+      if (cracking && isMined(key) && e.Stolen !== true) kinds.add(key);
+    } else if (e.event === "AsteroidCracked" || e.event === "ProspectedAsteroid") {
+      cracking = true;
+    } else if (["FSDJump", "CarrierJump", "Location", "LoadGame"].includes(e.event)) {
+      cracking = false;
     } else if (e.event === "MarketBuy" && (own === null || num(e.MarketID) !== own)) {
       kinds.delete(commodityKey(str(e.Type) ?? ""));
     }
