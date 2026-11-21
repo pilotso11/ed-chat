@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { parse as parseToml } from "smol-toml";
 import { describe, expect, it } from "vitest";
 import {
   buildReport,
@@ -11,8 +12,20 @@ import {
   jsonPathFor,
   median,
   parseArgs,
+  parseProvider,
+  providerRunsProblem,
+  runCliSettings,
+  testKeyProblem,
+  redactKey,
+  redactRun,
+  withoutTestKey,
+  providerHomesDir,
   parseQuestions,
   summarizeRun,
+  testProviderEnv,
+  codexTestConfig,
+  TEST_KEY_ENV,
+  type TestProvider,
   type AgentRun,
   type CompareRun,
   type QuestionResult,
@@ -30,6 +43,7 @@ describe("parseArgs", () => {
         questions: "q.json",
         out: "/tmp/r.md",
         timeoutSec: 300,
+        providers: [],
         dryRun: false,
         help: false,
       },
@@ -49,6 +63,7 @@ describe("parseArgs", () => {
         questions: "mine.json",
         out: "o.md",
         timeoutSec: 60,
+        providers: [],
         dryRun: true,
         help: false,
       },
@@ -84,6 +99,333 @@ describe("parseArgs", () => {
       ok: false,
       error: "unknown argument: --fast",
     });
+  });
+});
+
+describe("providers", () => {
+  it("reads --provider, and --run with @provider next to runs on the player's login", () => {
+    const r = parseArgs(
+      [
+        "--provider",
+        "scripts/providers/zai.json",
+        "--run",
+        "claude:sonnet",
+        "--run",
+        "codex:gpt-6.2-sol",
+        "--run",
+        "claude:glm-5.3@zai",
+        "--run=codex:glm-5.3@zai",
+      ],
+      defaults,
+    );
+    expect(r.ok && r.options.providers).toEqual(["scripts/providers/zai.json"]);
+    expect(r.ok && r.options.runs).toEqual([
+      { agent: "claude", model: "sonnet" },
+      { agent: "codex", model: "gpt-6.2-sol" },
+      { agent: "claude", model: "glm-5.3", provider: "zai" },
+      { agent: "codex", model: "glm-5.3", provider: "zai" },
+    ]);
+    expect(parseArgs(["--provider"], defaults)).toMatchObject({ ok: false });
+  });
+
+  it("keeps an @ in a model id that names no provider, and takes any file name", () => {
+    const runs = (...argv: string[]) => {
+      const r = parseArgs(argv, defaults);
+      return r.ok ? r.options.runs : r.error;
+    };
+    expect(runs("--run", "claude:claude-sonnet-4@20250514")).toEqual([
+      { agent: "claude", model: "claude-sonnet-4@20250514" },
+    ]);
+    expect(runs("--provider", "zai.json", "--run", "claude:claude-sonnet-4@20250514@zai")).toEqual([
+      { agent: "claude", model: "claude-sonnet-4@20250514", provider: "zai" },
+    ]);
+    // --provider after --run, and a file name with a space.
+    expect(runs("--run", "codex:glm@my zai", "--provider", "dir/my zai.json")).toEqual([
+      { agent: "codex", model: "glm", provider: "my zai" },
+    ]);
+  });
+
+  it("refuses an unknown provider, an unused one, two of one name, and Codex with no model", () => {
+    const err = (...argv: string[]) => {
+      const r = parseArgs(argv, defaults);
+      return r.ok ? null : r.error;
+    };
+    expect(err("--run", "claude@zai")).toMatch(/no --provider is named zai/);
+    expect(err("--provider", "zai.json", "--run", "claude")).toMatch(/no --run <agent>@zai/);
+    expect(err("--provider", "zai.json", "--only", "claude")).toMatch(/no --run <agent>@zai/);
+    expect(
+      err("--provider", "a/zai.json", "--provider", "b/zai.json", "--run", "claude@zai"),
+    ).toMatch(/two --provider files are named zai/);
+    expect(err("--provider", "zai.json", "--run", "codex@zai")).toMatch(/needs a model/);
+    expect(err("--provider", "zai.json", "--run", "claude@zai")).toMatch(/needs a model/);
+    // A misspelt or missing provider after a model never runs on the player's own login.
+    expect(err("--run", "codex:glm-5.3@zai")).toMatch(/no --provider is named zai/);
+    expect(err("--run", "claude:@zai")).toMatch(/no --provider is named zai/);
+    expect(err("--provider", "dir/.json", "--run", "claude:glm@")).toMatch(/needs a name/);
+    expect(err("--provider", "zai.json", "--run", "claude@zai:glm-5.3")).toMatch(
+      /the model goes first/,
+    );
+    expect(err("--provider", "zai.json", "--run", "codex:glm-5.3@zia")).toMatch(
+      /no --provider is named zia/,
+    );
+  });
+
+  it("reads the checked-in z.ai file, with no key in it", async () => {
+    const text = await readFile(
+      path.join(import.meta.dirname, "..", "scripts", "providers", "zai.json"),
+      "utf8",
+    );
+    const p = parseProvider(text);
+    expect(p.name).toBe("z.ai");
+    expect(p.claude?.baseUrl).toBe("https://api.z.ai/api/anthropic");
+    expect(p.codex?.baseUrl).toBe("https://api.z.ai/api/v1");
+    expect(p.codex?.models).toHaveLength(1);
+    // Claude's auto mode needs Anthropic's safety check, which z.ai does not have.
+    expect(p.claude?.permissionMode).toBe("default");
+    expect(p.codex?.permissionMode).toBeUndefined();
+    expect(text).not.toMatch(/AUTH_TOKEN|API_KEY|"key"/i);
+  });
+
+  it("refuses a bad URL, a key or base URL in env, and a file with no assistant", () => {
+    const parse = (o: unknown) => () => parseProvider(JSON.stringify(o));
+    expect(parse({ claude: { baseUrl: "a.example" } })).toThrow(/baseUrl/);
+    expect(parse({ claude: { baseUrl: "http://a.example" } })).toThrow(/https/);
+    expect(
+      parseProvider(JSON.stringify({ claude: { baseUrl: "http://localhost:4000" } })).claude
+        ?.baseUrl,
+    ).toBe("http://localhost:4000");
+    for (const name of [
+      "HTTPS_PROXY",
+      "NODE_OPTIONS",
+      "PATH",
+      "ssl_cert_file",
+      "LC_ALL",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+    ])
+      expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "x" } } })).toThrow(
+        /must not set/,
+      );
+    for (const name of ["CLAUDE_CODE_USE_BEDROCK", "AWS_REGION", "ANTHROPIC_VERTEX_PROJECT_ID"])
+      expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "1" } } })).toThrow(
+        /must not set/,
+      );
+    expect(
+      parse({ claude: { baseUrl: "https://a.example", env: { ANTHROPIC_CUSTOM_HEADERS: "x" } } }),
+    ).toThrow(/must not set/);
+    expect(
+      parse({ claude: { baseUrl: "https://a.example", env: { ANTHROPIC_AUTH_TOKEN: "k" } } }),
+    ).toThrow(/must not set/);
+    expect(parse({ claude: { baseUrl: "https://a.example", env: { X: { y: 1 } } } })).toThrow(
+      /not a string/,
+    );
+    expect(parse({ codex: { baseUrl: "https://b.example", models: {} } })).toThrow(/not a list/);
+    expect(parse({ codex: { baseUrl: "https://b.example", models: [] } })).toThrow(/not a list/);
+    expect(
+      parse({ codex: { baseUrl: "https://b.example", models: [{ name: "glm-5.3" }] } }),
+    ).toThrow(/not a list/);
+    expect(parse({ codex: { baseUrl: "https://b.example", models: ["glm"] } })).toThrow(
+      /not a list/,
+    );
+    expect(parse({ claude: { baseUrl: "https://a.example", env: "ANTHROPIC_MODEL=glm" } })).toThrow(
+      /env is not an object/,
+    );
+    expect(parse({ name: "x" })).toThrow(/neither/);
+    // A misspelt key is refused, not dropped.
+    expect(parse({ claude: { baseUrl: "https://a.example", permissionmode: "default" } })).toThrow(
+      /unknown key: permissionmode/,
+    );
+    expect(parse({ codex: { baseUrl: "https://b.example", env: {} } })).toThrow(/unknown key: env/);
+    expect(parse({ nmae: "x", claude: { baseUrl: "https://a.example" } })).toThrow(
+      /unknown key: nmae/,
+    );
+    for (const name of ["ANTHROPIC_API_KEY", "SOME_TOKEN", "a_secret", "DB_PASSWORD"])
+      expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "x" } } })).toThrow(
+        /must not set/,
+      );
+    expect(parse({ claude: { baseUrl: "https://a.example", permissionMode: "auto" } })).toThrow(
+      /cannot be auto/,
+    );
+    expect(parse({ codex: { baseUrl: "https://b.example", permissionMode: "yolo" } })).toThrow(
+      /auto or default/,
+    );
+    expect(
+      parseProvider(
+        JSON.stringify({ claude: { baseUrl: "https://a.example", env: { API_TIMEOUT_MS: 1 } } }),
+      ).claude?.env,
+    ).toEqual({ API_TIMEOUT_MS: "1" });
+  });
+
+  const provider: TestProvider = {
+    name: "test",
+    claude: {
+      baseUrl: "https://a.example/anthropic",
+      env: { ANTHROPIC_DEFAULT_SONNET_MODEL: "glm" },
+    },
+    codex: { baseUrl: "https://b.example/v1", models: [] },
+  };
+  const playerEnv = {
+    PATH: "C:\\bin",
+    CLAUDE_CODE_USE_BEDROCK: "1",
+    CLAUDE_CODE_SUBAGENT_MODEL: "player-subagent",
+    CLAUDE_CODE_MESSAGING_TOKEN: "parent-session",
+    CLAUDECODE: "1",
+    MCP_TIMEOUT: "99",
+    ED_MCP_INARA_KEY: "player-inara",
+    npm_config_registry: "https://registry.example/",
+    "npm_config_//registry.npmjs.org/:_authToken": "player-npm-token",
+    npm_config__auth: "player-npm-auth",
+    Https_Proxy: "http://proxy:8080",
+    MAX_THINKING_TOKENS: "64000",
+    CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe",
+    ANTHROPIC_MODEL: "player-model",
+    AWS_BEARER_TOKEN_BEDROCK: "player-bedrock",
+    OPENAI_ORG_ID: "player-org",
+    [TEST_KEY_ENV]: "k-from-shell",
+    ANTHROPIC_API_KEY: "player-anthropic",
+    Claude_Config_Dir: "C:\\Users\\p\\.claude-alt",
+    CLAUDE_CODE_OAUTH_TOKEN: "player-oauth",
+    OPENAI_API_KEY: "player-openai",
+    CODEX_HOME: "C:\\Users\\p\\.codex",
+  };
+
+  it("runs Claude on the endpoint with its own config folder, and none of the player's login", () => {
+    expect(testProviderEnv("claude", provider, "k1", "T:\\claude-home", playerEnv)).toEqual({
+      PATH: "C:\\bin",
+      // Kept: where Claude Code finds Git Bash, not a login.
+      CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe",
+      Https_Proxy: "http://proxy:8080",
+      ED_MCP_INARA_KEY: "player-inara",
+      npm_config_registry: "https://registry.example/",
+      ANTHROPIC_DEFAULT_SONNET_MODEL: "glm",
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+      CLAUDE_CONFIG_DIR: "T:\\claude-home",
+      ANTHROPIC_BASE_URL: "https://a.example/anthropic",
+      ANTHROPIC_AUTH_TOKEN: "k1",
+    });
+  });
+
+  it("runs Codex with its own CODEX_HOME and the key in ED_CHAT_TEST_API_KEY only", () => {
+    expect(testProviderEnv("codex", provider, "k2", "T:\\codex-home", playerEnv)).toEqual({
+      PATH: "C:\\bin",
+      CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe",
+      Https_Proxy: "http://proxy:8080",
+      ED_MCP_INARA_KEY: "player-inara",
+      npm_config_registry: "https://registry.example/",
+      CODEX_HOME: "T:\\codex-home",
+      [TEST_KEY_ENV]: "k2",
+    });
+    expect(() => testProviderEnv("codex", { name: "c" }, "k", "h", {})).toThrow(/no codex/);
+  });
+
+  it("keeps the config folders out of the temp folder, where Codex sets up no sandbox", () => {
+    expect(providerHomesDir({ LOCALAPPDATA: "C:\\LA" }, "C:\\Users\\p", "win32", "run1")).toBe(
+      "C:\\LA\\ed-chat-compare\\run1",
+    );
+    expect(providerHomesDir({}, "C:\\Users\\p", "win32", "run1")).toBe(
+      "C:\\Users\\p\\AppData\\Local\\ed-chat-compare\\run1",
+    );
+    expect(providerHomesDir({}, "/home/p", "linux", "run1")).toBe(
+      "/home/p/.cache/ed-chat-compare/run1",
+    );
+  });
+
+  it("keeps the provider's key from runs on the player's own login", () => {
+    expect(withoutTestKey({ PATH: "p", [TEST_KEY_ENV]: "k", ed_chat_test_api_key: "k" })).toEqual({
+      PATH: "p",
+    });
+  });
+
+  it("stops a run its provider cannot serve, before any CLI starts", () => {
+    const zai: TestProvider = {
+      name: "z.ai",
+      claude: { baseUrl: "https://a.example", env: {} },
+      codex: { baseUrl: "https://b.example", models: [{ slug: "glm-5.3" }] },
+    };
+    const claudeOnly: TestProvider = {
+      name: "c",
+      claude: { baseUrl: "https://a.example", env: {} },
+    };
+    const providers = new Map([
+      ["zai", zai],
+      ["c", claudeOnly],
+    ]);
+    expect(
+      providerRunsProblem(
+        [
+          { agent: "claude", model: "sonnet" },
+          { agent: "codex", model: "glm-5.3", provider: "zai" },
+        ],
+        providers,
+      ),
+    ).toBeNull();
+    expect(
+      providerRunsProblem([{ agent: "codex", model: "glm-5.4", provider: "zai" }], providers),
+    ).toBe("--run codex:glm-5.4@zai: zai has glm-5.3");
+    expect(providerRunsProblem([{ agent: "codex", model: "m", provider: "c" }], providers)).toMatch(
+      /c has no codex endpoint/,
+    );
+    expect(
+      providerRunsProblem([{ agent: "claude", model: "m", provider: "x" }], providers),
+    ).toMatch(/no --provider is named x/);
+  });
+
+  it("needs a key of a real length when a provider is given, except for a dry run", () => {
+    const key = "0123456789abcdef.0123";
+    expect(testKeyProblem("", false, false)).toBeNull();
+    expect(testKeyProblem("", true, true)).toBeNull();
+    expect(testKeyProblem("", true, false)).toMatch(/set ED_CHAT_TEST_API_KEY/);
+    expect(testKeyProblem("short", true, false)).toMatch(/too short/);
+    expect(testKeyProblem("short", true, true)).toBeNull();
+    expect(testKeyProblem(key, true, false)).toBeNull();
+  });
+
+  it("gives a provider run none of ED Chat's extra CLI arguments, and its permission mode", () => {
+    const s = { permissionMode: "auto", extraArgs: ["-c", "model_provider=openai"], model: "m" };
+    const p: TestProvider = {
+      name: "p",
+      claude: { baseUrl: "https://a.example", env: {}, permissionMode: "default" },
+      codex: { baseUrl: "https://b.example", models: null },
+    };
+    expect(runCliSettings(s, "claude", null)).toBe(s);
+    expect(runCliSettings(s, "claude", p)).toEqual({
+      ...s,
+      extraArgs: [],
+      permissionMode: "default",
+    });
+    expect(runCliSettings(s, "codex", p)).toEqual({ ...s, extraArgs: [] });
+    // No mode in the provider file: default for Claude, whose auto mode fails there.
+    const bare: TestProvider = { name: "b", claude: { baseUrl: "https://a.example", env: {} } };
+    expect(runCliSettings(s, "claude", bare).permissionMode).toBe("default");
+  });
+
+  it("takes the key out of every copy in a report", () => {
+    const k = "sk.0123456789abcdef";
+    expect(redactKey(`env: KEY=${k} and again ${k}`, k)).toBe("env: KEY=[key] and again [key]");
+    expect(redactKey("no key here", "")).toBe("no key here");
+    // Too short to be a key: the script refuses one, and nothing is replaced.
+    expect(redactKey("a test run", "test")).toBe("a test run");
+    const zai = "0123456789abcdef0123.ABCDEFGHIJKLMNOP";
+    expect(redactKey(`id 0123456789abcdef0123, secret ABCDEFGHIJKLMNOP`, zai)).toBe(
+      "id [key], secret [key]",
+    );
+  });
+
+  it("writes a Codex provider that reads the key from the environment, not the file", () => {
+    expect(parseToml(codexTestConfig("https://b.example/v1", "T:\\h\\models.json"))).toEqual({
+      model_provider: "ed-chat-test",
+      model_catalog_json: "T:\\h\\models.json",
+      model_providers: {
+        "ed-chat-test": {
+          name: "ed-chat-test",
+          base_url: "https://b.example/v1",
+          env_key: TEST_KEY_ENV,
+          wire_api: "responses",
+        },
+      },
+    });
+    expect(parseToml(codexTestConfig("https://b.example/v1", null))).not.toHaveProperty(
+      "model_catalog_json",
+    );
   });
 });
 
@@ -294,6 +636,34 @@ describe("summaries", () => {
   });
 });
 
+describe("redactRun", () => {
+  it("keeps the key out of both reports, wherever a reply or error quotes it", () => {
+    const key = "0123456789abcdef0123.ABCDEFGHIJKLMNOPQRS";
+    const leaky: CompareRun = {
+      ...run,
+      runs: [
+        {
+          ...claudeRun,
+          results: [
+            {
+              ...claudeRun.results[0]!,
+              reply: `env:
+ANTHROPIC_AUTH_TOKEN=${key} | done`,
+            },
+            { ...claudeRun.results[1]!, isError: true, error: `401 for "${key}"` },
+          ],
+        },
+      ],
+    };
+    const clean = redactRun(leaky, key);
+    expect(buildReport(leaky)).toContain(key.split(".")[1]);
+    expect(buildReport(clean)).not.toContain(key.split(".")[1]);
+    expect(JSON.stringify(clean)).not.toContain(key.split(".")[1]);
+    expect(JSON.stringify(clean)).not.toContain(key.split(".")[0]);
+    expect(clean.runs[0]!.results[1]!.error).toBe('401 for "[key]"');
+  });
+});
+
 describe("buildReport", () => {
   const report = buildReport(run);
 
@@ -307,6 +677,19 @@ describe("buildReport", () => {
     });
     expect(report).toContain("| | Claude (sonnet) | Claude (opus) |");
     expect(report).toContain("model sonnet");
+  });
+
+  it("names the test endpoint a run went through", () => {
+    const report = buildReport({
+      ...run,
+      runs: [
+        { ...claudeRun, model: "sonnet" },
+        { ...claudeRun, via: "z.ai", endpoint: "https://a.example/anthropic", model: "sonnet" },
+      ],
+    });
+    expect(report).toContain("| | Claude (sonnet) | z.ai via Claude (sonnet) |");
+    expect(report).toContain("through z.ai, https://a.example/anthropic");
+    expect(buildReport(run)).not.toContain("through ");
   });
 
   it("has a summary with a column per assistant", () => {

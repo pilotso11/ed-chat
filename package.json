@@ -8,7 +8,7 @@
   "type": "module",
   "main": "out/main/index.js",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "scripts": {
     "dev": "electron-vite dev",
@@ -20,6 +20,7 @@
     "coverage": "vitest run --coverage",
     "test:e2e": "npm run build && playwright test",
     "check": "npm run typecheck && npm run format:check && npm run coverage",
+    "compare:providers": "tsx scripts/compare-agents.ts --provider scripts/providers/zai.json --run claude:sonnet --run claude:opus --run codex:gpt-6.2-sol --run claude:glm-5.3@zai --run codex:glm-5.3@zai",
     "dist": "npm run build && electron-builder --win --publish never"
   },
   "dependencies": {
@@ -32,6 +33,8 @@
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.3",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -41,6 +44,7 @@
     "electron": "^45.3.3",
     "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
+    "jsdom": "28.1.0",
     "prettier": "^3.10.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

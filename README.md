@@ -263,6 +263,31 @@ denied and the overlay shows `⛔ denied … no answer`.
 To never be asked about ed-mcp tools, add `"mcp__ed-mcp__*"` to
 `permissions.allow` in `~/.claude/settings.json`.
 
+## Other model providers
+
+ED Chat starts your own `claude` or `codex` command, so a third-party model
+provider that you set up in that assistant also works in ED Chat. Follow your
+provider's instructions for Claude Code or Codex, then change these ED Chat
+settings:
+
+- **Claude Code**: the provider's settings go in the `env` of
+  `~/.claude/settings.json` (`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, and
+  the model names). Set `claude.permissionMode` to `default`. Auto mode needs
+  Anthropic's safety check, which does not run through another provider, so in
+  auto mode every tool call fails, ed-mcp included. Set `claude.model` to a
+  model that the provider has, or keep `sonnet` if the provider maps it to one
+  of its models.
+- **Codex**: the provider goes in `~/.codex/config.toml`, with
+  `wire_api = "responses"` (Codex no longer accepts `"chat"`). Set
+  `codex.model` to the provider's model, or to `null` to use the model in
+  `config.toml`. The default `gpt-6.1-terra` replaces the model in
+  `config.toml`, and the provider does not have it.
+
+This was tested with the z.ai GLM Coding Plan and `glm-5.3`, in both
+assistants. A Coding Plan needs a key made for that plan: a standard API key
+gets `1113 Insufficient balance`. With Codex, `glm-5.3` asked for approval
+before shell commands that OpenAI's models ran without asking.
+
 ## Settings
 
 `%APPDATA%\ed-chat\settings.json` holds only the settings you change; every
@@ -362,8 +387,11 @@ conversation, ED Chat still resumes it, but the history view starts empty.
 ## Tests
 
 - `npm run check`: typecheck, format check, and the unit tests with coverage. It fails if
-  coverage of `src/core` drops below the minimums in `vitest.config.ts`. The HTML report is in
-  `coverage/`.
+  coverage of `src/core` or of the React components drops below the minimums in
+  `vitest.config.ts`. The HTML report is in `coverage/`.
+- The tests in `test/renderer` render the chat window and the activity panel with React Testing
+  Library in jsdom, with a fake `window.overlay` in place of the preload API. They push views in
+  as main does, and check what the windows show and what they send back to main.
 - `npm run test:e2e`: builds the app, then runs the Playwright tests in `e2e/`. They start
   ED Chat in Electron with a fake Claude CLI and temporary folders, so they do not touch your
   settings, your journal or your Claude login. Its windows do show on screen, over whatever is
