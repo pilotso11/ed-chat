@@ -46,6 +46,7 @@ import {
   providerHomesDir,
   providerName,
   redactKey,
+  redactRun,
   withoutTestKey,
   type TestProvider,
   type RunSpec,
@@ -541,9 +542,7 @@ try {
       await mkdir(path.dirname(out), { recursive: true });
       // A reply can quote the key (a model that prints its environment). Every string goes
       // before either report is built, so escaping in Markdown or JSON cannot hide a copy.
-      const clean = JSON.parse(
-        JSON.stringify(run, (_, v: unknown) => (typeof v === "string" ? redactKey(v, testKey) : v)),
-      ) as CompareRun;
+      const clean = redactRun(run, testKey);
       await writeFile(out, buildReport(clean));
       await writeFile(jsonOut, JSON.stringify(clean, null, 2) + "\n");
       console.error(`Report: ${out}\nNumbers: ${jsonOut}`);

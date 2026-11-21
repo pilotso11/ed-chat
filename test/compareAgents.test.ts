@@ -17,6 +17,7 @@ import {
   runCliSettings,
   testKeyProblem,
   redactKey,
+  redactRun,
   withoutTestKey,
   providerHomesDir,
   parseQuestions,
@@ -632,6 +633,34 @@ describe("summaries", () => {
 
   it("keeps a table cell in one piece", () => {
     expect(cell("a | b\nc <x> & d")).toBe("a \\| b<br>c &lt;x&gt; &amp; d");
+  });
+});
+
+describe("redactRun", () => {
+  it("keeps the key out of both reports, wherever a reply or error quotes it", () => {
+    const key = "0123456789abcdef0123.ABCDEFGHIJKLMNOPQRS";
+    const leaky: CompareRun = {
+      ...run,
+      runs: [
+        {
+          ...claudeRun,
+          results: [
+            {
+              ...claudeRun.results[0]!,
+              reply: `env:
+ANTHROPIC_AUTH_TOKEN=${key} | done`,
+            },
+            { ...claudeRun.results[1]!, isError: true, error: `401 for "${key}"` },
+          ],
+        },
+      ],
+    };
+    const clean = redactRun(leaky, key);
+    expect(buildReport(leaky)).toContain(key.split(".")[1]);
+    expect(buildReport(clean)).not.toContain(key.split(".")[1]);
+    expect(JSON.stringify(clean)).not.toContain(key.split(".")[1]);
+    expect(JSON.stringify(clean)).not.toContain(key.split(".")[0]);
+    expect(clean.runs[0]!.results[1]!.error).toBe('401 for "[key]"');
   });
 });
 

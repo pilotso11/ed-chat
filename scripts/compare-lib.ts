@@ -13,6 +13,9 @@ import {
 export const AGENT_IDS: AgentId[] = ["claude", "codex"];
 const NAMES: Record<AgentId, string> = { claude: "Claude", codex: "Codex" };
 
+/** The environment variable that holds the provider's key. Never an argument or a file. */
+export const TEST_KEY_ENV = "ED_CHAT_TEST_API_KEY";
+
 export const USAGE = `Usage: npx tsx scripts/compare-agents.ts [options]
 
 Sends the same player questions to Claude and Codex through ED Chat's own sessions, with the
@@ -32,7 +35,7 @@ Options:
   --provider <file>     A third-party endpoint that --run <agent>@<name> can use instead of the
                         player's own login; <name> is the file name without .json, for example
                         scripts/providers/zai.json gives zai. Give it more than once for more
-                        providers. The key is read from ED_CHAT_TEST_API_KEY. A run through a
+                        providers. The key is read from ${TEST_KEY_ENV}. A run through a
                         provider gets an empty config folder of its own, removed when the
                         script ends: the player's login, settings and history are not read or
                         changed. It needs a model: --run <agent>:<model>@<name>. ED Chat's
@@ -283,9 +286,6 @@ function isHttpUrl(v: unknown): v is string {
   }
 }
 
-/** The environment variable that holds the provider's key. Never an argument or a file. */
-export const TEST_KEY_ENV = "ED_CHAT_TEST_API_KEY";
-
 /** A third-party endpoint for the assistants, from --provider. It holds no key. */
 export interface TestProvider {
   name: string;
@@ -521,6 +521,16 @@ export function redactKey(text: string, key: string): string {
   const parts = [key, ...key.split(".").filter((p) => p.length >= 16 && p !== key)];
   // Not <key>: a Markdown viewer hides that as an unknown HTML tag.
   return parts.reduce((t, p) => t.split(p).join("[key]"), text);
+}
+
+/**
+ * The run with the key taken out of every string (replies, errors, approvals), before either
+ * report is built: escaping in Markdown or JSON cannot then hide a copy.
+ */
+export function redactRun(run: CompareRun, key: string): CompareRun {
+  return JSON.parse(
+    JSON.stringify(run, (_, v: unknown) => (typeof v === "string" ? redactKey(v, key) : v)),
+  ) as CompareRun;
 }
 
 /**
