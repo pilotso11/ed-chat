@@ -241,6 +241,9 @@ describe("providers", () => {
       expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "x" } } })).toThrow(
         /must not set/,
       );
+    expect(parse({ claude: { baseUrl: "https://a.example", permissionMode: "auto" } })).toThrow(
+      /cannot be auto/,
+    );
     expect(parse({ codex: { baseUrl: "https://b.example", permissionMode: "yolo" } })).toThrow(
       /auto or default/,
     );
@@ -366,7 +369,7 @@ describe("providers", () => {
     expect(testKeyProblem("", true, true)).toBeNull();
     expect(testKeyProblem("", true, false)).toMatch(/set ED_CHAT_TEST_API_KEY/);
     expect(testKeyProblem("short", true, false)).toMatch(/too short/);
-    expect(testKeyProblem("short", true, true)).toMatch(/too short/);
+    expect(testKeyProblem("short", true, true)).toBeNull();
     expect(testKeyProblem(key, true, false)).toBeNull();
   });
 
@@ -384,6 +387,9 @@ describe("providers", () => {
       permissionMode: "default",
     });
     expect(runCliSettings(s, "codex", p)).toEqual({ ...s, extraArgs: [] });
+    // No mode in the provider file: default for Claude, whose auto mode fails there.
+    const bare: TestProvider = { name: "b", claude: { baseUrl: "https://a.example", env: {} } };
+    expect(runCliSettings(s, "claude", bare).permissionMode).toBe("default");
   });
 
   it("takes the key out of every copy in a report", () => {

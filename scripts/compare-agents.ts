@@ -419,9 +419,13 @@ try {
       command: cli?.command ?? null,
       version: null,
       permissionMode: s.permissionMode,
-      // Only ed-mcp: Claude runs with --strict-mcp-config, and a provider run's empty config
-      // folder has none of the player's servers. Codex on the player's login loads theirs too.
-      edMcp: agent === "claude" || provider ? `${edMcpNote}, and no other MCP server` : edMcpNote,
+      // Claude runs with --strict-mcp-config (ed-mcp and ED Chat's approval server), and a
+      // provider run's empty config folder has none of the player's servers. Codex on the
+      // player's login loads theirs too.
+      edMcp:
+        agent === "claude" || provider
+          ? `${edMcpNote}, and none of the player's other MCP servers`
+          : edMcpNote,
       results: [],
     };
     // Checked when the provider files were read: a provider run always has its endpoint.

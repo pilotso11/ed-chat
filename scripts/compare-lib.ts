@@ -243,9 +243,9 @@ export function providerRunsProblem(
 
 /** Why the provider key cannot be used, or null. A dry run needs none. */
 export function testKeyProblem(key: string, hasProviders: boolean, dryRun: boolean): string | null {
-  if (!hasProviders) return null;
-  if (!key)
-    return dryRun ? null : `--provider was given: set ${TEST_KEY_ENV} to the provider's key.`;
+  // A dry run starts no CLI, so it does not use the key at all.
+  if (!hasProviders || dryRun) return null;
+  if (!key) return `--provider was given: set ${TEST_KEY_ENV} to the provider's key.`;
   if (key.length < MIN_KEY_LENGTH)
     return `${TEST_KEY_ENV} is too short to be a key (${key.length} characters).`;
   return null;
@@ -262,7 +262,9 @@ export function runCliSettings<S extends { permissionMode: string; extraArgs: st
   provider: TestProvider | null,
 ): S {
   if (!provider) return s;
-  const mode = provider[agent]?.permissionMode;
+  // Claude's auto mode needs Anthropic's safety check, which another provider does not have:
+  // every tool call would fail. So a provider Claude run is in default mode unless told.
+  const mode = provider[agent]?.permissionMode ?? (agent === "claude" ? "default" : undefined);
   return { ...s, extraArgs: [], ...(mode ? { permissionMode: mode } : {}) };
 }
 
@@ -331,6 +333,11 @@ export function parseProvider(json: string): TestProvider {
       o.permissionMode !== "default"
     )
       throw new Error(`the provider's ${agent}.permissionMode is not auto or default`);
+    if (agent === "claude" && o.permissionMode === "auto")
+      throw new Error(
+        "the provider's claude.permissionMode cannot be auto: its safety check does not run " +
+          "through another provider, so every tool call fails",
+      );
     return o;
   };
   // Instead of the one in ED Chat's settings, for an endpoint where that mode does not work.
