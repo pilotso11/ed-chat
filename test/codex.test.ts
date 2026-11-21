@@ -242,10 +242,15 @@ describe("codex command", () => {
         cwd: "C:\\w",
         settingsFile,
       });
+      expect(developerInstructions).toContain(
+        "use the current journal location and the ship's laden jump range",
+      );
+      expect(developerInstructions).toContain("say that the route uses neutron boosting");
       expect(developerInstructions).toContain("Sum the jumps field across the waypoints");
       expect(developerInstructions).toContain(
         "A leg between saved plan stops can take several jumps",
       );
+      expect(developerInstructions).toContain("If the plan lacks jump counts, plot a fresh route");
       expect(developerInstructions).toContain("a lower bound for unboosted travel");
       expect(developerInstructions).toContain("use materials_plan when available");
       expect(developerInstructions).toContain("the nearest matching trader in a map marker");
