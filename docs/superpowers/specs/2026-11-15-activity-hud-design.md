@@ -143,12 +143,14 @@ The mode is the newest of three choices, each with a time:
 
 | Source | Sets | Time |
 |---|---|---|
-| `MissionAccepted` for a massacre mission | massacre | the event's timestamp, or the newest readable event time before it when it has none |
+| `MissionAccepted` for a massacre mission | massacre | the event's timestamp |
 | `FSSDiscoveryScan`, or a `Scan` of type `Detailed` (an FSS or probe scan) | exploration | the event's timestamp |
 | `ApproachBody` or `Touchdown` on a body with bio signals, or `ScanOrganic` | exobiology | the event's timestamp |
 | `LeaveBody`, when exobiology was the mode | exploration | the event's timestamp |
 | The activity note's `kind`, if it is one of the three | that mode | the note's `updated_at` |
 | The `hudMode` hotkey | the chosen mode, or off | the moment of the key press |
+
+An event with no readable timestamp takes the newest readable time of the events before it.
 
 - Massacre mode ends when ed-mcp's mission list has no massacre mission left. `MissionCompleted`,
   `MissionFailed` and `MissionAbandoned` remove missions, and the `Missions` list at login drops
