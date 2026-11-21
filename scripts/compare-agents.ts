@@ -206,11 +206,22 @@ for (const file of opts.providers) {
 }
 // A run through a provider never falls back to the player's own login, so one the provider
 // cannot serve stops the comparison here, before any tokens are spent.
-for (const { agent, provider } of specs)
-  if (provider && !providers.get(provider)![agent]) {
+for (const { agent, model, provider } of specs) {
+  if (!provider) continue;
+  if (!providers.get(provider)![agent]) {
     console.error(`--run ${agent}@${provider}: ${provider} has no ${agent} endpoint`);
     process.exit(2);
   }
+  // Codex takes only the models in the provider's catalog, when it has one.
+  const catalog = providers.get(provider)!.codex?.models;
+  if (agent === "codex" && catalog) {
+    const slugs = catalog.map((m) => (m as { slug?: unknown }).slug);
+    if (!slugs.includes(model)) {
+      console.error(`--run codex:${model}@${provider}: ${provider} has ${slugs.join(", ")}`);
+      process.exit(2);
+    }
+  }
+}
 const testKey = process.env[TEST_KEY_ENV]?.trim() ?? "";
 if (providers.size && !testKey && !opts.dryRun) {
   console.error(`--provider was given: set ${TEST_KEY_ENV} to the provider's key.`);

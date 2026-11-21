@@ -368,6 +368,12 @@ const ALLOWED_VARS = new Set([
   "NO_PROXY",
   "NODE_EXTRA_CA_CERTS",
   "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "ALL_PROXY",
+  "REQUESTS_CA_BUNDLE",
+  "CURL_CA_BUNDLE",
+  "XDG_CACHE_HOME",
+  "NVM_DIR",
   // Node version managers, for node and npx (ed-mcp)
   "NVM_HOME",
   "NVM_SYMLINK",
