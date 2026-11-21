@@ -20,6 +20,7 @@
     "coverage": "vitest run --coverage",
     "test:e2e": "npm run build && playwright test",
     "check": "npm run typecheck && npm run format:check && npm run coverage",
+    "compare:providers": "tsx scripts/compare-agents.ts --provider scripts/providers/zai.json --run claude:sonnet --run claude:opus --run codex:gpt-6.2-sol --run claude:glm-5.3@zai --run codex:glm-5.3@zai",
     "dist": "npm run build && electron-builder --win --publish never"
   },
   "dependencies": {
