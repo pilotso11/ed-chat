@@ -9,7 +9,7 @@ const MARKS: Record<RouteRow["kind"], string> = {
   more: "",
 };
 
-export function Hud() {
+export function HudPanel() {
   const [v, setV] = useState<HudView | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => window.overlay.onHud(setV), []);

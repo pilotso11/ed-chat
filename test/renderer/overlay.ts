@@ -1,5 +1,5 @@
-import { act, cleanup } from "@testing-library/react";
-import { afterEach, vi, type Mock } from "vitest";
+import { act } from "@testing-library/react";
+import { vi, type Mock } from "vitest";
 import type { HudView } from "../../src/core/hud/hud.js";
 import type { ViewModel } from "../../src/core/view.js";
 import type { OverlayApi } from "../../src/shared/ipc.js";
@@ -45,22 +45,42 @@ export function fakeOverlay(): FakeOverlay {
   return o;
 }
 
-// jsdom has no ResizeObserver; this one reports each observed element once, as a browser does
-// when observing starts.
-class FakeResizeObserver {
-  constructor(private cb: ResizeObserverCallback) {}
+/**
+ * jsdom has no ResizeObserver, and lays nothing out. test/renderer/setup.ts installs this one: a
+ * size change is a test calling resize(), which reports every element still observed, as a
+ * browser reports each change after layout.
+ */
+export class FakeResizeObserver {
+  static active = new Set<FakeResizeObserver>();
+  readonly targets = new Set<Element>();
+  constructor(readonly cb: ResizeObserverCallback) {}
   observe(el: Element) {
-    this.cb([{ target: el } as ResizeObserverEntry], this as unknown as ResizeObserver);
+    this.targets.add(el);
+    FakeResizeObserver.active.add(this);
   }
-  unobserve() {}
-  disconnect() {}
+  unobserve(el: Element) {
+    this.targets.delete(el);
+  }
+  disconnect() {
+    this.targets.clear();
+    FakeResizeObserver.active.delete(this);
+  }
+  static observing(): number {
+    let n = 0;
+    for (const o of FakeResizeObserver.active) n += o.targets.size;
+    return n;
+  }
 }
-globalThis.ResizeObserver = FakeResizeObserver as unknown as typeof ResizeObserver;
 
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-});
+/** Every observed element changed size. */
+export function resize(): void {
+  act(() => {
+    for (const o of [...FakeResizeObserver.active]) {
+      const entries = [...o.targets].map((target) => ({ target }) as ResizeObserverEntry);
+      if (entries.length) o.cb(entries, o as unknown as ResizeObserver);
+    }
+  });
+}
 
 export function baseView(over: Partial<ViewModel> = {}): ViewModel {
   return {

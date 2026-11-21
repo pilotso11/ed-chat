@@ -1,4 +1,4 @@
 import { createRoot } from "react-dom/client";
-import { Hud } from "./HudPanel.js";
+import { HudPanel } from "./HudPanel.js";
 
-createRoot(document.getElementById("root")!).render(<Hud />);
+createRoot(document.getElementById("root")!).render(<HudPanel />);

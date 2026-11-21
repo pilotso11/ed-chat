@@ -3,7 +3,7 @@ import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ViewModel } from "../../src/core/view.js";
 import { App } from "../../src/renderer/App.js";
-import { baseView, fakeOverlay } from "./overlay.js";
+import { baseView, fakeOverlay, FakeResizeObserver, resize } from "./overlay.js";
 
 function setup(v?: Partial<ViewModel>) {
   const overlay = fakeOverlay();
@@ -33,12 +33,26 @@ describe("status strip", () => {
     expect(overlay.onView).toHaveBeenCalledOnce();
   });
 
-  it("shows the status, the AUTO badge with the agent's name, and reports its height", () => {
-    const { $, overlay } = setup({ status: "● idle", auto: true, agentName: "Codex" });
+  it("shows the status and the AUTO badge with the agent's name", () => {
+    const { $ } = setup({ status: "● idle", auto: true, agentName: "Codex" });
     expect($(".strip .state")?.textContent).toBe("● idleAUTO");
     expect($(".badge")?.title).toBe("Codex runs most tools without asking");
     expect($(".strip")?.hidden).toBe(false);
-    expect(overlay.reportHeight).toHaveBeenCalledWith(0);
+  });
+
+  it("reports its height on each change once it shows, until unmounted", () => {
+    const overlay = fakeOverlay();
+    const { unmount } = render(<App />);
+    // Nothing to measure before the first view.
+    expect(FakeResizeObserver.observing()).toBe(0);
+    overlay.view(baseView());
+    overlay.view(baseView({ status: "● sending" }));
+    expect(FakeResizeObserver.observing()).toBe(1);
+    expect(overlay.reportHeight).not.toHaveBeenCalled();
+    resize();
+    expect(overlay.reportHeight.mock.calls).toEqual([[0]]);
+    unmount();
+    expect(FakeResizeObserver.observing()).toBe(0);
   });
 
   it("has no badge when not in auto mode", () => {

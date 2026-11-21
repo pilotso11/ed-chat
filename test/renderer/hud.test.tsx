@@ -2,8 +2,8 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { HudView } from "../../src/core/hud/hud.js";
-import { Hud } from "../../src/renderer/HudPanel.js";
-import { fakeOverlay } from "./overlay.js";
+import { HudPanel } from "../../src/renderer/HudPanel.js";
+import { fakeOverlay, FakeResizeObserver, resize } from "./overlay.js";
 
 const base: HudView = {
   panel: null,
@@ -16,15 +16,28 @@ const base: HudView = {
 
 function setup() {
   const overlay = fakeOverlay();
-  const { container } = render(<Hud />);
+  const { container } = render(<HudPanel />);
   return { overlay, container, hud: container.querySelector<HTMLDivElement>(".hud")! };
 }
 
 describe("activity panel", () => {
-  it("shows nothing until main sends a view, and reports its size", () => {
-    const { overlay, hud } = setup();
+  it("shows nothing until main sends a view", () => {
+    const { hud } = setup();
     expect(hud.children).toHaveLength(0);
-    expect(overlay.reportHudSize).toHaveBeenCalledWith(0, 0);
+  });
+
+  it("reports its size at once and on each change, until unmounted", () => {
+    const overlay = fakeOverlay();
+    const { unmount } = render(<HudPanel />);
+    expect(overlay.reportHudSize.mock.calls).toEqual([[0, 0]]);
+    resize();
+    expect(overlay.reportHudSize).toHaveBeenCalledTimes(2);
+    // New views do not add observers.
+    overlay.hud({ ...base, moving: "move" });
+    overlay.hud({ ...base, moving: "move on" });
+    expect(FakeResizeObserver.observing()).toBe(1);
+    unmount();
+    expect(FakeResizeObserver.observing()).toBe(0);
   });
 
   it("shows nothing for a view with no panel, route or move", () => {
