@@ -70,9 +70,24 @@ function CopyableNotice({ text }: { text: string }) {
   );
 }
 
+// Its own component, like CopyableNotice: when the other notices go, it unmounts under the
+// pointer and gives the clicks back.
+function MoreNotices({ n }: { n: number }) {
+  const target = useClickTarget();
+  return (
+    <button
+      className="more-notices"
+      title="Show all messages"
+      {...target}
+      onClick={() => window.overlay.showNotices()}
+    >
+      +{n}
+    </button>
+  );
+}
+
 // A command in backticks shows as code; a click copies it. "+n" lists every notice.
 function NoticeView({ notice }: { notice: NonNullable<ViewModel["notice"]> }) {
-  const more = useClickTarget();
   return (
     <span className="notices">
       {notice.command ? (
@@ -82,16 +97,7 @@ function NoticeView({ notice }: { notice: NonNullable<ViewModel["notice"]> }) {
           <NoticeText text={notice.text} />
         </span>
       )}
-      {notice.more > 0 && (
-        <button
-          className="more-notices"
-          title="Show all messages"
-          {...more}
-          onClick={() => window.overlay.showNotices()}
-        >
-          +{notice.more}
-        </button>
-      )}
+      {notice.more > 0 && <MoreNotices n={notice.more} />}
     </span>
   );
 }

@@ -141,6 +141,16 @@ describe("click targets", () => {
     expect(overlay.hover.mock.calls).toEqual([[true], [false]]);
   });
 
+  it("gives the clicks back when the hovered +n button goes", () => {
+    const { $, overlay } = setup({ notice: { text: "copied Sol", command: null, more: 1 } });
+    fireEvent.mouseEnter($(".more-notices")!);
+    expect(overlay.hover.mock.calls).toEqual([[true]]);
+    // The other notice expired: the notice stays, its button goes.
+    overlay.view(baseView({ notice: { text: "copied Sol", command: null, more: 0 } }));
+    expect($(".more-notices")).toBeNull();
+    expect(overlay.hover.mock.calls).toEqual([[true], [false]]);
+  });
+
   it("keeps the clicks while a hovered command notice is replaced by another", () => {
     const { $, overlay } = setup({
       notice: { text: "Run `npx ed-mcp setup`", command: "npx ed-mcp setup", more: 0 },
