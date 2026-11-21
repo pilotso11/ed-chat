@@ -36,6 +36,51 @@ jobs:
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ steps.app.outputs.token }}
+      # The README's coverage badge reads coverage.json from the latest release, which this
+      # release now is. Until the coverage job below replaces it, it gets the previous
+      # release's file, so the badge never points at a release without one.
+      - name: Carry the coverage badge over
+        if: steps.rp.outputs.release_created == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.rp.outputs.tag_name }}
+        run: |
+          prev=$(gh release list --exclude-drafts --limit 10 --json tagName --jq '.[].tagName' |
+            grep -vx "$TAG" | head -1)
+          if [ -n "$prev" ] && gh release download "$prev" -p coverage.json -D badge; then
+            gh release upload "$TAG" badge/coverage.json --clobber
+          else
+            echo "::warning::no coverage.json on $prev to carry over"
+          fi
+
+  # The badge's number for this release. Apart from the installer, so a failing test here
+  # never holds up the installer; the release then keeps the carried-over number.
+  coverage-badge:
+    needs: release-please
+    if: needs.release-please.outputs.created == 'true'
+    runs-on: windows-latest
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run coverage
+      - run: npx tsx scripts/coverage-badge.ts
+      - run: gh release upload "$TAG" coverage/coverage.json --clobber
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag }}
+      - if: failure()
+        run: echo "::warning::coverage badge not updated; it keeps the previous release's number"
+        shell: bash
 
   installer:
     needs: release-please
@@ -59,17 +104,3 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag }}
-      # The README's coverage badge reads coverage.json from the latest release, so nothing is
-      # committed or published anywhere else. After the installer, and allowed to fail: a test
-      # that fails here leaves the badge at the last release's number, never a release without
-      # its installer. CI ran the same tests on this commit before it merged.
-      - name: Coverage badge
-        continue-on-error: true
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.release-please.outputs.tag }}
-        run: |
-          npm run coverage
-          npx tsx scripts/coverage-badge.ts
-          gh release upload "$TAG" coverage/coverage.json --clobber
