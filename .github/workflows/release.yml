@@ -54,7 +54,11 @@ jobs:
       - run: npx electron-builder --win --publish never
       # Attach to the release release-please just created; electron-builder skips
       # publishing to a release that is already published.
-      - run: gh release upload "$TAG" dist/*.exe dist/*.appx --clobber
+      # The README's coverage badge reads coverage.json from the latest release, so nothing
+      # is committed or published anywhere else.
+      - run: npm run coverage
+      - run: npx tsx scripts/coverage-badge.ts
+      - run: gh release upload "$TAG" dist/*.exe dist/*.appx coverage/coverage.json --clobber
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
