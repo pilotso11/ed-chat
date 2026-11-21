@@ -65,6 +65,15 @@ describe("journalMode", () => {
     });
   });
 
+  it("dates a scan or sample with no readable time by the newest readable event", () => {
+    const jump = ev("FSDJump");
+    const sample = { ...ev("ScanOrganic", { ScanType: "Log" }), timestamp: "" };
+    expect(journalMode([ev("FSSDiscoveryScan"), jump, sample], false)).toEqual({
+      mode: "exobiology",
+      at: Date.parse(jump.timestamp),
+    });
+  });
+
   it("does not leave massacre mode for a scan while missions are open", () => {
     const events = [massacreAccepted(), ev("Scan", { ScanType: "Detailed" })];
     expect(journalMode(events, true)?.mode).toBe("massacre");
