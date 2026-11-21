@@ -26,7 +26,7 @@ Options:
                         models, for example --run claude:sonnet --run claude:opus --run codex.
                         Without a model, the model in ED Chat's settings is used. With
                         @provider, the run goes through that provider (see --provider), for
-                        example --run claude@zai --run codex:glm-5.3@zai. An @ that does not
+                        example --run claude:glm-5.3@zai --run codex:glm-5.3@zai. An @ that does not
                         name a --provider is part of the model, as in claude:model@20250514.
   --provider <file>     A third-party endpoint that --run <agent>@<name> can use instead of the
                         player's own login; <name> is the file name without .json, for example
@@ -34,7 +34,8 @@ Options:
                         providers. The key is read from ED_CHAT_TEST_API_KEY. A run through a
                         provider gets an empty config folder of its own, removed when the
                         script ends: the player's login, settings and history are not read or
-                        changed. Codex needs a model then: --run codex:<model>@<name>.
+                        changed. It needs a model: --run <agent>:<model>@<name>. ED Chat's
+                        extra arguments for the CLI are not passed to it.
   --questions <file>    A JSON list of { "topic", "text" } (default scripts/compare-questions.json).
   --out <file>          The Markdown report (default in the temp folder). The raw numbers go
                         next to it, with .json. It must be outside the repo.
@@ -179,11 +180,11 @@ export function parseArgs(
         ok: false,
         error: `--run ${r.agent}@${r.provider}: no --provider is named ${r.provider}`,
       };
-    // The model in ED Chat's settings is an OpenAI one, which the provider will not know.
-    if (r.provider && r.agent === "codex" && !r.model)
+    // The model in ED Chat's settings is the player's own, which the provider may not know.
+    if (r.provider && !r.model)
       return {
         ok: false,
-        error: `--run codex@${r.provider} needs a model: codex:<model>@${r.provider}`,
+        error: `--run ${r.agent}@${r.provider} needs a model: ${r.agent}:<model>@${r.provider}`,
       };
   }
   for (const n of names)
@@ -275,7 +276,10 @@ export function parseProvider(json: string): TestProvider {
   const claude = section("claude");
   if (claude) {
     const env: Record<string, string> = {};
-    for (const [k, v] of Object.entries((claude.env ?? {}) as Record<string, unknown>)) {
+    const raw = claude.env ?? {};
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw))
+      throw new Error("the provider's claude.env is not an object");
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
       if (!["string", "number", "boolean"].includes(typeof v))
         throw new Error(`the provider's claude.env.${k} is not a string`);
       if (CLAUDE_OWN_VARS.includes(k.toUpperCase()))
@@ -294,8 +298,13 @@ export function parseProvider(json: string): TestProvider {
   const codex = section("codex");
   if (codex) {
     const models = codex.models ?? null;
-    if (models !== null && !Array.isArray(models))
-      throw new Error("the provider's codex.models is not a list");
+    if (
+      models !== null &&
+      (!Array.isArray(models) ||
+        !models.length ||
+        models.some((m) => typeof m !== "object" || m === null || Array.isArray(m)))
+    )
+      throw new Error("the provider's codex.models is not a list of models");
     out.codex = { baseUrl: codex.baseUrl as string, models, ...mode(codex) };
   }
   if (!out.claude && !out.codex) throw new Error("the provider names neither claude nor codex");
@@ -339,8 +348,7 @@ export function testProviderEnv(
   env: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
-  for (const [k, v] of Object.entries(env))
-    if (!isLoginVar(k) && k.toUpperCase() !== TEST_KEY_ENV) out[k] = v;
+  for (const [k, v] of Object.entries(withoutTestKey(env))) if (!isLoginVar(k)) out[k] = v;
   if (agent === "claude") {
     const c = provider.claude;
     if (!c) throw new Error(`${provider.name} has no claude endpoint`);

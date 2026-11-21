@@ -109,7 +109,7 @@ describe("providers", () => {
         "--run",
         "codex:gpt-6.2-sol",
         "--run",
-        "claude@zai",
+        "claude:glm-5.3@zai",
         "--run=codex:glm-5.3@zai",
       ],
       defaults,
@@ -118,7 +118,7 @@ describe("providers", () => {
     expect(r.ok && r.options.runs).toEqual([
       { agent: "claude", model: "sonnet" },
       { agent: "codex", model: "gpt-6.2-sol" },
-      { agent: "claude", provider: "zai" },
+      { agent: "claude", model: "glm-5.3", provider: "zai" },
       { agent: "codex", model: "glm-5.3", provider: "zai" },
     ]);
     expect(parseArgs(["--provider"], defaults)).toMatchObject({ ok: false });
@@ -153,6 +153,7 @@ describe("providers", () => {
       err("--provider", "a/zai.json", "--provider", "b/zai.json", "--run", "claude@zai"),
     ).toMatch(/two --provider files are named zai/);
     expect(err("--provider", "zai.json", "--run", "codex@zai")).toMatch(/needs a model/);
+    expect(err("--provider", "zai.json", "--run", "claude@zai")).toMatch(/needs a model/);
     // A misspelt or missing provider after a model never runs on the player's own login.
     expect(err("--run", "codex:glm-5.3@zai")).toMatch(/no --provider is named zai/);
     expect(err("--run", "claude:@zai")).toMatch(/no --provider is named zai/);
@@ -202,6 +203,13 @@ describe("providers", () => {
       /not a string/,
     );
     expect(parse({ codex: { baseUrl: "https://b.example", models: {} } })).toThrow(/not a list/);
+    expect(parse({ codex: { baseUrl: "https://b.example", models: [] } })).toThrow(/not a list/);
+    expect(parse({ codex: { baseUrl: "https://b.example", models: ["glm"] } })).toThrow(
+      /not a list/,
+    );
+    expect(parse({ claude: { baseUrl: "https://a.example", env: "ANTHROPIC_MODEL=glm" } })).toThrow(
+      /env is not an object/,
+    );
     expect(parse({ name: "x" })).toThrow(/neither/);
     for (const name of ["ANTHROPIC_API_KEY", "SOME_TOKEN", "a_secret", "DB_PASSWORD"])
       expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "x" } } })).toThrow(

@@ -220,6 +220,14 @@ const plans: Plan[] = specs.map(({ agent, model, provider }) => ({
   provider: provider ? providers.get(provider)! : null,
 }));
 
+/**
+ * ED Chat's extra arguments for the CLI, which a run through a provider does not get: one such
+ * as -c model_provider=… or --model would send it somewhere other than the provider.
+ */
+function cliArgs(s: Settings[AgentId], provider: TestProvider | null): string[] {
+  return provider ? [] : s.extraArgs;
+}
+
 /** ED Chat's settings for a run, with the provider's permission mode when it sets one. */
 function runSettings(agent: AgentId, provider: TestProvider | null): Settings[AgentId] {
   const mode = provider?.[agent]?.permissionMode;
@@ -243,10 +251,10 @@ if (opts.dryRun) {
             permissionMode: s.permissionMode,
             model,
             mcpConfigFile: "<temp>/approval-mcp.json",
-            extraArgs: [...s.extraArgs, "--strict-mcp-config"],
+            extraArgs: [...cliArgs(s, provider), "--strict-mcp-config"],
             settingsFile: "<temp>/settings.json",
           })
-        : buildCodexArgs({ extraArgs: s.extraArgs });
+        : buildCodexArgs({ extraArgs: cliArgs(s, provider) });
     console.log(`\n${agent}: would run ${cli.command}${cli.shell ? " (through cmd)" : ""}`);
     console.log(`  args: ${args.map(short).join(" ")}`);
     console.log(`  model: ${model ?? "the CLI's default"}`);
@@ -434,7 +442,9 @@ try {
     // nothing of the player's login, settings or history is read, and nothing is written there.
     // A run on the player's own login does not get the provider's key either.
     let env: NodeJS.ProcessEnv = withoutTestKey(process.env);
-    if (provider && endpoint) {
+    if (provider) {
+      // Checked when the provider files were read; never fall back to the player's own login.
+      if (!endpoint) throw new Error(`${provider.name} has no ${agent} endpoint`);
       homesRoot ??= providerHomesDir(
         process.env,
         os.homedir(),
@@ -467,14 +477,14 @@ try {
         mcpConfigFile,
         // Only the servers in --mcp-config: the player's own ed-mcp, on the real data, must
         // not run next to the copy.
-        extraArgs: [...s.extraArgs, "--strict-mcp-config"],
+        extraArgs: [...cliArgs(s, provider), "--strict-mcp-config"],
         settingsFile,
       });
       session = new ClaudeSession({ ...cli, args, cwd: workspace, env });
     } else {
       session = new CodexSession({
         ...cli,
-        args: buildCodexArgs({ extraArgs: s.extraArgs }),
+        args: buildCodexArgs({ extraArgs: cliArgs(s, provider) }),
         cwd: workspace,
         env,
         thread: codexThreadSettings({
@@ -513,7 +523,9 @@ try {
   }
 } catch (err) {
   failed = true;
-  console.error(err instanceof Error ? (err.stack ?? err.message) : err);
+  console.error(
+    redactKey(err instanceof Error ? (err.stack ?? err.message) : String(err), testKey),
+  );
 } finally {
   stopAll();
   await approvalServer?.stop();
