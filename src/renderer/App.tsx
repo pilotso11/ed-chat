@@ -50,31 +50,54 @@ function ChipButton({ chip }: { chip: Chip }) {
   );
 }
 
+function NoticeText({ text }: { text: string }) {
+  return <>{text.split("`").map((p, i) => (i % 2 ? <code key={i}>{p}</code> : p))}</>;
+}
+
+// Its own component: when the notice under the pointer changes to one without a command, it
+// unmounts, and the game gets its clicks back.
+function CopyableNotice({ text }: { text: string }) {
+  const target = useClickTarget();
+  return (
+    <span
+      className="notice copyable"
+      title="Click to copy the command"
+      {...target}
+      onClick={() => window.overlay.copyNotice()}
+    >
+      <NoticeText text={text} />
+    </span>
+  );
+}
+
+// Its own component, like CopyableNotice: when the other notices go, it unmounts under the
+// pointer and gives the clicks back.
+function MoreNotices({ n }: { n: number }) {
+  const target = useClickTarget();
+  return (
+    <button
+      className="more-notices"
+      title="Show all messages"
+      {...target}
+      onClick={() => window.overlay.showNotices()}
+    >
+      +{n}
+    </button>
+  );
+}
+
 // A command in backticks shows as code; a click copies it. "+n" lists every notice.
 function NoticeView({ notice }: { notice: NonNullable<ViewModel["notice"]> }) {
-  const target = useClickTarget();
-  const more = useClickTarget();
-  const parts = notice.text.split("`");
   return (
     <span className="notices">
-      <span
-        className={notice.command ? "notice copyable" : "notice"}
-        title={notice.command ? "Click to copy the command" : notice.text}
-        {...(notice.command ? target : {})}
-        onClick={notice.command ? () => window.overlay.copyNotice() : undefined}
-      >
-        {parts.map((p, i) => (i % 2 ? <code key={i}>{p}</code> : p))}
-      </span>
-      {notice.more > 0 && (
-        <button
-          className="more-notices"
-          title="Show all messages"
-          {...more}
-          onClick={() => window.overlay.showNotices()}
-        >
-          +{notice.more}
-        </button>
+      {notice.command ? (
+        <CopyableNotice text={notice.text} />
+      ) : (
+        <span className="notice" title={notice.text}>
+          <NoticeText text={notice.text} />
+        </span>
       )}
+      {notice.more > 0 && <MoreNotices n={notice.more} />}
     </span>
   );
 }

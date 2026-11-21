@@ -362,8 +362,11 @@ conversation, ED Chat still resumes it, but the history view starts empty.
 ## Tests
 
 - `npm run check`: typecheck, format check, and the unit tests with coverage. It fails if
-  coverage of `src/core` drops below the minimums in `vitest.config.ts`. The HTML report is in
-  `coverage/`.
+  coverage of `src/core` or of the React components drops below the minimums in
+  `vitest.config.ts`. The HTML report is in `coverage/`.
+- The tests in `test/renderer` render the chat window and the activity panel with React Testing
+  Library in jsdom, with a fake `window.overlay` in place of the preload API. They push views in
+  as main does, and check what the windows show and what they send back to main.
 - `npm run test:e2e`: builds the app, then runs the Playwright tests in `e2e/`. They start
   ED Chat in Electron with a fake Claude CLI and temporary folders, so they do not touch your
   settings, your journal or your Claude login. Its windows do show on screen, over whatever is
