@@ -4,3 +4,5 @@ dist
 coverage
 # Agent worktrees made by Claude Code
 .claude/worktrees
+test-results
+playwright-report

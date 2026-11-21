@@ -357,6 +357,17 @@ turns of that file back into the history view and adds new turns to the same
 file. You can open or delete the files. If you delete the file of the last
 conversation, ED Chat still resumes it, but the history view starts empty.
 
+## Tests
+
+- `npm run check`: typecheck, format check, and the unit tests with coverage. It fails if
+  coverage of `src/core` drops below the minimums in `vitest.config.ts`. The HTML report is in
+  `coverage/`.
+- `npm run test:e2e`: builds the app, then runs the Playwright tests in `e2e/`. They start
+  ED Chat in Electron with a fake Claude CLI and temporary folders, so they do not touch your
+  settings, your journal or your Claude login.
+
+CI runs both, and shows the coverage summary on each run.
+
 ## Releases
 
 Release-please opens a release PR from the commits on `main`. Merge it to tag the
