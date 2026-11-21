@@ -23,7 +23,7 @@ export interface TestApp {
  * nothing reaches the player's own setup or an API.
  */
 export async function launch(
-  opts: { fixture?: string; settings?: Record<string, unknown>; journal?: object[] } = {},
+  opts: { fixture?: string; journal?: object[] } = {},
 ): Promise<TestApp> {
   const root = await mkdtemp(path.join(tmpdir(), "edchat-e2e-"));
   const home = path.join(root, "home");
@@ -40,8 +40,9 @@ export async function launch(
   await writeFile(
     path.join(dataDir, "settings.json"),
     // permissionMode set: otherwise a first-run dialog asks for it and the session waits.
+    // No Spansh lookup: the tests make no network calls.
     JSON.stringify(
-      { claude: { path: shim, permissionMode: "auto" }, journalDir, ...opts.settings },
+      { claude: { path: shim, permissionMode: "auto" }, journalDir, hud: { spansh: false } },
       null,
       2,
     ),
@@ -56,26 +57,35 @@ export async function launch(
     );
   }
 
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
-  // Variables the app reads that would point it at the player's own setup.
-  for (const k of [
+  // Dropped, in any case (Windows has Path, not PATH): the variables set below; ones the app
+  // reads that would point it at the player's own setup; ELECTRON_RUN_AS_NODE, which makes
+  // Electron run as plain Node with no window; and the fake CLI's own (FAKE_*).
+  const drop = new Set([
+    "PATH",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "USERPROFILE",
+    "HOME",
     "ELECTRON_RENDERER_URL",
     "CLAUDE_CONFIG_DIR",
     "CODEX_HOME",
     "ED_MCP_SYNC_DIR",
     "ED_JOURNAL_DIR",
-    // Set, Electron runs as plain Node and opens no window.
     "ELECTRON_RUN_AS_NODE",
-  ])
-    delete env[k];
+  ]);
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    const key = k.toUpperCase();
+    if (v !== undefined && !drop.has(key) && !key.startsWith("FAKE_")) env[k] = v;
+  }
+  const systemRoot = process.env.SystemRoot ?? "C:\\Windows";
   Object.assign(env, {
     APPDATA: appData,
     LOCALAPPDATA: localAppData,
     USERPROFILE: home,
     HOME: home,
     // Only Windows' own folders, so no installed Claude or Codex is found on PATH.
-    PATH: [`${env.SystemRoot}\\System32`, env.SystemRoot].join(";"),
+    PATH: [`${systemRoot}\\System32`, systemRoot].join(";"),
     FAKE_VERSION: TESTED_CLI_VERSION,
     FAKE_FIXTURE: path.join(
       ROOT,
