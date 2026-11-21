@@ -43,19 +43,23 @@ export const LAPSE_JUMPS = 5;
  */
 export function journalMode(events: JournalEvent[], massacreActive: boolean): Choice | null {
   const bio = new Set<string>();
-  let mode: HudModeId | null = null;
+  // Exploration and exobiology, followed through every event, before and during a stack.
+  // Massacre is kept apart: while a stack is open it wins, and once it is handed in this mode is
+  // current, as if there had been no missions.
+  let mode: "exploration" | "exobiology" | null = null;
   let at = 0;
-  // The mode before massacre, to go back to when the stack is handed in.
-  let before: { mode: HudModeId | null; at: number } = { mode: null, at: 0 };
-  const set = (m: HudModeId, e: JournalEvent) => {
-    if (m === "massacre" && mode !== "massacre") before = { mode, at };
-    if (m === "exploration" || m === "exobiology") jumps = 0;
+  let massacreAt: number | null = null;
+  const set = (m: "exploration" | "exobiology") => {
+    jumps = 0;
     mode = m;
-    at = Date.parse(e.timestamp) || at;
+    at = last;
   };
   // Jumps since the last exploration event: a trip home ends exploration mode.
   let jumps = 0;
+  // The newest readable event time: an event's own, or for one with none, the one before it.
+  let last = 0;
   for (const e of events) {
+    last = Date.parse(e.timestamp) || last;
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     switch (e.event) {
       case "FSDJump":
@@ -63,13 +67,14 @@ export function journalMode(events: JournalEvent[], massacreActive: boolean): Ch
         if (mode === "exploration" && jumps >= LAPSE_JUMPS) mode = null;
         break;
       case "MissionAccepted":
-        if (isMassacre(e)) set("massacre", e);
+        // An acceptance with no readable time still counts, dated by the newest readable event.
+        if (isMassacre(e)) massacreAt = last;
         break;
       case "FSSDiscoveryScan":
-        if (mode !== "massacre") set("exploration", e);
+        set("exploration");
         break;
       case "Scan":
-        if (e.ScanType === "Detailed" && mode !== "massacre") set("exploration", e);
+        if (e.ScanType === "Detailed") set("exploration");
         break;
       case "FSSBodySignals":
       case "SAASignalsFound":
@@ -77,20 +82,17 @@ export function journalMode(events: JournalEvent[], massacreActive: boolean): Ch
         break;
       case "ApproachBody":
       case "Touchdown":
-        if (bio.has(key) && mode !== "massacre") set("exobiology", e);
+        if (bio.has(key)) set("exobiology");
         break;
       case "ScanOrganic":
-        if (mode !== "massacre") set("exobiology", e);
+        set("exobiology");
         break;
       case "LeaveBody":
-        if (mode === "exobiology") set("exploration", e);
+        if (mode === "exobiology") set("exploration");
         break;
     }
   }
-  if (mode === "massacre" && !massacreActive) {
-    mode = before.mode;
-    at = before.at;
-  }
+  if (massacreActive && massacreAt !== null) return { mode: "massacre", at: massacreAt };
   return mode ? { mode, at } : null;
 }
 

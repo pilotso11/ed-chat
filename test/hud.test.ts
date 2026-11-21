@@ -39,10 +39,39 @@ describe("journalMode", () => {
     expect(journalMode([massacreAccepted()], true)?.mode).toBe("massacre");
   });
 
-  it("goes back to the mode before massacre once the stack is handed in", () => {
+  it("shows the exploration mode once the stack is handed in", () => {
     const events = [ev("FSSDiscoveryScan", { SystemAddress: 1 }), massacreAccepted()];
     expect(journalMode(events, false)?.mode).toBe("exploration");
     expect(journalMode([massacreAccepted()], false)).toBeNull();
+  });
+
+  it("keeps what was scanned during and after a finished massacre stack", () => {
+    // The panel showed the activity note's mode instead, since this came out empty.
+    const events = [massacreAccepted(), ev("ScanOrganic", { ScanType: "Log" })];
+    // Dated by the sample, so it beats an activity note older than the sample.
+    expect(journalMode(events, false)).toEqual({
+      mode: "exobiology",
+      at: Date.parse(events[1]!.timestamp),
+    });
+    expect(journalMode(events, true)?.mode).toBe("massacre");
+  });
+
+  it("counts a massacre acceptance with no readable time", () => {
+    const jump = ev("FSDJump");
+    const bad = { ...massacreAccepted(), timestamp: "" };
+    expect(journalMode([jump, bad], true)).toEqual({
+      mode: "massacre",
+      at: Date.parse(jump.timestamp),
+    });
+  });
+
+  it("dates a scan or sample with no readable time by the newest readable event", () => {
+    const jump = ev("FSDJump");
+    const sample = { ...ev("ScanOrganic", { ScanType: "Log" }), timestamp: "" };
+    expect(journalMode([ev("FSSDiscoveryScan"), jump, sample], false)).toEqual({
+      mode: "exobiology",
+      at: Date.parse(jump.timestamp),
+    });
   });
 
   it("does not leave massacre mode for a scan while missions are open", () => {
@@ -62,6 +91,11 @@ describe("journalMode", () => {
     expect(journalMode([ev("FSSDiscoveryScan"), ...jumps.slice(1)], false)?.mode).toBe(
       "exploration",
     );
+  });
+
+  it("counts jumps during a massacre stack toward the end of exploration", () => {
+    const jumps = Array.from({ length: LAPSE_JUMPS }, () => ev("FSDJump"));
+    expect(journalMode([ev("FSSDiscoveryScan"), massacreAccepted(), ...jumps], false)).toBeNull();
   });
 
   it("turns on exobiology near a body with bio signals, and back to exploration on leaving", () => {
