@@ -23,7 +23,7 @@ test("starts with the status strip and the first-run hotkeys card", async () => 
 
 test("sends a message to Claude and shows the reply", async () => {
   t = await launch({ fixture: "recorded-text.jsonl" });
-  // The session starts once the CLI's version is checked; until then a message is refused.
+  // The session exists once startup finishes (startAgent); until then a message is refused.
   await expect.poll(() => t!.chat.evaluate(() => window.overlay.send("what is 2 + 2?"))).toBe(true);
   // The reply shows on the strip, under the status line.
   await expect(t.chat.locator("#root")).toContainText("2 + 2 = 4");
@@ -98,3 +98,21 @@ test("survives the Claude version check answering after the windows are gone", a
     (globalThis as { holdQuit?: boolean }).holdQuit = false;
   });
 });
+
+for (const which of ["chat", "panel"] as const) {
+  test(`quits when the ${which} window is closed`, async () => {
+    // A process left running with one window would have no tray icon and no hotkeys.
+    t = await launch();
+    const page = which === "chat" ? "/index.html" : "/hud.html";
+    const exited = new Promise<void>((r) => t!.app.process().once("exit", () => r()));
+    await t.app.evaluate(({ BrowserWindow }, page) => {
+      const w = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith(page))!;
+      // After this call returns: the app quits, and Playwright cannot finish a call to a gone app.
+      setTimeout(() => w.close(), 0);
+    }, page);
+    const stillRunning = new Promise<never>((_r, reject) =>
+      setTimeout(() => reject(new Error("the app kept running with a window closed")), 15_000),
+    );
+    await Promise.race([exited, stillRunning]);
+  });
+}

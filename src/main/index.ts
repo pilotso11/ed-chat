@@ -1316,7 +1316,8 @@ async function main(): Promise<void> {
   // The open chat takes all clicks already; otherwise only a chip or the icon under the pointer does.
   ipcMain.on(IPC.hover, (_e, v: unknown) => {
     const over = boolArg(v);
-    if (over === null || windowProps(state).interactive) return;
+    // A message the renderer sent just before its window closed can arrive after.
+    if (over === null || windowProps(state).interactive || win.isDestroyed()) return;
     win.setIgnoreMouseEvents(!over, { forward: true });
   });
   ipcMain.on(IPC.expand, () => {
@@ -1336,7 +1337,9 @@ async function main(): Promise<void> {
     clipboard.writeText(command);
     flash("copy", COMMAND_COPIED, 3_000);
   });
-  ipcMain.on(IPC.showNotices, () => noticeMenu().popup({ window: win }));
+  ipcMain.on(IPC.showNotices, () => {
+    if (!win.isDestroyed()) noticeMenu().popup({ window: win });
+  });
   ipcMain.on(IPC.closeKeys, hideKeys);
   ipcMain.on(IPC.showMore, () => runAction({ type: "showMore" }, "hotkey"));
   ipcMain.on(IPC.answerApproval, (_e, id: unknown, a: unknown) => {

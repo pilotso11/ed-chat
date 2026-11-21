@@ -111,6 +111,8 @@ export async function launch(
     await cleanUp();
     throw err;
   }
+  // Kept from the start: app.process() fails once the app has gone.
+  const proc = app.process();
   // An uncaught error in the main process shows a modal dialog and nothing else; this records it
   // to a file instead, up to and during quitting, and close() fails the test with it.
   const errorFile = path.join(root, "main-errors.log");
@@ -164,7 +166,8 @@ export async function launch(
       async close() {
         let errors = "";
         try {
-          await app.close();
+          // A test may already have made the app quit.
+          if (proc.exitCode === null && proc.signalCode === null) await app.close();
         } finally {
           // Read even when closing failed: the errors may say why.
           errors = await readFile(errorFile, "utf8").catch(() => "");
