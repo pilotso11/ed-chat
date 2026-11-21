@@ -58,7 +58,15 @@ export async function launch(
 
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
-  delete env.ELECTRON_RENDERER_URL;
+  // Variables the app reads that would point it at the player's own setup.
+  for (const k of [
+    "ELECTRON_RENDERER_URL",
+    "CLAUDE_CONFIG_DIR",
+    "CODEX_HOME",
+    "ED_MCP_SYNC_DIR",
+    "ED_JOURNAL_DIR",
+  ])
+    delete env[k];
   Object.assign(env, {
     APPDATA: appData,
     LOCALAPPDATA: localAppData,
@@ -76,26 +84,43 @@ export async function launch(
     ),
   });
 
-  const app = await _electron.launch({ args: [ROOT], cwd: ROOT, env });
-  const page = async (file: string) => {
-    for (;;) {
-      const found = app.windows().find((w) => w.url().endsWith(file));
-      if (found) return found;
-      await app.waitForEvent("window");
-    }
-  };
-  const chat = await page("/index.html");
-  const hud = await page("/hud.html");
-  await chat.waitForLoadState();
-  await hud.waitForLoadState();
-  return {
-    app,
-    chat,
-    hud,
-    journalDir,
-    async close() {
-      await app.close();
-      await rm(root, { recursive: true, force: true, maxRetries: 5 });
-    },
-  };
+  const cleanUp = () => rm(root, { recursive: true, force: true, maxRetries: 5 });
+  let app: ElectronApplication;
+  try {
+    app = await _electron.launch({ args: [ROOT], cwd: ROOT, env });
+  } catch (err) {
+    await cleanUp();
+    throw err;
+  }
+  try {
+    // A window can still be on about:blank when it appears, so its URL is polled.
+    const page = async (file: string) => {
+      const deadline = Date.now() + 30_000;
+      for (;;) {
+        const found = app.windows().find((w) => w.url().endsWith(file));
+        if (found) return found;
+        if (Date.now() > deadline) throw new Error(`no window for ${file}`);
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    };
+    const chat = await page("/index.html");
+    const hud = await page("/hud.html");
+    await chat.waitForLoadState();
+    await hud.waitForLoadState();
+    return {
+      app,
+      chat,
+      hud,
+      journalDir,
+      async close() {
+        await app.close();
+        await cleanUp();
+      },
+    };
+  } catch (err) {
+    // A failed start must not leave the app holding the global hotkeys for the next test.
+    await app.close().catch(() => {});
+    await cleanUp();
+    throw err;
+  }
 }

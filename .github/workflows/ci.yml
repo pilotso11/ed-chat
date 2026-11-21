@@ -21,7 +21,8 @@ jobs:
       # Typecheck, format and the unit tests with coverage; fails below the src/core minimums.
       - run: npm run check
       - name: Coverage summary
-        if: always()
+        # Also after a test failure, but not when the tests never ran.
+        if: always() && hashFiles('coverage/coverage-summary.json') != ''
         shell: bash
         run: |
           node -e '
