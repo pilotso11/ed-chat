@@ -6,6 +6,13 @@ import { HUD_PROMPT, settingsPrompt } from "../../prompt.js";
 // The version the protocol was probed with (spec, "Step 0 results").
 export const TESTED_CODEX_VERSION = "0.170.0";
 
+const CODEX_HUD_GUIDANCE = [
+  "For engineering costs and inventory questions, use materials_plan when available. Check the fitted module when relevant. If it already meets the target, say so first and give the total cost and inventory shortfalls for a fresh module when the player asks what the upgrade needs. State the starting grade and roll assumptions for estimated totals.",
+  "For recommended material trades, include the give and get quantities and the nearest matching trader in a map marker with its distance, when verified.",
+  "For nearby material farming, look for a specific system and say what signal or site to look for there. If a search rejects its arguments, check the tool schema and retry with valid inputs. If the local search comes up empty, try a wider search or a nearby populated area and give the best verified option. If you cannot verify a farming site, say so and explain how to find one. Label a trader as a trade option.",
+  "For engineering or material plans, you may exceed the HUD line limit when needed to include material counts, trades and destinations. Keep each line short and skip routine announcements that you are about to check a tool.",
+].join(" ");
+
 const win32 = path.win32;
 
 /**
@@ -89,14 +96,14 @@ export function codexThreadSettings(o: {
     o.permissionMode === "auto"
       ? " Change settings.json with a file edit (apply_patch), not with a shell command."
       : "";
-  const prompt = o.settingsFile
-    ? `${HUD_PROMPT} ${settingsPrompt(o.settingsFile)}${edit}`
-    : HUD_PROMPT;
+  const prompt = `${HUD_PROMPT} ${CODEX_HUD_GUIDANCE}`;
   const s: ThreadSettings = {
     cwd: o.cwd,
     approvalPolicy: o.permissionMode === "auto" ? "on-request" : "untrusted",
     sandbox: "workspace-write",
-    developerInstructions: prompt,
+    developerInstructions: o.settingsFile
+      ? `${prompt} ${settingsPrompt(o.settingsFile)}${edit}`
+      : prompt,
   };
   if (o.model) s.model = o.model;
   // In the request body, not as -c arguments: the env can hold ED_MCP_SYNC_PASSWORD, and
