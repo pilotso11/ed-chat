@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { openStores } from "ed-mcp/journal";
@@ -18,12 +18,13 @@ let start: number;
 let t: number;
 
 beforeEach(async () => {
-  // The journal service keeps its state for a second; the clock moves on between polls, as the
-  // app's one-second polling does. Only the clocks are faked, so file reads still finish.
+  // ed-mcp's journal service keeps its state for a second (by performance.now), so the clocks
+  // move on between polls, as the app's one-second polling does. Only the clocks are faked, so
+  // file reads still finish.
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   dir = await mkdtemp(path.join(tmpdir(), "edchat-journal-"));
   syncDir = await mkdtemp(path.join(tmpdir(), "edchat-sync-"));
-  // The journal service reads only recent files, so the events are dated just before now.
+  // An hour ago, so times such as the next mission expiry are measured from a real "now".
   start = Date.now() - 60 * 60_000;
   t = 0;
 });
@@ -117,14 +118,19 @@ const stratum = (bodyId: number, type: "Log" | "Sample" | "Analyse"): Event =>
 
 /** ED Chat's panel feed on the temporary journal folder, polled as the app polls it. */
 function game() {
-  const events: Event[] = [];
+  const pending: Event[] = [];
+  // ed-mcp finds the newest journal by its name, so it is named from the first event's time.
+  const stamp = new Date(start).toISOString().slice(0, 19).replace(/:/g, "");
+  const journal = path.join(dir, `Journal.${stamp}.01.log`);
+  const errors: string[] = [];
   const stores = openStores(
     { ED_JOURNAL_DIR: dir, ED_MCP_SYNC_DIR: syncDir },
     { keep: HUD_EVENTS },
   );
-  const feed = new HudFeed(stores, dir);
+  // Without this, an ed-mcp error would show only as an empty panel.
+  const feed = new HudFeed(stores, dir, { onError: (what, m) => errors.push(`${what}: ${m}`) });
   return {
-    add: (...more: Event[]) => events.push(...more),
+    add: (...more: Event[]) => pending.push(...more),
     /** The ship on a body: latitude and longitude in degrees. */
     at: (bodyId: number, latitude: number, longitude: number) =>
       writeFile(
@@ -139,12 +145,18 @@ function game() {
         }),
       ),
     async hud(): Promise<HudView> {
-      await writeFile(
-        path.join(dir, "Journal.2026-11-15T100000.01.log"),
-        events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+      // Appended, as the game writes it.
+      await appendFile(
+        journal,
+        pending
+          .splice(0)
+          .map((e) => JSON.stringify(e) + "\n")
+          .join(""),
       );
-      vi.advanceTimersByTime(1_100);
+      // Well past ed-mcp's one-second memo, so every poll reads the journal again.
+      vi.advanceTimersByTime(5_000);
       const data = await feed.poll();
+      expect(errors).toEqual([]);
       return buildHud(
         { ...data, hotkey: null, settings: DEFAULT_SETTINGS.hud, now: Date.now() },
         null,
@@ -162,10 +174,14 @@ describe("panel from the real ed-mcp journal reader", () => {
     g.add(...arrive(), planet(3), bioSignals(3, ["Stratum", "Bacterial"]), stratum(3, "Log"));
     await g.at(3, 10, 20);
     // ED Chat starts here: samples taken before it started have no known position.
-    await g.hud();
+    let v = await g.hud();
+    expect(v.panel!.rows.slice(0, 2)).toEqual([
+      { text: "Stratum Tectonicas", right: "1/3  95.1M", tone: "accent" },
+      { text: "Bacterium  likely Aurasus", right: "~5.0M", tone: "dim" },
+    ]);
 
     g.add(stratum(3, "Sample"));
-    let v = await g.hud();
+    v = await g.hud();
     expect(v.panel).toMatchObject({ mode: "exobiology", title: "EXOBIOLOGY", subtitle: "3" });
     // A body nobody has walked on pays five times the value. Stratum's colony range is 500 m.
     expect(v.panel!.rows.slice(0, 2)).toEqual([
