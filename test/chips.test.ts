@@ -78,6 +78,23 @@ describe("HUD_PROMPT", () => {
     expect(HUD_PROMPT.length).toBeLessThan(3500);
   });
 
+  it("distinguishes actual jumps from route legs and labels unboosted estimates", () => {
+    expect(HUD_PROMPT).toContain(
+      "use the current journal location and the ship's laden jump range",
+    );
+    expect(HUD_PROMPT).toContain(
+      "When plotting with spansh_route, say that the route uses neutron boosting",
+    );
+    expect(HUD_PROMPT).toContain(
+      "Sum the jumps field across the waypoints: total_jumps can count waypoint legs instead of actual jumps",
+    );
+    expect(HUD_PROMPT).toContain("A leg between saved plan stops can take several jumps");
+    expect(HUD_PROMPT).toContain("If the plan lacks jump counts, plot a fresh route");
+    expect(HUD_PROMPT).toContain(
+      "Without a usable plot, label straight-line distance divided by unboosted jump range, rounded up, as a lower bound for unboosted travel",
+    );
+  });
+
   it("tells Claude to use a working ed-mcp when another copy failed", () => {
     expect(HUD_PROMPT).toMatch(/one can fail while the other works/);
     expect(HUD_PROMPT).toMatch(/use them, and do not report the other copy as failed/);
