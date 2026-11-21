@@ -23,10 +23,13 @@ const position = (what: string, prefix: string): Record<string, SettingEntry> =>
 });
 
 export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
+  // Player-only: the approve and always-allow keys answer approval cards, so an assistant that
+  // rebinds them could have the player allow its next request with a key they press anyway.
   hotkeys: {
     text:
       "Hotkeys. Each takes one key, such as Ctrl+Alt+C, or a list of keys for the same action. " +
       "Keys use Electron accelerator names.",
+    playerOnly: true,
   },
   "hotkeys.scope": {
     text:
@@ -190,6 +193,18 @@ export function annotateSchema(node: JsonSchemaNode, where = "", playerOnly = fa
     annotateSchema(child, p, only);
   }
 }
+
+/**
+ * The player-only settings of v0.5.0, the last release that did not keep the paths with the
+ * saved values (state.json playerOnlyPaths): what those saved values cover.
+ */
+export const PLAYER_ONLY_PATHS_V0_5 = [
+  "safety",
+  "approval",
+  "claude",
+  "journalDir",
+  "hud.edMcpDataDir",
+] as const;
 
 /** The settings that only the player may change, each with everything under it. */
 export const PLAYER_ONLY_PATHS: string[] = Object.entries(SETTINGS_DICTIONARY)

@@ -8,14 +8,14 @@
   },
   { "topic": "materials", "text": "Where can I farm manufactured materials near me?" },
   { "topic": "materials", "text": "Do I have enough materials for grade 5 dirty drives?" },
-  { "topic": "trade", "text": "Find me a profitable trade loop near here for my ship." },
-  { "topic": "trade", "text": "Where can I sell tritium for the best price within 50 ly?" },
+  { "topic": "trade", "text": "Find me a profitable trade loop starting from Inti for my ship." },
+  { "topic": "trade", "text": "Where can I sell tritium for the best price within 50 ly of Inti?" },
   { "topic": "exobiology", "text": "Which bodies in this system are worth landing on for bio?" },
   {
     "topic": "exobiology",
     "text": "How far apart do my samples of Stratum Tectonicas need to be?"
   },
-  { "topic": "combat", "text": "Is there a good massacre mission stack near me?" },
+  { "topic": "combat", "text": "Is there a good massacre mission stack near Inti?" },
   { "topic": "activity", "text": "What was I doing last time?" },
   { "topic": "settings", "text": "What is my bio threshold?" },
   { "topic": "settings", "text": "Set the bio threshold on the panel to 10 million." }

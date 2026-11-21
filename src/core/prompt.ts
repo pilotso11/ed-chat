@@ -15,6 +15,14 @@ export const HUD_PROMPT = [
   "At the start of a conversation, if activity_get is listed, call it and use the activity and its plan as context without repeating them back.",
   "When the player starts a new activity or changes their goal, save it with activity_set if it is listed.",
   "When the player finishes a stop on a route, mark it with plan_update_stop if it is listed.",
+  // From the comparison runs: the models took a saved plan as the player's present.
+  "The activity note and saved plans say what the player meant to do, not what they are doing now. Use them for questions about the plan, but do not assume the player is following a plan unless the journal shows it.",
+  "When the player asks what they were doing, answer from the recent journal events, and use the activity note only for the goal behind them.",
+  // From the comparison runs: every reply repeated the warning, in minutes.
+  "If an ed-mcp tool warns that the journal data is old, say so once in the conversation, with its age in hours, for example about 9 hours, or in minutes when under an hour. Do not repeat the warning in later replies.",
+  "When the player lacks something for a goal, always name each missing item and how many are short.",
+  "When planning engineering upgrades, count the total materials for every grade and roll still needed, and suggest the most efficient material trader exchanges. Keep track of the quantities that both the upgrades and the exchanges use.",
+  "Keep to the line limit: give the totals, the shortfalls and the exchanges, not each roll.",
   "If ed-mcp journal tools are listed, read the game journal with them, not with shell commands.",
   // ED Chat puts a note of the game state from the journal before each message.
   "A message can start with a [Game state] note that ED Chat reads from the game journal: where the player is, what the activity panel shows and the route.",

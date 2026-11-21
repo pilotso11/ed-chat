@@ -83,7 +83,15 @@ export function codexThreadSettings(o: {
   edMcp?: CodexMcpServer | null;
 }): ThreadSettings {
   if (!path.isAbsolute(o.cwd)) throw new Error(`cwd must be absolute: ${o.cwd}`);
-  const prompt = o.settingsFile ? `${HUD_PROMPT} ${settingsPrompt(o.settingsFile)}` : HUD_PROMPT;
+  // A file edit, not a shell command: in auto mode ED Chat accepts an edit of settings.json alone
+  // without a card, and cannot tell what a shell command writes.
+  const edit =
+    o.permissionMode === "auto"
+      ? " Change settings.json with a file edit (apply_patch), not with a shell command."
+      : "";
+  const prompt = o.settingsFile
+    ? `${HUD_PROMPT} ${settingsPrompt(o.settingsFile)}${edit}`
+    : HUD_PROMPT;
   const s: ThreadSettings = {
     cwd: o.cwd,
     approvalPolicy: o.permissionMode === "auto" ? "on-request" : "untrusted",

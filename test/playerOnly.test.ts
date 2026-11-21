@@ -8,6 +8,7 @@ import {
 } from "../src/core/playerOnly.js";
 import { PlayerOnlyGuard, type PlayerOnlyHost } from "../src/core/playerOnlyGuard.js";
 import { parseSettings, type Settings } from "../src/core/settings.js";
+import { PLAYER_ONLY_PATHS, PLAYER_ONLY_PATHS_V0_5 } from "../src/core/settingsDictionary.js";
 
 describe("player-only values", () => {
   it("reads only the player-only settings, as the file sets them", () => {
@@ -58,6 +59,7 @@ function fakeHost(text: string) {
     text,
     applied: [] as Settings[],
     saved: [] as PlayerOnlyValues[],
+    covered: [] as string[][],
     questions: [] as string[][],
     answers: [] as ((ok: boolean) => void)[],
     waiting: false,
@@ -80,7 +82,10 @@ function fakeHost(text: string) {
         h.answers.push(resolve);
       }),
     waiting: (on) => void (h.waiting = on),
-    save: (v) => void h.saved.push(v),
+    save: (v, paths) => {
+      h.saved.push(v);
+      h.covered.push([...paths]);
+    },
     log: () => {},
   };
   return { h, host };
@@ -92,14 +97,60 @@ const START = '{"claude":{"permissionMode":"default"},"hud":{"bioMin":1}}';
 describe("PlayerOnlyGuard", () => {
   it("trusts the file on the first run of this version and saves its values", () => {
     const { h, host } = fakeHost(START);
-    const g = new PlayerOnlyGuard(host, null);
+    const g = new PlayerOnlyGuard(host, null, PLAYER_ONLY_PATHS);
     expect(g.values).toEqual({ claude: { permissionMode: "default" } });
     expect(h.saved).toEqual([{ claude: { permissionMode: "default" } }]);
   });
 
+  it("keeps the values of a setting that became player-only since the last run", () => {
+    const { h, host } = fakeHost(
+      '{"hotkeys":{"openChat":"F9"},"claude":{"permissionMode":"auto"}}',
+    );
+    const saved = { claude: { permissionMode: "default" } };
+    const g = new PlayerOnlyGuard(
+      host,
+      saved,
+      PLAYER_ONLY_PATHS.filter((p) => p !== "hotkeys"),
+    );
+    // The hotkeys in the file are kept; the change to claude still waits for the player.
+    expect(g.values).toEqual({ ...saved, hotkeys: { openChat: "F9" } });
+    expect(h.saved).toEqual([g.values]);
+    expect(g.effective()!.hotkeys.openChat).toBe("F9");
+    expect(g.effective()!.claude.permissionMode).toBe("default");
+  });
+
+  it("asks about a new player-only setting when the file does not parse at start", async () => {
+    const { h, host } = fakeHost('{"hotkeys":');
+    const saved = { claude: { permissionMode: "default" } };
+    const old = PLAYER_ONLY_PATHS.filter((p) => p !== "hotkeys");
+    const g = new PlayerOnlyGuard(host, saved, old);
+    expect(g.values).toEqual(saved);
+    expect(h.covered).toEqual([PLAYER_ONLY_PATHS]);
+    // A later version of the file may be the assistant's, so its hotkeys wait for the player.
+    h.text = '{"hotkeys":{"approve":"F9"},"claude":{"permissionMode":"default"}}';
+    g.fileChanged();
+    expect(h.applied.at(-1)!.hotkeys.approve).not.toBe("F9");
+    expect(h.questions[0]).toEqual(['hotkeys.approve: (default) → "F9"']);
+    h.answers[0]!(true);
+    await tick();
+    expect(g.values).toEqual({ ...saved, hotkeys: { approve: "F9" } });
+  });
+
+  it("takes the values that v0.5.0 did not cover from the file", () => {
+    const { host } = fakeHost('{"codex":{"model":"m"},"hotkeys":{"openChat":"F9"}}');
+    const g = new PlayerOnlyGuard(host, {}, PLAYER_ONLY_PATHS_V0_5);
+    expect(g.values).toEqual({ codex: { model: "m" }, hotkeys: { openChat: "F9" } });
+  });
+
+  it("does not save again when the saved values cover every player-only path", () => {
+    const { h, host } = fakeHost(START);
+    new PlayerOnlyGuard(host, { claude: { permissionMode: "default" } }, PLAYER_ONLY_PATHS);
+    expect(h.saved).toEqual([]);
+  });
+
   it("applies the other settings of a save at once and keeps the player-only ones", async () => {
     const { h, host } = fakeHost(START);
-    const g = new PlayerOnlyGuard(host, null);
+    const g = new PlayerOnlyGuard(host, null, PLAYER_ONLY_PATHS);
     h.text = '{"claude":{"permissionMode":"auto","path":"C:/evil.exe"},"hud":{"bioMin":2}}';
     g.fileChanged();
     expect(h.applied[0]!.hud.bioMin).toBe(2);
@@ -115,7 +166,7 @@ describe("PlayerOnlyGuard", () => {
 
   it("applies the shown values when the player chooses Apply", async () => {
     const { h, host } = fakeHost(START);
-    const g = new PlayerOnlyGuard(host, null);
+    const g = new PlayerOnlyGuard(host, null, PLAYER_ONLY_PATHS);
     h.text = '{"claude":{"permissionMode":"auto"}}';
     g.fileChanged();
     h.answers[0]!(true);
@@ -128,7 +179,7 @@ describe("PlayerOnlyGuard", () => {
 
   it("writes the old values back on Undo and keeps the rest of the save", async () => {
     const { h, host } = fakeHost(START);
-    const g = new PlayerOnlyGuard(host, null);
+    const g = new PlayerOnlyGuard(host, null, PLAYER_ONLY_PATHS);
     h.text = '{"claude":{"extraArgs":["--x"]},"hud":{"bioMin":2}}';
     g.fileChanged();
     h.answers[0]!(false);
@@ -143,7 +194,7 @@ describe("PlayerOnlyGuard", () => {
   // The answer is for the values the player read, not for what the file holds later.
   it("asks again when the file changes while the question is open", async () => {
     const { h, host } = fakeHost(START);
-    const g = new PlayerOnlyGuard(host, null);
+    const g = new PlayerOnlyGuard(host, null, PLAYER_ONLY_PATHS);
     h.text = '{"claude":{"permissionMode":"default","path":"C:/a.exe"}}';
     g.fileChanged();
     h.text = '{"claude":{"permissionMode":"default","path":"C:/evil.exe"}}';
@@ -161,7 +212,11 @@ describe("PlayerOnlyGuard", () => {
   // A change made while ED Chat was closed, or left unanswered at quit.
   it("asks at start when the file differs from the values last applied", () => {
     const { h, host } = fakeHost('{"claude":{"path":"C:/evil.exe"}}');
-    const g = new PlayerOnlyGuard(host, { claude: { permissionMode: "default" } });
+    const g = new PlayerOnlyGuard(
+      host,
+      { claude: { permissionMode: "default" } },
+      PLAYER_ONLY_PATHS,
+    );
     expect(g.effective()!.claude.path).toBeNull();
     expect(g.effective()!.claude.permissionMode).toBe("default");
     g.check();
@@ -170,7 +225,7 @@ describe("PlayerOnlyGuard", () => {
 
   it("does not ask about a value ED Chat writes for the player", async () => {
     const { h, host } = fakeHost(START);
-    const g = new PlayerOnlyGuard(host, null);
+    const g = new PlayerOnlyGuard(host, null, PLAYER_ONLY_PATHS);
     await g.playerWrite(
       '{"claude":{"permissionMode":"auto"},"hud":{"bioMin":1}}',
       "claude.permissionMode",
@@ -183,7 +238,7 @@ describe("PlayerOnlyGuard", () => {
 
   it("keeps a change that waits for the player when ED Chat writes another value", async () => {
     const { h, host } = fakeHost(START);
-    const g = new PlayerOnlyGuard(host, null);
+    const g = new PlayerOnlyGuard(host, null, PLAYER_ONLY_PATHS);
     // The assistant (or the player) changes extraArgs; the question is open.
     h.text = '{"claude":{"permissionMode":"default","extraArgs":["--x"]},"hud":{"bioMin":1}}';
     g.fileChanged();
@@ -210,6 +265,7 @@ describe("PlayerOnlyGuard", () => {
     const g = new PlayerOnlyGuard(
       { ...host, write: () => Promise.reject(new Error("EBUSY")) },
       null,
+      PLAYER_ONLY_PATHS,
     );
     await expect(
       g.playerWrite('{"claude":{"permissionMode":"auto"}}', "claude.permissionMode", "auto"),

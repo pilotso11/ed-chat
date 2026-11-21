@@ -116,6 +116,7 @@ import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.j
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
 import { currentStop, nextStopAfter, previousStop, todoStops } from "../core/hud/panels.js";
 import { PlayerOnlyGuard } from "../core/playerOnlyGuard.js";
+import { PLAYER_ONLY_PATHS_V0_5 } from "../core/settingsDictionary.js";
 import { buildView, noticeCommand, pickNotice, shortTool } from "../core/view.js";
 import { fetchLatestEdMcp, versionText, type Versions } from "../core/version.js";
 import { IPC } from "../shared/ipc.js";
@@ -225,13 +226,14 @@ async function main(): Promise<void> {
           key: "playerOnly",
           text: on ? "⚠ settings.json: a change waits for your answer" : null,
         }),
-      save: (values) => {
-        saved = { ...saved, playerOnly: values };
+      save: (values, paths) => {
+        saved = { ...saved, playerOnly: values, playerOnlyPaths: [...paths] };
         writeState();
       },
       log: (level, text) => log.log(level, text),
     },
     saved.playerOnly ?? null,
+    saved.playerOnlyPaths ?? PLAYER_ONLY_PATHS_V0_5,
   );
   let settings: Settings = playerOnly.effective() ?? settingsStore.settings;
   let position: Position;
@@ -771,6 +773,7 @@ async function main(): Promise<void> {
             resumeId: resumeFrom,
             thread: codexThread(settings),
             approve: brokerApprover(approvals),
+            autoEditFiles: [settingsFile],
             clientVersion: app.getVersion(),
           });
     // Shown at the first ready: the CLI confirms the conversation only then.

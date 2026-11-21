@@ -101,7 +101,10 @@ function playTurn(threadId, turnId) {
         item: {
           type: "fileChange",
           id: itemId,
-          changes: [{ path: "C:/x/a.txt" }],
+          // FAKE_CHANGES: the changes as JSON, for example an edit of settings.json.
+          changes: process.env.FAKE_CHANGES
+            ? JSON.parse(process.env.FAKE_CHANGES)
+            : [{ path: "C:/x/a.txt", kind: { type: "update", move_path: null } }],
           status: "inProgress",
         },
       });
@@ -134,7 +137,14 @@ function playTurn(threadId, turnId) {
       id,
       method: file ? "item/fileChange/requestApproval" : "item/commandExecution/requestApproval",
       params: file
-        ? { threadId, turnId, itemId, reason: "outside the workspace" }
+        ? {
+            threadId,
+            turnId,
+            itemId,
+            reason: "outside the workspace",
+            // FAKE_GRANT_ROOT: a folder that the request asks write access to.
+            ...(process.env.FAKE_GRANT_ROOT ? { grantRoot: process.env.FAKE_GRANT_ROOT } : {}),
+          }
         : { threadId, turnId, itemId, command: "powershell.exe -Command dir C:\\", cwd: "C:\\" },
     });
     return;

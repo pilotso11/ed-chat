@@ -174,6 +174,8 @@ export interface SavedState {
   hudHidden?: boolean;
   /** The player-only settings as the player last applied them (see PlayerOnlyGuard). */
   playerOnly?: Record<string, unknown>;
+  /** The player-only paths that playerOnly covers; absent up to v0.5.0. */
+  playerOnlyPaths?: string[];
 }
 
 const SessionSchema = z.object({
@@ -195,6 +197,7 @@ const SavedStateSchema = z.object({
   hudMode: z.object({ mode: z.enum([...HUD_MODES, "off"]), at: z.string() }).optional(),
   hudHidden: z.boolean().optional(),
   playerOnly: z.record(z.string(), z.unknown()).optional(),
+  playerOnlyPaths: z.array(z.string()).optional(),
   agentHintShown: z.boolean().optional(),
   sessions: z
     .object({ claude: SessionSchema.optional(), codex: SessionSchema.optional() })

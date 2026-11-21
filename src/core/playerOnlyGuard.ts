@@ -7,6 +7,20 @@ import {
   withValues,
 } from "./playerOnly.js";
 import type { Settings } from "./settings.js";
+import { PLAYER_ONLY_PATHS } from "./settingsDictionary.js";
+
+/** Whether settings.json text is a JSON object. */
+function parses(text: string): boolean {
+  try {
+    const v: unknown = JSON.parse(text);
+    return !!v && typeof v === "object" && !Array.isArray(v);
+  } catch {
+    return false;
+  }
+}
+
+const sameSet = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((p) => b.includes(p));
 
 export interface PlayerOnlyHost {
   /** settings.json as last read, without a BOM. */
@@ -21,8 +35,8 @@ export interface PlayerOnlyHost {
   ask(lines: string[]): Promise<boolean>;
   /** A change waits for the player's answer, or no longer does. */
   waiting(on: boolean): void;
-  /** Keeps the applied values across restarts. */
-  save(values: PlayerOnlyValues): void;
+  /** Keeps the applied values across restarts, with the player-only paths they cover. */
+  save(values: PlayerOnlyValues, paths: readonly string[]): void;
   log(level: "info" | "warn", text: string): void;
 }
 
@@ -35,14 +49,30 @@ export class PlayerOnlyGuard {
   private asking = false;
   private applied: PlayerOnlyValues;
 
-  /** applied: the values saved at the last run, or null on the first run of this version. */
+  /**
+   * applied: the values saved at the last run, or null on the first run of this version.
+   * covers: the player-only paths those values cover; a version can add some.
+   */
   constructor(
     private readonly host: PlayerOnlyHost,
     applied: PlayerOnlyValues | null,
+    covers: readonly string[],
   ) {
-    this.applied = applied ?? playerOnlyValues(host.fileText());
     // The first run of this version has nothing saved, so it trusts the file it starts with.
-    if (!applied) host.save(this.applied);
+    // A setting that became player-only since the values were saved is trusted the same way,
+    // at start only, or an upgrade would take back what the player had set. When the file does
+    // not parse then, its values are not trusted: the player is asked about them instead.
+    const text = host.fileText();
+    const file = playerOnlyValues(text);
+    this.applied = applied ?? file;
+    if (applied && parses(text))
+      for (const p of PLAYER_ONLY_PATHS.filter((p) => !covers.includes(p)))
+        this.applied = valuesWith(this.applied, p, file[p]);
+    if (!applied || !sameSet(covers, PLAYER_ONLY_PATHS)) this.save();
+  }
+
+  private save(): void {
+    this.host.save(this.applied, PLAYER_ONLY_PATHS);
   }
 
   /** The values in use. */
@@ -96,7 +126,7 @@ export class PlayerOnlyGuard {
 
   private trust(values: PlayerOnlyValues): void {
     this.applied = values;
-    this.host.save(values);
+    this.save();
   }
 
   private async askLoop(): Promise<void> {

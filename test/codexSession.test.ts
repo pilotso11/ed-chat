@@ -23,6 +23,12 @@ interface Setup {
   approve?: Approver;
   command?: string;
   interruptGraceMs?: number;
+  /** Files that auto mode may change without a card, relative to the session's folder. */
+  autoEditFiles?: string[];
+  /** The changes of file-approval's fileChange item, given the session's folder. */
+  changes?: (dir: string) => unknown[];
+  /** The folder that file-approval's request asks write access to, given the session's folder. */
+  grantRoot?: (dir: string) => string;
 }
 
 async function setup(o: Setup = {}) {
@@ -43,7 +49,15 @@ async function setup(o: Setup = {}) {
       }),
     interruptGraceMs: o.interruptGraceMs,
     startTimeoutMs: o.startTimeoutMs,
-    env: { ...process.env, FAKE_FIXTURE: fixture, FAKE_MODE: o.mode ?? "ok", FAKE_LOG: log },
+    autoEditFiles: o.autoEditFiles?.map((f) => path.join(dir, f)),
+    env: {
+      ...process.env,
+      FAKE_FIXTURE: fixture,
+      FAKE_MODE: o.mode ?? "ok",
+      FAKE_LOG: log,
+      ...(o.changes ? { FAKE_CHANGES: JSON.stringify(o.changes(dir)) } : {}),
+      ...(o.grantRoot ? { FAKE_GRANT_ROOT: o.grantRoot(dir) } : {}),
+    },
   });
   sessions.push(s);
   const events: BackendEvent[] = [];
@@ -627,6 +641,86 @@ describe("CodexSession", () => {
     expect(reply.result).toEqual({ decision: "decline" });
     expect(events.find((e) => e.type === "result")).toMatchObject({ denials: ["edit"] });
     expect(events.find((e) => e.type === "toolEnd")).toMatchObject({ name: "edit", isError: true });
+  });
+
+  describe("auto mode and an edit of settings.json", () => {
+    const update = (p: string, move_path: string | null = null) => ({
+      path: p,
+      kind: { type: "update", move_path },
+      diff: "@@ -1 +1 @@\n-{}\n+{}\n",
+    });
+    // Asks the session about a file change, given the session's folder; the card's requests,
+    // and the answer Codex got.
+    async function edit(
+      changes: (dir: string) => unknown[],
+      permissionMode: "auto" | "default" = "auto",
+      grantRoot?: (dir: string) => string,
+    ) {
+      const r = await setup({
+        mode: "file-approval",
+        permissionMode,
+        autoEditFiles: ["settings.json"],
+        changes,
+        grantRoot,
+      });
+      r.s.send("edit");
+      await until(() => has(r.events, "result"));
+      const reply = (await r.received()).find((m) => m.id === "srv-1" && !m.method)!;
+      return { asked: r.asked, answer: reply.result };
+    }
+    const settings = (dir: string) => path.join(dir, "settings.json");
+    const other = (dir: string) => path.join(dir, "approval-mcp.json");
+
+    it("accepts an update of settings.json alone without a card", async () => {
+      expect(await edit((d) => [update(settings(d))])).toEqual({
+        asked: [],
+        answer: { decision: "accept" },
+      });
+    });
+
+    it("matches the path in another case on Windows", async () => {
+      const upper = (d: string) =>
+        process.platform === "win32" ? settings(d).toUpperCase() : settings(d);
+      expect((await edit((d) => [update(upper(d))])).asked).toEqual([]);
+    });
+
+    it("shows the card in default mode", async () => {
+      expect((await edit((d) => [update(settings(d))], "default")).asked).toHaveLength(1);
+    });
+
+    // A relative path depends on the folder the patch was applied in.
+    it.each<[string, (d: string) => unknown[]]>([
+      ["another file", (d) => [update(other(d))]],
+      ["a relative path", () => [update("settings.json")]],
+      ["a move", (d) => [update(settings(d), other(d))]],
+      [
+        "a move in another field",
+        (d) => [{ path: settings(d), kind: { type: "update", movePath: other(d) } }],
+      ],
+      ["an add", (d) => [{ path: settings(d), kind: { type: "add" } }]],
+      ["a delete", (d) => [{ path: settings(d), kind: { type: "delete" } }]],
+      ["no kind", (d) => [{ path: settings(d) }]],
+      ["a move beside the path", (d) => [{ ...update(settings(d)), move_to: other(d) }]],
+      ["a second file", (d) => [update(settings(d)), update(other(d))]],
+    ])("shows the card for %s", async (_, changes) => {
+      expect((await edit(changes)).asked).toHaveLength(1);
+    });
+
+    // A grant lets Codex write anywhere in the folder, not only the file in the change.
+    it("shows the card for write access to a folder", async () => {
+      const r = await edit(
+        (d) => [update(settings(d))],
+        "auto",
+        (d) => d,
+      );
+      expect(r.asked).toHaveLength(1);
+      expect(r.answer).not.toEqual({ decision: "accept" });
+    });
+
+    // \x\y is on the drive of whichever folder the patch is applied in.
+    it.runIf(process.platform === "win32")("shows the card for a path with no drive", async () => {
+      expect((await edit((d) => [update(settings(d).slice(2))])).asked).toHaveLength(1);
+    });
   });
 
   it("withdraws the approval card when the reply is stopped", async () => {

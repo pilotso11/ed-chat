@@ -399,6 +399,7 @@ try {
           edMcp,
         }),
         approve: brokerApprover(broker),
+        autoEditFiles: [settingsFile],
       });
     }
     sessions.add(session);

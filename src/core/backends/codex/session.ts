@@ -31,6 +31,12 @@ export interface CodexSessionOptions {
   resumeId?: string | null;
   thread: ThreadSettings;
   approve: Approver;
+  /**
+   * Files that Codex may update in place without a card in auto mode, such as ED Chat's
+   * settings.json: a file change that only updates these, with no add, delete or move, is
+   * accepted. Any other change shows the card.
+   */
+  autoEditFiles?: string[];
   /** ED Chat's version, for initialize. */
   clientVersion?: string;
   /** How long a stopped turn may take to end before the process is restarted. */
@@ -48,6 +54,11 @@ function samePath(a: string, b: string): boolean {
   const n = (p: string) => path.resolve(p).replace(/[\\/]+$/, "");
   return process.platform === "win32" ? n(a).toLowerCase() === n(b).toLowerCase() : n(a) === n(b);
 }
+
+// An absolute path that names its drive on Windows: \x\y is on the drive of the folder it is
+// used in, which can differ from ED Chat's.
+const fullPath = (p: string) =>
+  process.platform === "win32" ? /^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/])/.test(p) : path.isAbsolute(p);
 
 const sameCommand = (a: BackendCommand, b: BackendCommand) =>
   a.command === b.command &&
@@ -100,8 +111,9 @@ export class CodexSession implements AgentBackend {
     RequestId,
     { ctl: AbortController; rpc: RpcClient; decline: unknown }
   >();
-  // Paths of each file change, for the approval card: the request itself names none.
-  private readonly fileChanges = new Map<string, string[]>();
+  // Each fileChange item's paths, for the approval card (the request itself names none), and
+  // whether every change is an update in place.
+  private readonly fileChanges = new Map<string, { paths: string[]; updatesOnly: boolean }>();
   // Threads that /new left: what still arrives for them is dropped, even before the new thread
   // has an id.
   private readonly leftThreads = new Set<string>();
@@ -570,12 +582,31 @@ export class CodexSession implements AgentBackend {
           typeof item.id === "string" &&
           Array.isArray(item.changes)
         )
-          this.fileChanges.set(
-            item.id,
-            item.changes.flatMap((c) =>
+          this.fileChanges.set(item.id, {
+            paths: item.changes.flatMap((c) =>
               isRecord(c) && typeof c.path === "string" ? [c.path] : [],
             ),
-          );
+            // A move names its new path in move_path; an add or a delete is not an edit. Any
+            // other field set, in kind or beside path, kind and diff, is taken as a move too,
+            // in case Codex renames it or moves it.
+            updatesOnly: item.changes.every(
+              (c) =>
+                isRecord(c) &&
+                typeof c.path === "string" &&
+                isRecord(c.kind) &&
+                c.kind.type === "update" &&
+                Object.entries(c).every(
+                  ([k, v]) => k === "path" || k === "kind" || k === "diff" || v == null,
+                ) &&
+                Object.entries(c.kind).every(([k, v]) => k === "type" || v == null),
+            ),
+          });
+        break;
+      }
+      // A finished change asks for nothing more.
+      case "item/completed": {
+        const item = isRecord(p.item) ? p.item : null;
+        if (typeof item?.id === "string") this.fileChanges.delete(item.id);
         break;
       }
     }
@@ -621,8 +652,21 @@ export class CodexSession implements AgentBackend {
       }
       case "item/fileChange/requestApproval": {
         const itemId = str(p.itemId);
-        const paths = (itemId && this.fileChanges.get(itemId)) || [];
+        const change = (itemId && this.fileChanges.get(itemId)) || null;
+        const paths = change?.paths ?? [];
         const root = str(p.grantRoot);
+        const allowed = this.opts.autoEditFiles ?? [];
+        if (
+          this.events.permissionMode === "auto" &&
+          !root &&
+          change?.updatesOnly &&
+          paths.length &&
+          // Full paths only: a relative one depends on the folder the patch was applied in.
+          paths.every((f) => fullPath(f) && allowed.some((a) => samePath(f, a)))
+        ) {
+          rpc.respond(id, { decision: "accept" });
+          return;
+        }
         const summary = root
           ? `write access to ${root}`
           : paths.length
