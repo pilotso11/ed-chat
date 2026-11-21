@@ -245,13 +245,19 @@ describe("codex command", () => {
       expect(developerInstructions).toContain(
         "use the current journal location and the ship's laden jump range",
       );
-      expect(developerInstructions).toContain("say that the route uses neutron boosting");
-      expect(developerInstructions).toContain("Sum the jumps field across the waypoints");
+      expect(developerInstructions).toContain(
+        "When plotting with spansh_route, say that the route uses neutron boosting",
+      );
+      expect(developerInstructions).toContain(
+        "Sum the jumps field across the waypoints: total_jumps can count waypoint legs instead of actual jumps",
+      );
       expect(developerInstructions).toContain(
         "A leg between saved plan stops can take several jumps",
       );
       expect(developerInstructions).toContain("If the plan lacks jump counts, plot a fresh route");
-      expect(developerInstructions).toContain("a lower bound for unboosted travel");
+      expect(developerInstructions).toContain(
+        "Without a usable plot, label straight-line distance divided by unboosted jump range, rounded up, as a lower bound for unboosted travel",
+      );
       expect(developerInstructions).toContain("use materials_plan when available");
       expect(developerInstructions).toContain("the nearest matching trader in a map marker");
       expect(developerInstructions).toContain("check the tool schema and retry with valid inputs");
