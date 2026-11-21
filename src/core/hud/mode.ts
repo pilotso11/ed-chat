@@ -27,6 +27,8 @@ export const HUD_EVENTS = [
   "CarrierLocation",
   "CarrierJumpRequest",
   "CarrierJumpCancelled",
+  "CarrierDecommission",
+  "CarrierCancelDecommission",
 ] as const;
 
 export interface Choice {
@@ -51,8 +53,7 @@ export const LAPSE_JUMPS = 5;
  * a discovery scan or a detailed scan turns on exploration; a body with biological signals, or
  * a bio sample, turns on exobiology; a prospector, a prospect, refining or a cracked asteroid
  * turns on mining. A jump alone starts nothing, and LAPSE_JUMPS jumps with no scan end
- * exploration. A jump, a sale or a new game ends mining unless mined cargo is still waiting to be
- * sold.
+ * exploration. A jump or a sale ends mining unless mined cargo is still waiting to be sold.
  * `massacreActive` is whether a massacre mission is still open now (from ed-mcp's massacre()).
  * `minedAboard` is whether mined cargo is waiting to be sold now (minedWaiting()).
  * `miningOn` is false when the mining mode is off: mining then changes no mode.
@@ -93,8 +94,8 @@ export function journalMode(
         if (mode === "mining") leftMining = true;
         break;
       case "MarketSell":
-      case "LoadGame":
-        // Selling, or starting the game again, ends mining once nothing mined is left.
+        // Selling ends mining once nothing mined is left. A relog does not: miners relog to reset
+        // the asteroids.
         if (mode === "mining") leftMining = true;
         break;
       case "ProspectedAsteroid":

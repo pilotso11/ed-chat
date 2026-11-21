@@ -11,6 +11,7 @@ import {
   miningPanel,
   miningState,
   minedWaiting,
+  ownCarrierId,
   refinedKinds,
   padFor,
   pickSell,
@@ -718,11 +719,12 @@ describe("after the review", () => {
     expect(away.copy).toBeUndefined();
   });
 
-  it("ends mining after a sale or a new game with nothing left, not with cargo waiting", () => {
+  it("ends mining after a sale with nothing left, not with cargo waiting or a relog", () => {
     const sold = [refined("Platinum"), ev("MarketSell", { Type: "platinum", Count: 1 })];
     expect(journalMode(sold, false, false)).toBeNull();
     expect(journalMode(sold, false, true)?.mode).toBe("mining");
-    expect(journalMode([refined("Platinum"), ev("LoadGame")], false, false)).toBeNull();
+    // A relog keeps mining: miners relog to reset the asteroids.
+    expect(journalMode([refined("Platinum"), ev("LoadGame")], false, false)?.mode).toBe("mining");
     // Prospecting again turns it back on.
     expect(journalMode([...sold, prospect([["Platinum", 30]])], false, false)?.mode).toBe("mining");
   });
@@ -1026,5 +1028,32 @@ describe("after the seventh review", () => {
     const { postSpansh } = await import("../src/core/hud/sell.js");
     await expect(postSpansh("https://x", {})).rejects.toThrow("Spansh 404");
     fetch.mockRestore();
+  });
+});
+
+describe("after the eighth review", () => {
+  it("counts a carrier jump as leaving the mining system", () => {
+    const events = [ev("FSDJump", { StarSystem: "A" }), refined("Platinum")];
+    for (const s of ["B", "C", "D", "E"]) events.push(ev("CarrierJump", { StarSystem: s }));
+    expect(miningState(events, T0 + t * 1000).system).toBeNull();
+  });
+
+  it("starts a new trip when the hold goes to the carrier", () => {
+    const tr = ev("CargoTransfer", {
+      Transfers: [{ Type: "platinum", Count: 10, Direction: "tocarrier" }],
+    });
+    expect(miningState([refined("Platinum"), tr], T0 + t * 1000).lastSale).toBe(tr.timestamp);
+  });
+
+  it("forgets a carrier once its decommission has gone through", () => {
+    const at = (s: number) => Math.floor((T0 + s * 1000) / 1000);
+    const events = [
+      ev("CarrierStats", { CarrierID: 9 }),
+      ev("CarrierDecommission", { CarrierID: 9, ScrapTime: at(t + 100) }),
+    ];
+    expect(ownCarrierId(events, T0 + t * 1000)).toBe(9);
+    expect(ownCarrierId(events, T0 + (t + 200) * 1000)).toBeNull();
+    const cancelled = [...events, ev("CarrierCancelDecommission", { CarrierID: 9 })];
+    expect(ownCarrierId(cancelled, T0 + (t + 200) * 1000)).toBe(9);
   });
 });

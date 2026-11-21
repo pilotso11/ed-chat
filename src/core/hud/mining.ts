@@ -193,13 +193,18 @@ export function miningState(
       case "CarrierJump":
       case "Location":
         here = str(e.StarSystem) ?? here;
-        if (e.event === "FSDJump") jumpsSince++;
+        // A carrier jump moves the ship too.
+        if (e.event !== "Location") jumpsSince++;
         prospect = null;
         ring = null;
         stintStart = null;
         break;
       case "MarketSell":
         lastSale = e.timestamp;
+        break;
+      case "CargoTransfer":
+        // The hold emptied to the carrier: the next full hold is a new trip.
+        if (objs(e.Transfers).some((x) => x.Direction === "tocarrier")) lastSale = e.timestamp;
         break;
       case "SupercruiseExit":
         if (e.BodyType === "PlanetaryRing") ring = str(e.Body);
@@ -359,17 +364,23 @@ const isFleetCarrier = (e: JournalEvent) =>
   e.CarrierType === undefined || e.CarrierType === "FleetCarrier";
 
 /** The player's own fleet carrier's ID (its market ID too); null when the journal shows none. */
-export function ownCarrierId(events: JournalEvent[]): number | null {
+export function ownCarrierId(events: JournalEvent[], now = Infinity): number | null {
   let id: number | null = null;
+  let scrapped: { id: number; at: number } | null = null;
   for (const e of events) {
     if (
       (e.event === "CarrierBuy" || e.event === "CarrierStats" || e.event === "CarrierLocation") &&
       isFleetCarrier(e)
     ) {
       id = num(e.CarrierID) ?? id;
+    } else if (e.event === "CarrierDecommission" && num(e.CarrierID) !== null) {
+      // A request: the carrier goes at ScrapTime (Unix seconds), unless cancelled.
+      scrapped = { id: num(e.CarrierID)!, at: (num(e.ScrapTime) ?? 0) * 1000 };
+    } else if (e.event === "CarrierCancelDecommission" && num(e.CarrierID) === scrapped?.id) {
+      scrapped = null;
     }
   }
-  return id;
+  return scrapped && scrapped.id === id && now >= scrapped.at ? null : id;
 }
 
 // The feed reads a new events array each poll, and a render reads it several times.
@@ -387,7 +398,7 @@ export function carrierState(events: JournalEvent[], now: number): Carrier | nul
 }
 
 function readCarrier(events: JournalEvent[], now: number): Carrier | null {
-  const id = ownCarrierId(events);
+  const id = ownCarrierId(events, now);
   if (id === null) return null;
   const c: Carrier = {
     id,
@@ -636,11 +647,11 @@ export function sellQueries(input: SellInput): ToSell[] {
 
 // ---------- The panel ----------
 
-/** The prospect's material that best clears its target, else its richest; null when none listed. */
 /** hud.mining.targets by commodityKey(), for judge(). */
 export const targetsMap = (targets: Record<string, number>) =>
   new Map(Object.entries(targets).map(([k, v]) => [commodityKey(k), v]));
 
+/** The prospect's material that best clears its target, else its richest; null when none listed. */
 export function judge(
   p: Prospect,
   t: Map<string, number>,

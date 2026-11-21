@@ -111,7 +111,7 @@ import {
 } from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
-import { SellPrices, postSpansh } from "../core/hud/sell.js";
+import { SellPrices, postSpansh, type SellQuery } from "../core/hud/sell.js";
 import { buildHud, type HudView } from "../core/hud/hud.js";
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
@@ -558,10 +558,7 @@ async function main(): Promise<void> {
       hotkey: hudChoice(),
       settings: settings.hud,
       now: Date.now(),
-      sell:
-        settings.hud.spansh && visible
-          ? (q: Parameters<SellPrices["get"]>[0]) => sellPrices.get(q)
-          : undefined,
+      sell: settings.hud.spansh && visible ? (q: SellQuery) => sellPrices.get(q) : undefined,
     };
     const k = settings.hotkeys;
     const first = (x: Parameters<typeof keyList>[0]) => keyList(x)[0];
