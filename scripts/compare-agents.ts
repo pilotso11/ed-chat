@@ -45,7 +45,6 @@ import {
   testKeyProblem,
   providerHomesDir,
   providerName,
-  MIN_KEY_LENGTH,
   redactKey,
   withoutTestKey,
   type TestProvider,
@@ -177,8 +176,9 @@ if (process.platform === "darwin") {
   console.error("compare-agents runs on Windows and Linux only: it cannot sandbox ed-mcp here.");
   process.exit(2);
 }
-// Codex still loads the player's other MCP servers from config.toml (only ed-mcp is replaced);
-// a tool of theirs that would change something asks, and the script declines it.
+// Codex on the player's login still loads their other MCP servers from config.toml (only
+// ed-mcp is replaced); a tool of theirs that would change something asks, and the script
+// declines it. A provider run's empty CODEX_HOME has none of them.
 const edMcpNote = `ed-mcp from ${edMcpDef.source}, on a copy of its data`;
 const resolvers: Record<AgentId, (p: string | null) => ResolvedCommand | null> = {
   claude: (p) => resolveClaude(p),
@@ -419,8 +419,9 @@ try {
       command: cli?.command ?? null,
       version: null,
       permissionMode: s.permissionMode,
-      // A provider run's empty config folder has no MCP servers of the player's: only ed-mcp.
-      edMcp: provider ? `${edMcpNote}, and no other MCP server` : edMcpNote,
+      // Only ed-mcp: Claude runs with --strict-mcp-config, and a provider run's empty config
+      // folder has none of the player's servers. Codex on the player's login loads theirs too.
+      edMcp: agent === "claude" || provider ? `${edMcpNote}, and no other MCP server` : edMcpNote,
       results: [],
     };
     // Checked when the provider files were read: a provider run always has its endpoint.
