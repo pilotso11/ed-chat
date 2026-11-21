@@ -5,16 +5,11 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-export interface Badge {
-  label: string;
-  message: string;
-}
-
-/** The badge for the whole of src: the share of lines the unit tests run, rounded down. */
-export function coverageBadge(summary: { total: { lines: { pct: number } } }): Badge {
-  const pct = summary.total.lines.pct;
+/** The badge text for the whole of src: the share of lines the unit tests run, rounded down. */
+export function coverageBadge(summary: unknown): { message: string } {
+  const pct = (summary as { total?: { lines?: { pct?: unknown } } } | null)?.total?.lines?.pct;
   if (typeof pct !== "number" || !Number.isFinite(pct)) throw new Error("no line coverage");
-  return { label: "coverage", message: `${Math.floor(pct)}%` };
+  return { message: `${Math.floor(pct)}%` };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

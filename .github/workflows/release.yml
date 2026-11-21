@@ -54,12 +54,22 @@ jobs:
       - run: npx electron-builder --win --publish never
       # Attach to the release release-please just created; electron-builder skips
       # publishing to a release that is already published.
-      # The README's coverage badge reads coverage.json from the latest release, so nothing
-      # is committed or published anywhere else.
-      - run: npm run coverage
-      - run: npx tsx scripts/coverage-badge.ts
-      - run: gh release upload "$TAG" dist/*.exe dist/*.appx coverage/coverage.json --clobber
+      - run: gh release upload "$TAG" dist/*.exe dist/*.appx --clobber
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag }}
+      # The README's coverage badge reads coverage.json from the latest release, so nothing is
+      # committed or published anywhere else. After the installer, and allowed to fail: a test
+      # that fails here leaves the badge at the last release's number, never a release without
+      # its installer. CI ran the same tests on this commit before it merged.
+      - name: Coverage badge
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag }}
+        run: |
+          npm run coverage
+          npx tsx scripts/coverage-badge.ts
+          gh release upload "$TAG" coverage/coverage.json --clobber
