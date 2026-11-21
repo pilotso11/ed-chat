@@ -11,6 +11,9 @@ import {
   scopeNotice,
   versionNotice,
 } from "../src/core/notices.js";
+import { TESTED_CLI_VERSION } from "../src/core/backends/claude/command.js";
+import { TESTED_CODEX_VERSION } from "../src/core/backends/codex/command.js";
+import { parseCliVersion } from "../src/core/cli.js";
 import { noticeCommand } from "../src/core/view.js";
 
 describe("ed-mcp notice", () => {
@@ -64,6 +67,12 @@ describe("version notice", () => {
       notice: null,
     });
     expect(versionNotice("codex-cli 9.0.0", "1.0.0", AGENTS.codex).notice).toBeNull();
+  });
+
+  it("can read the versions ED Chat was tested with", () => {
+    // An unreadable one would turn the update warning off.
+    expect(parseCliVersion(TESTED_CLI_VERSION)).not.toBeNull();
+    expect(parseCliVersion(TESTED_CODEX_VERSION)).not.toBeNull();
   });
 
   it("gives no notice when the tested version cannot be read", () => {

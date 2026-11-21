@@ -26,6 +26,7 @@ import {
   journalDir as journalFolder,
   localCommand,
   settingsChange,
+  type LocalCommand,
 } from "../core/agentSetup.js";
 import {
   AGENTS,
@@ -1054,16 +1055,30 @@ async function main(): Promise<void> {
     return true;
   }
 
+  /** False when the command could not run; the chat then stays open. */
+  async function runLocal(command: LocalCommand): Promise<boolean> {
+    switch (command) {
+      case "/new":
+        newConversation();
+        return true;
+      case "/version":
+        return showVersion();
+      case "/claude":
+      case "/codex":
+        return chooseAgent(command === "/claude" ? "claude" : "codex");
+      default:
+        // A command added to LOCAL_COMMANDS must be handled here.
+        return command satisfies never;
+    }
+  }
+
   async function send(text: string): Promise<boolean> {
     const t = text.trim();
     if (!t) return false;
     // ED Chat's own commands. They do not reach the assistant.
     const command = localCommand(t);
     if (command) {
-      if (command === "/new") newConversation();
-      else if (command === "/version") {
-        if (!showVersion()) return false;
-      } else if (!(await chooseAgent(command === "/claude" ? "claude" : "codex"))) return false;
+      if (!(await runLocal(command))) return false;
       const ok = await giveFocusBack();
       dispatch({ type: "closeChat" });
       if (ok) void settleFocus();
