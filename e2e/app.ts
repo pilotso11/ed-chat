@@ -65,6 +65,8 @@ export async function launch(
     "CODEX_HOME",
     "ED_MCP_SYNC_DIR",
     "ED_JOURNAL_DIR",
+    // Set, Electron runs as plain Node and opens no window.
+    "ELECTRON_RUN_AS_NODE",
   ])
     delete env[k];
   Object.assign(env, {
@@ -93,6 +95,11 @@ export async function launch(
     throw err;
   }
   try {
+    // Electron finds the roaming AppData folder from the profile (USERPROFILE), not from
+    // APPDATA, so this checks that the app's data really is in the temporary folder.
+    const userData = await app.evaluate(({ app }) => app.getPath("userData"));
+    if (!path.resolve(userData).toLowerCase().startsWith(path.resolve(root).toLowerCase()))
+      throw new Error(`the app's data folder is not the test's: ${userData}`);
     // A window can still be on about:blank when it appears, so its URL is polled.
     const page = async (file: string) => {
       const deadline = Date.now() + 30_000;
@@ -113,8 +120,12 @@ export async function launch(
       hud,
       journalDir,
       async close() {
-        await app.close();
-        await cleanUp();
+        try {
+          await app.close();
+        } finally {
+          // A folder Windows still holds must not fail a test that passed.
+          await cleanUp().catch(() => {});
+        }
       },
     };
   } catch (err) {

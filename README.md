@@ -366,7 +366,8 @@ conversation, ED Chat still resumes it, but the history view starts empty.
   ED Chat in Electron with a fake Claude CLI and temporary folders, so they do not touch your
   settings, your journal or your Claude login.
 
-CI runs both, and shows the coverage summary on each run.
+CI runs `npm run check`, then the Playwright tests on the app that its installer build made,
+and shows the coverage summary on each run.
 
 ## Releases
 

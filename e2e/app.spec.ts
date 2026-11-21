@@ -13,9 +13,12 @@ test("starts with the status strip and the first-run hotkeys card", async () => 
   t = await launch();
   await expect(t.chat.locator(".strip .state")).toContainText("idle");
   await expect(t.chat.locator(".keys-card .title")).toHaveText("ED Chat hotkeys");
-  // PATH holds no other assistant, so there is no notice about one. The app looks for Codex
-  // before it starts Claude, so by "idle" above any such notice would already show.
-  await expect(t.chat.locator(".notices")).not.toContainText("Codex");
+  // The test's settings.json is read: Claude runs in auto mode.
+  await expect(t.chat.locator(".strip .badge")).toHaveText("AUTO");
+  await expect(t.chat.locator(".strip .badge")).toHaveAttribute(
+    "title",
+    "Claude runs most tools without asking",
+  );
 });
 
 test("sends a message to Claude and shows the reply", async () => {
