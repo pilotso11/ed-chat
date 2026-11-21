@@ -56,6 +56,8 @@ export class FakeResizeObserver {
   readonly targets = new Set<Element>();
   constructor(readonly cb: ResizeObserverCallback) {}
   observe(el: Element) {
+    // As in a browser, observing an element again does nothing.
+    if (this.targets.has(el)) return;
     this.targets.add(el);
     FakeResizeObserver.active.add(this);
     // Components observe in a layout effect, inside act.

@@ -131,8 +131,9 @@ describe("click targets", () => {
     expect(overlay.hover.mock.calls).toEqual([[true]]);
     expect(overlay.holdCard.mock.calls).toEqual([[true]]);
     // Onto the chip inside the card, and off it again: the window still takes clicks.
-    // As a browser reports it: the pointer moves between the two.
-    fireEvent.mouseOver(chip, { relatedTarget: card });
+    // React reads enter and leave from mouseout and where the pointer went.
+    fireEvent.mouseOut(card, { relatedTarget: chip });
+    expect(overlay.hover.mock.calls).toEqual([[true]]);
     fireEvent.mouseOut(chip, { relatedTarget: card });
     expect(overlay.hover.mock.calls).toEqual([[true]]);
     fireEvent.mouseLeave(card);
@@ -383,7 +384,7 @@ describe("hotkeys while the overlay has focus", () => {
       altKey: true,
       modifierAltGraph: true,
       cancelable: true,
-    } as KeyboardEventInit);
+    });
     window.dispatchEvent(altGr);
     fireEvent.keyDown(window, { key: "x", code: "KeyX" });
     expect(overlay.chord).not.toHaveBeenCalled();

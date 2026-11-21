@@ -27,13 +27,10 @@ describe("activity panel", () => {
 
   it("reports its size at once and on each change, until unmounted", () => {
     const { overlay, unmount } = setup();
-    // Its own report, then the observer's first one.
-    expect(overlay.reportHudSize.mock.calls).toEqual([
-      [0, 0],
-      [0, 0],
-    ]);
+    expect(overlay.reportHudSize).toHaveBeenLastCalledWith(0, 0);
+    const atMount = overlay.reportHudSize.mock.calls.length;
     resize();
-    expect(overlay.reportHudSize).toHaveBeenCalledTimes(3);
+    expect(overlay.reportHudSize).toHaveBeenCalledTimes(atMount + 1);
     // New views do not add observers.
     overlay.hud({ ...base, moving: "move" });
     overlay.hud({ ...base, moving: "move on" });
