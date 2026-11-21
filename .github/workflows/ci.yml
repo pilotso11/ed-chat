@@ -18,7 +18,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Typecheck, format and the unit tests with coverage; fails below the src/core minimums.
+      # Typecheck, format and the unit tests with coverage; fails below the minimums in
+      # vitest.config.ts (src/core and src/renderer).
       - run: npm run check
       - name: Coverage summary
         # Also after a test failure, but not when the tests never ran.
