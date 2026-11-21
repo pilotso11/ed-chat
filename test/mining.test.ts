@@ -136,13 +136,17 @@ describe("miningState", () => {
     expect(s.prospects).toHaveLength(2);
   });
 
-  it("forgets the prospect and ring on a jump, and the session on a new game", () => {
+  it("forgets the prospect and ring on a jump, and the session after a long break", () => {
     const events = [prospect([["Platinum", 30]]), refined("Platinum"), ev("FSDJump")];
     const s = miningState(events, T0 + t * 1000);
     expect(s.prospect).toBeNull();
     expect(s.refined.get("platinum")).toBe(1);
-    const after = miningState([...events, ev("LoadGame")], T0 + t * 1000);
-    expect(after.refined.size).toBe(0);
+    // A relog keeps the session: miners relog to reset the rocks.
+    const relog = miningState([...events, ev("LoadGame"), refined("Platinum")], T0 + t * 1000);
+    expect(relog.refined.get("platinum")).toBe(2);
+    const later = [...events, ev("MiningRefined", { Type: "$osmium_name;" }, t + 3 * 3600)];
+    const after = miningState(later, T0 + t * 1000);
+    expect([...after.refined]).toEqual([["osmium", 1]]);
     expect(after.prospects).toHaveLength(0);
   });
 
@@ -597,15 +601,14 @@ describe("mining edge cases", () => {
     // No departure time: about 15 minutes after booking.
     expect(c.jumping?.system).toBe("Maia");
     expect(carrierState(events, T0 + (t + 16 * 60) * 1000)!.system).toBe("Maia");
-    // A new game session forgets what was moved.
+    // Moves more than 12 hours old no longer count as waiting.
     const moved = carrierState(
       [
         ...events,
         ev("Docked", { MarketID: ID, StarSystem: "Merope" }),
         ev("CargoTransfer", { Transfers: [{ Type: "painite", Count: 5, Direction: "tocarrier" }] }),
-        ev("LoadGame"),
       ],
-      T0 + t * 1000,
+      T0 + (t + 13 * 3600) * 1000,
     )!;
     expect(moved.moved.size).toBe(0);
   });
@@ -974,7 +977,6 @@ describe("after the fifth review", () => {
     expect(miningState(events, T0 + t * 1000).system).toBe("A");
     events.push(ev("FSDJump", { StarSystem: "E" }));
     expect(miningState(events, T0 + t * 1000).system).toBeNull();
-    expect(miningState([...events.slice(0, 2), ev("LoadGame")], T0 + t * 1000).system).toBeNull();
   });
 
   it("knows the newer small hulls", () => {

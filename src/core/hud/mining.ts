@@ -119,6 +119,8 @@ export interface MiningState {
 }
 
 const RATE_WINDOW_MS = 15 * 60_000;
+/** This long without mining ends a mining session: its counts start again. */
+const SESSION_GAP_MS = 2 * 3_600_000;
 /** Buyers are searched from the mining system for this many jumps, then from where the ship is. */
 const SEARCH_FROM_MINING_JUMPS = 3;
 const RATE_MIN_MS = 3 * 60_000;
@@ -169,6 +171,13 @@ export function miningState(
   let jumpsSince = 0;
   const rings = new Map<string, { name: string; count: number }[]>();
   const mined = () => {
+    // A long break starts a new session; a relog does not, since miners relog to reset rocks.
+    if (lastMining && last - lastMining > SESSION_GAP_MS) {
+      prospects.length = 0;
+      refined.clear();
+      refinedAt.length = 0;
+      cracked = 0;
+    }
     // After a break (docked, or away), the rate counts from when mining started again.
     if (stintStart !== null && last - lastMining > RATE_WINDOW_MS) stintStart = last;
     stintStart ??= last;
@@ -179,22 +188,15 @@ export function miningState(
   for (const e of events) {
     last = Date.parse(e.timestamp) || last;
     switch (e.event) {
-      case "LoadGame":
-        prospects.length = 0;
-        refined.clear();
-        refinedAt.length = 0;
-        cracked = 0;
-        prospect = null;
-        ring = null;
-        stintStart = null;
-        system = null;
+      case "Location":
+        // Written at login too, in the same place: not a move.
+        here = str(e.StarSystem) ?? here;
         break;
       case "FSDJump":
       case "CarrierJump":
-      case "Location":
         here = str(e.StarSystem) ?? here;
         // A carrier jump moves the ship too.
-        if (e.event !== "Location") jumpsSince++;
+        jumpsSince++;
         prospect = null;
         ring = null;
         stintStart = null;
@@ -230,22 +232,23 @@ export function miningState(
         );
         break;
       }
+      // mined() first: a new session clears the counts before this event adds to them.
       case "ProspectedAsteroid":
+        mined();
         prospect = prospectOf(e, last);
         prospects.push(prospect);
-        mined();
         break;
       case "AsteroidCracked":
+        mined();
         cracked++;
         ring = str(e.Body) ?? ring;
-        mined();
         break;
       case "MiningRefined": {
+        mined();
         const key = commodityKey(str(e.Type) ?? str(e.Type_Localised) ?? "");
         // An event with no readable type still counts toward the rate.
         if (key) refined.set(key, (refined.get(key) ?? 0) + 1);
         refinedAt.push(last);
-        mined();
         break;
       }
       case "LaunchDrone":
@@ -279,6 +282,15 @@ export function miningState(
 }
 
 const kindsMemo = new WeakMap<JournalEvent[], Set<string>>();
+/** Events after which fragments collected are no longer from rocks just cracked. */
+const LEAVE_RING = new Set([
+  "FSDJump",
+  "CarrierJump",
+  "Location",
+  "LoadGame",
+  "SupercruiseEntry",
+  "Docked",
+]);
 
 /**
  * The commodities the player has mined and not bought since, by commodityKey(): refined by laser,
@@ -289,7 +301,8 @@ const kindsMemo = new WeakMap<JournalEvent[], Set<string>>();
 export function refinedKinds(events: JournalEvent[]): Set<string> {
   const memo = kindsMemo.get(events);
   if (memo) return memo;
-  const own = ownCarrierId(events);
+  // Buying back from the carrier keeps the mark, even while a decommission is pending.
+  const own = ownCarrierId(events, -Infinity);
   const kinds = new Set<string>();
   // Mining in this system since arriving: fragments collected now come from rocks.
   let cracking = false;
@@ -304,11 +317,7 @@ export function refinedKinds(events: JournalEvent[]): Set<string> {
       if (cracking && isMined(key) && e.Stolen !== true) kinds.add(key);
     } else if (e.event === "AsteroidCracked" || e.event === "ProspectedAsteroid") {
       cracking = true;
-    } else if (
-      ["FSDJump", "CarrierJump", "Location", "LoadGame", "SupercruiseEntry", "Docked"].includes(
-        e.event,
-      )
-    ) {
+    } else if (LEAVE_RING.has(e.event)) {
       cracking = false;
     } else if (e.event === "MarketBuy" && (own === null || num(e.MarketID) !== own)) {
       kinds.delete(commodityKey(str(e.Type) ?? ""));
@@ -353,9 +362,12 @@ export interface Carrier {
   jumping: { system: string; departs: number | null } | null;
   /** From the newest carrier management screen, less the cargo moved since. */
   freeSpace: number | null;
-  /** Mined commodities moved to the carrier this game session, by commodityKey(). */
+  /** Mined commodities moved to the carrier in the last 12 hours, by commodityKey(). */
   moved: Map<string, number>;
 }
+
+/** Cargo moved to the carrier counts as waiting to be sold for this long. */
+const MOVED_FOR_MS = 12 * 3_600_000;
 
 /** A jump booked without a departure time leaves about this long after it is booked. */
 const CARRIER_COUNTDOWN_MS = 15 * 60_000;
@@ -375,7 +387,9 @@ export function ownCarrierId(events: JournalEvent[], now = Infinity): number | n
       id = num(e.CarrierID) ?? id;
     } else if (e.event === "CarrierDecommission" && num(e.CarrierID) !== null) {
       // A request: the carrier goes at ScrapTime (Unix seconds), unless cancelled.
-      scrapped = { id: num(e.CarrierID)!, at: (num(e.ScrapTime) ?? 0) * 1000 };
+      const at = num(e.ScrapTime);
+      // Without a scrap time it is not known to go: keep it.
+      scrapped = { id: num(e.CarrierID)!, at: at === null ? Infinity : at * 1000 };
     } else if (e.event === "CarrierCancelDecommission" && num(e.CarrierID) === scrapped?.id) {
       scrapped = null;
     }
@@ -418,7 +432,10 @@ function readCarrier(events: JournalEvent[], now: number): Carrier | null {
   const move = (name: string, tons: number) => {
     const key = commodityKey(name);
     if (c.freeSpace !== null) c.freeSpace -= tons;
-    if (isMined(key)) c.moved.set(key, Math.max(0, (c.moved.get(key) ?? 0) + tons));
+    // Sales from the carrier are not in the journal, so only recent moves count as waiting.
+    if (isMined(key) && now - last <= MOVED_FOR_MS) {
+      c.moved.set(key, Math.max(0, (c.moved.get(key) ?? 0) + tons));
+    }
   };
   const land = () => {
     if (jump.pending && last >= jump.pending.departs) {
@@ -431,9 +448,6 @@ function readCarrier(events: JournalEvent[], now: number): Carrier | null {
     land();
     const mine = num(e.CarrierID) === id || num(e.MarketID) === id;
     switch (e.event) {
-      case "LoadGame":
-        c.moved.clear();
-        break;
       case "CarrierBuy":
         if (mine) {
           c.callsign = str(e.Callsign) ?? c.callsign;

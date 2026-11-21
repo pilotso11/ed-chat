@@ -189,8 +189,9 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   },
   "hud.mining.sellRadiusLy": {
     text:
-      "Light years from the ship to search for buyers on Spansh. Only the system name and the " +
-      "commodity are sent. Uses hud.spansh.",
+      "Light years to search for buyers on Spansh: from the mining system, until the ship is " +
+      "more than 3 jumps from it, then from the ship. Only the system name and the commodity " +
+      "are sent. Uses hud.spansh.",
   },
   "hud.mining.carrierRadiusLy": {
     text: "Light years from the carrier to search for buyers when hud.mining.useCarrier is on.",
