@@ -48,7 +48,11 @@ describe("journalMode", () => {
   it("keeps what was scanned during and after a finished massacre stack", () => {
     // The panel showed the activity note's mode instead, since this came out empty.
     const events = [massacreAccepted(), ev("ScanOrganic", { ScanType: "Log" })];
-    expect(journalMode(events, false)?.mode).toBe("exobiology");
+    // Dated by the sample, so it beats an activity note older than the sample.
+    expect(journalMode(events, false)).toEqual({
+      mode: "exobiology",
+      at: Date.parse(events[1]!.timestamp),
+    });
     expect(journalMode(events, true)?.mode).toBe("massacre");
   });
 
@@ -69,6 +73,11 @@ describe("journalMode", () => {
     expect(journalMode([ev("FSSDiscoveryScan"), ...jumps.slice(1)], false)?.mode).toBe(
       "exploration",
     );
+  });
+
+  it("counts jumps during a massacre stack toward the end of exploration", () => {
+    const jumps = Array.from({ length: LAPSE_JUMPS }, () => ev("FSDJump"));
+    expect(journalMode([ev("FSSDiscoveryScan"), massacreAccepted(), ...jumps], false)).toBeNull();
   });
 
   it("turns on exobiology near a body with bio signals, and back to exploration on leaving", () => {

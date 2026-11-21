@@ -152,8 +152,10 @@ The mode is the newest of three choices, each with a time:
 
 - Massacre mode ends when ed-mcp's mission list has no massacre mission left. `MissionCompleted`,
   `MissionFailed` and `MissionAbandoned` remove missions, and the `Missions` list at login drops
-  any the game no longer has. The panel then goes back to the mode before massacre, or hides.
-- While massacre mode is on, scans and samples do not switch the mode.
+  any the game no longer has. The panel then shows the mode that the scans, samples and jumps
+  since give, as if there had been no missions, or hides.
+- While massacre mode is on, scans and samples do not switch the mode, but they and the jumps
+  still count for the mode after it.
 - A jump never starts a mode, so the panel does not appear on a plain trip. Five jumps with no
   scan end exploration mode.
 - The hotkey choice is saved in `state.json` with its time, so after a restart it is still
