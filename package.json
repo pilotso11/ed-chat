@@ -1,6 +1,6 @@
 {
   "name": "ed-chat",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "Claude Code or Codex chat overlay for Elite Dangerous on Windows",
   "license": "MIT",
