@@ -57,7 +57,7 @@ export function trayItems(s: {
     {
       label: "Assistant",
       submenu: (Object.keys(AGENTS) as AgentId[]).map((id): TrayItem => ({
-        label: AGENTS[id].name,
+        label: menuLabel(AGENTS[id].name),
         kind: "radio",
         checked: s.agentId === id,
         action: { type: "chooseAgent", id },
