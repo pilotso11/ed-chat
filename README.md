@@ -1,5 +1,7 @@
 # ED Chat
 
+[![Coverage](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fpilotso11%2Fed-chat%2Freleases%2Flatest%2Fdownload%2Fcoverage.json&query=%24.message&label=coverage&color=blue)](#tests)
+
 A small AI chat window on top of Elite Dangerous, for Claude Code or OpenAI's
 Codex. Press a hotkey, ask a question, press Enter, and keep flying. The reply shows in a corner of the
 screen. Star system and station names in the reply become numbered chips;
@@ -381,6 +383,22 @@ file per conversation. When ED Chat resumes a conversation, it reads the last 20
 turns of that file back into the history view and adds new turns to the same
 file. You can open or delete the files. If you delete the file of the last
 conversation, ED Chat still resumes it, but the history view starts empty.
+
+## Tests
+
+- `npm run check`: typecheck, format check, and the unit tests with coverage. It fails if
+  coverage of `src/core` drops below the minimums in `vitest.config.ts`. The HTML report is in
+  `coverage/`.
+- `npm run test:e2e`: builds the app, then runs the Playwright tests in `e2e/`. They start
+  ED Chat in Electron with a fake Claude CLI and temporary folders, so they do not touch your
+  settings, your journal or your Claude login. Its windows do show on screen, over whatever is
+  in front, so the tests refuse to run while Elite is running; set `E2E_FORCE=1` to run them
+  anyway. `npm run check` does not run them.
+
+CI runs `npm run check`, then the Playwright tests on the app that its installer build made,
+and shows the coverage summary on each run. The release workflow attaches `coverage.json`
+(from `scripts/coverage-badge.ts`) to each release, and the coverage badge above reads it from
+the latest release, so CI commits and publishes nothing for it.
 
 ## Releases
 

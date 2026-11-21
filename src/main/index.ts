@@ -261,6 +261,7 @@ async function main(): Promise<void> {
     process.env.ELECTRON_RENDERER_URL && `${process.env.ELECTRON_RENDERER_URL}/hud.html`,
     path.join(import.meta.dirname, "../renderer/hud.html"),
   );
+  const windowsGone = () => win.isDestroyed() || hudWin.isDestroyed();
   let hudPosition: Position;
   ({ position: hudPosition, saved } = effectiveHudPosition(settings.hud.position, saved));
 
@@ -271,6 +272,8 @@ async function main(): Promise<void> {
   // The route stops still to do, current first: chips in their systems show the body or station.
   let chipStops: StopTarget[] = [];
   function render(): void {
+    // A CLI that exits while the app quits still dispatches; the windows are gone by then.
+    if (windowsGone()) return;
     const req = currentApproval(state);
     if (req?.id !== shownApproval?.id) shownApproval = req ? { id: req.id, at: Date.now() } : null;
     const props = windowProps(state);
@@ -333,7 +336,7 @@ async function main(): Promise<void> {
   let dragging = false;
 
   function reposition(): void {
-    if (dragging) return;
+    if (dragging || windowsGone()) return;
     const display = chooseDisplay(
       screen.getAllDisplays(),
       screen.getPrimaryDisplay(),
@@ -360,6 +363,7 @@ async function main(): Promise<void> {
   let dragTimer: NodeJS.Timeout | undefined;
   function finishDrag(): void {
     dragging = false;
+    if (windowsGone()) return;
     const b = win.getBounds();
     // No real move: apply any height change that waited for the drag.
     if (placed && b.x === placed.x && b.y === placed.y) return reposition();
@@ -396,6 +400,7 @@ async function main(): Promise<void> {
   // Focus and topmost.
   const win32 = process.platform === "win32" ? loadWin32() : null;
   const overlayHwnd = () => {
+    if (win.isDestroyed()) return 0;
     const b = win.getNativeWindowHandle();
     return b.length >= 8 ? Number(b.readBigUInt64LE()) : b.readUInt32LE();
   };
@@ -426,6 +431,7 @@ async function main(): Promise<void> {
 
   let wasGame: boolean | null = null;
   function onForeground(f: Foreground): void {
+    if (windowsGone()) return;
     // For diagnosing game detection on the PC; only the flag and the process name are logged.
     if (f.isGame !== wasGame) {
       wasGame = f.isGame;
@@ -503,6 +509,7 @@ async function main(): Promise<void> {
   const HUD_MOVE_SECONDS = 15;
 
   function placeHud(): void {
+    if (windowsGone()) return;
     const display = chooseDisplay(
       screen.getAllDisplays(),
       screen.getPrimaryDisplay(),
@@ -526,6 +533,7 @@ async function main(): Promise<void> {
     saved.hudMode ? { mode: saved.hudMode.mode, at: Date.parse(saved.hudMode.at) } : null;
 
   function renderHud(): void {
+    if (windowsGone()) return;
     const input = {
       journal: null,
       status: null,
@@ -1308,7 +1316,8 @@ async function main(): Promise<void> {
   // The open chat takes all clicks already; otherwise only a chip or the icon under the pointer does.
   ipcMain.on(IPC.hover, (_e, v: unknown) => {
     const over = boolArg(v);
-    if (over === null || windowProps(state).interactive) return;
+    // A message the renderer sent just before its window closed can arrive after.
+    if (over === null || windowProps(state).interactive || win.isDestroyed()) return;
     win.setIgnoreMouseEvents(!over, { forward: true });
   });
   ipcMain.on(IPC.expand, () => {
@@ -1328,7 +1337,9 @@ async function main(): Promise<void> {
     clipboard.writeText(command);
     flash("copy", COMMAND_COPIED, 3_000);
   });
-  ipcMain.on(IPC.showNotices, () => noticeMenu().popup({ window: win }));
+  ipcMain.on(IPC.showNotices, () => {
+    if (!win.isDestroyed()) noticeMenu().popup({ window: win });
+  });
   ipcMain.on(IPC.closeKeys, hideKeys);
   ipcMain.on(IPC.showMore, () => runAction({ type: "showMore" }, "hotkey"));
   ipcMain.on(IPC.answerApproval, (_e, id: unknown, a: unknown) => {
@@ -1575,7 +1586,15 @@ async function main(): Promise<void> {
   // After the first foreground check, so the list shows which keys other apps hold.
   if (settings.startup.showKeys) setTimeout(showKeys, 1_000);
 
-  app.on("will-quit", () => {
+  // Everything that could still reach the windows stops as soon as quitting starts: will-quit
+  // comes only after the windows are gone. Once only.
+  let stopped = false;
+  function shutDown(): void {
+    if (stopped) return;
+    stopped = true;
+    clearTimeout(dragTimer);
+    screen.off("display-removed", placeAll);
+    screen.off("display-metrics-changed", placeAll);
     trayIcon.destroy();
     globalShortcut.unregisterAll();
     focus?.stop();
@@ -1584,5 +1603,11 @@ async function main(): Promise<void> {
     settingsStore.unwatch();
     session?.stop();
     void approval.stop();
-  });
+  }
+  app.on("before-quit", shutDown);
+  // ED Chat is no use with a window gone (Alt+F4 on the open chat closes it), so it quits; the
+  // other window would otherwise keep a process running with no tray icon or hotkeys.
+  win.on("closed", () => app.quit());
+  hudWin.on("closed", () => app.quit());
+  app.on("will-quit", shutDown);
 }

@@ -1,6 +1,6 @@
 {
   "name": "ed-chat",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Claude Code or Codex chat overlay for Elite Dangerous on Windows",
   "license": "MIT",
@@ -17,7 +17,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run format:check && npm test",
+    "coverage": "vitest run --coverage",
+    "test:e2e": "npm run build && playwright test",
+    "check": "npm run typecheck && npm run format:check && npm run coverage",
     "compare:providers": "tsx scripts/compare-agents.ts --provider scripts/providers/zai.json --run claude:sonnet --run claude:opus --run codex:gpt-6.2-sol --run claude:glm-5.3@zai --run codex:glm-5.3@zai",
     "dist": "npm run build && electron-builder --win --publish never"
   },
@@ -30,10 +32,12 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
+    "@vitest/coverage-v8": "5.1.0",
     "ed-mcp": "0.8.0",
     "electron": "^45.3.3",
     "electron-builder": "^26.18.0",
