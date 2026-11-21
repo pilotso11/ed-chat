@@ -151,6 +151,12 @@ describe("click targets", () => {
     );
     expect($(".notice code")?.textContent).toBe("claude update");
     expect(overlay.hover.mock.calls).toEqual([[true]]);
+    // Still the copyable notice, and leaving it gives the clicks back.
+    expect($(".notice")?.className).toBe("notice copyable");
+    fireEvent.click($(".notice")!);
+    expect(overlay.copyNotice).toHaveBeenCalledOnce();
+    fireEvent.mouseLeave($(".notice")!);
+    expect(overlay.hover.mock.calls).toEqual([[true], [false]]);
   });
 
   it("takes clicks while any nested target is hovered", () => {
