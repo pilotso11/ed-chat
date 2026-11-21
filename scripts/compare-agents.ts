@@ -1,6 +1,8 @@
 // Sends the same player questions to Claude and Codex through ED Chat's own sessions and writes
 // a report with both replies side by side. It spends tokens: see --help, and try --dry-run first.
 // Usage: npx tsx scripts/compare-agents.ts [--only claude|codex] [--questions f] [--out f] [--dry-run]
+// The regression run, with the z.ai columns: set ED_CHAT_TEST_API_KEY to a z.ai Coding Plan key,
+// then npm run compare:providers (add -- --dry-run to see the runs first).
 import { execFile } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -34,7 +36,13 @@ import {
 } from "../src/core/settings.js";
 import {
   AGENT_IDS,
+  TEST_KEY_ENV,
   USAGE,
+  codexTestConfig,
+  parseProvider,
+  providerHomesDir,
+  providerName,
+  type TestProvider,
   type RunSpec,
   buildReport,
   edChatDataDir,
@@ -50,6 +58,7 @@ import {
   type CompareRun,
   type Question,
   type QuestionResult,
+  testProviderEnv,
 } from "./compare-lib.js";
 
 const repo = fileURLToPath(new URL("..", import.meta.url));
@@ -83,6 +92,8 @@ if (outProblem) {
 const sessions = new Set<AgentBackend>();
 let approvalServer: ApprovalServer | null = null;
 let tempRoot: string | null = null;
+// The config folders of runs through a provider, outside the temp folder (providerHomesDir).
+let homesRoot: string | null = null;
 function stopAll(): void {
   // stop() ends the CLI and its children (ed-mcp) with taskkill /T on Windows.
   for (const s of sessions) s.stop();
@@ -105,11 +116,12 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGBREAK", "SIGHUP"] as const) {
     // taskkill needs a moment to start before this process goes. The temp folder can hold the
     // sync password, so it goes too.
     setTimeout(() => {
-      if (tempRoot) {
+      for (const dir of [tempRoot, homesRoot]) {
+        if (!dir) continue;
         try {
-          rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+          rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
         } catch (err) {
-          console.error(`could not remove ${tempRoot}: ${String(err)}`);
+          console.error(`could not remove ${dir}: ${String(err)}`);
         }
       }
       process.exit(130);
@@ -166,26 +178,51 @@ interface Plan {
   agent: AgentId;
   model: string | null;
   cli: ResolvedCommand | null;
+  /** The provider the run goes through, or null for the player's own login. */
+  provider: TestProvider | null;
 }
 const specs: RunSpec[] =
   opts.runs ?? (opts.only ? [opts.only] : AGENT_IDS).map((agent) => ({ agent }));
-const plans: Plan[] = specs.map(({ agent, model }) => ({
+// Providers, by the name --run gives them. A provider's key is read from the environment only,
+// so it is never in a command line, a file in the repo or the report.
+const providers = new Map<string, TestProvider>();
+for (const file of opts.providers) {
+  try {
+    providers.set(providerName(file), parseProvider(await readFile(file, "utf8")));
+  } catch (err) {
+    console.error(`--provider ${file}: ${(err as Error).message}`);
+    process.exit(2);
+  }
+}
+const testKey = process.env[TEST_KEY_ENV]?.trim() ?? "";
+if (providers.size && !testKey && !opts.dryRun) {
+  console.error(`--provider was given: set ${TEST_KEY_ENV} to the provider's key.`);
+  process.exit(2);
+}
+const plans: Plan[] = specs.map(({ agent, model, provider }) => ({
   agent,
   model: model ?? settings[agent].model,
   cli: resolvers[agent](settings[agent].path),
+  provider: provider ? providers.get(provider)! : null,
 }));
+
+/** ED Chat's settings for a run, with the provider's permission mode when it sets one. */
+function runSettings(agent: AgentId, provider: TestProvider | null): Settings[AgentId] {
+  const mode = provider?.[agent]?.permissionMode;
+  return mode ? { ...settings[agent], permissionMode: mode } : settings[agent];
+}
 
 if (opts.dryRun) {
   const short = (a: string) => (a.length > 60 ? `${a.slice(0, 57)}...` : a);
   console.log(`Questions (${questions.length}) from ${opts.questions}:`);
   for (const q of questions) console.log(`  ${q.id}. [${q.topic}] ${q.text}`);
   const ws = path.join(os.tmpdir(), "ed-chat-compare-XXXX", "workspace");
-  for (const { agent, model, cli } of plans) {
+  for (const { agent, model, cli, provider } of plans) {
     if (!cli) {
       console.log(`\n${agent}: not installed, skipped`);
       continue;
     }
-    const s = settings[agent];
+    const s = runSettings(agent, provider);
     const args =
       agent === "claude"
         ? buildClaudeArgs({
@@ -201,6 +238,14 @@ if (opts.dryRun) {
     console.log(`  model: ${model ?? "the CLI's default"}`);
     console.log(`  permission mode: ${s.permissionMode}`);
     console.log(`  ed-mcp: ${edMcpNote}`);
+    const endpoint = provider?.[agent]?.baseUrl;
+    if (provider && !endpoint) console.log(`  skipped: ${provider.name} has no ${agent} endpoint`);
+    if (endpoint)
+      console.log(
+        `  endpoint: ${provider!.name}, ${endpoint}, key from ${TEST_KEY_ENV}` +
+          (testKey ? "" : " (not set)") +
+          ", own config folder, removed after the run",
+      );
   }
   console.log(`\nReport: ${out}\nNumbers: ${jsonOut}`);
   process.exit(0);
@@ -345,9 +390,9 @@ try {
     onSettled: () => {},
   });
 
-  for (const { agent, model, cli } of plans) {
+  for (const { agent, model, cli, provider } of plans) {
     if (interrupted.signal.aborted) break;
-    const s = settings[agent];
+    const s = runSettings(agent, provider);
     // A fresh copy for each run: a settings change by one assistant must not carry over to
     // the next, which would then find the change already made.
     await writeFile(settingsFile, settingsText ?? newSettingsText());
@@ -362,6 +407,15 @@ try {
       edMcp: edMcpNote,
       results: [],
     };
+    const endpoint = provider?.[agent]?.baseUrl;
+    if (provider) entry.via = provider.name;
+    if (endpoint) entry.endpoint = endpoint;
+    // A run through a provider never falls back to the player's own login.
+    if (provider && !endpoint) {
+      entry.skipped = `${provider.name} has no ${agent} endpoint`;
+      console.error(`${agent}: ${entry.skipped}, skipped`);
+      continue;
+    }
     run.runs.push(entry);
     if (!cli) {
       entry.skipped = "not installed";
@@ -369,6 +423,27 @@ try {
       continue;
     }
     entry.version = await cliVersion(cli);
+    // Through a test endpoint: an empty config folder for the CLI, fresh for each run, so
+    // nothing of the player's login, settings or history is read, and nothing is written there.
+    let env: NodeJS.ProcessEnv | undefined;
+    if (provider && endpoint) {
+      homesRoot ??= providerHomesDir(
+        process.env,
+        os.homedir(),
+        process.platform,
+        path.basename(tempRoot),
+      );
+      const home = path.join(homesRoot, `${agent}-home`);
+      await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+      await mkdir(home, { recursive: true });
+      if (agent === "codex") {
+        const models = provider.codex?.models;
+        const catalog = models ? path.join(home, "models.json") : null;
+        if (catalog) await writeFile(catalog, JSON.stringify({ models }, null, 2));
+        await writeFile(path.join(home, "config.toml"), codexTestConfig(endpoint, catalog));
+      }
+      env = testProviderEnv(agent, provider, testKey, home, process.env);
+    }
     let session: AgentBackend;
     if (agent === "claude") {
       approvalServer = new ApprovalServer(broker);
@@ -385,12 +460,13 @@ try {
         extraArgs: [...s.extraArgs, "--strict-mcp-config"],
         settingsFile,
       });
-      session = new ClaudeSession({ ...cli, args, cwd: workspace });
+      session = new ClaudeSession({ ...cli, args, cwd: workspace, env });
     } else {
       session = new CodexSession({
         ...cli,
         args: buildCodexArgs({ extraArgs: s.extraArgs }),
         cwd: workspace,
+        env,
         thread: codexThreadSettings({
           permissionMode: s.permissionMode,
           model,
@@ -446,10 +522,11 @@ try {
   }
   // The temp folder holds the copied ed-mcp env, which can have the sync password. The CLIs
   // may hold files open for a moment after taskkill, so removal retries.
-  if (tempRoot)
-    await rm(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }).catch(
-      (err: unknown) => console.error(`could not remove ${tempRoot}: ${String(err)}`),
-    );
+  for (const dir of [tempRoot, homesRoot])
+    if (dir)
+      await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }).catch(
+        (err: unknown) => console.error(`could not remove ${dir}: ${String(err)}`),
+      );
 }
 process.exitCode = interrupted.signal.aborted ? 130 : failed ? 1 : 0;
 // A handle left open (a late taskkill, a socket) must not keep the script running.

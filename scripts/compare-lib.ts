@@ -21,13 +21,33 @@ a new conversation. Approvals are declined. This spends tokens on each assistant
 
 Options:
   --only claude|codex   Run one assistant only.
-  --run <agent>[:model] Run this assistant with this model; give it more than once to compare
+  --run <agent>[:model][@provider]
+                        Run this assistant with this model; give it more than once to compare
                         models, for example --run claude:sonnet --run claude:opus --run codex.
-                        Without a model, the model in ED Chat's settings is used.
+                        Without a model, the model in ED Chat's settings is used. With
+                        @provider, the run goes through that provider (see --provider), for
+                        example --run claude@zai --run codex:glm-5.3@zai.
+  --provider <file>     A third-party endpoint that --run <agent>@<name> can use instead of the
+                        player's own login; <name> is the file name without .json, for example
+                        scripts/providers/zai.json gives zai. Give it more than once for more
+                        providers. The key is read from ED_CHAT_TEST_API_KEY. A run through a
+                        provider gets an empty config folder of its own, removed after the run: the
+                        player's login, settings and history are not read or changed. Codex
+                        needs a model then: --run codex:<model>@<name>.
   --questions <file>    A JSON list of { "topic", "text" } (default scripts/compare-questions.json).
   --out <file>          The Markdown report (default in the temp folder). The raw numbers go
                         next to it, with .json. It must be outside the repo.
   --timeout <seconds>   How long one reply may take (default 300).
+  --questions <file>    A JSON list of { "topic", "text" } (default scripts/compare-questions.json).
+  --out <file>          The Markdown report (default in the temp folder). The raw numbers go
+                        next to it, with .json. It must be outside the repo.
+  --timeout <seconds>   How long one reply may take (default 300).
+  --provider <file>     Run the assistants through a third-party endpoint instead of the
+                        player's own login, for example scripts/providers/zai.json. Its key is
+                        read from ED_CHAT_TEST_API_KEY. Each CLI gets an empty config folder of
+                        its own in the temp folder: the player's login, settings and history
+                        are not read or changed. An assistant the file does not name is
+                        skipped. Codex needs a model then: --run codex:<model>.
   --dry-run             Print what would run, and start no CLI.
   --help                Show this message.`;
 
@@ -35,6 +55,8 @@ Options:
 export interface RunSpec {
   agent: AgentId;
   model?: string;
+  /** The provider's name (--provider), or absent for the player's own login. */
+  provider?: string;
 }
 
 export interface CompareOptions {
@@ -44,6 +66,8 @@ export interface CompareOptions {
   questions: string;
   out: string;
   timeoutSec: number;
+  /** The provider files (--provider), in order. */
+  providers: string[];
   dryRun: boolean;
   help: boolean;
 }
@@ -61,6 +85,7 @@ export function parseArgs(
     questions: defaults.questions,
     out: defaults.out,
     timeoutSec: 300,
+    providers: [],
     dryRun: false,
     help: false,
   };
@@ -93,10 +118,15 @@ export function parseArgs(
       }
       case "--run": {
         const v = value();
-        const m = v ? /^(claude|codex)(?::(.+))?$/.exec(v) : null;
-        if (!m) return { ok: false, error: "--run takes claude or codex, and :model if wanted" };
+        const m = v ? /^(claude|codex)(?::([^@]+))?(?:@([\w.-]+))?$/.exec(v) : null;
+        if (!m)
+          return {
+            ok: false,
+            error: "--run takes claude or codex, :model and @provider if wanted",
+          };
         const spec: RunSpec = { agent: m[1] as AgentId };
         if (m[2]) spec.model = m[2];
+        if (m[3]) spec.provider = m[3];
         (o.runs ??= []).push(spec);
         break;
       }
@@ -119,12 +149,207 @@ export function parseArgs(
         o.timeoutSec = v;
         break;
       }
+      case "--provider": {
+        const v = value();
+        if (!v) return { ok: false, error: "--provider takes a file" };
+        o.providers.push(v);
+        break;
+      }
       default:
         return { ok: false, error: `unknown argument: ${arg}` };
     }
   }
   if (o.only && o.runs) return { ok: false, error: "give --only or --run, not both" };
+  const names = o.providers.map(providerName);
+  const dup = names.find((n, i) => names.indexOf(n) !== i);
+  if (dup) return { ok: false, error: `two --provider files are named ${dup}` };
+  for (const r of o.runs ?? []) {
+    if (r.provider && !names.includes(r.provider))
+      return {
+        ok: false,
+        error: `--run ${r.agent}@${r.provider}: no --provider is named ${r.provider}`,
+      };
+    // The model in ED Chat's settings is an OpenAI one, which the provider will not know.
+    if (r.provider && r.agent === "codex" && !r.model)
+      return {
+        ok: false,
+        error: `--run codex@${r.provider} needs a model: codex:<model>@${r.provider}`,
+      };
+  }
+  for (const n of names)
+    if (!o.runs?.some((r) => r.provider === n))
+      return { ok: false, error: `--provider ${n} is given, but no --run <agent>@${n} uses it` };
   return { ok: true, options: o };
+}
+
+/**
+ * Where the config folders of runs through a provider go: outside the temp folder, because
+ * Codex will not set up its helpers (its sandbox on Windows) in a CODEX_HOME there, and then
+ * asks before every shell command.
+ */
+export function providerHomesDir(
+  env: NodeJS.ProcessEnv,
+  home: string,
+  platform: NodeJS.Platform,
+  run: string,
+): string {
+  const p = platform === "win32" ? path.win32 : path.posix;
+  const base =
+    platform === "win32"
+      ? env.LOCALAPPDATA || p.join(home, "AppData", "Local")
+      : env.XDG_CACHE_HOME || p.join(home, ".cache");
+  return p.join(base, "ed-chat-compare", run);
+}
+
+/** The name --run uses for a provider file: its file name without .json. */
+export const providerName = (file: string): string => path.basename(file).replace(/\.json$/i, "");
+
+function isHttpUrl(v: unknown): v is string {
+  if (typeof v !== "string") return false;
+  try {
+    const u = new URL(v);
+    return u.protocol === "https:" || u.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+/** The environment variable that holds the provider's key. Never an argument or a file. */
+export const TEST_KEY_ENV = "ED_CHAT_TEST_API_KEY";
+
+/** A third-party endpoint for the assistants, from --provider. It holds no key. */
+export interface TestProvider {
+  name: string;
+  /** An Anthropic-compatible endpoint, and more environment for Claude (model names). */
+  claude?: { baseUrl: string; env: Record<string, string>; permissionMode?: PermissionMode };
+  /** An OpenAI Responses endpoint, and a model catalog (models.json) for the models it has. */
+  codex?: { baseUrl: string; models: unknown[] | null; permissionMode?: PermissionMode };
+}
+
+type PermissionMode = "auto" | "default";
+
+// The script sets these itself; a provider file must not.
+const CLAUDE_OWN_VARS = ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR"];
+
+/** Reads a provider file. Env values may be numbers or booleans, and become strings. */
+export function parseProvider(json: string): TestProvider {
+  let data: unknown;
+  try {
+    data = JSON.parse(json);
+  } catch (err) {
+    throw new Error(`the provider file is not JSON: ${(err as Error).message}`);
+  }
+  const r = (data ?? {}) as Record<string, unknown>;
+  const out: TestProvider = { name: typeof r.name === "string" && r.name ? r.name : "provider" };
+  const section = (agent: AgentId): Record<string, unknown> | null => {
+    const v = r[agent];
+    if (v === undefined) return null;
+    if (typeof v !== "object" || v === null || Array.isArray(v))
+      throw new Error(`the provider's ${agent} is not an object`);
+    const o = v as Record<string, unknown>;
+    if (!isHttpUrl(o.baseUrl))
+      throw new Error(`the provider's ${agent}.baseUrl is not an http(s) URL`);
+    if (
+      o.permissionMode !== undefined &&
+      o.permissionMode !== "auto" &&
+      o.permissionMode !== "default"
+    )
+      throw new Error(`the provider's ${agent}.permissionMode is not auto or default`);
+    return o;
+  };
+  // Instead of the one in ED Chat's settings, for an endpoint where that mode does not work.
+  const mode = (o: Record<string, unknown>) =>
+    o.permissionMode === undefined ? {} : { permissionMode: o.permissionMode as PermissionMode };
+  const claude = section("claude");
+  if (claude) {
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries((claude.env ?? {}) as Record<string, unknown>)) {
+      if (!["string", "number", "boolean"].includes(typeof v))
+        throw new Error(`the provider's claude.env.${k} is not a string`);
+      if (CLAUDE_OWN_VARS.includes(k.toUpperCase()))
+        throw new Error(`the provider's claude.env must not set ${k}: the script sets it`);
+      env[k] = String(v);
+    }
+    out.claude = { baseUrl: claude.baseUrl as string, env, ...mode(claude) };
+  }
+  const codex = section("codex");
+  if (codex) {
+    const models = codex.models ?? null;
+    if (models !== null && !Array.isArray(models))
+      throw new Error("the provider's codex.models is not a list");
+    out.codex = { baseUrl: codex.baseUrl as string, models, ...mode(codex) };
+  }
+  if (!out.claude && !out.codex) throw new Error("the provider names neither claude nor codex");
+  return out;
+}
+
+/** The provider name in the test CODEX_HOME's config.toml. */
+const CODEX_TEST_PROVIDER = "ed-chat-test";
+
+// The player's login and config locations, which a run through a provider must not use.
+const LOGIN_VARS = new Set([
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_BASE_URL",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "CLAUDE_CONFIG_DIR",
+  "CODEX_API_KEY",
+  "CODEX_HOME",
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+]);
+
+/**
+ * The environment for a CLI run through a provider. home is an empty folder that becomes the
+ * CLI's config folder, so it finds none of the player's login, settings or history, and writes
+ * nothing to theirs. Windows names are case-insensitive, so the player's own login variables
+ * go whatever their case.
+ */
+export function testProviderEnv(
+  agent: AgentId,
+  provider: TestProvider,
+  key: string,
+  home: string,
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(env)) if (!LOGIN_VARS.has(k.toUpperCase())) out[k] = v;
+  if (agent === "claude") {
+    const c = provider.claude;
+    if (!c) throw new Error(`${provider.name} has no claude endpoint`);
+    return {
+      ...out,
+      // No update checks or telemetry to Anthropic: the run talks to the provider only.
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+      ...c.env,
+      CLAUDE_CONFIG_DIR: home,
+      ANTHROPIC_BASE_URL: c.baseUrl,
+      ANTHROPIC_AUTH_TOKEN: key,
+    };
+  }
+  if (!provider.codex) throw new Error(`${provider.name} has no codex endpoint`);
+  return { ...out, CODEX_HOME: home, [TEST_KEY_ENV]: key };
+}
+
+/**
+ * config.toml for the test CODEX_HOME: the endpoint as the model provider, with its key read
+ * from TEST_KEY_ENV, and the model catalog when there is one. Codex 0.170 takes only the
+ * Responses API (wire_api "chat" is refused).
+ */
+export function codexTestConfig(baseUrl: string, catalogFile: string | null): string {
+  // A JSON string is a valid TOML basic string.
+  const q = JSON.stringify;
+  return [
+    `model_provider = ${q(CODEX_TEST_PROVIDER)}`,
+    ...(catalogFile ? [`model_catalog_json = ${q(catalogFile)}`] : []),
+    "",
+    `[model_providers.${CODEX_TEST_PROVIDER}]`,
+    `name = ${q(CODEX_TEST_PROVIDER)}`,
+    `base_url = ${q(baseUrl)}`,
+    `env_key = ${q(TEST_KEY_ENV)}`,
+    `wire_api = "responses"`,
+    "",
+  ].join("\n");
 }
 
 export interface Question {
@@ -269,6 +494,10 @@ export interface AgentRun {
   version: string | null;
   permissionMode: string;
   edMcp: string;
+  /** The provider it ran through, when not the player's own login. */
+  via?: string;
+  /** That provider's endpoint. */
+  endpoint?: string;
   /** Why the assistant did not run. */
   skipped?: string;
   results: QuestionResult[];
@@ -339,8 +568,10 @@ function approvalList(a: ApprovalAsked[]): string {
 
 /** How a run is named in the report: the assistant, and its model when one was set. */
 // Escaped like the table cells: the model is free text from --run.
-export const runLabel = (r: AgentRun): string =>
-  cell(r.model ? `${NAMES[r.agent]} (${r.model})` : NAMES[r.agent]);
+export const runLabel = (r: AgentRun): string => {
+  const who = r.via ? `${r.via} via ${NAMES[r.agent]}` : NAMES[r.agent];
+  return cell(r.model ? `${who} (${r.model})` : who);
+};
 
 /** The Markdown report: a summary, a table per assistant, then each question's replies side by side. */
 export function buildReport(run: CompareRun): string {
@@ -357,7 +588,7 @@ export function buildReport(run: CompareRun): string {
   for (const r of run.runs) {
     const what = r.skipped
       ? `skipped: ${r.skipped}`
-      : `${r.command}${r.version ? ` (${r.version})` : ""}, model ${r.model ?? "the CLI's default"}, permission mode ${r.permissionMode}, ed-mcp: ${r.edMcp}`;
+      : `${r.command}${r.version ? ` (${r.version})` : ""}, model ${r.model ?? "the CLI's default"}, permission mode ${r.permissionMode}, ed-mcp: ${r.edMcp}${r.endpoint ? `, through ${r.via}, ${r.endpoint}` : ""}`;
     out.push(`- **${runLabel(r)}**: ${cell(what)}`);
   }
   out.push("");

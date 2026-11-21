@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { parse as parseToml } from "smol-toml";
 import { describe, expect, it } from "vitest";
 import {
   buildReport,
@@ -11,8 +12,14 @@ import {
   jsonPathFor,
   median,
   parseArgs,
+  parseProvider,
+  providerHomesDir,
   parseQuestions,
   summarizeRun,
+  testProviderEnv,
+  codexTestConfig,
+  TEST_KEY_ENV,
+  type TestProvider,
   type AgentRun,
   type CompareRun,
   type QuestionResult,
@@ -30,6 +37,7 @@ describe("parseArgs", () => {
         questions: "q.json",
         out: "/tmp/r.md",
         timeoutSec: 300,
+        providers: [],
         dryRun: false,
         help: false,
       },
@@ -49,6 +57,7 @@ describe("parseArgs", () => {
         questions: "mine.json",
         out: "o.md",
         timeoutSec: 60,
+        providers: [],
         dryRun: true,
         help: false,
       },
@@ -84,6 +93,150 @@ describe("parseArgs", () => {
       ok: false,
       error: "unknown argument: --fast",
     });
+  });
+});
+
+describe("providers", () => {
+  it("reads --provider, and --run with @provider next to runs on the player's login", () => {
+    const r = parseArgs(
+      [
+        "--provider",
+        "scripts/providers/zai.json",
+        "--run",
+        "claude:sonnet",
+        "--run",
+        "codex:gpt-6.2-sol",
+        "--run",
+        "claude@zai",
+        "--run=codex:glm-5.3@zai",
+      ],
+      defaults,
+    );
+    expect(r.ok && r.options.providers).toEqual(["scripts/providers/zai.json"]);
+    expect(r.ok && r.options.runs).toEqual([
+      { agent: "claude", model: "sonnet" },
+      { agent: "codex", model: "gpt-6.2-sol" },
+      { agent: "claude", provider: "zai" },
+      { agent: "codex", model: "glm-5.3", provider: "zai" },
+    ]);
+    expect(parseArgs(["--provider"], defaults)).toMatchObject({ ok: false });
+  });
+
+  it("refuses an unknown provider, an unused one, two of one name, and Codex with no model", () => {
+    const err = (...argv: string[]) => {
+      const r = parseArgs(argv, defaults);
+      return r.ok ? null : r.error;
+    };
+    expect(err("--run", "claude@zai")).toMatch(/no --provider is named zai/);
+    expect(err("--provider", "zai.json", "--run", "claude")).toMatch(/no --run <agent>@zai/);
+    expect(err("--provider", "zai.json", "--only", "claude")).toMatch(/no --run <agent>@zai/);
+    expect(
+      err("--provider", "a/zai.json", "--provider", "b/zai.json", "--run", "claude@zai"),
+    ).toMatch(/two --provider files are named zai/);
+    expect(err("--provider", "zai.json", "--run", "codex@zai")).toMatch(/needs a model/);
+  });
+
+  it("reads the checked-in z.ai file, with no key in it", async () => {
+    const text = await readFile(
+      path.join(import.meta.dirname, "..", "scripts", "providers", "zai.json"),
+      "utf8",
+    );
+    const p = parseProvider(text);
+    expect(p.name).toBe("z.ai");
+    expect(p.claude?.baseUrl).toBe("https://api.z.ai/api/anthropic");
+    expect(p.codex?.baseUrl).toBe("https://api.z.ai/api/v1");
+    expect(p.codex?.models).toHaveLength(1);
+    // Claude's auto mode needs Anthropic's safety check, which z.ai does not have.
+    expect(p.claude?.permissionMode).toBe("default");
+    expect(p.codex?.permissionMode).toBeUndefined();
+    expect(text).not.toMatch(/AUTH_TOKEN|API_KEY|"key"/i);
+  });
+
+  it("refuses a bad URL, a key or base URL in env, and a file with no assistant", () => {
+    const parse = (o: unknown) => () => parseProvider(JSON.stringify(o));
+    expect(parse({ claude: { baseUrl: "a.example" } })).toThrow(/baseUrl/);
+    expect(
+      parse({ claude: { baseUrl: "https://a.example", env: { ANTHROPIC_AUTH_TOKEN: "k" } } }),
+    ).toThrow(/must not set/);
+    expect(parse({ claude: { baseUrl: "https://a.example", env: { X: { y: 1 } } } })).toThrow(
+      /not a string/,
+    );
+    expect(parse({ codex: { baseUrl: "https://b.example", models: {} } })).toThrow(/not a list/);
+    expect(parse({ name: "x" })).toThrow(/neither/);
+    expect(parse({ codex: { baseUrl: "https://b.example", permissionMode: "yolo" } })).toThrow(
+      /auto or default/,
+    );
+    expect(
+      parseProvider(JSON.stringify({ claude: { baseUrl: "https://a.example", env: { N: 1 } } }))
+        .claude?.env,
+    ).toEqual({ N: "1" });
+  });
+
+  const provider: TestProvider = {
+    name: "test",
+    claude: {
+      baseUrl: "https://a.example/anthropic",
+      env: { ANTHROPIC_DEFAULT_SONNET_MODEL: "glm" },
+    },
+    codex: { baseUrl: "https://b.example/v1", models: [] },
+  };
+  const playerEnv = {
+    PATH: "C:\\bin",
+    ANTHROPIC_API_KEY: "player-anthropic",
+    Claude_Config_Dir: "C:\\Users\\p\\.claude-alt",
+    CLAUDE_CODE_OAUTH_TOKEN: "player-oauth",
+    OPENAI_API_KEY: "player-openai",
+    CODEX_HOME: "C:\\Users\\p\\.codex",
+  };
+
+  it("runs Claude on the endpoint with its own config folder, and none of the player's login", () => {
+    expect(testProviderEnv("claude", provider, "k1", "T:\\claude-home", playerEnv)).toEqual({
+      PATH: "C:\\bin",
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+      ANTHROPIC_DEFAULT_SONNET_MODEL: "glm",
+      CLAUDE_CONFIG_DIR: "T:\\claude-home",
+      ANTHROPIC_BASE_URL: "https://a.example/anthropic",
+      ANTHROPIC_AUTH_TOKEN: "k1",
+    });
+  });
+
+  it("runs Codex with its own CODEX_HOME and the key in ED_CHAT_TEST_API_KEY only", () => {
+    expect(testProviderEnv("codex", provider, "k2", "T:\\codex-home", playerEnv)).toEqual({
+      PATH: "C:\\bin",
+      CODEX_HOME: "T:\\codex-home",
+      [TEST_KEY_ENV]: "k2",
+    });
+    expect(() => testProviderEnv("codex", { name: "c" }, "k", "h", {})).toThrow(/no codex/);
+  });
+
+  it("keeps the config folders out of the temp folder, where Codex sets up no sandbox", () => {
+    expect(providerHomesDir({ LOCALAPPDATA: "C:\\LA" }, "C:\\Users\\p", "win32", "run1")).toBe(
+      "C:\\LA\\ed-chat-compare\\run1",
+    );
+    expect(providerHomesDir({}, "C:\\Users\\p", "win32", "run1")).toBe(
+      "C:\\Users\\p\\AppData\\Local\\ed-chat-compare\\run1",
+    );
+    expect(providerHomesDir({}, "/home/p", "linux", "run1")).toBe(
+      "/home/p/.cache/ed-chat-compare/run1",
+    );
+  });
+
+  it("writes a Codex provider that reads the key from the environment, not the file", () => {
+    expect(parseToml(codexTestConfig("https://b.example/v1", "T:\\h\\models.json"))).toEqual({
+      model_provider: "ed-chat-test",
+      model_catalog_json: "T:\\h\\models.json",
+      model_providers: {
+        "ed-chat-test": {
+          name: "ed-chat-test",
+          base_url: "https://b.example/v1",
+          env_key: TEST_KEY_ENV,
+          wire_api: "responses",
+        },
+      },
+    });
+    expect(parseToml(codexTestConfig("https://b.example/v1", null))).not.toHaveProperty(
+      "model_catalog_json",
+    );
   });
 });
 
@@ -307,6 +460,19 @@ describe("buildReport", () => {
     });
     expect(report).toContain("| | Claude (sonnet) | Claude (opus) |");
     expect(report).toContain("model sonnet");
+  });
+
+  it("names the test endpoint a run went through", () => {
+    const report = buildReport({
+      ...run,
+      runs: [
+        { ...claudeRun, model: "sonnet" },
+        { ...claudeRun, via: "z.ai", endpoint: "https://a.example/anthropic", model: "sonnet" },
+      ],
+    });
+    expect(report).toContain("| | Claude (sonnet) | z.ai via Claude (sonnet) |");
+    expect(report).toContain("through z.ai, https://a.example/anthropic");
+    expect(buildReport(run)).not.toContain("through ");
   });
 
   it("has a summary with a column per assistant", () => {
