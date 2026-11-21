@@ -41,7 +41,7 @@ const MINED: Record<string, string> = {
   moissanite: "Moissanite",
   monazite: "Monazite",
   musgravite: "Musgravite",
-  opal: "Void Opals",
+  opal: "Void Opal",
   osmium: "Osmium",
   painite: "Painite",
   palladium: "Palladium",
@@ -236,8 +236,25 @@ export function miningState(
   };
 }
 
+/**
+ * The commodities the journal shows the player refining, by commodityKey(). Cargo of these counts
+ * as mined: Gold bought to trade does not, unless the player also mined Gold.
+ */
+export function refinedKinds(events: JournalEvent[]): Set<string> {
+  const kinds = new Set<string>();
+  for (const e of events) {
+    if (e.event === "MiningRefined") {
+      kinds.add(commodityKey(str(e.Type) ?? str(e.Type_Localised) ?? ""));
+    }
+  }
+  return kinds;
+}
+
 /** Mined commodities in the ship's hold, by commodityKey(), and the limpets. */
-export function holdOf(cargo: JournalState["cargo"]): {
+export function holdOf(
+  cargo: JournalState["cargo"],
+  kinds: Set<string> | null = null,
+): {
   mined: Map<string, number>;
   limpets: number;
   used: number;
@@ -249,7 +266,9 @@ export function holdOf(cargo: JournalState["cargo"]): {
     used += c.count;
     const key = commodityKey(c.name);
     if (key === "drones") limpets += c.count;
-    else if (c.mission_id === null && isMined(key)) mined.set(key, (mined.get(key) ?? 0) + c.count);
+    else if (c.mission_id === null && isMined(key) && (!kinds || kinds.has(key))) {
+      mined.set(key, (mined.get(key) ?? 0) + c.count);
+    }
   }
   return { mined, limpets, used };
 }
@@ -297,7 +316,8 @@ export function carrierState(events: JournalEvent[], now: number): Carrier | nul
     freeSpace: null,
     moved: new Map(),
   };
-  // A booked jump, held in an object so the closures below see its changes.
+  // A booked jump. In an object: TypeScript narrows a plain let to null after the loop, since it
+  // does not follow assignments made inside the land() closure.
   const jump: { pending: { system: string; departs: number } | null } = { pending: null };
   let last = 0;
   // Cargo moves only count while docked at this carrier, not at a squadron carrier.
@@ -361,6 +381,11 @@ export function carrierState(events: JournalEvent[], now: number): Carrier | nul
           c.system = str(e.StarSystem) ?? c.system;
           jump.pending = null;
         }
+        break;
+      case "Location":
+        // Logging in docked at the carrier writes Location, not Docked.
+        aboard = e.Docked === true && mine;
+        if (mine) c.system = str(e.StarSystem) ?? c.system;
         break;
       case "Undocked":
         aboard = false;
@@ -476,6 +501,8 @@ interface SellInput {
   system: string | null;
   hold: Map<string, number>;
   carrier: Carrier | null;
+  /** refinedKinds(): only these count on the carrier; null counts every minable commodity. */
+  kinds?: Set<string> | null;
   shipType: string | null;
   settings: Settings["hud"]["mining"];
 }
@@ -484,7 +511,8 @@ interface SellInput {
 function queryFor(input: SellInput, key: string): SellQuery | null {
   const s = input.settings;
   const fromCarrier = s.useCarrier && input.carrier?.system ? input.carrier : null;
-  const near = fromCarrier?.system ?? input.system;
+  // A booked jump: the cargo will be sold from where the carrier is going.
+  const near = fromCarrier?.jumping?.system ?? fromCarrier?.system ?? input.system;
   if (!near) return null;
   return {
     near,
@@ -503,7 +531,9 @@ function queryFor(input: SellInput, key: string): SellQuery | null {
 export function sellQueries(input: SellInput): ToSell[] {
   const fromCarrier = input.settings.useCarrier && input.carrier?.system ? input.carrier : null;
   const tons = new Map(input.hold);
-  for (const [k, n] of fromCarrier?.moved ?? []) tons.set(k, (tons.get(k) ?? 0) + n);
+  for (const [k, n] of fromCarrier?.moved ?? []) {
+    if (!input.kinds || input.kinds.has(k)) tons.set(k, (tons.get(k) ?? 0) + n);
+  }
   const out: ToSell[] = [];
   for (const [key, n] of [...tons].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1])) {
     if (out.length === MAX_SELL_ROWS) break;
@@ -544,6 +574,8 @@ const pct = (n: number) => `${n.toFixed(1)}%`;
 export function miningPanel(input: {
   system: string | null;
   state: MiningState;
+  /** The journal, for which commodities the player refined; without it, any minable counts. */
+  events?: JournalEvent[];
   cargo: JournalState["cargo"];
   capacity: number | null;
   shipType: string | null;
@@ -581,7 +613,8 @@ export function miningPanel(input: {
     rows.push({ text: `Hotspots: ${spots.join(" · ")}`, tone: "dim" });
   }
 
-  const hold = holdOf(input.cargo);
+  const kinds = input.events ? refinedKinds(input.events) : null;
+  const hold = holdOf(input.cargo, kinds);
   const free = input.capacity !== null ? Math.max(0, input.capacity - hold.used) : null;
   rows.push({
     text: input.capacity !== null ? `Hold ${hold.used}/${input.capacity} t` : `Hold ${hold.used} t`,
@@ -621,6 +654,7 @@ export function miningPanel(input: {
     system: input.system,
     hold: hold.mined,
     carrier: input.carrier,
+    kinds,
     shipType: input.shipType,
     settings,
   };
@@ -727,9 +761,15 @@ export function miningPanel(input: {
  */
 export function minedWaiting(
   cargo: JournalState["cargo"],
-  carrier: Carrier | null,
+  events: JournalEvent[],
+  now: number,
   settings: Settings["hud"]["mining"],
 ): boolean {
-  if (holdOf(cargo).mined.size > 0) return true;
-  return settings.useCarrier && [...(carrier?.moved.values() ?? [])].some((t) => t > 0);
+  const kinds = refinedKinds(events);
+  if (!kinds.size) return false;
+  if (holdOf(cargo, kinds).mined.size > 0) return true;
+  // The carrier is read only when selling from it.
+  if (!settings.useCarrier) return false;
+  const carrier = carrierState(events, now);
+  return [...(carrier?.moved ?? [])].some(([k, t]) => t > 0 && kinds.has(k));
 }

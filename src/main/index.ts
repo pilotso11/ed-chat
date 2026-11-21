@@ -571,13 +571,14 @@ async function main(): Promise<void> {
     const view = buildHud(input, moveHint);
     lastHudView = view;
     const copy = visible ? (view.panel?.copy ?? null) : null;
-    const copyId = copy ? `${copy.key}|${copy.text}` : null;
+    const copyId = copy ? copy.key : null;
     if (copy && copyId !== hudCopied) {
       clipboard.writeText(copy.text);
       flash("copy", `📋 ${copy.note}`, 6_000);
     }
-    // Kept while hidden, so showing the panel again does not copy the same buyer.
-    if (visible) hudCopied = copyId;
+    // Kept through gaps (a hidden panel, a hold no longer full, a search in progress), so the same
+    // buyer is copied once.
+    if (copyId) hudCopied = copyId;
     const mode = String(view.mode ?? null);
     if (mode !== hudMode) {
       hudMode = mode;

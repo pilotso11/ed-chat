@@ -162,9 +162,10 @@ export class SellPrices {
 
 /** POST as JSON to Spansh. */
 export function postSpansh(url: string, body: unknown): Promise<unknown> {
-  return spanshJson(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  // A station search can take longer than a system dump.
+  return spanshJson(
+    url,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    20_000,
+  );
 }

@@ -140,11 +140,15 @@ export class KnownBodies {
 }
 
 /** A Spansh request as JSON, with ED Chat's User-Agent and a timeout. A 404 gives {}. */
-export async function spanshJson(url: string, init: RequestInit = {}): Promise<unknown> {
+export async function spanshJson(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 15_000,
+): Promise<unknown> {
   const res = await fetch(url, {
     ...init,
     headers: { "User-Agent": "ED-Chat", ...(init.headers as Record<string, string>) },
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (res.status === 404) return {};
   if (!res.ok) throw new Error(`Spansh ${res.status}`);

@@ -87,9 +87,7 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
   if (input.hotkey?.mode === "off") return "off";
   const j = input.journal;
   const groups = j ? massacre(j.missions, j.events).groups : [];
-  const minedAboard = j
-    ? minedWaiting(j.cargo, carrierState(j.events, input.now), input.settings.mining)
-    : false;
+  const minedAboard = j ? minedWaiting(j.cargo, j.events, input.now, input.settings.mining) : false;
   const fromJournal = j ? journalMode(j.events, groups.length > 0, minedAboard) : null;
   const m = noteMode(input.activity?.kind);
   const fromNote =
@@ -108,6 +106,7 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
     return miningPanel({
       system,
       state: miningState(j.events, input.now, input.status?.body ?? null),
+      events: j.events,
       cargo: j.cargo,
       capacity: j.ship.cargo_capacity,
       shipType: j.ship.type,

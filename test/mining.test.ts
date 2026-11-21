@@ -64,7 +64,7 @@ describe("commodity names", () => {
 
   it("gives the market's English name", () => {
     expect(commodityName("lowtemperaturediamond")).toBe("Low Temperature Diamonds");
-    expect(commodityName("opal")).toBe("Void Opals");
+    expect(commodityName("opal")).toBe("Void Opal");
     expect(commodityName("unknownthing", "UnknownThing")).toBe("Unknown Thing");
   });
 });
@@ -624,7 +624,7 @@ describe("mining edge cases", () => {
     const p = panel({ state: state(events) });
     expect(p.right).toMatch(/t\/h$/);
     expect(p.rows[0]).toMatchObject({ text: "Painite 10.0% · Low · 40% left", right: "skip" });
-    expect(p.rows[1]).toMatchObject({ text: "Motherlode: Void Opals", right: "crack" });
+    expect(p.rows[1]).toMatchObject({ text: "Motherlode: Void Opal", right: "crack" });
     expect(p.rows[2]!.text).toBe("Hotspots: Painite");
     expect(p.rows[3]).toMatchObject({ text: "Hold 0 t", right: "0 limpets", tone: "warn" });
     expect(p.footer[0]).toBe("Session: 1 prospected · 0 worth mining · 1 motherlode · 1 cracked");
@@ -713,18 +713,72 @@ describe("after the review", () => {
   });
 
   it("counts cargo on the carrier as waiting to be sold when selling from it", () => {
+    const now = T0 + t * 1000;
+    const events = [
+      refined("Platinum"),
+      ev("CarrierLocation", { CarrierID: 9, StarSystem: "Belach" }),
+      ev("Docked", { MarketID: 9, StarSystem: "Belach" }),
+      ev("CargoTransfer", {
+        Transfers: [{ Type: "platinum", Count: 300, Direction: "tocarrier" }],
+      }),
+    ];
+    expect(minedWaiting([], events, now, M)).toBe(false);
+    expect(minedWaiting([], events, now, { ...M, useCarrier: true })).toBe(true);
+    expect(minedWaiting(cargo(1), events, now, M)).toBe(true);
+    // Bought Gold is not mined cargo.
+    const gold = [{ name: "Gold", count: 300, stolen: false, mission_id: null }];
+    expect(minedWaiting(gold, events, now, M)).toBe(false);
+    expect(minedWaiting(cargo(1), [], now, M)).toBe(false);
+  });
+
+  it("counts transfers after logging in docked at the carrier", () => {
+    const c = carrierState(
+      [
+        ev("CarrierLocation", { CarrierID: 9, StarSystem: "Belach" }),
+        ev("Location", { Docked: true, MarketID: 9, StarSystem: "Belach" }),
+        ev("CargoTransfer", { Transfers: [{ Type: "osmium", Count: 40, Direction: "tocarrier" }] }),
+      ],
+      T0 + t * 1000,
+    )!;
+    expect(c.moved.get("osmium")).toBe(40);
+  });
+
+  it("searches around a booked jump's destination, for refined cargo only", () => {
     const carrier = {
-      id: 1,
+      id: 9,
       callsign: null,
       name: null,
       system: "Belach",
-      jumping: null,
+      jumping: { system: "Hub", departs: null },
       freeSpace: null,
-      moved: new Map([["platinum", 300]]),
+      moved: new Map([
+        ["platinum", 100],
+        ["gold", 50],
+      ]),
     };
-    expect(minedWaiting([], carrier, M)).toBe(false);
-    expect(minedWaiting([], carrier, { ...M, useCarrier: true })).toBe(true);
-    expect(minedWaiting(cargo(1), null, M)).toBe(true);
+    const q = sellQueries({
+      system: "HIP 1",
+      hold: new Map(),
+      carrier,
+      kinds: new Set(["platinum"]),
+      shipType: null,
+      settings: { ...M, useCarrier: true },
+    });
+    expect(q.map((x) => [x.name, x.tons, x.query.near])).toEqual([["Platinum", 100, "Hub"]]);
+  });
+
+  it("searches for void opals by the market's name", () => {
+    expect(commodityName(commodityKey("$Opal_Name;"))).toBe("Void Opal");
+  });
+
+  it("leaves bought cargo out of the sell rows", () => {
+    const p = panel([refined("Platinum"), prospect([["Platinum", 30]])], {
+      events: [refined("Platinum")],
+      cargo: [...cargo(10), { name: "Gold", count: 20, stolen: false, mission_id: null }],
+    });
+    expect(p.rows.filter((r) => r.text.startsWith("Sell")).map((r) => r.text)).toEqual([
+      "Sell Platinum 10 t",
+    ]);
   });
 
   it("prices refined commodities that are no longer aboard", () => {
