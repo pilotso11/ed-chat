@@ -26,8 +26,9 @@ Options:
                         models, for example --run claude:sonnet --run claude:opus --run codex.
                         Without a model, the model in ED Chat's settings is used. With
                         @provider, the run goes through that provider (see --provider), for
-                        example --run claude:glm-5.3@zai --run codex:glm-5.3@zai. An @ that does not
-                        name a --provider is part of the model, as in claude:model@20250514.
+                        example --run claude:glm-5.3@zai --run codex:glm-5.3@zai. After a model,
+                        an @ must name a --provider, or be a version in digits, which stays
+                        part of the model, as in claude:model@20250514.
   --provider <file>     A third-party endpoint that --run <agent>@<name> can use instead of the
                         player's own login; <name> is the file name without .json, for example
                         scripts/providers/zai.json gives zai. Give it more than once for more
@@ -317,21 +318,26 @@ const CODEX_TEST_PROVIDER = "ed-chat-test";
 // The player's login, routing and model variables, which a run through a provider must not
 // use: another key or base URL, Bedrock or Vertex instead of the endpoint, or their own model
 // names. Matched by prefix, so a variable added in a later CLI release goes too.
+// CLAUDE_CODE_* also holds the player's tuning (output and thinking limits, effort) and, when
+// the script runs inside Claude Code, that session's own variables.
 const LOGIN_PREFIXES = [
   "ANTHROPIC_",
-  "CLAUDE_CODE_USE_",
-  "CLAUDE_CODE_OAUTH",
-  "CLAUDE_CODE_SUBAGENT_MODEL",
+  "CLAUDE_CODE_",
   "CLAUDE_CONFIG_DIR",
+  "MAX_THINKING_TOKENS",
+  "API_TIMEOUT_MS",
+  "DISABLE_PROMPT_CACHING",
   "CLOUD_ML_REGION",
   "AWS_BEARER_TOKEN_BEDROCK",
   "OPENAI_",
   "CODEX_",
   "AZURE_OPENAI_",
 ];
+// Where Claude Code finds Git Bash on Windows: a path, not a login or a choice of model.
+const KEEP_VARS = ["CLAUDE_CODE_GIT_BASH_PATH"];
 const isLoginVar = (name: string) => {
   const n = name.toUpperCase();
-  return LOGIN_PREFIXES.some((p) => n.startsWith(p));
+  return !KEEP_VARS.includes(n) && LOGIN_PREFIXES.some((p) => n.startsWith(p));
 };
 
 /**
@@ -380,7 +386,8 @@ export function withoutTestKey(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 export function redactKey(text: string, key: string): string {
   if (!key) return text;
   const parts = [key, ...key.split(".").filter((p) => p.length >= 16 && p !== key)];
-  return parts.reduce((t, p) => t.split(p).join("<key>"), text);
+  // Not <key>: a Markdown viewer hides that as an unknown HTML tag.
+  return parts.reduce((t, p) => t.split(p).join("[key]"), text);
 }
 
 /**

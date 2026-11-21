@@ -536,7 +536,10 @@ try {
       await mkdir(path.dirname(out), { recursive: true });
       // A reply can quote the key (a model that prints its environment): it goes from both.
       await writeFile(out, redactKey(buildReport(run), testKey));
-      await writeFile(jsonOut, redactKey(JSON.stringify(run, null, 2), testKey) + "\n");
+      // Each string before it is written, so a key that JSON escapes is found too.
+      const redacted = (_: string, v: unknown) =>
+        typeof v === "string" ? redactKey(v, testKey) : v;
+      await writeFile(jsonOut, JSON.stringify(run, redacted, 2) + "\n");
       console.error(`Report: ${out}\nNumbers: ${jsonOut}`);
     } catch (err) {
       failed = true;

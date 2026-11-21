@@ -236,6 +236,9 @@ describe("providers", () => {
     PATH: "C:\\bin",
     CLAUDE_CODE_USE_BEDROCK: "1",
     CLAUDE_CODE_SUBAGENT_MODEL: "player-subagent",
+    CLAUDE_CODE_MESSAGING_TOKEN: "parent-session",
+    MAX_THINKING_TOKENS: "64000",
+    CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe",
     ANTHROPIC_MODEL: "player-model",
     AWS_BEARER_TOKEN_BEDROCK: "player-bedrock",
     OPENAI_ORG_ID: "player-org",
@@ -250,6 +253,8 @@ describe("providers", () => {
   it("runs Claude on the endpoint with its own config folder, and none of the player's login", () => {
     expect(testProviderEnv("claude", provider, "k1", "T:\\claude-home", playerEnv)).toEqual({
       PATH: "C:\\bin",
+      // Kept: where Claude Code finds Git Bash, not a login.
+      CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe",
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
       ANTHROPIC_DEFAULT_SONNET_MODEL: "glm",
       CLAUDE_CONFIG_DIR: "T:\\claude-home",
@@ -261,6 +266,7 @@ describe("providers", () => {
   it("runs Codex with its own CODEX_HOME and the key in ED_CHAT_TEST_API_KEY only", () => {
     expect(testProviderEnv("codex", provider, "k2", "T:\\codex-home", playerEnv)).toEqual({
       PATH: "C:\\bin",
+      CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe",
       CODEX_HOME: "T:\\codex-home",
       [TEST_KEY_ENV]: "k2",
     });
@@ -287,12 +293,12 @@ describe("providers", () => {
 
   it("takes the key out of every copy in a report", () => {
     expect(redactKey("env: KEY=sk.1 and again sk.1", "sk.1")).toBe(
-      "env: KEY=<key> and again <key>",
+      "env: KEY=[key] and again [key]",
     );
     expect(redactKey("no key here", "")).toBe("no key here");
     const zai = "0123456789abcdef0123.ABCDEFGHIJKLMNOP";
     expect(redactKey(`id 0123456789abcdef0123, secret ABCDEFGHIJKLMNOP`, zai)).toBe(
-      "id <key>, secret <key>",
+      "id [key], secret [key]",
     );
   });
 
