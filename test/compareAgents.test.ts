@@ -14,6 +14,7 @@ import {
   parseArgs,
   parseProvider,
   redactKey,
+  withoutTestKey,
   providerHomesDir,
   parseQuestions,
   summarizeRun,
@@ -154,6 +155,7 @@ describe("providers", () => {
     expect(err("--provider", "zai.json", "--run", "codex@zai")).toMatch(/needs a model/);
     // A misspelt or missing provider after a model never runs on the player's own login.
     expect(err("--run", "codex:glm-5.3@zai")).toMatch(/no --provider is named zai/);
+    expect(err("--run", "claude:@zai")).toMatch(/no --provider is named zai/);
     expect(err("--provider", "zai.json", "--run", "codex:glm-5.3@zia")).toMatch(
       /no --provider is named zia/,
     );
@@ -178,6 +180,18 @@ describe("providers", () => {
   it("refuses a bad URL, a key or base URL in env, and a file with no assistant", () => {
     const parse = (o: unknown) => () => parseProvider(JSON.stringify(o));
     expect(parse({ claude: { baseUrl: "a.example" } })).toThrow(/baseUrl/);
+    expect(parse({ claude: { baseUrl: "http://a.example" } })).toThrow(/https/);
+    expect(
+      parseProvider(JSON.stringify({ claude: { baseUrl: "http://localhost:4000" } })).claude
+        ?.baseUrl,
+    ).toBe("http://localhost:4000");
+    for (const name of ["CLAUDE_CODE_USE_BEDROCK", "AWS_REGION", "ANTHROPIC_VERTEX_PROJECT_ID"])
+      expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "1" } } })).toThrow(
+        /elsewhere/,
+      );
+    expect(
+      parse({ claude: { baseUrl: "https://a.example", env: { ANTHROPIC_CUSTOM_HEADERS: "x" } } }),
+    ).toThrow(/credential/);
     expect(
       parse({ claude: { baseUrl: "https://a.example", env: { ANTHROPIC_AUTH_TOKEN: "k" } } }),
     ).toThrow(/must not set/);
@@ -210,6 +224,7 @@ describe("providers", () => {
   const playerEnv = {
     PATH: "C:\\bin",
     CLAUDE_CODE_USE_BEDROCK: "1",
+    CLAUDE_CODE_SUBAGENT_MODEL: "player-subagent",
     ANTHROPIC_MODEL: "player-model",
     AWS_BEARER_TOKEN_BEDROCK: "player-bedrock",
     OPENAI_ORG_ID: "player-org",
@@ -251,6 +266,12 @@ describe("providers", () => {
     expect(providerHomesDir({}, "/home/p", "linux", "run1")).toBe(
       "/home/p/.cache/ed-chat-compare/run1",
     );
+  });
+
+  it("keeps the provider's key from runs on the player's own login", () => {
+    expect(withoutTestKey({ PATH: "p", [TEST_KEY_ENV]: "k", ed_chat_test_api_key: "k" })).toEqual({
+      PATH: "p",
+    });
   });
 
   it("takes the key out of every copy in a report", () => {

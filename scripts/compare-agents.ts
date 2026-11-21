@@ -4,7 +4,7 @@
 // The regression run, with the z.ai columns: set ED_CHAT_TEST_API_KEY to a z.ai Coding Plan key,
 // then npm run compare:providers (add -- --dry-run to see the runs first).
 import { execFile } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, rmdirSync, rmSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, rm, rmdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -43,6 +43,7 @@ import {
   providerHomesDir,
   providerName,
   redactKey,
+  withoutTestKey,
   type TestProvider,
   type RunSpec,
   buildReport,
@@ -124,6 +125,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGBREAK", "SIGHUP"] as const) {
         } catch (err) {
           console.error(`could not remove ${dir}: ${String(err)}`);
         }
+      }
+      try {
+        if (homesRoot) rmdirSync(path.dirname(homesRoot));
+      } catch {
+        // Not empty: another run is using it, or a folder above could not be removed.
       }
       process.exit(130);
     }, 1000);
@@ -251,7 +257,7 @@ if (opts.dryRun) {
       console.log(
         `  endpoint: ${provider!.name}, ${endpoint}, key from ${TEST_KEY_ENV}` +
           (testKey ? "" : " (not set)") +
-          ", own config folder, removed after the run",
+          ", own config folder, removed when the script ends",
       );
   }
   console.log(`\nReport: ${out}\nNumbers: ${jsonOut}`);
@@ -426,7 +432,8 @@ try {
     await copyEdMcpData();
     // Through a test endpoint: an empty config folder for the CLI, fresh for each run, so
     // nothing of the player's login, settings or history is read, and nothing is written there.
-    let env: NodeJS.ProcessEnv | undefined;
+    // A run on the player's own login does not get the provider's key either.
+    let env: NodeJS.ProcessEnv = withoutTestKey(process.env);
     if (provider && endpoint) {
       homesRoot ??= providerHomesDir(
         process.env,

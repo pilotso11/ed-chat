@@ -32,7 +32,8 @@ Options:
                         player's own login; <name> is the file name without .json, for example
                         scripts/providers/zai.json gives zai. Give it more than once for more
                         providers. The key is read from ED_CHAT_TEST_API_KEY. A run through a
-                        provider gets an empty config folder of its own, removed after the run: the
+                        provider gets an empty config folder of its own, removed when the script
+                        ends: the
                         player's login, settings and history are not read or changed. Codex
                         needs a model then: --run codex:<model>@<name>.
   --questions <file>    A JSON list of { "topic", "text" } (default scripts/compare-questions.json).
@@ -158,11 +159,12 @@ export function parseArgs(
   if (dup) return { ok: false, error: `two --provider files are named ${dup}` };
   for (const r of o.runs ?? []) {
     const at = r.model?.lastIndexOf("@") ?? -1;
-    if (r.model && at > 0) {
+    if (r.model && at >= 0) {
       const tail = r.model.slice(at + 1);
       if (names.includes(tail)) {
         r.provider = tail;
-        r.model = r.model.slice(0, at);
+        if (at > 0) r.model = r.model.slice(0, at);
+        else delete r.model;
       } else if (!/^\d+$/.test(tail))
         // Only a version such as @20250514 stays in a model id: a misspelt or missing
         // provider must not run on the player's own login.
@@ -215,7 +217,9 @@ function isHttpUrl(v: unknown): v is string {
   if (typeof v !== "string") return false;
   try {
     const u = new URL(v);
-    return u.protocol === "https:" || u.protocol === "http:";
+    // The key goes in a header: plain http only to this computer.
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname);
+    return u.protocol === "https:" || (u.protocol === "http:" && local);
   } catch {
     return false;
   }
@@ -255,7 +259,7 @@ export function parseProvider(json: string): TestProvider {
       throw new Error(`the provider's ${agent} is not an object`);
     const o = v as Record<string, unknown>;
     if (!isHttpUrl(o.baseUrl))
-      throw new Error(`the provider's ${agent}.baseUrl is not an http(s) URL`);
+      throw new Error(`the provider's ${agent}.baseUrl is not an https URL (or http to localhost)`);
     if (
       o.permissionMode !== undefined &&
       o.permissionMode !== "auto" &&
@@ -275,9 +279,13 @@ export function parseProvider(json: string): TestProvider {
         throw new Error(`the provider's claude.env.${k} is not a string`);
       if (CLAUDE_OWN_VARS.includes(k.toUpperCase()))
         throw new Error(`the provider's claude.env must not set ${k}: the script sets it`);
-      // The file is checked in: a key goes in ED_CHAT_TEST_API_KEY, never here.
-      if (/(KEY|TOKEN|SECRET|PASSWORD)$/i.test(k))
+      // The file is checked in: a key goes in ED_CHAT_TEST_API_KEY, never here. Headers can
+      // carry one too.
+      if (/(KEY|TOKEN|SECRET|PASSWORD|HEADERS)$/i.test(k))
         throw new Error(`the provider's claude.env must not hold a credential: ${k}`);
+      // The run goes to baseUrl: not to Bedrock, Vertex or another cloud of the player's.
+      if (/^(CLAUDE_CODE_USE_|AWS_|CLOUD_ML_|ANTHROPIC_VERTEX_|ANTHROPIC_BEDROCK_)/i.test(k))
+        throw new Error(`the provider's claude.env must not send the run elsewhere: ${k}`);
       env[k] = String(v);
     }
     out.claude = { baseUrl: claude.baseUrl as string, env, ...mode(claude) };
@@ -303,6 +311,7 @@ const LOGIN_PREFIXES = [
   "ANTHROPIC_",
   "CLAUDE_CODE_USE_",
   "CLAUDE_CODE_OAUTH",
+  "CLAUDE_CODE_SUBAGENT_MODEL",
   "CLAUDE_CONFIG_DIR",
   "CLOUD_ML_REGION",
   "AWS_BEARER_TOKEN_BEDROCK",
@@ -348,6 +357,11 @@ export function testProviderEnv(
   if (!provider.codex) throw new Error(`${provider.name} has no codex endpoint`);
   // config.toml's env_key names this variable, so Codex reads the key from it.
   return { ...out, CODEX_HOME: home, [TEST_KEY_ENV]: key };
+}
+
+/** The environment for a run on the player's own login: theirs, without the provider's key. */
+export function withoutTestKey(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(env).filter(([k]) => k.toUpperCase() !== TEST_KEY_ENV));
 }
 
 /**
