@@ -1,6 +1,7 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  LOCAL_COMMANDS,
   agentArgs,
   blockedFor,
   displaySettingsFile,
@@ -18,7 +19,8 @@ const home = path.join("C:", "Users", "cmdr");
 
 describe("local commands", () => {
   it("knows ED Chat's own commands", () => {
-    for (const c of ["/new", "/version", "/claude", "/codex"]) expect(localCommand(c)).toBe(c);
+    for (const c of LOCAL_COMMANDS) expect(localCommand(c)).toBe(c);
+    expect(LOCAL_COMMANDS).toEqual(["/new", "/version", "/claude", "/codex"]);
   });
 
   it("leaves everything else to the assistant", () => {

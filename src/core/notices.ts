@@ -47,11 +47,11 @@ export function versionNotice(
   agent: AgentInfo,
 ): { version: string | null; notice: string | null } {
   const v = output === null ? null : parseCliVersion(output);
-  const tested = parseCliVersion(testedText)!;
+  const tested = parseCliVersion(testedText);
   return {
     version: v ? v.join(".") : null,
     notice:
-      v && isOlder(v, tested)
+      v && tested && isOlder(v, tested)
         ? `⚠ ${agent.cli} ${v.join(".")} is older than ${testedText}; run \`${agent.updateCommand}\``
         : null,
   };

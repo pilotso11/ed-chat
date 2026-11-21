@@ -7,12 +7,11 @@ import type { Settings } from "./settings.js";
 // Decisions main makes about the assistant and the game files, apart from running them.
 
 /** ED Chat's own commands, typed in the chat; they never reach the assistant. */
-export type LocalCommand = "/new" | "/version" | "/claude" | "/codex";
+export const LOCAL_COMMANDS = ["/new", "/version", "/claude", "/codex"] as const;
+export type LocalCommand = (typeof LOCAL_COMMANDS)[number];
 
 export function localCommand(text: string): LocalCommand | null {
-  return text === "/new" || text === "/version" || text === "/claude" || text === "/codex"
-    ? text
-    : null;
+  return (LOCAL_COMMANDS as readonly string[]).includes(text) ? (text as LocalCommand) : null;
 }
 
 /** The assistant's CLI arguments from the settings. */

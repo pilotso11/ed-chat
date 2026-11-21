@@ -70,6 +70,10 @@ describe("displays", () => {
     expect(onNextDisplay(pos(0), [a, b, c], b)).toEqual({ ...pos(0), display: 1 });
   });
 
+  it("stays put while no display is listed", () => {
+    expect(onNextDisplay(pos(1), [], b)).toEqual(pos(1));
+  });
+
   it("starts from the first display when the primary is not listed", () => {
     expect(onNextDisplay(pos("primary"), [a, c], b).display).toBe(1);
   });

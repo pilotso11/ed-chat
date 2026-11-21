@@ -20,10 +20,10 @@ import {
 import { chooseDisplay, place, snap, step } from "../core/anchor.js";
 import {
   agentArgs,
-  blockedFor as blockedBy,
+  blockedFor,
   displaySettingsFile,
   firstRunChoice,
-  journalDir as journalDirOf,
+  journalDir as journalFolder,
   localCommand,
   settingsChange,
 } from "../core/agentSetup.js";
@@ -681,14 +681,13 @@ async function main(): Promise<void> {
     log.log("warn", `data folder: ${message(err)}`);
     dataBlocked = `⚠ Can't write to ${dataDir}: ${message(err)}`;
   }
-  const blockedFor = (id: AgentId) =>
-    blockedBy(id, { data: dataBlocked, approval: approvalBlocked });
+  const blocked = (id: AgentId) => blockedFor(id, { data: dataBlocked, approval: approvalBlocked });
   const notFound = () =>
-    blockedFor(agentId) ??
+    blocked(agentId) ??
     notFoundText(agent, lookedIn(CLIS[agentId].lookup(), settings[agentId].path));
 
   const agentCommand = (s: Settings, id: AgentId = agentId) => {
-    if (blockedFor(id)) return null;
+    if (blocked(id)) return null;
     const resolved = CLIS[id].resolve(s[id].path);
     if (!resolved) return null;
     return { ...resolved, args: agentArgs(id, s, { mcpConfigFile, settingsFile }) };
@@ -779,9 +778,7 @@ async function main(): Promise<void> {
   // Runs after the tray exists: the question can open behind a fullscreen game, and the tray is
   // how the player quits. Settings reloads start no session before the answer.
   let agentStarted = false;
-  // First run, before any conversation: with only Codex installed, Codex is the assistant.
-  // With both, Claude stays, and the player hears how to switch. A file that names the agent
-  // has chosen already.
+  // First run, before any conversation: see firstRunChoice.
   async function firstRunAgent(): Promise<void> {
     const choice = firstRunChoice({
       firstRun,
@@ -1267,7 +1264,7 @@ async function main(): Promise<void> {
   win.webContents.on("did-finish-load", render);
 
   // Game files.
-  const journalDir = (s: Settings) => journalDirOf(s, os.homedir());
+  const journalDir = (s: Settings) => journalFolder(s, os.homedir());
   let status = new StatusWatcher(path.join(journalDir(settings), "Status.json"), (flags) =>
     dispatch({ type: "flags", flags }),
   );

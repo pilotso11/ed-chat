@@ -66,6 +66,13 @@ describe("version notice", () => {
     expect(versionNotice("codex-cli 9.0.0", "1.0.0", AGENTS.codex).notice).toBeNull();
   });
 
+  it("gives no notice when the tested version cannot be read", () => {
+    expect(versionNotice("1.0.0", "2.x", AGENTS.claude)).toEqual({
+      version: "1.0.0",
+      notice: null,
+    });
+  });
+
   it("knows no version when the check failed or printed none", () => {
     expect(versionNotice(null, "2.1.0", AGENTS.claude)).toEqual({ version: null, notice: null });
     expect(versionNotice("no version here", "2.1.0", AGENTS.claude)).toEqual({

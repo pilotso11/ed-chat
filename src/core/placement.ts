@@ -39,6 +39,8 @@ export function displaySetting(d: Display, all: Display[], primary: Display): Po
 
 /** The position on the next display, in the order Windows lists them. */
 export function onNextDisplay(pos: Position, all: Display[], primary: Display): Position {
+  // While a monitor is unplugged Windows can list none for a moment.
+  if (!all.length) return pos;
   const now = pos.display === "primary" ? all.findIndex((d) => d.id === primary.id) : pos.display;
   return { ...pos, display: (Math.max(0, now) + 1) % all.length };
 }
