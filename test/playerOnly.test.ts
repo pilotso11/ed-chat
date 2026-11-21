@@ -8,7 +8,7 @@ import {
 } from "../src/core/playerOnly.js";
 import { PlayerOnlyGuard, type PlayerOnlyHost } from "../src/core/playerOnlyGuard.js";
 import { parseSettings, type Settings } from "../src/core/settings.js";
-import { PLAYER_ONLY_PATHS } from "../src/core/settingsDictionary.js";
+import { PLAYER_ONLY_PATHS, PLAYER_ONLY_PATHS_V0_5 } from "../src/core/settingsDictionary.js";
 
 describe("player-only values", () => {
   it("reads only the player-only settings, as the file sets them", () => {
@@ -119,21 +119,27 @@ describe("PlayerOnlyGuard", () => {
     expect(g.effective()!.claude.permissionMode).toBe("default");
   });
 
-  it("waits for a file that parses before it takes a new player-only setting from it", () => {
+  it("asks about a new player-only setting when the file does not parse at start", async () => {
     const { h, host } = fakeHost('{"hotkeys":');
     const saved = { claude: { permissionMode: "default" } };
     const old = PLAYER_ONLY_PATHS.filter((p) => p !== "hotkeys");
     const g = new PlayerOnlyGuard(host, saved, old);
     expect(g.values).toEqual(saved);
-    expect(h.saved.every((v) => !("hotkeys" in v))).toBe(true);
-    expect(h.covered.every((c) => !c.includes("hotkeys"))).toBe(true);
-    // The player fixes the file in the same run: its hotkeys are taken, not asked about.
-    h.text = '{"hotkeys":{"openChat":"F9"},"claude":{"permissionMode":"default"}}';
+    expect(h.covered).toEqual([PLAYER_ONLY_PATHS]);
+    // A later version of the file may be the assistant's, so its hotkeys wait for the player.
+    h.text = '{"hotkeys":{"approve":"F9"},"claude":{"permissionMode":"default"}}';
     g.fileChanged();
-    expect(g.values).toEqual({ ...saved, hotkeys: { openChat: "F9" } });
-    expect(h.applied.at(-1)!.hotkeys.openChat).toBe("F9");
-    expect(h.questions).toEqual([]);
-    expect(h.covered.at(-1)).toEqual(PLAYER_ONLY_PATHS);
+    expect(h.applied.at(-1)!.hotkeys.approve).not.toBe("F9");
+    expect(h.questions[0]).toEqual(['hotkeys.approve: (default) → "F9"']);
+    h.answers[0]!(true);
+    await tick();
+    expect(g.values).toEqual({ ...saved, hotkeys: { approve: "F9" } });
+  });
+
+  it("takes the values that v0.5.0 did not cover from the file", () => {
+    const { host } = fakeHost('{"codex":{"model":"m"},"hotkeys":{"openChat":"F9"}}');
+    const g = new PlayerOnlyGuard(host, {}, PLAYER_ONLY_PATHS_V0_5);
+    expect(g.values).toEqual({ codex: { model: "m" }, hotkeys: { openChat: "F9" } });
   });
 
   it("does not save again when the saved values cover every player-only path", () => {

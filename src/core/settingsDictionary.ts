@@ -194,6 +194,18 @@ export function annotateSchema(node: JsonSchemaNode, where = "", playerOnly = fa
   }
 }
 
+/**
+ * The player-only settings of v0.5.0, the last release that did not keep the paths with the
+ * saved values (state.json playerOnlyPaths): what those saved values cover.
+ */
+export const PLAYER_ONLY_PATHS_V0_5 = [
+  "safety",
+  "approval",
+  "claude",
+  "journalDir",
+  "hud.edMcpDataDir",
+] as const;
+
 /** The settings that only the player may change, each with everything under it. */
 export const PLAYER_ONLY_PATHS: string[] = Object.entries(SETTINGS_DICTIONARY)
   .filter(([, e]) => e.playerOnly)

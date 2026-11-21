@@ -174,7 +174,7 @@ export interface SavedState {
   hudHidden?: boolean;
   /** The player-only settings as the player last applied them (see PlayerOnlyGuard). */
   playerOnly?: Record<string, unknown>;
-  /** The player-only paths that playerOnly covers; absent before hotkeys became player-only. */
+  /** The player-only paths that playerOnly covers; absent up to v0.5.0. */
   playerOnlyPaths?: string[];
 }
 

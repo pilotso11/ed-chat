@@ -603,6 +603,12 @@ export class CodexSession implements AgentBackend {
           });
         break;
       }
+      // A finished change asks for nothing more.
+      case "item/completed": {
+        const item = isRecord(p.item) ? p.item : null;
+        if (typeof item?.id === "string") this.fileChanges.delete(item.id);
+        break;
+      }
     }
     for (const e of this.events.map(method, params)) {
       // ready means idle to the overlay: a status change during a turn waits for its end.
@@ -647,7 +653,6 @@ export class CodexSession implements AgentBackend {
       case "item/fileChange/requestApproval": {
         const itemId = str(p.itemId);
         const change = (itemId && this.fileChanges.get(itemId)) || null;
-        if (itemId) this.fileChanges.delete(itemId);
         const paths = change?.paths ?? [];
         const root = str(p.grantRoot);
         const allowed = this.opts.autoEditFiles ?? [];
