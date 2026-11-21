@@ -6,7 +6,10 @@ export default defineConfig({
   test: {
     testTimeout: 10_000,
     projects: [
-      { extends: true, test: { name: "unit", include: ["test/**/*.test.ts"] } },
+      {
+        extends: true,
+        test: { name: "unit", include: ["test/**/*.test.ts"], exclude: ["test/renderer/**"] },
+      },
       {
         extends: true,
         test: {

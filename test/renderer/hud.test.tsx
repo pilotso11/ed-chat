@@ -2,7 +2,7 @@ import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { HudView } from "../../src/core/hud/hud.js";
 import { HudPanel } from "../../src/renderer/HudPanel.js";
-import { fakeOverlay, FakeResizeObserver, resize } from "./overlay.js";
+import { fakeOverlay, FakeResizeObserver, layOut, resize } from "./overlay.js";
 
 const base: HudView = {
   panel: null,
@@ -26,11 +26,14 @@ describe("activity panel", () => {
   });
 
   it("reports its size at once and on each change, until unmounted", () => {
+    layOut(120, 45);
     const { overlay, unmount } = setup();
-    expect(overlay.reportHudSize).toHaveBeenLastCalledWith(0, 0);
+    expect(overlay.reportHudSize).toHaveBeenLastCalledWith(120, 45);
     const atMount = overlay.reportHudSize.mock.calls.length;
+    layOut(200, 80);
     resize();
     expect(overlay.reportHudSize).toHaveBeenCalledTimes(atMount + 1);
+    expect(overlay.reportHudSize).toHaveBeenLastCalledWith(200, 80);
     // New views do not add observers.
     overlay.hud({ ...base, moving: "move" });
     overlay.hud({ ...base, moving: "move on" });
@@ -63,6 +66,7 @@ describe("activity panel", () => {
       },
     });
     expect(hud.style.getPropertyValue("--font")).toBe("30px");
+    expect(hud.style.getPropertyValue("--bg-alpha")).toBe("0.5");
     // The width scales with the font: 300 at 15 px is 600 at 30 px.
     expect(hud.style.getPropertyValue("--min-width")).toBe("600px");
     expect(hud.querySelector(".head .title")?.textContent).toBe("EXOBIOLOGY");

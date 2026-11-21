@@ -17,6 +17,7 @@ afterEach(() => {
     // Also when an unmount threw: the next test must start clean.
     FakeResizeObserver.active.clear();
     vi.useRealTimers();
+    vi.restoreAllMocks();
     delete (window as { overlay?: unknown }).overlay;
   }
   if (left) throw new Error(`${left} element(s) still observed after unmount`);

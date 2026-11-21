@@ -2,7 +2,7 @@ import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ViewModel } from "../../src/core/view.js";
 import { App } from "../../src/renderer/App.js";
-import { baseView, fakeOverlay, FakeResizeObserver, resize } from "./overlay.js";
+import { baseView, fakeOverlay, FakeResizeObserver, layOut, resize } from "./overlay.js";
 
 function setup(v?: Partial<ViewModel>) {
   const overlay = fakeOverlay();
@@ -40,6 +40,7 @@ describe("status strip", () => {
   });
 
   it("reports its height on each change once it shows, until unmounted", () => {
+    layOut(520, 64);
     const { overlay, unmount } = setup();
     // Nothing to measure before the first view.
     expect(FakeResizeObserver.observing()).toBe(0);
@@ -47,9 +48,10 @@ describe("status strip", () => {
     // A new view does not observe again.
     overlay.view(baseView({ status: "● sending" }));
     expect(FakeResizeObserver.observing()).toBe(1);
-    expect(overlay.reportHeight.mock.calls).toEqual([[0]]);
+    expect(overlay.reportHeight.mock.calls).toEqual([[64]]);
+    layOut(520, 90);
     resize();
-    expect(overlay.reportHeight.mock.calls).toEqual([[0], [0]]);
+    expect(overlay.reportHeight.mock.calls).toEqual([[64], [90]]);
     unmount();
     expect(FakeResizeObserver.observing()).toBe(0);
   });
@@ -61,11 +63,20 @@ describe("status strip", () => {
 
   it("applies the style settings", () => {
     const { $ } = setup({
-      ui: { ...baseView().ui, fontSize: 18, maxLines: 4, growsUp: true },
+      ui: {
+        ...baseView().ui,
+        fontSize: 18,
+        backgroundOpacity: 0.3,
+        maxLines: 4,
+        chatLines: 9,
+        growsUp: true,
+      },
     });
     const root = $(".overlay")!;
     expect(root.style.getPropertyValue("--font")).toBe("18px");
+    expect(root.style.getPropertyValue("--bg-alpha")).toBe("0.3");
     expect(root.style.getPropertyValue("--max-lines")).toBe("4");
+    expect(root.style.getPropertyValue("--chat-lines")).toBe("9");
     expect(root.style.flexDirection).toBe("column-reverse");
   });
 

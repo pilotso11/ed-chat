@@ -18,6 +18,18 @@ export interface FakeOverlay extends Mocked<OverlayApi> {
   hud(v: HudView): void;
 }
 
+function subscribed<T>(cb: T | undefined, name: string): T {
+  if (!cb) throw new Error(`no component has called window.overlay.${name} yet`);
+  return cb;
+}
+
+/** Every element measures width x height, as laid out. */
+export function layOut(width: number, height: number): void {
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, width, height),
+  );
+}
+
 export function fakeOverlay(): FakeOverlay {
   let onView: ((v: ViewModel) => void) | undefined;
   let onHud: ((v: HudView) => void) | undefined;
@@ -38,8 +50,8 @@ export function fakeOverlay(): FakeOverlay {
     showMore: vi.fn(),
     answerApproval: vi.fn(),
     reportHudSize: vi.fn(),
-    view: (v) => act(() => onView!(v)),
-    hud: (v) => act(() => onHud!(v)),
+    view: (v) => act(() => subscribed(onView, "onView")(v)),
+    hud: (v) => act(() => subscribed(onHud, "onHud")(v)),
   };
   window.overlay = o;
   return o;
