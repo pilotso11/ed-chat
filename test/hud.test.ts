@@ -56,6 +56,11 @@ describe("journalMode", () => {
     expect(journalMode(events, true)?.mode).toBe("massacre");
   });
 
+  it("counts a massacre acceptance with no readable time", () => {
+    const bad = { ...massacreAccepted(), timestamp: "" };
+    expect(journalMode([bad], true)?.mode).toBe("massacre");
+  });
+
   it("does not leave massacre mode for a scan while missions are open", () => {
     const events = [massacreAccepted(), ev("Scan", { ScanType: "Detailed" })];
     expect(journalMode(events, true)?.mode).toBe("massacre");

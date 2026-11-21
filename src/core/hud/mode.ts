@@ -64,7 +64,8 @@ export function journalMode(events: JournalEvent[], massacreActive: boolean): Ch
         if (mode === "exploration" && jumps >= LAPSE_JUMPS) mode = null;
         break;
       case "MissionAccepted":
-        if (isMassacre(e)) massacreAt = Date.parse(e.timestamp) || massacreAt;
+        // An acceptance with no readable time still counts, dated like the event before it.
+        if (isMassacre(e)) massacreAt = Date.parse(e.timestamp) || (massacreAt ?? at);
         break;
       case "FSSDiscoveryScan":
         set("exploration", e);
