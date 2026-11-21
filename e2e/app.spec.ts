@@ -75,3 +75,16 @@ test("shows the activity panel for a body being sampled", async () => {
   await expect(t.hud.locator(".panel .row").first()).toContainText("Stratum Tectonicas");
   await expect(t.hud.locator(".panel .row").first()).toContainText("2/3");
 });
+
+test("survives the Claude version check answering after the windows are gone", async () => {
+  // Quitting closes the windows first; a CLI answering in between must not draw to them. The
+  // windows are destroyed here with the app still running, so the late answer always lands.
+  // close() fails on any main-process error, such as drawing to a destroyed window.
+  t = await launch({ versionDelayMs: 1_500 });
+  await t.app.evaluate(({ app, BrowserWindow }) => {
+    // Kept running, as a slow quit is, instead of quitting with the last window.
+    app.on("window-all-closed", () => {});
+    for (const w of BrowserWindow.getAllWindows()) w.destroy();
+  });
+  await new Promise((r) => setTimeout(r, 3_000));
+});

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { _electron, type ElectronApplication, type Page } from "@playwright/test";
@@ -23,7 +23,7 @@ export interface TestApp {
  * nothing reaches the player's own setup or an API.
  */
 export async function launch(
-  opts: { fixture?: string; journal?: object[] } = {},
+  opts: { fixture?: string; journal?: object[]; versionDelayMs?: number } = {},
 ): Promise<TestApp> {
   const root = await mkdtemp(path.join(tmpdir(), "edchat-e2e-"));
   const home = path.join(root, "home");
@@ -87,6 +87,7 @@ export async function launch(
     // Only Windows' own folders, so no installed Claude or Codex is found on PATH.
     PATH: [`${systemRoot}\\System32`, systemRoot].join(";"),
     FAKE_VERSION: TESTED_CLI_VERSION,
+    FAKE_VERSION_DELAY_MS: String(opts.versionDelayMs ?? 0),
     FAKE_FIXTURE: path.join(
       ROOT,
       "test",
@@ -104,7 +105,14 @@ export async function launch(
     await cleanUp();
     throw err;
   }
+  // An uncaught error in the main process shows a modal dialog and nothing else; this records it
+  // to a file instead, up to and during quitting, and close() fails the test with it.
+  const errorFile = path.join(root, "main-errors.log");
   try {
+    await app.evaluate((_e, file) => {
+      const fs = process.getBuiltinModule("node:fs");
+      process.on("uncaughtException", (err) => fs.appendFileSync(file, `${err.stack ?? err}\n`));
+    }, errorFile);
     // Electron finds the roaming AppData folder from the profile (USERPROFILE), not from
     // APPDATA, so this checks that the app's data really is in the temporary folder.
     const userData = await app.evaluate(({ app }) => app.getPath("userData"));
@@ -130,12 +138,15 @@ export async function launch(
       hud,
       journalDir,
       async close() {
+        let errors = "";
         try {
           await app.close();
+          errors = await readFile(errorFile, "utf8").catch(() => "");
         } finally {
           // A folder Windows still holds must not fail a test that passed.
           await cleanUp().catch(() => {});
         }
+        if (errors) throw new Error(`the app's main process threw:\n${errors}`);
       },
     };
   } catch (err) {

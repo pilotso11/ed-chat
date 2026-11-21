@@ -261,6 +261,7 @@ async function main(): Promise<void> {
     process.env.ELECTRON_RENDERER_URL && `${process.env.ELECTRON_RENDERER_URL}/hud.html`,
     path.join(import.meta.dirname, "../renderer/hud.html"),
   );
+  const windowsGone = () => win.isDestroyed() || hudWin.isDestroyed();
   let hudPosition: Position;
   ({ position: hudPosition, saved } = effectiveHudPosition(settings.hud.position, saved));
 
@@ -271,6 +272,8 @@ async function main(): Promise<void> {
   // The route stops still to do, current first: chips in their systems show the body or station.
   let chipStops: StopTarget[] = [];
   function render(): void {
+    // A CLI that exits while the app quits still dispatches; the windows are gone by then.
+    if (windowsGone()) return;
     const req = currentApproval(state);
     if (req?.id !== shownApproval?.id) shownApproval = req ? { id: req.id, at: Date.now() } : null;
     const props = windowProps(state);
@@ -426,6 +429,7 @@ async function main(): Promise<void> {
 
   let wasGame: boolean | null = null;
   function onForeground(f: Foreground): void {
+    if (windowsGone()) return;
     // For diagnosing game detection on the PC; only the flag and the process name are logged.
     if (f.isGame !== wasGame) {
       wasGame = f.isGame;
@@ -503,6 +507,7 @@ async function main(): Promise<void> {
   const HUD_MOVE_SECONDS = 15;
 
   function placeHud(): void {
+    if (windowsGone()) return;
     const display = chooseDisplay(
       screen.getAllDisplays(),
       screen.getPrimaryDisplay(),
@@ -526,6 +531,7 @@ async function main(): Promise<void> {
     saved.hudMode ? { mode: saved.hudMode.mode, at: Date.parse(saved.hudMode.at) } : null;
 
   function renderHud(): void {
+    if (windowsGone()) return;
     const input = {
       journal: null,
       status: null,
