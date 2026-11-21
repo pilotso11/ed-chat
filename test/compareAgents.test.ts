@@ -189,7 +189,7 @@ describe("providers", () => {
       parseProvider(JSON.stringify({ claude: { baseUrl: "http://localhost:4000" } })).claude
         ?.baseUrl,
     ).toBe("http://localhost:4000");
-    for (const name of ["HTTPS_PROXY", "NODE_OPTIONS"])
+    for (const name of ["HTTPS_PROXY", "NODE_OPTIONS", "PATH", "ssl_cert_file", "LC_ALL"])
       expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "x" } } })).toThrow(
         /must not set/,
       );
@@ -301,10 +301,11 @@ describe("providers", () => {
   });
 
   it("takes the key out of every copy in a report", () => {
-    expect(redactKey("env: KEY=sk.1 and again sk.1", "sk.1")).toBe(
-      "env: KEY=[key] and again [key]",
-    );
+    const k = "sk.0123456789abcdef";
+    expect(redactKey(`env: KEY=${k} and again ${k}`, k)).toBe("env: KEY=[key] and again [key]");
     expect(redactKey("no key here", "")).toBe("no key here");
+    // Too short to be a key: the script refuses one, and nothing is replaced.
+    expect(redactKey("a test run", "test")).toBe("a test run");
     const zai = "0123456789abcdef0123.ABCDEFGHIJKLMNOP";
     expect(redactKey(`id 0123456789abcdef0123, secret ABCDEFGHIJKLMNOP`, zai)).toBe(
       "id [key], secret [key]",

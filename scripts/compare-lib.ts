@@ -294,6 +294,9 @@ export function parseProvider(json: string): TestProvider {
         throw new Error(`the provider's claude.env must not send the run elsewhere: ${k}`);
       // A proxy or Node option could read the key or send it somewhere else.
       if (/PROXY$|^NODE_/i.test(k)) throw new Error(`the provider's claude.env must not set ${k}`);
+      // Nor what the run keeps of the player's environment: PATH could run another claude or
+      // npx, SSL_CERT_FILE could trust another certificate.
+      if (isAllowedVar(k)) throw new Error(`the provider's claude.env must not set ${k}`);
       env[k] = String(v);
     }
     out.claude = { baseUrl: claude.baseUrl as string, env, ...mode(claude) };
@@ -362,12 +365,18 @@ const ALLOWED_VARS = new Set([
   "NO_PROXY",
   "NODE_EXTRA_CA_CERTS",
   "SSL_CERT_FILE",
+  // Node version managers, for node and npx (ed-mcp)
+  "NVM_HOME",
+  "NVM_SYMLINK",
+  "VOLTA_HOME",
+  "PNPM_HOME",
   // Where Claude Code finds Git Bash on Windows
   "CLAUDE_CODE_GIT_BASH_PATH",
 ]);
 const isAllowedVar = (name: string) => {
   const n = name.toUpperCase();
-  return ALLOWED_VARS.has(n) || n.startsWith("LC_");
+  // npm_config_*: npm's registry and cache, which npx needs to start ed-mcp.
+  return ALLOWED_VARS.has(n) || n.startsWith("LC_") || n.startsWith("NPM_CONFIG_");
 };
 
 /**
@@ -395,7 +404,8 @@ export function testProviderEnv(
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
       CLAUDE_CONFIG_DIR: home,
       ANTHROPIC_BASE_URL: c.baseUrl,
-      // The only place the key goes for Claude.
+      // Where Claude reads the key. Its child processes (ed-mcp, shell commands) inherit it, as
+      // they would with the player's own provider setup; only the reports are redacted.
       ANTHROPIC_AUTH_TOKEN: key,
     };
   }
@@ -403,6 +413,9 @@ export function testProviderEnv(
   // config.toml's env_key names this variable, so Codex reads the key from it.
   return { ...out, CODEX_HOME: home, [TEST_KEY_ENV]: key };
 }
+
+/** A provider key is at least this long; a shorter value is a mistake, not a key. */
+export const MIN_KEY_LENGTH = 16;
 
 /** The environment for a run on the player's own login: theirs, without the provider's key. */
 export function withoutTestKey(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -414,7 +427,8 @@ export function withoutTestKey(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
  * The long parts of a key with dots (z.ai's <id>.<secret>) go too, as a reply may quote one.
  */
 export function redactKey(text: string, key: string): string {
-  if (!key) return text;
+  // The script refuses a key this short; a short one would match ordinary words.
+  if (key.length < MIN_KEY_LENGTH) return text;
   const parts = [key, ...key.split(".").filter((p) => p.length >= 16 && p !== key)];
   // Not <key>: a Markdown viewer hides that as an unknown HTML tag.
   return parts.reduce((t, p) => t.split(p).join("[key]"), text);

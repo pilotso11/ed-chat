@@ -42,6 +42,7 @@ import {
   parseProvider,
   providerHomesDir,
   providerName,
+  MIN_KEY_LENGTH,
   redactKey,
   withoutTestKey,
   type TestProvider,
@@ -215,6 +216,10 @@ if (providers.size && !testKey && !opts.dryRun) {
   console.error(`--provider was given: set ${TEST_KEY_ENV} to the provider's key.`);
   process.exit(2);
 }
+if (providers.size && testKey && testKey.length < MIN_KEY_LENGTH) {
+  console.error(`${TEST_KEY_ENV} is too short to be a key (${testKey.length} characters).`);
+  process.exit(2);
+}
 const plans: Plan[] = specs.map(({ agent, model, provider }) => ({
   agent,
   model: model ?? settings[agent].model,
@@ -242,7 +247,7 @@ if (opts.dryRun) {
   console.log(`Questions (${questions.length}) from ${opts.questions}:`);
   for (const q of questions) console.log(`  ${q.id}. [${q.topic}] ${q.text}`);
   const ws = path.join(os.tmpdir(), "ed-chat-compare-XXXX", "workspace");
-  for (const { agent, model, cli, provider } of plans) {
+  for (const { agent, model, cli, provider, providerKey } of plans) {
     if (!cli) {
       console.log(`\n${agent}: not installed, skipped`);
       continue;
@@ -266,7 +271,7 @@ if (opts.dryRun) {
     const endpoint = provider?.[agent]?.baseUrl;
     if (endpoint)
       console.log(
-        `  endpoint: ${provider!.name}, ${endpoint}, key from ${TEST_KEY_ENV}` +
+        `  endpoint: ${providerKey}, ${endpoint}, key from ${TEST_KEY_ENV}` +
           (testKey ? "" : " (not set)") +
           ", own config folder, removed when the script ends",
       );
