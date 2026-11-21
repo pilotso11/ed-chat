@@ -4,11 +4,20 @@ const WELL_TESTED = { lines: 90, statements: 90, functions: 90, branches: 85 };
 
 export default defineConfig({
   test: {
-    // Renderer tests (.tsx) run in jsdom, set per file.
-    include: ["test/**/*.test.{ts,tsx}"],
-    // For the renderer tests: cleanup between tests, and what jsdom lacks.
-    setupFiles: ["test/renderer/setup.ts"],
     testTimeout: 10_000,
+    projects: [
+      { extends: true, test: { name: "unit", include: ["test/**/*.test.ts"] } },
+      {
+        extends: true,
+        test: {
+          // The React components, in jsdom, with cleanup between tests and what jsdom lacks.
+          name: "renderer",
+          include: ["test/renderer/**/*.test.tsx"],
+          environment: "jsdom",
+          setupFiles: ["test/renderer/setup.ts"],
+        },
+      },
+    ],
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],

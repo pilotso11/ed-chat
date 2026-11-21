@@ -46,9 +46,10 @@ export function fakeOverlay(): FakeOverlay {
 }
 
 /**
- * jsdom has no ResizeObserver, and lays nothing out. test/renderer/setup.ts installs this one. As
- * in a browser, observing an element reports it once; after that, a size change is a test
- * calling resize(), which reports every element still observed.
+ * jsdom has no ResizeObserver, and lays nothing out. test/renderer/setup.ts installs this one.
+ * Observing an element reports it once, at once: a browser reports it after the next layout, so
+ * the tests check what is reported, not when. After that, a size change is a test calling
+ * resize(), which reports every element still observed.
  */
 export class FakeResizeObserver {
   static active = new Set<FakeResizeObserver>();
@@ -57,7 +58,7 @@ export class FakeResizeObserver {
   observe(el: Element) {
     this.targets.add(el);
     FakeResizeObserver.active.add(this);
-    // A browser reports after the next layout; components observe in a layout effect, inside act.
+    // Components observe in a layout effect, inside act.
     this.cb([{ target: el } as ResizeObserverEntry], this as unknown as ResizeObserver);
   }
   unobserve(el: Element) {

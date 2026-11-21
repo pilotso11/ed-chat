@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ViewModel } from "../../src/core/view.js";
