@@ -109,13 +109,18 @@ export interface MiningState {
   refined: Map<string, number>;
   /** Tons per hour, over the last 15 minutes of mining; null when too little to say. */
   rate: number | null;
-  /** The system of the newest mining event: buyers are searched from here, not each jump. */
+  /**
+   * The system of the newest mining event, while the ship is a few jumps from it at most: buyers
+   * are searched from here, not again at each jump. Null further away, or after a new game.
+   */
   system: string | null;
   /** When the player last sold anything: a new trip after a sale copies the buyer again. */
   lastSale: string | null;
 }
 
 const RATE_WINDOW_MS = 15 * 60_000;
+/** Buyers are searched from the mining system for this many jumps, then from where the ship is. */
+const SEARCH_FROM_MINING_JUMPS = 3;
 const RATE_MIN_MS = 3 * 60_000;
 
 function prospectOf(e: JournalEvent, at: number): Prospect {
@@ -161,6 +166,7 @@ export function miningState(
   let system: string | null = null;
   let lastSale: string | null = null;
   let lastMining = 0;
+  let jumpsSince = 0;
   const rings = new Map<string, { name: string; count: number }[]>();
   const mined = () => {
     // After a break (docked, or away), the rate counts from when mining started again.
@@ -168,6 +174,7 @@ export function miningState(
     stintStart ??= last;
     lastMining = last;
     system = here;
+    jumpsSince = 0;
   };
   for (const e of events) {
     last = Date.parse(e.timestamp) || last;
@@ -180,11 +187,13 @@ export function miningState(
         prospect = null;
         ring = null;
         stintStart = null;
+        system = null;
         break;
       case "FSDJump":
       case "CarrierJump":
       case "Location":
         here = str(e.StarSystem) ?? here;
+        if (e.event === "FSDJump") jumpsSince++;
         prospect = null;
         ring = null;
         stintStart = null;
@@ -238,7 +247,7 @@ export function miningState(
   const lastRefined = refinedAt.at(-1);
   if (stintStart !== null && lastRefined !== undefined && now - lastRefined < RATE_WINDOW_MS) {
     const span = Math.min(RATE_WINDOW_MS, now - stintStart);
-    const tons = refinedAt.filter((t) => t > now - span).length;
+    const tons = refinedAt.filter((t) => t >= now - span).length;
     if (span >= RATE_MIN_MS) rate = Math.round((tons / span) * 3_600_000);
   }
   return {
@@ -249,25 +258,36 @@ export function miningState(
     hotspots: (ring && rings.get(ring.toLowerCase())) || [],
     refined,
     rate,
-    system,
     lastSale,
+    system: jumpsSince <= SEARCH_FROM_MINING_JUMPS ? system : null,
   };
 }
 
+const kindsMemo = new WeakMap<JournalEvent[], Set<string>>();
+
 /**
- * The commodities the player has refined and not bought since, by commodityKey(). Cargo of these
- * counts as mined, however long ago: Gold bought to trade after mining Gold does not.
+ * The commodities the player has mined and not bought since, by commodityKey(): refined by laser,
+ * or collected as fragments after cracking a core. Cargo of these counts as mined, however long
+ * ago: Gold bought to trade after mining Gold does not. Buying back from the player's own carrier
+ * only moves the cargo, so it keeps the mark.
  */
 export function refinedKinds(events: JournalEvent[]): Set<string> {
+  const memo = kindsMemo.get(events);
+  if (memo) return memo;
+  const own = ownCarrierId(events);
   const kinds = new Set<string>();
   for (const e of events) {
     if (e.event === "MiningRefined") {
       const key = commodityKey(str(e.Type) ?? str(e.Type_Localised) ?? "");
       if (key) kinds.add(key);
-    } else if (e.event === "MarketBuy") {
+    } else if (e.event === "CollectCargo") {
+      const key = commodityKey(str(e.Type) ?? "");
+      if (isMined(key) && e.Stolen !== true) kinds.add(key);
+    } else if (e.event === "MarketBuy" && (own === null || num(e.MarketID) !== own)) {
       kinds.delete(commodityKey(str(e.Type) ?? ""));
     }
   }
+  kindsMemo.set(events, kinds);
   return kinds;
 }
 
@@ -316,8 +336,8 @@ const CARRIER_COUNTDOWN_MS = 15 * 60_000;
 const isFleetCarrier = (e: JournalEvent) =>
   e.CarrierType === undefined || e.CarrierType === "FleetCarrier";
 
-/** The player's own fleet carrier, from the journal; null when the journal never shows one. */
-export function carrierState(events: JournalEvent[], now: number): Carrier | null {
+/** The player's own fleet carrier's ID (its market ID too); null when the journal shows none. */
+export function ownCarrierId(events: JournalEvent[]): number | null {
   let id: number | null = null;
   for (const e of events) {
     if (
@@ -327,6 +347,25 @@ export function carrierState(events: JournalEvent[], now: number): Carrier | nul
       id = num(e.CarrierID) ?? id;
     }
   }
+  return id;
+}
+
+// The feed reads a new events array each poll, and a render reads it several times.
+const carrierMemo = new WeakMap<JournalEvent[], { minute: number; c: Carrier | null }>();
+
+/** The player's own fleet carrier, from the journal; null when the journal never shows one. */
+export function carrierState(events: JournalEvent[], now: number): Carrier | null {
+  // The carrier's place depends on the time only through a jump landing: a minute is close enough.
+  const minute = Math.floor(now / 60_000);
+  const memo = carrierMemo.get(events);
+  if (memo?.minute === minute) return memo.c;
+  const c = readCarrier(events, now);
+  carrierMemo.set(events, { minute, c });
+  return c;
+}
+
+function readCarrier(events: JournalEvent[], now: number): Carrier | null {
+  const id = ownCarrierId(events);
   if (id === null) return null;
   const c: Carrier = {
     id,
@@ -465,6 +504,7 @@ const SMALL = new Set([
   "sidewinder",
   "viper",
   "viper_mkiv",
+  "smallcombat01_nx",
   "vulture",
 ]);
 
@@ -575,9 +615,12 @@ export function sellQueries(input: SellInput): ToSell[] {
 /** The prospect's material that best clears its target, else its richest; null when none listed. */
 export function judge(
   p: Prospect,
-  targets: Record<string, number>,
+  targets: Record<string, number> | Map<string, number>,
 ): { name: string; percent: number; worth: boolean } | null {
-  const t = new Map(Object.entries(targets).map(([k, v]) => [commodityKey(k), v]));
+  const t =
+    targets instanceof Map
+      ? targets
+      : new Map(Object.entries(targets).map(([k, v]) => [commodityKey(k), v]));
   let best: { name: string; percent: number; worth: boolean; score: number } | null = null;
   for (const m of p.materials) {
     const min = t.get(m.key);
@@ -614,9 +657,10 @@ export function miningPanel(input: {
 }): PanelView {
   const { state, settings } = input;
   const rows: HudRow[] = [];
+  const targets = new Map(Object.entries(settings.targets).map(([k, v]) => [commodityKey(k), v]));
   const p = state.prospect;
   if (p) {
-    const j = judge(p, settings.targets);
+    const j = judge(p, targets);
     const left =
       p.remaining !== null && p.remaining < 100 ? ` · ${Math.round(p.remaining)}% left` : "";
     if (j) {
@@ -741,7 +785,7 @@ export function miningPanel(input: {
     // unless the load goes to the carrier.
     if (!copy && !carrier && mining && free === 0 && pick.best.system !== input.system) {
       copy = {
-        key: `hold-full|${state.lastSale ?? ""}|${pick.best.station}|${pick.best.system}`,
+        key: `hold-full|${state.lastSale ?? ""}`,
         text: pick.best.system,
         note: `hold full: ${t.name} sells best at ${pick.best.station}, ${pick.best.system} (copied)`,
       };
@@ -767,7 +811,7 @@ export function miningPanel(input: {
     });
   }
 
-  const worthCount = state.prospects.filter((x) => judge(x, settings.targets)?.worth).length;
+  const worthCount = state.prospects.filter((x) => judge(x, targets)?.worth).length;
   const motherlodes = state.prospects.filter((x) => x.motherlode).length;
   const session = [
     state.prospects.length ? `${state.prospects.length} prospected` : null,

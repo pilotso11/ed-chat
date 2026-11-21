@@ -16,6 +16,7 @@ import {
 } from "ed-mcp/journal";
 import type { HudModeId } from "../settings.js";
 import { isHighlight, type KnownBody } from "./known.js";
+import { num, str, type Obj } from "./json.js";
 
 export type Tone = "dim" | "good" | "warn" | "accent";
 
@@ -39,10 +40,6 @@ export interface PanelView {
   /** A system to copy for the galaxy map once, with a note for the chat strip: a new key copies again. */
   copy?: { key: string; text: string; note: string };
 }
-
-type Obj = Record<string, unknown>;
-const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 
 /** 2.1M, 840k, 500. */
 /** A value that may or may not get a first-discovery or first-footfall bonus. */

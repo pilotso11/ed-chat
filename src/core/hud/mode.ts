@@ -1,5 +1,6 @@
 import type { JournalEvent } from "ed-mcp/journal";
 import type { HudModeId } from "../settings.js";
+import { num, objs, type Obj } from "./json.js";
 
 /** Journal events the mode rules and panels read, besides the ones ed-mcp keeps. */
 export const HUD_EVENTS = [
@@ -13,6 +14,7 @@ export const HUD_EVENTS = [
   // Mining and the fleet carrier.
   "ProspectedAsteroid",
   "MiningRefined",
+  "CollectCargo",
   "AsteroidCracked",
   "LaunchDrone",
   "SupercruiseExit",
@@ -31,11 +33,6 @@ export interface Choice {
   /** Epoch ms. The newest choice wins. */
   at: number;
 }
-
-type Obj = Record<string, unknown>;
-const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const objs = (v: unknown): Obj[] =>
-  Array.isArray(v) ? v.filter((x): x is Obj => typeof x === "object" && x !== null) : [];
 
 const isMassacre = (e: JournalEvent) =>
   typeof e.Name === "string" && /massacre/i.test(e.Name) && typeof e.KillCount === "number";

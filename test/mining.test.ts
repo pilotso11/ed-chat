@@ -707,9 +707,9 @@ describe("after the review", () => {
       ...over,
     });
 
-  it("copies a full hold's buyer only while mining, keyed by the buyer", () => {
+  it("copies a full hold's buyer only while mining, once per trip", () => {
     const here = panel([prospect([["Platinum", 30]])]);
-    expect(here.copy?.key).toBe("hold-full||Haber Hub|Ngalinn");
+    expect(here.copy?.key).toBe("hold-full|");
     // After a jump toward the buyer the route copies the next stop instead.
     const away = panel([prospect([["Platinum", 30]]), ev("FSDJump")], { system: "Other" });
     expect(away.copy).toBeUndefined();
@@ -879,8 +879,8 @@ describe("after the third review", () => {
       });
     const first = panel(base).copy?.key;
     const second = panel([...base, ev("MarketSell", { Type: "platinum", Count: 10 })]).copy?.key;
-    expect(first).toBe("hold-full||X|Y");
-    expect(second).toMatch(/^hold-full\|2026-11-21T.*\|X\|Y$/);
+    expect(first).toBe("hold-full|");
+    expect(second).toMatch(/^hold-full\|2026-11-21T/);
   });
 
   it("counts refined commodities until bought, however long ago, and skips unreadable ones", () => {
@@ -905,11 +905,11 @@ describe("after the third review", () => {
 
   it("counts the rate from when mining started again after a break", () => {
     const events = [ev("MiningRefined", { Type: "$platinum_name;" }, 0)];
-    // Two hours docked, then 8 t in 4 minutes.
+    // Two hours docked, then 8 t over three and a half minutes.
     for (let i = 1; i <= 8; i++) {
       events.push(ev("MiningRefined", { Type: "$platinum_name;" }, 7200 + i * 30));
     }
-    expect(miningState(events, T0 + (7200 + 240) * 1000).rate).toBe(120);
+    expect(miningState(events, T0 + (7200 + 240) * 1000).rate).toBe(137);
   });
 
   it("sells from a carrier known only by a booked jump", () => {
@@ -939,5 +939,40 @@ describe("after the third review", () => {
       "Gold",
     );
     expect(hits).toEqual([]);
+  });
+});
+
+describe("after the fifth review", () => {
+  it("counts fragments collected from a cracked core as mined", () => {
+    const events = [ev("AsteroidCracked", { Body: "R" }), ev("CollectCargo", { Type: "opal" })];
+    expect([...refinedKinds(events)]).toEqual(["opal"]);
+    const opals = [{ name: "opal", count: 200, stolen: false, mission_id: null }];
+    expect(minedWaiting(opals, events, T0 + t * 1000, M)).toBe(true);
+    // Salvage that cannot be mined does not count.
+    expect([...refinedKinds([ev("CollectCargo", { Type: "usscargoblackbox" })])]).toEqual([]);
+  });
+
+  it("keeps the mark when buying back from the player's own carrier", () => {
+    const events = [
+      ev("CarrierLocation", { CarrierID: 9, StarSystem: "Belach" }),
+      refined("Platinum"),
+      ev("MarketBuy", { MarketID: 9, Type: "platinum", Count: 50 }),
+    ];
+    expect(refinedKinds(events).has("platinum")).toBe(true);
+    const elsewhere = [...events, ev("MarketBuy", { MarketID: 5, Type: "platinum", Count: 1 })];
+    expect(refinedKinds(elsewhere).has("platinum")).toBe(false);
+  });
+
+  it("searches from the ship once it is a few jumps from the mining system", () => {
+    const events = [ev("FSDJump", { StarSystem: "A" }), refined("Platinum")];
+    for (const s of ["B", "C", "D"]) events.push(ev("FSDJump", { StarSystem: s }));
+    expect(miningState(events, T0 + t * 1000).system).toBe("A");
+    events.push(ev("FSDJump", { StarSystem: "E" }));
+    expect(miningState(events, T0 + t * 1000).system).toBeNull();
+    expect(miningState([...events.slice(0, 2), ev("LoadGame")], T0 + t * 1000).system).toBeNull();
+  });
+
+  it("knows the newer small hulls", () => {
+    expect(padFor("smallcombat01_nx")).toBe("S");
   });
 });

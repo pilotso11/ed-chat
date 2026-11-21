@@ -1,4 +1,5 @@
 import type { BioConditions } from "ed-mcp/journal";
+import { type Obj } from "./json.js";
 
 /** A planet in the current system as Spansh knows it, before the player scans it. */
 export interface KnownBody {
@@ -29,8 +30,6 @@ const JOURNAL_TYPE: Record<string, string> = {
 export function isHighlight(type: string | null, terraformable: boolean): boolean {
   return terraformable || /^(earthlike body|water world|ammonia world)$/i.test(type ?? "");
 }
-
-type Obj = Record<string, unknown>;
 
 function bioOf(v: unknown): { bioSignals: number; genera: string[] } {
   const s = (v ?? {}) as { signals?: Record<string, unknown>; genuses?: unknown };
