@@ -113,6 +113,17 @@ describe("notices", () => {
     expect($(".more-notices")).toBeNull();
   });
 
+  it("shows the +n button beside a command notice too", () => {
+    const { $, overlay } = setup({
+      notice: { text: "Run `claude update`", command: "claude update", more: 2 },
+    });
+    expect($(".notice")?.className).toBe("notice copyable");
+    expect($(".more-notices")?.textContent).toBe("+2");
+    fireEvent.click($(".more-notices")!);
+    expect(overlay.showNotices).toHaveBeenCalledOnce();
+    expect(overlay.copyNotice).not.toHaveBeenCalled();
+  });
+
   it("does nothing on a click without a command; +n lists the others", () => {
     const { $, overlay } = setup({ notice: { text: "copied Sol", command: null, more: 2 } });
     const notice = $(".notice")!;
