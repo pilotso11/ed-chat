@@ -57,8 +57,12 @@ describe("journalMode", () => {
   });
 
   it("counts a massacre acceptance with no readable time", () => {
+    const jump = ev("FSDJump");
     const bad = { ...massacreAccepted(), timestamp: "" };
-    expect(journalMode([bad], true)?.mode).toBe("massacre");
+    expect(journalMode([jump, bad], true)).toEqual({
+      mode: "massacre",
+      at: Date.parse(jump.timestamp),
+    });
   });
 
   it("does not leave massacre mode for a scan while missions are open", () => {

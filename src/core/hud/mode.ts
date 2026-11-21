@@ -56,7 +56,10 @@ export function journalMode(events: JournalEvent[], massacreActive: boolean): Ch
   };
   // Jumps since the last exploration event: a trip home ends exploration mode.
   let jumps = 0;
+  // The newest readable event time, for an event with none.
+  let last = 0;
   for (const e of events) {
+    last = Date.parse(e.timestamp) || last;
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     switch (e.event) {
       case "FSDJump":
@@ -64,8 +67,8 @@ export function journalMode(events: JournalEvent[], massacreActive: boolean): Ch
         if (mode === "exploration" && jumps >= LAPSE_JUMPS) mode = null;
         break;
       case "MissionAccepted":
-        // An acceptance with no readable time still counts, dated like the event before it.
-        if (isMassacre(e)) massacreAt = Date.parse(e.timestamp) || (massacreAt ?? at);
+        // An acceptance with no readable time still counts, dated by the newest readable event.
+        if (isMassacre(e)) massacreAt = last;
         break;
       case "FSSDiscoveryScan":
         set("exploration", e);
