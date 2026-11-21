@@ -141,6 +141,18 @@ describe("click targets", () => {
     expect(overlay.hover.mock.calls).toEqual([[true], [false]]);
   });
 
+  it("keeps the clicks while a hovered command notice is replaced by another", () => {
+    const { $, overlay } = setup({
+      notice: { text: "Run `npx ed-mcp setup`", command: "npx ed-mcp setup", more: 0 },
+    });
+    fireEvent.mouseEnter($(".notice")!);
+    overlay.view(
+      baseView({ notice: { text: "Run `claude update`", command: "claude update", more: 0 } }),
+    );
+    expect($(".notice code")?.textContent).toBe("claude update");
+    expect(overlay.hover.mock.calls).toEqual([[true]]);
+  });
+
   it("takes clicks while any nested target is hovered", () => {
     const { $, overlay } = setup({
       mode: "card",
