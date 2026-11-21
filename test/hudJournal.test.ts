@@ -2,7 +2,7 @@ import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { openStores } from "ed-mcp/journal";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HudFeed } from "../src/core/hud/feed.js";
 import { buildHud, type HudView } from "../src/core/hud/hud.js";
 import { HUD_EVENTS } from "../src/core/hud/mode.js";
@@ -18,19 +18,14 @@ let start: number;
 let t: number;
 
 beforeEach(async () => {
-  // ed-mcp's journal service keeps its state for a second (by performance.now), so the clocks
-  // move on between polls, as the app's one-second polling does. Only the clocks are faked, so
-  // file reads still finish.
-  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   dir = await mkdtemp(path.join(tmpdir(), "edchat-journal-"));
   syncDir = await mkdtemp(path.join(tmpdir(), "edchat-sync-"));
-  // An hour ago, so times such as the next mission expiry are measured from a real "now".
-  start = Date.now() - 60 * 60_000;
+  // A few minutes ago: recent enough that ed-mcp does not call the journal old.
+  start = Date.now() - 5 * 60_000;
   t = 0;
 });
 
 afterEach(async () => {
-  vi.useRealTimers();
   await rm(dir, { recursive: true, force: true });
   await rm(syncDir, { recursive: true, force: true });
 });
@@ -119,16 +114,19 @@ const stratum = (bodyId: number, type: "Log" | "Sample" | "Analyse"): Event =>
 /** ED Chat's panel feed on the temporary journal folder, polled as the app polls it. */
 function game() {
   const pending: Event[] = [];
-  // ed-mcp finds the newest journal by its name, so it is named from the first event's time.
+  // ed-mcp finds the newest journal by its name, read as UTC, so it is named from the first
+  // event's time.
   const stamp = new Date(start).toISOString().slice(0, 19).replace(/:/g, "");
   const journal = path.join(dir, `Journal.${stamp}.01.log`);
   const errors: string[] = [];
+  // One long-lived service, as the app opens it.
   const stores = openStores(
     { ED_JOURNAL_DIR: dir, ED_MCP_SYNC_DIR: syncDir },
     { keep: HUD_EVENTS },
   );
   // Without this, an ed-mcp error would show only as an empty panel.
   const feed = new HudFeed(stores, dir, { onError: (what, m) => errors.push(`${what}: ${m}`) });
+  let polled = false;
   return {
     add: (...more: Event[]) => pending.push(...more),
     /** The ship on a body: latitude and longitude in degrees. */
@@ -153,10 +151,14 @@ function game() {
           .map((e) => JSON.stringify(e) + "\n")
           .join(""),
       );
-      // Well past ed-mcp's one-second memo, so every poll reads the journal again.
-      vi.advanceTimersByTime(5_000);
+      // The journal service keeps its state for a second, so polls are a second apart, as the
+      // app's are.
+      if (polled) await new Promise((r) => setTimeout(r, 1_050));
+      polled = true;
       const data = await feed.poll();
       expect(errors).toEqual([]);
+      // ed-mcp reports a journal it could not read as a warning, with an empty state.
+      expect((data.journal as { warnings?: string[] } | null)?.warnings).toEqual([]);
       return buildHud(
         { ...data, hotkey: null, settings: DEFAULT_SETTINGS.hud, now: Date.now() },
         null,
@@ -257,7 +259,8 @@ describe("panel from the real ed-mcp journal reader", () => {
         { text: "Bad Guys", right: "7 left", tone: "accent" },
         { text: "Giver One", right: "3/10", bar: 0.3 },
       ],
-      footer: ["next expires 23h 59m"],
+      // Read against the real clock, so a slow run can take a minute off.
+      footer: [expect.stringMatching(/^next expires 23h 5\dm$/)],
     });
   });
 });
