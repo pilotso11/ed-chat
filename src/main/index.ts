@@ -1438,6 +1438,9 @@ async function main(): Promise<void> {
         return openPath(logDir);
       case "quit":
         return app.quit();
+      default:
+        // A tray action added in menus.ts must be handled here.
+        return a satisfies never;
     }
   }
   const menuTemplate = (items: TrayItem[]): MenuItemConstructorOptions[] =>
