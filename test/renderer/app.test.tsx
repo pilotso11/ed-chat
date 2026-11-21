@@ -197,7 +197,7 @@ describe("reply card", () => {
     expect($(".card .more")).toBeNull();
 
     // jsdom lays nothing out; a text taller than its box is what a long reply looks like.
-    const tall = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(500);
+    const tall = vi.spyOn(Element.prototype, "scrollHeight", "get").mockReturnValue(500);
     try {
       overlay.view(baseView({ mode: "card", card: { text: "long", chips: [], full: false } }));
       expect($(".card .text")?.className).toBe("text");
@@ -396,6 +396,8 @@ describe("hotkeys while the overlay has focus", () => {
       modifierAltGraph: true,
       cancelable: true,
     });
+    // jsdom reports AltGr as typed: what the overlay must leave alone.
+    expect(altGr.getModifierState("AltGraph")).toBe(true);
     window.dispatchEvent(altGr);
     fireEvent.keyDown(window, { key: "x", code: "KeyX" });
     expect(overlay.chord).not.toHaveBeenCalled();

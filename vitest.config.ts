@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 const WELL_TESTED = { lines: 90, statements: 90, functions: 90, branches: 85 };
 
@@ -8,14 +8,18 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        test: { name: "unit", include: ["test/**/*.test.ts"], exclude: ["test/renderer/**"] },
+        test: {
+          name: "unit",
+          include: ["test/**/*.test.ts"],
+          exclude: [...configDefaults.exclude, "test/renderer/**"],
+        },
       },
       {
         extends: true,
         test: {
           // The React components, in jsdom, with cleanup between tests and what jsdom lacks.
           name: "renderer",
-          include: ["test/renderer/**/*.test.tsx"],
+          include: ["test/renderer/**/*.test.{ts,tsx}"],
           environment: "jsdom",
           setupFiles: ["test/renderer/setup.ts"],
         },
