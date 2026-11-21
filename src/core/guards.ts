@@ -1,5 +1,5 @@
-import type { Foreground } from "../core/focus.js";
-import type { Settings } from "../core/settings.js";
+import type { Foreground } from "./focus.js";
+import type { Settings } from "./settings.js";
 
 export const MAX_HEIGHT = 2000;
 export const STDERR_CHARS = 160;

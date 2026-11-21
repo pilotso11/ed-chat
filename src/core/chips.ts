@@ -63,3 +63,16 @@ export function firstLine(plain: string): string | null {
       .find(Boolean) ?? null
   );
 }
+
+/** The copy key or a click on chip n: what to copy, and what the strip says. */
+export function chipCopy(chips: Chip[], n: number): { text: string | null; notice: string } {
+  const chip = chips[n - 1];
+  if (!chip) {
+    const has = chips.length ? `the reply has ${chips.length}` : "the reply has none";
+    return { text: null, notice: `📋 no chip ${n}; ${has}` };
+  }
+  return {
+    text: chip.text,
+    notice: `📋 copied ${chip.text}${chip.detail ? ` (for ${chip.detail})` : ""}`,
+  };
+}
