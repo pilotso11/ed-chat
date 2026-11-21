@@ -461,7 +461,9 @@ const isAllowedVar = (name: string) => {
   return (
     ALLOWED_VARS.has(n) ||
     n.startsWith("LC_") ||
-    n.startsWith("NPM_CONFIG_") ||
+    // Not npm's credentials (npm run exports .npmrc's //registry/:_authToken as one): npx
+    // needs the registry and cache, not a login.
+    (n.startsWith("NPM_CONFIG_") && !/AUTH|TOKEN|PASSWORD|SECRET|KEY/.test(n)) ||
     n.startsWith("ED_MCP_")
   );
 };
