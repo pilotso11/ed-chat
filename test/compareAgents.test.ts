@@ -156,6 +156,9 @@ describe("providers", () => {
     // A misspelt or missing provider after a model never runs on the player's own login.
     expect(err("--run", "codex:glm-5.3@zai")).toMatch(/no --provider is named zai/);
     expect(err("--run", "claude:@zai")).toMatch(/no --provider is named zai/);
+    expect(err("--provider", "zai.json", "--run", "claude@zai:glm-5.3")).toMatch(
+      /the model goes first/,
+    );
     expect(err("--provider", "zai.json", "--run", "codex:glm-5.3@zia")).toMatch(
       /no --provider is named zia/,
     );

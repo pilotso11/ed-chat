@@ -32,10 +32,9 @@ Options:
                         player's own login; <name> is the file name without .json, for example
                         scripts/providers/zai.json gives zai. Give it more than once for more
                         providers. The key is read from ED_CHAT_TEST_API_KEY. A run through a
-                        provider gets an empty config folder of its own, removed when the script
-                        ends: the
-                        player's login, settings and history are not read or changed. Codex
-                        needs a model then: --run codex:<model>@<name>.
+                        provider gets an empty config folder of its own, removed when the
+                        script ends: the player's login, settings and history are not read or
+                        changed. Codex needs a model then: --run codex:<model>@<name>.
   --questions <file>    A JSON list of { "topic", "text" } (default scripts/compare-questions.json).
   --out <file>          The Markdown report (default in the temp folder). The raw numbers go
                         next to it, with .json. It must be outside the repo.
@@ -112,7 +111,9 @@ export function parseArgs(
         const v = value();
         // The provider is split off after all --provider files are known: a model id can
         // hold an @ too (claude-sonnet-4@20250514).
-        const m = v ? /^(claude|codex)(?::(.+)|@(.+))?$/.exec(v) : null;
+        const m = v ? /^(claude|codex)(?::(.+)|@([^:]+))?$/.exec(v) : null;
+        if (v && /^(claude|codex)@[^:]*:/.test(v))
+          return { ok: false, error: `--run ${v}: the model goes first, as agent:model@provider` };
         if (!m)
           return {
             ok: false,

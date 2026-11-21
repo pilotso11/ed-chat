@@ -442,7 +442,7 @@ try {
         path.basename(tempRoot),
       );
       const home = path.join(homesRoot, `${run.runs.length}-${agent}-home`);
-      await rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+      // A new folder: homesRoot is this run's own, and each home has the run's number.
       await mkdir(home, { recursive: true });
       if (agent === "codex") {
         const models = provider.codex?.models;
