@@ -158,6 +158,9 @@ export function parseArgs(
   }
   if (o.only && o.runs) return { ok: false, error: "give --only or --run, not both" };
   const names = o.providers.map(providerName);
+  // An empty name would let --run claude:model@ pass as no provider, on the player's login.
+  if (names.some((n) => !n.trim()))
+    return { ok: false, error: "a --provider file needs a name before .json" };
   const dup = names.find((n, i) => names.indexOf(n) !== i);
   if (dup) return { ok: false, error: `two --provider files are named ${dup}` };
   for (const r of o.runs ?? []) {
@@ -242,8 +245,10 @@ export interface TestProvider {
 
 type PermissionMode = "auto" | "default";
 
-// The script sets these itself; a provider file must not.
-const CLAUDE_OWN_VARS = ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR"];
+// What a provider file may set for Claude: model names, context and compaction, timeouts and
+// telemetry. Anything else (a key, a proxy, a cloud, PATH, NODE_OPTIONS) is refused.
+const PROVIDER_CLAUDE_VARS =
+  /^(ANTHROPIC_(MODEL|SMALL_FAST_MODEL|DEFAULT_(HAIKU|SONNET|OPUS)_MODEL)|CLAUDE_CODE_(AUTO_COMPACT_WINDOW|MAX_CONTEXT_TOKENS|MAX_OUTPUT_TOKENS|SIMPLE_SYSTEM_PROMPT|DISABLE_NONESSENTIAL_TRAFFIC)|MAX_THINKING_TOKENS|API_TIMEOUT_MS|DISABLE_TELEMETRY|DISABLE_ERROR_REPORTING)$/;
 
 /** Reads a provider file. Env values may be numbers or booleans, and become strings. */
 export function parseProvider(json: string): TestProvider {
@@ -283,20 +288,10 @@ export function parseProvider(json: string): TestProvider {
     for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
       if (!["string", "number", "boolean"].includes(typeof v))
         throw new Error(`the provider's claude.env.${k} is not a string`);
-      if (CLAUDE_OWN_VARS.includes(k.toUpperCase()))
-        throw new Error(`the provider's claude.env must not set ${k}: the script sets it`);
-      // The file is checked in: a key goes in ED_CHAT_TEST_API_KEY, never here. Headers can
-      // carry one too.
-      if (/(KEY|TOKEN|SECRET|PASSWORD|HEADERS)$/i.test(k))
-        throw new Error(`the provider's claude.env must not hold a credential: ${k}`);
-      // The run goes to baseUrl: not to Bedrock, Vertex or another cloud of the player's.
-      if (/^(CLAUDE_CODE_USE_|AWS_|CLOUD_ML_|ANTHROPIC_VERTEX_|ANTHROPIC_BEDROCK_)/i.test(k))
-        throw new Error(`the provider's claude.env must not send the run elsewhere: ${k}`);
-      // A proxy or Node option could read the key or send it somewhere else.
-      if (/PROXY$|^NODE_/i.test(k)) throw new Error(`the provider's claude.env must not set ${k}`);
-      // Nor what the run keeps of the player's environment: PATH could run another claude or
-      // npx, SSL_CERT_FILE could trust another certificate.
-      if (isAllowedVar(k)) throw new Error(`the provider's claude.env must not set ${k}`);
+      // Only model names and Claude Code's tuning: the file is checked in, so no key, and the
+      // run goes to baseUrl with what the script sets, not to a proxy, cloud or other code.
+      if (!PROVIDER_CLAUDE_VARS.test(k))
+        throw new Error(`the provider's claude.env must not set ${k}: only model names and tuning`);
       env[k] = String(v);
     }
     out.claude = { baseUrl: claude.baseUrl as string, env, ...mode(claude) };

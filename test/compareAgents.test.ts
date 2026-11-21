@@ -157,6 +157,7 @@ describe("providers", () => {
     // A misspelt or missing provider after a model never runs on the player's own login.
     expect(err("--run", "codex:glm-5.3@zai")).toMatch(/no --provider is named zai/);
     expect(err("--run", "claude:@zai")).toMatch(/no --provider is named zai/);
+    expect(err("--provider", "dir/.json", "--run", "claude:glm@")).toMatch(/needs a name/);
     expect(err("--provider", "zai.json", "--run", "claude@zai:glm-5.3")).toMatch(
       /the model goes first/,
     );
@@ -195,11 +196,11 @@ describe("providers", () => {
       );
     for (const name of ["CLAUDE_CODE_USE_BEDROCK", "AWS_REGION", "ANTHROPIC_VERTEX_PROJECT_ID"])
       expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "1" } } })).toThrow(
-        /elsewhere/,
+        /must not set/,
       );
     expect(
       parse({ claude: { baseUrl: "https://a.example", env: { ANTHROPIC_CUSTOM_HEADERS: "x" } } }),
-    ).toThrow(/credential/);
+    ).toThrow(/must not set/);
     expect(
       parse({ claude: { baseUrl: "https://a.example", env: { ANTHROPIC_AUTH_TOKEN: "k" } } }),
     ).toThrow(/must not set/);
@@ -217,15 +218,16 @@ describe("providers", () => {
     expect(parse({ name: "x" })).toThrow(/neither/);
     for (const name of ["ANTHROPIC_API_KEY", "SOME_TOKEN", "a_secret", "DB_PASSWORD"])
       expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "x" } } })).toThrow(
-        /credential/,
+        /must not set/,
       );
     expect(parse({ codex: { baseUrl: "https://b.example", permissionMode: "yolo" } })).toThrow(
       /auto or default/,
     );
     expect(
-      parseProvider(JSON.stringify({ claude: { baseUrl: "https://a.example", env: { N: 1 } } }))
-        .claude?.env,
-    ).toEqual({ N: "1" });
+      parseProvider(
+        JSON.stringify({ claude: { baseUrl: "https://a.example", env: { API_TIMEOUT_MS: 1 } } }),
+      ).claude?.env,
+    ).toEqual({ API_TIMEOUT_MS: "1" });
   });
 
   const provider: TestProvider = {
