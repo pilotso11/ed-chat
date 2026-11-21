@@ -143,7 +143,7 @@ The mode is the newest of three choices, each with a time:
 
 | Source | Sets | Time |
 |---|---|---|
-| `MissionAccepted` for a massacre mission | massacre | the event's timestamp |
+| `MissionAccepted` for a massacre mission | massacre | the event's timestamp, or the newest readable event time before it when it has none |
 | `FSSDiscoveryScan`, or a `Scan` of type `Detailed` (an FSS or probe scan) | exploration | the event's timestamp |
 | `ApproachBody` or `Touchdown` on a body with bio signals, or `ScanOrganic` | exobiology | the event's timestamp |
 | `LeaveBody`, when exobiology was the mode | exploration | the event's timestamp |
