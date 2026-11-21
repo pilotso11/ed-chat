@@ -11,6 +11,7 @@ import {
 import type { HudModeId, Settings } from "../settings.js";
 import type { KnownBody } from "./known.js";
 import { carrierState, miningPanel, miningState, minedWaiting } from "./mining.js";
+import { isRun, passengerPanel } from "./passenger.js";
 import type { SellLookup, SellQuery } from "./sell.js";
 import { bookmarkRows } from "./bookmarks.js";
 import { journalMode, noteMode, pickMode, type Choice } from "./mode.js";
@@ -97,8 +98,9 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
     j && input.settings.modes.mining
       ? minedWaiting(j.cargo, j.events, input.now, input.settings.mining)
       : false;
+  const runActive = j ? j.missions.some(isRun) : false;
   const fromJournal = j
-    ? journalMode(j.events, groups.length > 0, minedAboard, input.settings.modes.mining)
+    ? journalMode(j.events, groups.length > 0, minedAboard, input.settings.modes.mining, runActive)
     : null;
   const m = noteMode(input.activity?.kind);
   const fromNote =
@@ -112,6 +114,14 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
   const j = input.journal;
   if (!j || mode === "route") return null;
   if (mode === "massacre") return massacrePanel(massacre(j.missions, j.events).groups, input.now);
+  if (mode === "passenger") {
+    return passengerPanel({
+      missions: j.missions,
+      events: j.events,
+      plan: input.plan,
+      now: input.now,
+    });
+  }
   const system = j.location.system;
   if (mode === "mining") {
     return miningPanel({
