@@ -16,8 +16,8 @@ const base: HudView = {
 
 function setup() {
   const overlay = fakeOverlay();
-  const { container } = render(<HudPanel />);
-  return { overlay, container, hud: container.querySelector<HTMLDivElement>(".hud")! };
+  const { container, unmount } = render(<HudPanel />);
+  return { overlay, unmount, hud: container.querySelector<HTMLDivElement>(".hud")! };
 }
 
 describe("activity panel", () => {
@@ -27,11 +27,14 @@ describe("activity panel", () => {
   });
 
   it("reports its size at once and on each change, until unmounted", () => {
-    const overlay = fakeOverlay();
-    const { unmount } = render(<HudPanel />);
-    expect(overlay.reportHudSize.mock.calls).toEqual([[0, 0]]);
+    const { overlay, unmount } = setup();
+    // Its own report, then the observer's first one.
+    expect(overlay.reportHudSize.mock.calls).toEqual([
+      [0, 0],
+      [0, 0],
+    ]);
     resize();
-    expect(overlay.reportHudSize).toHaveBeenCalledTimes(2);
+    expect(overlay.reportHudSize).toHaveBeenCalledTimes(3);
     // New views do not add observers.
     overlay.hud({ ...base, moving: "move" });
     overlay.hud({ ...base, moving: "move on" });

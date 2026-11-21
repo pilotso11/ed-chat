@@ -7,10 +7,10 @@ import { baseView, fakeOverlay, FakeResizeObserver, resize } from "./overlay.js"
 
 function setup(v?: Partial<ViewModel>) {
   const overlay = fakeOverlay();
-  const { container } = render(<App />);
+  const { container, unmount } = render(<App />);
   if (v) overlay.view(baseView(v));
   const $ = <E extends Element = HTMLElement>(sel: string) => container.querySelector<E>(sel);
-  return { overlay, container, $ };
+  return { overlay, container, unmount, $ };
 }
 
 const approval: NonNullable<ViewModel["approval"]> = {
@@ -41,16 +41,16 @@ describe("status strip", () => {
   });
 
   it("reports its height on each change once it shows, until unmounted", () => {
-    const overlay = fakeOverlay();
-    const { unmount } = render(<App />);
+    const { overlay, unmount } = setup();
     // Nothing to measure before the first view.
     expect(FakeResizeObserver.observing()).toBe(0);
     overlay.view(baseView());
+    // A new view does not observe again.
     overlay.view(baseView({ status: "● sending" }));
     expect(FakeResizeObserver.observing()).toBe(1);
-    expect(overlay.reportHeight).not.toHaveBeenCalled();
-    resize();
     expect(overlay.reportHeight.mock.calls).toEqual([[0]]);
+    resize();
+    expect(overlay.reportHeight.mock.calls).toEqual([[0], [0]]);
     unmount();
     expect(FakeResizeObserver.observing()).toBe(0);
   });
@@ -392,8 +392,7 @@ describe("hotkeys while the overlay has focus", () => {
   });
 
   it("stops listening when unmounted", () => {
-    const overlay = fakeOverlay();
-    const { unmount } = render(<App />);
+    const { overlay, unmount } = setup();
     unmount();
     fireEvent.keyDown(window, { key: "x", code: "KeyX", ctrlKey: true, altKey: true });
     expect(overlay.chord).not.toHaveBeenCalled();
