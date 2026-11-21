@@ -104,15 +104,27 @@ for (const which of ["chat", "panel"] as const) {
     // A process left running with one window would have no tray icon and no hotkeys.
     t = await launch();
     const page = which === "chat" ? "/index.html" : "/hud.html";
-    const exited = new Promise<void>((r) => t!.app.process().once("exit", () => r()));
+    const exited = new Promise<{ code: number | null; signal: string | null }>((r) =>
+      t!.app.process().once("exit", (code, signal) => r({ code, signal })),
+    );
     await t.app.evaluate(({ BrowserWindow }, page) => {
-      const w = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith(page))!;
+      const w = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith(page));
+      if (!w) throw new Error(`no window for ${page}`);
       // After this call returns: the app quits, and Playwright cannot finish a call to a gone app.
       setTimeout(() => w.close(), 0);
     }, page);
-    const stillRunning = new Promise<never>((_r, reject) =>
-      setTimeout(() => reject(new Error("the app kept running with a window closed")), 15_000),
-    );
-    await Promise.race([exited, stillRunning]);
+    let timer: NodeJS.Timeout | undefined;
+    const stillRunning = new Promise<never>((_r, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("the app kept running with a window closed")),
+        15_000,
+      );
+    });
+    try {
+      // A clean quit, not a crash.
+      expect(await Promise.race([exited, stillRunning])).toEqual({ code: 0, signal: null });
+    } finally {
+      clearTimeout(timer);
+    }
   });
 }
