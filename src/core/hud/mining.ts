@@ -3,11 +3,7 @@ import type { Settings } from "../settings.js";
 import { credits, shortBody, type HudRow, type PanelView } from "./panels.js";
 import type { SellHit, SellLookup, SellQuery } from "./sell.js";
 
-type Obj = Record<string, unknown>;
-const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
-const objs = (v: unknown): Obj[] =>
-  Array.isArray(v) ? v.filter((x): x is Obj => typeof x === "object" && x !== null) : [];
+import { num, objs, str, type Obj } from "./json.js";
 
 // ---------- Commodity names ----------
 
@@ -115,8 +111,8 @@ export interface MiningState {
   rate: number | null;
   /** The system of the newest mining event: buyers are searched from here, not each jump. */
   system: string | null;
-  /** Sales this game session: a new trip after a sale copies the buyer again. */
-  sales: number;
+  /** When the player last sold anything: a new trip after a sale copies the buyer again. */
+  lastSale: string | null;
 }
 
 const RATE_WINDOW_MS = 15 * 60_000;
@@ -163,10 +159,14 @@ export function miningState(
   let last = 0;
   let here: string | null = null;
   let system: string | null = null;
-  let sales = 0;
+  let lastSale: string | null = null;
+  let lastMining = 0;
   const rings = new Map<string, { name: string; count: number }[]>();
   const mined = () => {
+    // After a break (docked, or away), the rate counts from when mining started again.
+    if (stintStart !== null && last - lastMining > RATE_WINDOW_MS) stintStart = last;
     stintStart ??= last;
+    lastMining = last;
     system = here;
   };
   for (const e of events) {
@@ -180,7 +180,6 @@ export function miningState(
         prospect = null;
         ring = null;
         stintStart = null;
-        sales = 0;
         break;
       case "FSDJump":
       case "CarrierJump":
@@ -191,7 +190,7 @@ export function miningState(
         stintStart = null;
         break;
       case "MarketSell":
-        sales++;
+        lastSale = e.timestamp;
         break;
       case "SupercruiseExit":
         if (e.BodyType === "PlanetaryRing") ring = str(e.Body);
@@ -251,24 +250,23 @@ export function miningState(
     refined,
     rate,
     system,
-    sales,
+    lastSale,
   };
 }
 
-/** Cargo of a commodity refined this recently counts as mined. */
-const MINED_WITHIN_MS = 24 * 3_600_000;
-
 /**
- * The commodities the journal shows the player refining in the last day, by commodityKey().
- * Cargo of these counts as mined: Gold bought to trade does not, unless the player mined Gold
- * that day.
+ * The commodities the player has refined and not bought since, by commodityKey(). Cargo of these
+ * counts as mined, however long ago: Gold bought to trade after mining Gold does not.
  */
-export function refinedKinds(events: JournalEvent[], now: number): Set<string> {
+export function refinedKinds(events: JournalEvent[]): Set<string> {
   const kinds = new Set<string>();
   for (const e of events) {
-    if (e.event !== "MiningRefined" || now - Date.parse(e.timestamp) > MINED_WITHIN_MS) continue;
-    const key = commodityKey(str(e.Type) ?? str(e.Type_Localised) ?? "");
-    if (key) kinds.add(key);
+    if (e.event === "MiningRefined") {
+      const key = commodityKey(str(e.Type) ?? str(e.Type_Localised) ?? "");
+      if (key) kinds.add(key);
+    } else if (e.event === "MarketBuy") {
+      kinds.delete(commodityKey(str(e.Type) ?? ""));
+    }
   }
   return kinds;
 }
@@ -535,7 +533,8 @@ interface SellInput {
 /** The search for one commodity's buyers: around the carrier when selling from it, else the ship. */
 function queryFor(input: SellInput, key: string): SellQuery | null {
   const s = input.settings;
-  const fromCarrier = s.useCarrier && input.carrier?.system ? input.carrier : null;
+  const fromCarrier =
+    s.useCarrier && (input.carrier?.system || input.carrier?.jumping) ? input.carrier : null;
   // A booked jump: the cargo will be sold from where the carrier is going.
   const near = fromCarrier?.jumping?.system ?? fromCarrier?.system ?? input.from ?? input.system;
   if (!near) return null;
@@ -554,7 +553,10 @@ function queryFor(input: SellInput, key: string): SellQuery | null {
  * when selling from it, most tons first.
  */
 export function sellQueries(input: SellInput): ToSell[] {
-  const fromCarrier = input.settings.useCarrier && input.carrier?.system ? input.carrier : null;
+  const fromCarrier =
+    input.settings.useCarrier && (input.carrier?.system || input.carrier?.jumping)
+      ? input.carrier
+      : null;
   const tons = new Map(input.hold);
   for (const [k, n] of fromCarrier?.moved ?? []) {
     if (!input.kinds || input.kinds.has(k)) tons.set(k, (tons.get(k) ?? 0) + n);
@@ -638,7 +640,7 @@ export function miningPanel(input: {
     rows.push({ text: `Hotspots: ${spots.join(" · ")}`, tone: "dim" });
   }
 
-  const kinds = input.events ? refinedKinds(input.events, input.now) : null;
+  const kinds = input.events ? refinedKinds(input.events) : null;
   const hold = holdOf(input.cargo, kinds);
   const free = input.capacity !== null ? Math.max(0, input.capacity - hold.used) : null;
   rows.push({
@@ -739,7 +741,7 @@ export function miningPanel(input: {
     // unless the load goes to the carrier.
     if (!copy && !carrier && mining && free === 0 && pick.best.system !== input.system) {
       copy = {
-        key: `hold-full|${state.sales}|${pick.best.station}|${pick.best.system}`,
+        key: `hold-full|${state.lastSale ?? ""}|${pick.best.station}|${pick.best.system}`,
         text: pick.best.system,
         note: `hold full: ${t.name} sells best at ${pick.best.station}, ${pick.best.system} (copied)`,
       };
@@ -794,7 +796,7 @@ export function minedWaiting(
   now: number,
   settings: Settings["hud"]["mining"],
 ): boolean {
-  const kinds = refinedKinds(events, now);
+  const kinds = refinedKinds(events);
   if (!kinds.size) return false;
   if (holdOf(cargo, kinds).mined.size > 0) return true;
   // The carrier is read only when selling from it.

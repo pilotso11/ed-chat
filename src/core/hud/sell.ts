@@ -1,3 +1,4 @@
+import { num, type Obj } from "./json.js";
 import { spanshJson } from "./known.js";
 
 /** A station that buys a commodity, from a Spansh station search. */
@@ -78,9 +79,6 @@ export function sellSearchBody(q: SellQuery, now: number): unknown {
   };
 }
 
-type Obj = Record<string, unknown>;
-const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-
 /** The stations in a Spansh search result that buy the commodity. */
 export function parseSellHits(json: unknown, commodity: string): SellHit[] {
   const results = (json as { results?: unknown } | null)?.results;
@@ -93,11 +91,13 @@ export function parseSellHits(json: unknown, commodity: string): SellHit[] {
       (m) => typeof m?.commodity === "string" && m.commodity.toLowerCase() === want,
     );
     const price = num(row?.sell_price);
-    if (price === null || price <= 0) continue;
+    const distance = num(s.distance);
+    // Without a distance the station could be anywhere: it cannot be ranked as near.
+    if (price === null || price <= 0 || distance === null) continue;
     out.push({
       station: s.name,
       system: s.system_name,
-      distanceLy: num(s.distance) ?? 0,
+      distanceLy: distance,
       arrivalLs: num(s.distance_to_arrival),
       price,
       demand: num(row?.demand),

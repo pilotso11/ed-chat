@@ -522,6 +522,7 @@ describe("Spansh sale prices", () => {
           {
             name: "XFZ-12K",
             system_name: "Y",
+            distance: 3,
             type: "Drake-Class Carrier",
             market: [{ commodity: "Platinum", sell_price: 1 }],
           },
@@ -539,7 +540,12 @@ describe("Spansh sale prices", () => {
     let now = T0;
     const post = vi.fn(async () => ({
       results: [
-        { name: "A", system_name: "S", market: [{ commodity: "Platinum", sell_price: 9 }] },
+        {
+          name: "A",
+          system_name: "S",
+          distance: 1,
+          market: [{ commodity: "Platinum", sell_price: 9 }],
+        },
       ],
     }));
     const prices = new SellPrices(post, { now: () => now });
@@ -703,7 +709,7 @@ describe("after the review", () => {
 
   it("copies a full hold's buyer only while mining, keyed by the buyer", () => {
     const here = panel([prospect([["Platinum", 30]])]);
-    expect(here.copy?.key).toBe("hold-full|0|Haber Hub|Ngalinn");
+    expect(here.copy?.key).toBe("hold-full||Haber Hub|Ngalinn");
     // After a jump toward the buyer the route copies the next stop instead.
     const away = panel([prospect([["Platinum", 30]]), ev("FSDJump")], { system: "Other" });
     expect(away.copy).toBeUndefined();
@@ -873,17 +879,65 @@ describe("after the third review", () => {
       });
     const first = panel(base).copy?.key;
     const second = panel([...base, ev("MarketSell", { Type: "platinum", Count: 10 })]).copy?.key;
-    expect(first).toBe("hold-full|0|X|Y");
-    expect(second).toBe("hold-full|1|X|Y");
+    expect(first).toBe("hold-full||X|Y");
+    expect(second).toMatch(/^hold-full\|2026-11-21T.*\|X\|Y$/);
   });
 
-  it("forgets commodities refined more than a day ago, and unreadable ones", () => {
+  it("counts refined commodities until bought, however long ago, and skips unreadable ones", () => {
     const old = {
       timestamp: new Date(T0 - 2 * 86_400_000).toISOString(),
       event: "MiningRefined",
       Type: "$gold_name;",
     };
-    const kinds = refinedKinds([old, refined("Platinum"), ev("MiningRefined", {})], T0 + t * 1000);
-    expect([...kinds]).toEqual(["platinum"]);
+    expect([...refinedKinds([old, refined("Platinum"), ev("MiningRefined", {})])]).toEqual([
+      "gold",
+      "platinum",
+    ]);
+    const bought = [old, ev("MarketBuy", { Type: "gold", Count: 100 })];
+    expect([...refinedKinds(bought)]).toEqual([]);
+  });
+
+  it("changes no mode for mining while the mining mode is off", () => {
+    const events = [ev("FSSDiscoveryScan"), ev("LaunchDrone", { Type: "Prospector" })];
+    expect(journalMode(events, false, false, true)?.mode).toBe("mining");
+    expect(journalMode(events, false, false, false)?.mode).toBe("exploration");
+  });
+
+  it("counts the rate from when mining started again after a break", () => {
+    const events = [ev("MiningRefined", { Type: "$platinum_name;" }, 0)];
+    // Two hours docked, then 8 t in 4 minutes.
+    for (let i = 1; i <= 8; i++) {
+      events.push(ev("MiningRefined", { Type: "$platinum_name;" }, 7200 + i * 30));
+    }
+    expect(miningState(events, T0 + (7200 + 240) * 1000).rate).toBe(120);
+  });
+
+  it("sells from a carrier known only by a booked jump", () => {
+    const q = sellQueries({
+      system: "HIP 1",
+      hold: new Map([["platinum", 5]]),
+      carrier: {
+        id: 9,
+        callsign: null,
+        name: null,
+        system: null,
+        jumping: { system: "Hub", departs: null },
+        freeSpace: null,
+        moved: new Map(),
+      },
+      shipType: null,
+      settings: { ...M, useCarrier: true },
+    });
+    expect(q[0]!.query.near).toBe("Hub");
+  });
+
+  it("leaves out a buyer with no distance", () => {
+    const hits = parseSellHits(
+      {
+        results: [{ name: "A", system_name: "S", market: [{ commodity: "Gold", sell_price: 5 }] }],
+      },
+      "Gold",
+    );
+    expect(hits).toEqual([]);
   });
 });

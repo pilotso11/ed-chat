@@ -145,14 +145,13 @@ export async function spanshJson(
   init: RequestInit = {},
   timeoutMs = 15_000,
 ): Promise<unknown> {
+  const headers = new Headers(init.headers);
+  headers.set("User-Agent", "ED-Chat");
+  const timeout = AbortSignal.timeout(timeoutMs);
   const res = await fetch(url, {
     ...init,
-    headers: (() => {
-      const h = new Headers(init.headers);
-      h.set("User-Agent", "ED-Chat");
-      return h;
-    })(),
-    signal: AbortSignal.timeout(timeoutMs),
+    headers,
+    signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
   });
   if (res.status === 404) return {};
   if (!res.ok) throw new Error(`Spansh ${res.status}`);

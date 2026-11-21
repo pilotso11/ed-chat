@@ -91,7 +91,9 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
     j && input.settings.modes.mining
       ? minedWaiting(j.cargo, j.events, input.now, input.settings.mining)
       : false;
-  const fromJournal = j ? journalMode(j.events, groups.length > 0, minedAboard) : null;
+  const fromJournal = j
+    ? journalMode(j.events, groups.length > 0, minedAboard, input.settings.modes.mining)
+    : null;
   const m = noteMode(input.activity?.kind);
   const fromNote =
     m && input.activity ? { mode: m, at: Date.parse(input.activity.updated_at) } : null;

@@ -57,11 +57,13 @@ export const LAPSE_JUMPS = 5;
  * sold.
  * `massacreActive` is whether a massacre mission is still open now (from ed-mcp's massacre()).
  * `minedAboard` is whether mined cargo is waiting to be sold now (minedWaiting()).
+ * `miningOn` is false when the mining mode is off: mining then changes no mode.
  */
 export function journalMode(
   events: JournalEvent[],
   massacreActive: boolean,
   minedAboard = false,
+  miningOn = true,
 ): Choice | null {
   const bio = new Set<string>();
   // Exploration and exobiology, followed through every event, before and during a stack.
@@ -100,10 +102,10 @@ export function journalMode(
       case "ProspectedAsteroid":
       case "MiningRefined":
       case "AsteroidCracked":
-        set("mining");
+        if (miningOn) set("mining");
         break;
       case "LaunchDrone":
-        if (e.Type === "Prospector") set("mining");
+        if (miningOn && e.Type === "Prospector") set("mining");
         break;
       case "MissionAccepted":
         // An acceptance with no readable time still counts, dated by the newest readable event.
