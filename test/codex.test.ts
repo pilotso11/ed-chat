@@ -242,6 +242,11 @@ describe("codex command", () => {
         cwd: "C:\\w",
         settingsFile,
       });
+      expect(developerInstructions).toContain("Sum the jumps field across the waypoints");
+      expect(developerInstructions).toContain(
+        "A leg between saved plan stops can take several jumps",
+      );
+      expect(developerInstructions).toContain("a lower bound for unboosted travel");
       expect(developerInstructions).toContain("use materials_plan when available");
       expect(developerInstructions).toContain("the nearest matching trader in a map marker");
       expect(developerInstructions).toContain("check the tool schema and retry with valid inputs");
