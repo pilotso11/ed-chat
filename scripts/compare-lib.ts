@@ -248,7 +248,7 @@ type PermissionMode = "auto" | "default";
 // What a provider file may set for Claude: model names, context and compaction, timeouts and
 // telemetry. Anything else (a key, a proxy, a cloud, PATH, NODE_OPTIONS) is refused.
 const PROVIDER_CLAUDE_VARS =
-  /^(ANTHROPIC_(MODEL|SMALL_FAST_MODEL|DEFAULT_(HAIKU|SONNET|OPUS)_MODEL)|CLAUDE_CODE_(AUTO_COMPACT_WINDOW|MAX_CONTEXT_TOKENS|MAX_OUTPUT_TOKENS|SIMPLE_SYSTEM_PROMPT|DISABLE_NONESSENTIAL_TRAFFIC)|MAX_THINKING_TOKENS|API_TIMEOUT_MS|DISABLE_TELEMETRY|DISABLE_ERROR_REPORTING)$/;
+  /^(ANTHROPIC_(MODEL|SMALL_FAST_MODEL|DEFAULT_(HAIKU|SONNET|OPUS)_MODEL)|CLAUDE_CODE_(AUTO_COMPACT_WINDOW|MAX_CONTEXT_TOKENS|MAX_OUTPUT_TOKENS|SIMPLE_SYSTEM_PROMPT)|MAX_THINKING_TOKENS|API_TIMEOUT_MS|DISABLE_TELEMETRY|DISABLE_ERROR_REPORTING)$/;
 
 /** Reads a provider file. Env values may be numbers or booleans, and become strings. */
 export function parseProvider(json: string): TestProvider {
@@ -338,6 +338,14 @@ const ALLOWED_VARS = new Set([
   "COMMONPROGRAMFILES(X86)",
   "ALLUSERSPROFILE",
   "PUBLIC",
+  "USERDOMAIN",
+  "PROCESSOR_IDENTIFIER",
+  "PSMODULEPATH",
+  "COMMONPROGRAMW6432",
+  "PROGRAMFILES(ARM)",
+  "XDG_RUNTIME_DIR",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
   // The user's folders
   "USERPROFILE",
   "HOMEDRIVE",
@@ -371,7 +379,13 @@ const ALLOWED_VARS = new Set([
 const isAllowedVar = (name: string) => {
   const n = name.toUpperCase();
   // npm_config_*: npm's registry and cache, which npx needs to start ed-mcp.
-  return ALLOWED_VARS.has(n) || n.startsWith("LC_") || n.startsWith("NPM_CONFIG_");
+  // ED_MCP_*: the player's ed-mcp settings (keys, folders), which ed-mcp gets in every column.
+  return (
+    ALLOWED_VARS.has(n) ||
+    n.startsWith("LC_") ||
+    n.startsWith("NPM_CONFIG_") ||
+    n.startsWith("ED_MCP_")
+  );
 };
 
 /**

@@ -428,7 +428,8 @@ try {
       command: cli?.command ?? null,
       version: null,
       permissionMode: s.permissionMode,
-      edMcp: edMcpNote,
+      // A provider run's empty config folder has no MCP servers of the player's: only ed-mcp.
+      edMcp: provider ? `${edMcpNote}, and no other MCP server` : edMcpNote,
       results: [],
     };
     // Checked when the provider files were read: a provider run always has its endpoint.

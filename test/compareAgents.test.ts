@@ -190,7 +190,14 @@ describe("providers", () => {
       parseProvider(JSON.stringify({ claude: { baseUrl: "http://localhost:4000" } })).claude
         ?.baseUrl,
     ).toBe("http://localhost:4000");
-    for (const name of ["HTTPS_PROXY", "NODE_OPTIONS", "PATH", "ssl_cert_file", "LC_ALL"])
+    for (const name of [
+      "HTTPS_PROXY",
+      "NODE_OPTIONS",
+      "PATH",
+      "ssl_cert_file",
+      "LC_ALL",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+    ])
       expect(parse({ claude: { baseUrl: "https://a.example", env: { [name]: "x" } } })).toThrow(
         /must not set/,
       );
@@ -245,6 +252,7 @@ describe("providers", () => {
     CLAUDE_CODE_MESSAGING_TOKEN: "parent-session",
     CLAUDECODE: "1",
     MCP_TIMEOUT: "99",
+    ED_MCP_INARA_KEY: "player-inara",
     Https_Proxy: "http://proxy:8080",
     MAX_THINKING_TOKENS: "64000",
     CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe",
@@ -265,6 +273,7 @@ describe("providers", () => {
       // Kept: where Claude Code finds Git Bash, not a login.
       CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe",
       Https_Proxy: "http://proxy:8080",
+      ED_MCP_INARA_KEY: "player-inara",
       ANTHROPIC_DEFAULT_SONNET_MODEL: "glm",
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
       CLAUDE_CONFIG_DIR: "T:\\claude-home",
@@ -278,6 +287,7 @@ describe("providers", () => {
       PATH: "C:\\bin",
       CLAUDE_CODE_GIT_BASH_PATH: "C:\\Git\\bin\\bash.exe",
       Https_Proxy: "http://proxy:8080",
+      ED_MCP_INARA_KEY: "player-inara",
       CODEX_HOME: "T:\\codex-home",
       [TEST_KEY_ENV]: "k2",
     });
