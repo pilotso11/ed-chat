@@ -139,13 +139,17 @@ export class KnownBodies {
   }
 }
 
-/** fetch() as JSON; a 404 means Spansh does not know the system yet. */
-export async function fetchSpansh(url: string): Promise<unknown> {
+/** A Spansh request as JSON, with ED Chat's User-Agent and a timeout. A 404 gives {}. */
+export async function spanshJson(url: string, init: RequestInit = {}): Promise<unknown> {
   const res = await fetch(url, {
-    headers: { "User-Agent": "ED-Chat" },
-    signal: AbortSignal.timeout(15_000),
+    ...init,
+    headers: { "User-Agent": "ED-Chat", ...(init.headers as Record<string, string>) },
+    signal: AbortSignal.timeout(20_000),
   });
   if (res.status === 404) return {};
   if (!res.ok) throw new Error(`Spansh ${res.status}`);
   return res.json();
 }
+
+/** GET as JSON; a 404 means Spansh does not know the system yet. */
+export const fetchSpansh = (url: string): Promise<unknown> => spanshJson(url);

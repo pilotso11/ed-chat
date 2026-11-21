@@ -10,7 +10,7 @@ import {
 } from "ed-mcp/journal";
 import type { HudModeId, Settings } from "../settings.js";
 import type { KnownBody } from "./known.js";
-import { carrierState, holdOf, miningPanel, miningState } from "./mining.js";
+import { carrierState, miningPanel, miningState, minedWaiting } from "./mining.js";
 import type { SellLookup, SellQuery } from "./sell.js";
 import { journalMode, noteMode, pickMode, type Choice } from "./mode.js";
 import {
@@ -30,6 +30,8 @@ import {
 
 /** What the panel window shows. */
 export interface HudView {
+  /** The mode chosen: currentMode(). */
+  mode?: HudModeId | "off" | null;
   /** The mode's panel; null shows only the route line, or nothing. */
   panel: PanelView | null;
   /** The route, one stop to a row: the whole panel when there is no other, else below it. */
@@ -85,7 +87,9 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
   if (input.hotkey?.mode === "off") return "off";
   const j = input.journal;
   const groups = j ? massacre(j.missions, j.events).groups : [];
-  const minedAboard = j ? holdOf(j.cargo).mined.size > 0 : false;
+  const minedAboard = j
+    ? minedWaiting(j.cargo, carrierState(j.events, input.now), input.settings.mining)
+    : false;
   const fromJournal = j ? journalMode(j.events, groups.length > 0, minedAboard) : null;
   const m = noteMode(input.activity?.kind);
   const fromNote =
@@ -177,7 +181,7 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
     width: s.width,
   };
   const mode = currentMode(input);
-  if (mode === "off") return { ...base, panel: null, route: null };
+  if (mode === "off") return { ...base, mode, panel: null, route: null };
   const panel = mode ? panelFor(mode, input) : null;
   const route = s.modes.route
     ? routeRows({
@@ -186,5 +190,5 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
         system: input.journal?.location.system ?? null,
       })
     : null;
-  return { ...base, panel, route };
+  return { ...base, mode, panel, route };
 }

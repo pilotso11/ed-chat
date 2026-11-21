@@ -300,6 +300,8 @@ export function carrierState(events: JournalEvent[], now: number): Carrier | nul
   // A booked jump, held in an object so the closures below see its changes.
   const jump: { pending: { system: string; departs: number } | null } = { pending: null };
   let last = 0;
+  // Cargo moves only count while docked at this carrier, not at a squadron carrier.
+  let aboard = false;
   const move = (name: string, tons: number) => {
     const key = commodityKey(name);
     if (c.freeSpace !== null) c.freeSpace -= tons;
@@ -348,6 +350,7 @@ export function carrierState(events: JournalEvent[], now: number): Carrier | nul
         if (mine) jump.pending = null;
         break;
       case "Docked":
+        aboard = mine;
         if (mine) {
           c.system = str(e.StarSystem) ?? c.system;
           c.callsign = str(e.StationName) ?? c.callsign;
@@ -359,7 +362,11 @@ export function carrierState(events: JournalEvent[], now: number): Carrier | nul
           jump.pending = null;
         }
         break;
+      case "Undocked":
+        aboard = false;
+        break;
       case "CargoTransfer":
+        if (!aboard) break;
         for (const t of objs(e.Transfers)) {
           const tons = num(t.Count) ?? 0;
           const name = str(t.Type) ?? "";
@@ -462,42 +469,48 @@ export interface ToSell {
 }
 
 const MAX_SELL_ROWS = 3;
+/** Refined commodities no longer aboard are priced too, for the session's value: at most these. */
+const MAX_EXTRA_PRICES = 3;
 
-/**
- * What to look up a buyer for: the mined commodities in the hold, plus those moved to the carrier
- * when selling from it, most tons first. Searched around the carrier when selling from it, else
- * around the ship.
- */
-export function sellQueries(input: {
+interface SellInput {
   system: string | null;
   hold: Map<string, number>;
   carrier: Carrier | null;
   shipType: string | null;
   settings: Settings["hud"]["mining"];
-}): ToSell[] {
+}
+
+/** The search for one commodity's buyers: around the carrier when selling from it, else the ship. */
+function queryFor(input: SellInput, key: string): SellQuery | null {
   const s = input.settings;
   const fromCarrier = s.useCarrier && input.carrier?.system ? input.carrier : null;
   const near = fromCarrier?.system ?? input.system;
-  if (!near) return [];
+  if (!near) return null;
+  return {
+    near,
+    commodity: commodityName(key),
+    radiusLy: fromCarrier ? s.carrierRadiusLy : s.sellRadiusLy,
+    largePad: padFor(input.shipType) === "L",
+    carriers: s.carrierMarkets,
+    maxAgeDays: s.maxPriceAgeDays,
+  };
+}
+
+/**
+ * What to look up a buyer for: the mined commodities in the hold, plus those moved to the carrier
+ * when selling from it, most tons first.
+ */
+export function sellQueries(input: SellInput): ToSell[] {
+  const fromCarrier = input.settings.useCarrier && input.carrier?.system ? input.carrier : null;
   const tons = new Map(input.hold);
   for (const [k, n] of fromCarrier?.moved ?? []) tons.set(k, (tons.get(k) ?? 0) + n);
-  return [...tons]
-    .filter(([, n]) => n > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, MAX_SELL_ROWS)
-    .map(([key, n]) => ({
-      key,
-      name: commodityName(key),
-      tons: n,
-      query: {
-        near,
-        commodity: commodityName(key),
-        radiusLy: fromCarrier ? s.carrierRadiusLy : s.sellRadiusLy,
-        largePad: padFor(input.shipType) === "L",
-        carriers: s.carrierMarkets,
-        maxAgeDays: s.maxPriceAgeDays,
-      },
-    }));
+  const out: ToSell[] = [];
+  for (const [key, n] of [...tons].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1])) {
+    if (out.length === MAX_SELL_ROWS) break;
+    const query = queryFor(input, key);
+    if (query) out.push({ key, name: commodityName(key), tons: n, query });
+  }
+  return out;
 }
 
 // ---------- The panel ----------
@@ -604,13 +617,16 @@ export function miningPanel(input: {
   }
 
   // Where to sell: the best price and a nearer place paying nearly as much.
-  const toSell = sellQueries({
+  const sellInput: SellInput = {
     system: input.system,
     hold: hold.mined,
     carrier: input.carrier,
     shipType: input.shipType,
     settings,
-  });
+  };
+  const toSell = sellQueries(sellInput);
+  // Still mining here: not on the way to a buyer, where the route copies the next stop.
+  const mining = state.prospect !== null || state.ring !== null;
   const pad = padFor(input.shipType);
   const prices = new Map<string, number>();
   let copy: PanelView["copy"];
@@ -657,11 +673,11 @@ export function miningPanel(input: {
         tone: "dim",
       });
     }
-    // A full hold copies the best buyer's system for the galaxy map, unless the load goes to the
-    // carrier.
-    if (!copy && !carrier && free === 0 && pick.best.system !== input.system) {
+    // A full hold copies the best buyer's system for the galaxy map, once, while still mining,
+    // unless the load goes to the carrier.
+    if (!copy && !carrier && mining && free === 0 && pick.best.system !== input.system) {
       copy = {
-        key: `hold-full|${input.system}|${pick.best.system}`,
+        key: `hold-full|${pick.best.station}|${pick.best.system}`,
         text: pick.best.system,
         note: `hold full: ${t.name} sells best at ${pick.best.station}, ${pick.best.system} (copied)`,
       };
@@ -669,11 +685,20 @@ export function miningPanel(input: {
   }
 
   const refined = [...state.refined].sort((a, b) => b[1] - a[1]);
+  // Refined commodities already sold or not among the rows are priced with their own search.
+  for (const [key, tons] of refined.filter(([k]) => !prices.has(k)).slice(0, MAX_EXTRA_PRICES)) {
+    const q = isMined(key) ? queryFor(sellInput, key) : null;
+    const found = q ? input.sell?.(q) : undefined;
+    if (!Array.isArray(found)) continue;
+    const pick = pickSell(found, tons, pad, input.carrier?.id ?? null);
+    if (pick) prices.set(key, pick.best.price);
+  }
   if (refined.length) {
     const worth = refined.reduce((n, [k, t]) => n + (prices.get(k) ?? 0) * t, 0);
+    const unpriced = refined.some(([k]) => !prices.has(k));
     rows.push({
       text: `Refined: ${refined.map(([k, t]) => `${commodityName(k)} ${t} t`).join(" · ")}`,
-      right: worth ? `~${credits(worth)}` : undefined,
+      right: worth ? `~${credits(worth)}${unpriced ? "+" : ""}` : undefined,
     });
   }
 
@@ -694,4 +719,17 @@ export function miningPanel(input: {
     footer: session.length ? [`Session: ${session.join(" · ")}`] : [],
     ...(copy ? { copy } : {}),
   };
+}
+
+/**
+ * Whether mined cargo is waiting to be sold: in the hold, or moved to the carrier this session
+ * when selling from it. Keeps mining mode on after leaving the ring.
+ */
+export function minedWaiting(
+  cargo: JournalState["cargo"],
+  carrier: Carrier | null,
+  settings: Settings["hud"]["mining"],
+): boolean {
+  if (holdOf(cargo).mined.size > 0) return true;
+  return settings.useCarrier && [...(carrier?.moved.values() ?? [])].some((t) => t > 0);
 }

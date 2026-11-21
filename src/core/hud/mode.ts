@@ -53,9 +53,10 @@ export const LAPSE_JUMPS = 5;
  * a discovery scan or a detailed scan turns on exploration; a body with biological signals, or
  * a bio sample, turns on exobiology; a prospector, a prospect, refining or a cracked asteroid
  * turns on mining. A jump alone starts nothing, and LAPSE_JUMPS jumps with no scan end
- * exploration. A jump ends mining unless mined cargo is still aboard, to sell.
+ * exploration. A jump, a sale or a new game ends mining unless mined cargo is still waiting to be
+ * sold.
  * `massacreActive` is whether a massacre mission is still open now (from ed-mcp's massacre()).
- * `minedAboard` is whether the hold has mined commodities now.
+ * `minedAboard` is whether mined cargo is waiting to be sold now (minedWaiting()).
  */
 export function journalMode(
   events: JournalEvent[],
@@ -89,6 +90,11 @@ export function journalMode(
       case "CarrierJump":
         if (e.event === "FSDJump") jumps++;
         if (mode === "exploration" && jumps >= LAPSE_JUMPS) mode = null;
+        if (mode === "mining") leftMining = true;
+        break;
+      case "MarketSell":
+      case "LoadGame":
+        // Selling, or starting the game again, ends mining once nothing mined is left.
         if (mode === "mining") leftMining = true;
         break;
       case "ProspectedAsteroid":

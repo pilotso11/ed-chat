@@ -112,7 +112,7 @@ import {
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import { SellPrices, postSpansh } from "../core/hud/sell.js";
-import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
+import { buildHud, type HudView } from "../core/hud/hud.js";
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS, cycleMode } from "../core/hud/mode.js";
 import { currentStop, nextStopAfter, previousStop, todoStops } from "../core/hud/panels.js";
@@ -541,6 +541,11 @@ async function main(): Promise<void> {
 
   function renderHud(): void {
     if (windowsGone()) return;
+    const f = focus?.current ?? null;
+    // Shown over the game only, like the hotkeys in game scope.
+    const gameUp = !f || f.isGame || f.isOverlay;
+    // Spansh searches and clipboard copies only for a panel the player can see.
+    const visible = settings.hud.enabled && !saved.hudHidden && gameUp;
     const input = {
       journal: null,
       status: null,
@@ -553,9 +558,10 @@ async function main(): Promise<void> {
       hotkey: hudChoice(),
       settings: settings.hud,
       now: Date.now(),
-      sell: settings.hud.spansh
-        ? (q: Parameters<SellPrices["get"]>[0]) => sellPrices.get(q)
-        : undefined,
+      sell:
+        settings.hud.spansh && visible
+          ? (q: Parameters<SellPrices["get"]>[0]) => sellPrices.get(q)
+          : undefined,
     };
     const k = settings.hotkeys;
     const first = (x: Parameters<typeof keyList>[0]) => keyList(x)[0];
@@ -564,26 +570,20 @@ async function main(): Promise<void> {
       : null;
     const view = buildHud(input, moveHint);
     lastHudView = view;
-    const copy = view.panel?.copy ?? null;
+    const copy = visible ? (view.panel?.copy ?? null) : null;
     const copyId = copy ? `${copy.key}|${copy.text}` : null;
     if (copy && copyId !== hudCopied) {
       clipboard.writeText(copy.text);
       flash("copy", `📋 ${copy.note}`, 6_000);
     }
-    hudCopied = copyId;
-    const mode = String(currentMode(input));
+    // Kept while hidden, so showing the panel again does not copy the same buyer.
+    if (visible) hudCopied = copyId;
+    const mode = String(view.mode ?? null);
     if (mode !== hudMode) {
       hudMode = mode;
       log.log("info", `panel mode: ${mode}`);
     }
-    const f = focus?.current ?? null;
-    // Shown over the game only, like the hotkeys in game scope.
-    const gameUp = !f || f.isGame || f.isOverlay;
-    const show =
-      settings.hud.enabled &&
-      !saved.hudHidden &&
-      gameUp &&
-      (view.panel !== null || view.route !== null || hudMoving);
+    const show = visible && (view.panel !== null || view.route !== null || hudMoving);
     hudWin.webContents.send(IPC.hud, view);
     if (show !== hudShown) {
       hudShown = show;

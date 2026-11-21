@@ -9,6 +9,7 @@ import {
   judge,
   miningPanel,
   miningState,
+  minedWaiting,
   padFor,
   pickSell,
   sellQueries,
@@ -191,6 +192,11 @@ describe("carrierState", () => {
         Name: "DISTANT HORIZONS",
         SpaceUsage: { FreeSpace: 10_000 },
       }),
+      // At a squadron carrier: not this carrier's cargo.
+      ev("Docked", { MarketID: 777, StationName: "SQN-001", StarSystem: "Belach" }),
+      ev("CargoTransfer", { Transfers: [{ Type: "painite", Count: 99, Direction: "tocarrier" }] }),
+      ev("Undocked"),
+      ev("Docked", { MarketID: ID, StationName: "XFZ-12K", StarSystem: "Belach" }),
       ev("CargoTransfer", {
         Transfers: [{ Type: "platinum", Count: 200, Direction: "tocarrier" }],
       }),
@@ -579,6 +585,7 @@ describe("mining edge cases", () => {
     const moved = carrierState(
       [
         ...events,
+        ev("Docked", { MarketID: ID, StarSystem: "Merope" }),
         ev("CargoTransfer", { Transfers: [{ Type: "painite", Count: 5, Direction: "tocarrier" }] }),
         ev("LoadGame"),
       ],
@@ -669,5 +676,89 @@ describe("mining edge cases", () => {
     expect(fetch.mock.calls[0]![1]).toMatchObject({ method: "POST", body: '{"a":1}' });
     await expect(postSpansh("https://x", {})).rejects.toThrow("Spansh 503");
     fetch.mockRestore();
+  });
+});
+
+describe("after the review", () => {
+  const cargo = (n: number) => [{ name: "platinum", count: n, stolen: false, mission_id: null }];
+  const panel = (events: JournalEvent[], over: Partial<Parameters<typeof miningPanel>[0]> = {}) =>
+    miningPanel({
+      system: "HIP 1",
+      state: miningState(events, T0 + t * 1000),
+      cargo: cargo(256),
+      capacity: 256,
+      shipType: "type9",
+      carrier: null,
+      settings: M,
+      now: T0 + t * 1000,
+      sell: () => [hit({ station: "Haber Hub", system: "Ngalinn" })],
+      ...over,
+    });
+
+  it("copies a full hold's buyer only while mining, keyed by the buyer", () => {
+    const here = panel([prospect([["Platinum", 30]])]);
+    expect(here.copy?.key).toBe("hold-full|Haber Hub|Ngalinn");
+    // After a jump toward the buyer the route copies the next stop instead.
+    const away = panel([prospect([["Platinum", 30]]), ev("FSDJump")], { system: "Other" });
+    expect(away.copy).toBeUndefined();
+  });
+
+  it("ends mining after a sale or a new game with nothing left, not with cargo waiting", () => {
+    const sold = [refined("Platinum"), ev("MarketSell", { Type: "platinum", Count: 1 })];
+    expect(journalMode(sold, false, false)).toBeNull();
+    expect(journalMode(sold, false, true)?.mode).toBe("mining");
+    expect(journalMode([refined("Platinum"), ev("LoadGame")], false, false)).toBeNull();
+    // Prospecting again turns it back on.
+    expect(journalMode([...sold, prospect([["Platinum", 30]])], false, false)?.mode).toBe("mining");
+  });
+
+  it("counts cargo on the carrier as waiting to be sold when selling from it", () => {
+    const carrier = {
+      id: 1,
+      callsign: null,
+      name: null,
+      system: "Belach",
+      jumping: null,
+      freeSpace: null,
+      moved: new Map([["platinum", 300]]),
+    };
+    expect(minedWaiting([], carrier, M)).toBe(false);
+    expect(minedWaiting([], carrier, { ...M, useCarrier: true })).toBe(true);
+    expect(minedWaiting(cargo(1), null, M)).toBe(true);
+  });
+
+  it("prices refined commodities that are no longer aboard", () => {
+    const events = [refined("Platinum"), refined("Osmium"), refined("Painite")];
+    const seen: string[] = [];
+    const p = panel(events, {
+      cargo: cargo(10),
+      sell: (q) => {
+        seen.push(q.commodity);
+        return q.commodity === "Painite" ? "pending" : [hit({ price: 100_000 })];
+      },
+    });
+    expect(seen).toEqual(["Platinum", "Osmium", "Painite"]);
+    // Painite has no price yet: the value is a floor.
+    expect(p.rows.find((r) => r.text.startsWith("Refined"))?.right).toBe("~200k+");
+  });
+
+  it("forgets old failed searches", async () => {
+    let now = T0;
+    const prices = new SellPrices(async () => Promise.reject(new Error("offline")), {
+      now: () => now,
+    });
+    const q = (i: number) => ({
+      near: `S${i}`,
+      commodity: "Platinum",
+      radiusLy: 100,
+      largePad: false,
+      carriers: false,
+      maxAgeDays: 7,
+    });
+    for (let i = 0; i < 60; i++) prices.get(q(i));
+    await vi.waitFor(() => expect(prices.get(q(59))).toBe("failed"));
+    const failed = (prices as unknown as { failed: Map<string, number> }).failed;
+    expect(failed.size).toBeLessThanOrEqual(50);
+    now += 1;
   });
 });

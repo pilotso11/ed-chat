@@ -1,3 +1,5 @@
+import { spanshJson } from "./known.js";
+
 /** A station that buys a commodity, from a Spansh station search. */
 export interface SellHit {
   station: string;
@@ -30,7 +32,8 @@ export interface SellQuery {
 const CARRIER_TYPE = "Drake-Class Carrier";
 // Spansh has no "not" filter, so carriers are left out by listing every other type. Near busy
 // systems most market records are carriers, so dropping them after the search would leave few.
-// From GET /api/stations/field_values/type, as ed-mcp keeps it.
+// From GET /api/stations/field_values/type (2026-10-14), the same list as ed-mcp's fallback.
+// A type Spansh adds later is left out of the search until it is added here.
 const NON_CARRIER_TYPES = [
   "Asteroid base",
   "Coriolis Starport",
@@ -40,9 +43,11 @@ const NON_CARRIER_TYPES = [
   "Ocellus Starport",
   "Orbis Starport",
   "Outpost",
+  "Planetary Construction Depot",
   "Planetary Outpost",
   "Planetary Port",
   "Settlement",
+  "Space Construction Depot",
   "Surface Settlement",
 ];
 
@@ -142,7 +147,9 @@ export class SellPrices {
           while (this.cache.size > KEEP) this.cache.delete(this.cache.keys().next().value!);
         })
         .catch((err: unknown) => {
+          this.failed.delete(key);
           this.failed.set(key, now);
+          while (this.failed.size > KEEP) this.failed.delete(this.failed.keys().next().value!);
           this.opts.onError?.(err instanceof Error ? err.message : String(err));
         })
         .finally(() => this.pending.delete(key));
@@ -154,13 +161,10 @@ export class SellPrices {
 }
 
 /** POST as JSON to Spansh. */
-export async function postSpansh(url: string, body: unknown): Promise<unknown> {
-  const res = await fetch(url, {
+export function postSpansh(url: string, body: unknown): Promise<unknown> {
+  return spanshJson(url, {
     method: "POST",
-    headers: { "User-Agent": "ED-Chat", "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(20_000),
   });
-  if (!res.ok) throw new Error(`Spansh ${res.status}`);
-  return res.json();
 }

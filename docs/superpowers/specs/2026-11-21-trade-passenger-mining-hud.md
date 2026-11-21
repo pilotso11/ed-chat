@@ -92,7 +92,7 @@ panel shows what to do at each stop. The route rows then give the next hop and t
 |---|---|---|
 | `MissionAccepted` with `PassengerCount` | passenger | no passenger mission left |
 | `MarketBuy` while the hold has no mission cargo, or a plan stop of kind `trade` | trade | hold empty and no trade stop to do, or 5 jumps with no market trade |
-| `ProspectedAsteroid`, `LaunchDrone` of type `Prospector`, `MiningRefined`, `AsteroidCracked` | mining | a jump (`FSDJump`, or `CarrierJump` aboard), unless mined cargo is still in the hold |
+| `ProspectedAsteroid`, `LaunchDrone` of type `Prospector`, `MiningRefined`, `AsteroidCracked` | mining | a jump (`FSDJump`, or `CarrierJump` aboard), a `MarketSell` or a `LoadGame`, once no mined cargo is waiting: none in the hold, and with `useCarrier` none moved to the carrier |
 | The activity note's `kind` | that mode | |
 
 Massacre still wins while a stack is open. Passenger and trade are both "a run": when both are on
@@ -176,8 +176,14 @@ Session: 23 prospected · 4 worth mining · 1 motherlode
     takes the whole load, else the best price. A nearer station that pays at least 90% of it is
     shown below. A station whose demand is less than the load says so.
   - The value of what was refined this session uses the picked prices.
-  - When the hold fills, the best buyer's system is copied for the galaxy map, with a note in
-    the chat strip, once per system and buyer.
+  - When the hold fills while still mining in the ring, the best buyer's system is copied for the
+    galaxy map, with a note in the chat strip, once per buyer. Not after leaving, where the route
+    copies the next stop, and not while the panel is hidden.
+  - Refined commodities no longer aboard get their own search, so the session's value counts
+    them. A value with a commodity not priced yet shows as a floor (~200k+).
+  - Known limit: ed-mcp keeps the cargo's localised name only, so on a non-English game client the
+    hold's mined commodities are not recognised. Fixing it needs ed-mcp to keep the cargo's
+    journal name.
 - The panel's rows go to Claude in the game note, so Claude can plan the sale route with
   `commodity_prices` and the plan tools.
 
