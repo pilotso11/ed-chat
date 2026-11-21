@@ -234,6 +234,21 @@ describe("codex command", () => {
     expect(() => codexThreadSettings({ permissionMode: "auto", cwd: "work" })).toThrow("absolute");
   });
 
+  it.each([undefined, "C:\\s.json"])(
+    "gives Codex the HUD guidance with settings file %s",
+    (settingsFile) => {
+      const { developerInstructions } = codexThreadSettings({
+        permissionMode: "auto",
+        cwd: "C:\\w",
+        settingsFile,
+      });
+      expect(developerInstructions).toContain("use materials_plan when available");
+      expect(developerInstructions).toContain("the nearest matching trader in a map marker");
+      expect(developerInstructions).toContain("check the tool schema and retry with valid inputs");
+      expect(developerInstructions).toContain("you may exceed the HUD line limit");
+    },
+  );
+
   it("gives Codex the HUD and settings instructions", () => {
     const s = codexThreadSettings({
       permissionMode: "auto",
