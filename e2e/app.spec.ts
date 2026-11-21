@@ -82,10 +82,19 @@ test("survives the Claude version check answering after the windows are gone", a
   // late answer always lands. close() fails on any main-process error, such as drawing to a
   // destroyed window.
   t = await launch({ holdVersion: true });
+  // A closed window quits the app; the quit is held open here, as a slow quit is, so the late
+  // answer arrives while the app is still running with its windows gone.
   await t.app.evaluate(({ app, BrowserWindow }) => {
-    // Kept running, as a slow quit is, instead of quitting with the last window.
+    const g = globalThis as { holdQuit?: boolean };
+    g.holdQuit = true;
+    app.on("before-quit", (e) => {
+      if (g.holdQuit) e.preventDefault();
+    });
     app.on("window-all-closed", () => {});
     for (const w of BrowserWindow.getAllWindows()) w.destroy();
   });
   await t.releaseVersion();
+  await t.app.evaluate(() => {
+    (globalThis as { holdQuit?: boolean }).holdQuit = false;
+  });
 });

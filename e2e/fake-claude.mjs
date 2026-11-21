@@ -11,7 +11,10 @@ if (process.argv.includes("--version")) {
     });
   if (!gate) answer();
   else {
+    // Gives up after 30 s, so a test that failed before releasing it leaves nothing running.
+    const deadline = Date.now() + 30_000;
     const t = setInterval(() => {
+      if (Date.now() > deadline) process.exit(1);
       if (!existsSync(gate)) return;
       clearInterval(t);
       answer();

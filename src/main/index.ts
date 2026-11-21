@@ -1583,8 +1583,8 @@ async function main(): Promise<void> {
   // After the first foreground check, so the list shows which keys other apps hold.
   if (settings.startup.showKeys) setTimeout(showKeys, 1_000);
 
-  // Everything that could still reach the windows stops as soon as quitting starts, or as soon
-  // as a window closes: will-quit comes only after the windows are gone. Once only.
+  // Everything that could still reach the windows stops as soon as quitting starts: will-quit
+  // comes only after the windows are gone. Once only.
   let stopped = false;
   function shutDown(): void {
     if (stopped) return;
@@ -1602,7 +1602,9 @@ async function main(): Promise<void> {
     void approval.stop();
   }
   app.on("before-quit", shutDown);
-  win.on("closed", shutDown);
-  hudWin.on("closed", shutDown);
+  // ED Chat is no use with a window gone (Alt+F4 on the open chat closes it), so it quits; the
+  // other window would otherwise keep a process running with no tray icon or hotkeys.
+  win.on("closed", () => app.quit());
+  hudWin.on("closed", () => app.quit());
   app.on("will-quit", shutDown);
 }

@@ -158,7 +158,8 @@ export async function launch(
           if (Date.now() > deadline) throw new Error("the fake CLI never answered --version");
           await new Promise((r) => setTimeout(r, 50));
         }
-        await new Promise((r) => setTimeout(r, 500));
+        // The app handles the answer once the CLI exits; its windows are idle, so this is ample.
+        await new Promise((r) => setTimeout(r, 1_500));
       },
       async close() {
         let errors = "";
