@@ -7,6 +7,7 @@ import {
   commodityName,
   holdOf,
   judge,
+  targetsMap,
   miningPanel,
   miningState,
   minedWaiting,
@@ -145,7 +146,9 @@ describe("miningState", () => {
   });
 
   it("takes the ring from Status.json", () => {
-    expect(miningState([], T0, "Col 285 1 B Ring").ring).toBe("Col 285 1 B Ring");
+    expect(miningState([prospect([["Platinum", 30]])], T0, "Col 285 1 B Ring").ring).toBe(
+      "Col 285 1 B Ring",
+    );
     expect(miningState([], T0, "Col 285 1").ring).toBeNull();
   });
 
@@ -306,9 +309,9 @@ describe("judge", () => {
       ],
       T0,
     ).prospect!;
-    expect(judge(p, M.targets)).toEqual({ name: "Platinum", percent: 22, worth: true });
-    expect(judge(p, { Platinum: 30 })?.worth).toBe(false);
-    expect(judge(p, {})).toEqual({ name: "Gallite", percent: 40, worth: false });
+    expect(judge(p, targetsMap(M.targets))).toEqual({ name: "Platinum", percent: 22, worth: true });
+    expect(judge(p, targetsMap({ Platinum: 30 }))?.worth).toBe(false);
+    expect(judge(p, new Map())).toEqual({ name: "Gallite", percent: 40, worth: false });
   });
 });
 
@@ -994,5 +997,34 @@ describe("after the sixth review", () => {
     const s = miningState(events, T0 + t * 1000);
     expect([s.ring, s.prospect]).toEqual([null, null]);
     expect(s.prospects).toHaveLength(1);
+  });
+});
+
+describe("after the seventh review", () => {
+  it("ends collecting from cracked rocks on leaving the ring", () => {
+    const events = [
+      ev("AsteroidCracked", { Body: "R" }),
+      ev("SupercruiseEntry"),
+      ev("CollectCargo", { Type: "gold" }),
+    ];
+    expect([...refinedKinds(events)]).toEqual([]);
+  });
+
+  it("takes the ring from Status.json only while still mining", () => {
+    const left = [
+      ev("SupercruiseExit", { Body: "X 1 A Ring", BodyType: "PlanetaryRing" }),
+      prospect([["Platinum", 30]]),
+      ev("SupercruiseEntry"),
+    ];
+    expect(miningState(left, T0 + t * 1000, "X 1 A Ring").ring).toBeNull();
+  });
+
+  it("treats a 404 from a station search as a failure", async () => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("", { status: 404 }));
+    const { postSpansh } = await import("../src/core/hud/sell.js");
+    await expect(postSpansh("https://x", {})).rejects.toThrow("Spansh 404");
+    fetch.mockRestore();
   });
 });

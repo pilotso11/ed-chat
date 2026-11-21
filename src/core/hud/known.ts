@@ -138,11 +138,15 @@ export class KnownBodies {
   }
 }
 
-/** A Spansh request as JSON, with ED Chat's User-Agent and a timeout. A 404 gives {}. */
+/**
+ * A Spansh request as JSON, with ED Chat's User-Agent and a timeout. A 404 gives {} when
+ * `notFoundEmpty` (a system dump Spansh does not have yet), else fails like any error.
+ */
 export async function spanshJson(
   url: string,
   init: RequestInit = {},
   timeoutMs = 15_000,
+  notFoundEmpty = true,
 ): Promise<unknown> {
   const headers = new Headers(init.headers);
   headers.set("User-Agent", "ED-Chat");
@@ -152,7 +156,7 @@ export async function spanshJson(
     headers,
     signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
   });
-  if (res.status === 404) return {};
+  if (res.status === 404 && notFoundEmpty) return {};
   if (!res.ok) throw new Error(`Spansh ${res.status}`);
   return res.json();
 }

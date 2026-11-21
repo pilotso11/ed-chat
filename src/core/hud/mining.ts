@@ -248,7 +248,11 @@ export function miningState(
         break;
     }
   }
-  if (statusBody && /ring$/i.test(statusBody)) ring = statusBody;
+  // Status.json names the ring more exactly, but only while still mining: after leaving, the
+  // ship can still be near it.
+  if (statusBody && /ring$/i.test(statusBody) && (ring !== null || prospect !== null)) {
+    ring = statusBody;
+  }
   let rate: number | null = null;
   const lastRefined = refinedAt.at(-1);
   if (stintStart !== null && lastRefined !== undefined && now - lastRefined < RATE_WINDOW_MS) {
@@ -295,7 +299,11 @@ export function refinedKinds(events: JournalEvent[]): Set<string> {
       if (cracking && isMined(key) && e.Stolen !== true) kinds.add(key);
     } else if (e.event === "AsteroidCracked" || e.event === "ProspectedAsteroid") {
       cracking = true;
-    } else if (["FSDJump", "CarrierJump", "Location", "LoadGame"].includes(e.event)) {
+    } else if (
+      ["FSDJump", "CarrierJump", "Location", "LoadGame", "SupercruiseEntry", "Docked"].includes(
+        e.event,
+      )
+    ) {
       cracking = false;
     } else if (e.event === "MarketBuy" && (own === null || num(e.MarketID) !== own)) {
       kinds.delete(commodityKey(str(e.Type) ?? ""));
@@ -584,11 +592,16 @@ interface SellInput {
   settings: Settings["hud"]["mining"];
 }
 
+/** The carrier to sell from: when the setting is on and where it is, or is going, is known. */
+function sellingCarrier(input: SellInput): Carrier | null {
+  const c = input.carrier;
+  return input.settings.useCarrier && (c?.system || c?.jumping) ? c : null;
+}
+
 /** The search for one commodity's buyers: around the carrier when selling from it, else the ship. */
 function queryFor(input: SellInput, key: string): SellQuery | null {
   const s = input.settings;
-  const fromCarrier =
-    s.useCarrier && (input.carrier?.system || input.carrier?.jumping) ? input.carrier : null;
+  const fromCarrier = sellingCarrier(input);
   // A booked jump: the cargo will be sold from where the carrier is going.
   const near = fromCarrier?.jumping?.system ?? fromCarrier?.system ?? input.from ?? input.system;
   if (!near) return null;
@@ -607,10 +620,7 @@ function queryFor(input: SellInput, key: string): SellQuery | null {
  * when selling from it, most tons first.
  */
 export function sellQueries(input: SellInput): ToSell[] {
-  const fromCarrier =
-    input.settings.useCarrier && (input.carrier?.system || input.carrier?.jumping)
-      ? input.carrier
-      : null;
+  const fromCarrier = sellingCarrier(input);
   const tons = new Map(input.hold);
   for (const [k, n] of fromCarrier?.moved ?? []) {
     if (!input.kinds || input.kinds.has(k)) tons.set(k, (tons.get(k) ?? 0) + n);
@@ -627,14 +637,14 @@ export function sellQueries(input: SellInput): ToSell[] {
 // ---------- The panel ----------
 
 /** The prospect's material that best clears its target, else its richest; null when none listed. */
+/** hud.mining.targets by commodityKey(), for judge(). */
+export const targetsMap = (targets: Record<string, number>) =>
+  new Map(Object.entries(targets).map(([k, v]) => [commodityKey(k), v]));
+
 export function judge(
   p: Prospect,
-  targets: Record<string, number> | Map<string, number>,
+  t: Map<string, number>,
 ): { name: string; percent: number; worth: boolean } | null {
-  const t =
-    targets instanceof Map
-      ? targets
-      : new Map(Object.entries(targets).map(([k, v]) => [commodityKey(k), v]));
   let best: { name: string; percent: number; worth: boolean; score: number } | null = null;
   for (const m of p.materials) {
     const min = t.get(m.key);
@@ -671,7 +681,7 @@ export function miningPanel(input: {
 }): PanelView {
   const { state, settings } = input;
   const rows: HudRow[] = [];
-  const targets = new Map(Object.entries(settings.targets).map(([k, v]) => [commodityKey(k), v]));
+  const targets = targetsMap(settings.targets);
   const p = state.prospect;
   if (p) {
     const j = judge(p, targets);

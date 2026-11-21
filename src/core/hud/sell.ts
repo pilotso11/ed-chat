@@ -170,5 +170,7 @@ export function postSpansh(url: string, body: unknown): Promise<unknown> {
     url,
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
     20_000,
+    // A search Spansh cannot answer is a failure, retried soon, not "no buyer".
+    false,
   );
 }
