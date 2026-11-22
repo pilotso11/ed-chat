@@ -208,6 +208,7 @@ describe("massacrePanel", () => {
         },
       ],
       Date.UTC(2026, 10, 15, 12),
+      { minPerKill: 0 },
     )!;
     expect(p.right).toBe("12 left");
     // The unfinished mission's 1.0M over the 12 kills left.
@@ -243,10 +244,42 @@ describe("massacrePanel", () => {
     // Judged as shown: 999,999 a kill reads 1.0M, so it is not under 1.0M.
     const edge = massacrePanel(groups(9_999_990), 0, { minPerKill: 1_000_000 })!;
     expect(edge.rows[0]!.right).toBe("10 left · 1.0M/kill");
+    expect(massacrePanel(groups(14_600_000), 0, { minPerKill: 1_500_000 })!.rows[0]!.right).toBe(
+      "10 left · 1.5M/kill",
+    );
+    expect(massacrePanel(groups(14_400_000), 0, { minPerKill: 1_500_000 })!.rows[0]!.right).toBe(
+      "10 left · ⚠ 1.4M/kill",
+    );
+  });
+
+  it("leaves out a mission that expired before it was done", () => {
+    const at = (h: number) => new Date(Date.UTC(2026, 10, 15, h)).toISOString();
+    const p = massacrePanel(
+      [
+        {
+          target_faction: "Kumo Crew",
+          kills_left: 10,
+          factions: [
+            {
+              faction: "Lugh",
+              kills_left: 10,
+              missions: [
+                { ...mission(1, 10, 0, at(11)), reward: 30_000_000 },
+                { ...mission(2, 10, 0, at(13)), reward: 5_000_000 },
+              ],
+            },
+          ],
+        },
+      ],
+      Date.UTC(2026, 10, 15, 12),
+      { minPerKill: 1_000_000 },
+    )!;
+    expect(p.rows[0]!.right).toBe("10 left · ⚠ 500k/kill");
+    expect(p.footer).toEqual(["Stack 5.0M", "next expires expired"]);
   });
 
   it("is null with no missions", () => {
-    expect(massacrePanel([], 0)).toBeNull();
+    expect(massacrePanel([], 0, { minPerKill: 0 })).toBeNull();
   });
 });
 

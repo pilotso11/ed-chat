@@ -82,37 +82,45 @@ export function timeLeft(ms: number): string {
 
 // ---------- Massacre ----------
 
-/** The missions' rewards; "+" when some have none in the journal. */
-function rewards(missions: MassacreMission[]): string {
-  const sum = missions.reduce((n, m) => n + (m.reward ?? 0), 0);
-  return `${credits(sum)}${missions.some((m) => m.reward === null) ? "+" : ""}`;
+/** The missions' rewards, and whether some have none in the journal, which makes it a floor. */
+function rewards(missions: MassacreMission[]): { sum: number; floor: boolean } {
+  return {
+    sum: missions.reduce((n, m) => n + (m.reward ?? 0), 0),
+    floor: missions.some((m) => m.reward === null),
+  };
+}
+
+const rewardText = (r: { sum: number; floor: boolean }) => `${credits(r.sum)}${r.floor ? "+" : ""}`;
+
+/** credits() as a number: n to the precision the panel shows it. */
+function shown(n: number): number {
+  if (n >= 999_500) return Math.round(n / 1e5) * 1e5;
+  return n >= 1e3 ? Math.round(n / 1e3) * 1e3 : Math.round(n);
 }
 
 export function massacrePanel(
   groups: MassacreGroup[],
   now: number,
-  settings: { minPerKill: number } = { minPerKill: 0 },
+  settings: { minPerKill: number },
 ): PanelView | null {
   if (!groups.length) return null;
   const rows: HudRow[] = [];
-  const missions = groups.flatMap((g) => g.factions.flatMap((f) => f.missions));
+  // A mission that expired before it was done pays nothing.
+  const live = (m: MassacreMission) => m.done || !m.expires || !(Date.parse(m.expires) <= now);
+  const all = groups.flatMap((g) => g.factions.flatMap((f) => f.missions));
+  const missions = all.filter(live);
   for (const g of groups) {
     // What the stack still pays for each kill left: one kill counts for every giver at once.
-    const open = g.factions.flatMap((f) => f.missions).filter((m) => !m.done);
-    const perKill = g.kills_left
-      ? open.reduce((n, m) => n + (m.reward ?? 0), 0) / g.kills_left
-      : null;
-    // A reward missing from the journal makes the figure a floor: no ⚠ on a floor. Judged as
-    // shown, to the thousand, so 999,999 is not marked under 1.0M.
-    const floor = open.some((m) => m.reward === null);
-    const low =
-      perKill !== null && !floor && Math.round(perKill / 1000) * 1000 < settings.minPerKill;
+    const open = rewards(g.factions.flatMap((f) => f.missions).filter((m) => !m.done && live(m)));
+    const perKill = g.kills_left ? open.sum / g.kills_left : null;
+    // No ⚠ on a floor. Judged as shown, so a figure that reads 1.0M is not under 1.0M.
+    const low = perKill !== null && !open.floor && shown(perKill) < settings.minPerKill;
     // ⚠ when it pays too little: time to take more missions.
     rows.push({
       text: g.target_faction,
       right: [
         `${g.kills_left} left`,
-        perKill !== null ? `${low ? "⚠ " : ""}${credits(perKill)}${floor ? "+" : ""}/kill` : null,
+        perKill !== null ? `${low ? "⚠ " : ""}${rewardText({ ...open, sum: perKill })}/kill` : null,
       ]
         .filter(Boolean)
         .join(" · "),
@@ -131,12 +139,16 @@ export function massacrePanel(
   }
   const done = missions.filter((m) => m.done);
   const ready = done.length;
-  const expiries = missions
+  // Every mission not done, an expired one too: the line then says "expired".
+  const expiries = all
     .filter((m) => !m.done && m.expires)
     .map((m) => Date.parse(m.expires!))
     .filter((t) => !Number.isNaN(t));
   const footer = [
-    [`Stack ${rewards(missions)}`, ready ? `${ready} ready to hand in ${rewards(done)}` : null]
+    [
+      `Stack ${rewardText(rewards(missions))}`,
+      ready ? `${ready} ready to hand in ${rewardText(rewards(done))}` : null,
+    ]
       .filter(Boolean)
       .join(" · "),
     expiries.length ? `next expires ${timeLeft(Math.min(...expiries) - now)}` : null,

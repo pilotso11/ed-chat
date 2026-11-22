@@ -37,14 +37,18 @@ app.whenReady().then(async () => {
     win.webContents.send("hud:view", view);
     // Rendered and laid out, then measured: the panel's own size report comes only on a change.
     await new Promise((r) => setTimeout(r, 500));
-    const { width, height } = await win.webContents.executeJavaScript(
-      `(() => { const r = document.querySelector(".hud").getBoundingClientRect(); return { width: r.width, height: r.height }; })()`,
+    // The padded root, where it is: the panel and the background around it.
+    const r = await win.webContents.executeJavaScript(
+      `(() => { const r = document.getElementById("root").getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; })()`,
     );
+    const [winW, winH] = win.getContentSize();
+    if (r.x + r.width > winW || r.y + r.height > winH)
+      throw new Error(`${name}: the panel (${r.width}x${r.height}) does not fit the window`);
     const img = await win.webContents.capturePage({
-      x: 0,
-      y: 0,
-      width: Math.ceil(width) + 2 * PAD,
-      height: Math.ceil(height) + 2 * PAD,
+      x: Math.floor(r.x),
+      y: Math.floor(r.y),
+      width: Math.ceil(r.width),
+      height: Math.ceil(r.height),
     });
     fs.writeFileSync(path.join(outDir, `${name}.png`), img.toPNG());
     console.log(name, img.getSize());

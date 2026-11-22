@@ -3,7 +3,7 @@
 // reader as the app reads it, with the times moved to now so nothing reads as old or expired.
 //
 // Usage: npx tsx scripts/hud-scenes.ts docs/images/hud-scenes.json out/hud-scenes.json [journalDir]
-// Then: npm run build && npx electron scripts/hud-screenshots.cjs out/hud-scenes.json docs/images
+// Then: npm run build && npx electron --force-device-scale-factor=2 scripts/hud-screenshots.cjs out/hud-scenes.json docs/images
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -72,7 +72,14 @@ async function scene(s: Scene, journalDir: string, all: { file: string; start: n
       const lines = (await readFile(path.join(journalDir, j.file), "utf8"))
         .split("\n")
         .filter(Boolean)
-        .map((l) => JSON.parse(l) as Record<string, unknown>)
+        // A line cut off, as the game leaves one mid-write, is skipped as the reader skips it.
+        .flatMap((l) => {
+          try {
+            return [JSON.parse(l) as Record<string, unknown>];
+          } catch {
+            return [];
+          }
+        })
         .filter((e) => Date.parse(String(e.timestamp)) <= cut);
       for (const e of lines)
         for (const f of FIELDS)
