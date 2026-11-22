@@ -87,7 +87,10 @@ export function passengerPanel(input: {
   // In the plan's order when it has these stops, else the soonest expiry first.
   const order = new Map<string, number>();
   for (const [i, s] of (input.plan?.stops ?? []).entries()) {
-    if (s.status !== "todo") continue;
+    // Only a mission route's stops: an exobiology or trade plan left as the activity's plan is
+    // not about these missions.
+    const forMissions = s.kind === "mission" || s.kind === "hand_in" || Array.isArray(s.missions);
+    if (s.status !== "todo" || !forMissions) continue;
     const k = placeKey(s.system, s.station ?? null);
     if (!order.has(k)) order.set(k, i);
   }

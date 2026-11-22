@@ -5,6 +5,8 @@ import { journalMode, noteMode } from "../src/core/hud/mode.js";
 import { berths, drops, isRun, passengerPanel } from "../src/core/hud/passenger.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
 
+/** Every mode on. */
+const ALL = () => true;
 const NOW = Date.UTC(2026, 10, 21, 12, 0, 0);
 let t = 0;
 const ev = (event: string, extra: Record<string, unknown> = {}): JournalEvent => ({
@@ -162,7 +164,15 @@ describe("passengerPanel", () => {
   });
 
   it("orders by a plan stop that names only the system", () => {
-    const route = plan([{ system: "Wolf 397" }, { system: "Ochosi" }]);
+    const route = plan([
+      { system: "Wolf 397", kind: "mission" },
+      { system: "Ochosi", kind: "mission" },
+    ]);
+    // Another plan's stops (an exobiology plan, say) do not order the run.
+    const bio = plan([{ system: "Wolf 397", kind: "exobiology" }]);
+    expect(passengerPanel({ missions, events: [], plan: bio, now: NOW })!.rows[0]!.text).not.toBe(
+      "Wolf 397 · Brooks Estate",
+    );
     const p = passengerPanel({ missions, events: [], plan: route, now: NOW })!;
     expect(p.rows[0]!.text).toBe("Wolf 397 · Brooks Estate");
   });
@@ -171,21 +181,21 @@ describe("passengerPanel", () => {
 describe("passenger mode", () => {
   const taken = () => ev("MissionAccepted", { PassengerCount: 4, MissionID: 1 });
   it("turns on for a passenger or delivery mission while one is open", () => {
-    expect(journalMode([taken()], false, false, true, true)?.mode).toBe("passenger");
-    expect(journalMode([taken()], false, false, true, false)).toBeNull();
+    expect(journalMode([taken()], false, false, ALL, true)?.mode).toBe("passenger");
+    expect(journalMode([taken()], false, false, ALL, false)).toBeNull();
     const delivery = ev("MissionAccepted", { Commodity: "$Gold_Name;", Count: 10, MissionID: 2 });
-    expect(journalMode([delivery], false, false, true, true)?.mode).toBe("passenger");
+    expect(journalMode([delivery], false, false, ALL, true)?.mode).toBe("passenger");
   });
 
   it("gives way to a newer activity, and to massacres", () => {
-    expect(journalMode([taken(), ev("FSSDiscoveryScan")], false, false, true, true)?.mode).toBe(
+    expect(journalMode([taken(), ev("FSSDiscoveryScan")], false, false, ALL, true)?.mode).toBe(
       "exploration",
     );
-    expect(journalMode([ev("FSSDiscoveryScan"), taken()], false, false, true, true)?.mode).toBe(
+    expect(journalMode([ev("FSSDiscoveryScan"), taken()], false, false, ALL, true)?.mode).toBe(
       "passenger",
     );
     const massacre = ev("MissionAccepted", { Name: "Mission_Massacre", KillCount: 9 });
-    expect(journalMode([massacre, taken()], true, false, true, true)?.mode).toBe("massacre");
+    expect(journalMode([massacre, taken()], true, false, ALL, true)?.mode).toBe("massacre");
   });
 
   it("follows the activity note", () => {
@@ -247,6 +257,17 @@ describe("passenger mode", () => {
       },
     };
     expect(currentMode(off)).toBe("exploration");
+
+    // A turned-off mode newer than the run does not hide it.
+    const sampled = {
+      ...input,
+      journal: { ...input.journal!, events: [...events, ev("ScanOrganic", { ScanType: "Log" })] },
+      settings: {
+        ...DEFAULT_SETTINGS.hud,
+        modes: { ...DEFAULT_SETTINGS.hud.modes, exobiology: false },
+      },
+    };
+    expect(currentMode(sampled)).toBe("passenger");
 
     // A missions note with no run to show is not followed.
     const note = {

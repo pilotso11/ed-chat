@@ -262,6 +262,40 @@ describe("panel from the real ed-mcp journal reader", () => {
   });
 });
 
+describe("passengers from the real ed-mcp journal reader", () => {
+  it("shows the run with the berths from the fitted cabins", async () => {
+    const g = game();
+    g.add(
+      ...arrive(),
+      ev("Loadout", {
+        Ship: "python",
+        Modules: [
+          { Slot: "Slot01_Size6", Item: "int_passengercabin_size5_class1" },
+          { Slot: "Slot02_Size5", Item: "int_passengercabin_size4_class2" },
+        ],
+      }),
+      ev("MissionAccepted", {
+        Faction: "Giver One",
+        Name: "Mission_PassengerBulk",
+        LocalisedName: "Take tourists",
+        PassengerCount: 4,
+        PassengerType: "Tourist",
+        PassengerVIPs: false,
+        PassengerWanted: false,
+        DestinationSystem: "Ochosi",
+        DestinationStation: "Perez Market",
+        Expiry: new Date(Date.now() + 86_400_000).toISOString().replace(/\.\d+Z$/, "Z"),
+        Reward: 1_000_000,
+        MissionID: 201,
+      }),
+    );
+    const v = await g.hud();
+    expect(v.panel).toMatchObject({ mode: "passenger", title: "PASSENGERS" });
+    expect(v.panel!.right).toMatch(/^4\/\d+ berths/);
+    expect(v.panel!.rows[0]!.text).toBe("Ochosi · Perez Market");
+  });
+});
+
 describe("mining from the real ed-mcp journal reader", () => {
   // The mining rules read Docked, Location, LoadGame, Died, FSDJump, CarrierJump and Cargo, all in
   // HUD_EVENTS: this runs them through ed-mcp's real reader, so a test fails if one stops arriving.
