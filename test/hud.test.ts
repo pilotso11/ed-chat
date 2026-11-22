@@ -10,6 +10,7 @@ import {
   nextStopAfter,
   previousStop,
   explorationTotals,
+  exobiologyPanel,
   jumpsLeft,
   massacrePanel,
   parseNavRoute,
@@ -333,38 +334,92 @@ describe("exploration totals", () => {
       );
     const value = explorationTotals([analyse(0, 3)]).unsoldBio;
     expect(value).toBeGreaterThan(0);
+    const jump = (min: number) => timed(min, ev("FSDJump", { SystemAddress: 1 }));
+    const body = (event: string, min: number, id: number) =>
+      timed(min, ev(event, { SystemAddress: 1, BodyID: id }));
     const events = [
       timed(0, ev("LoadGame")),
-      timed(0, ev("FSDJump", { SystemAddress: 1 })),
-      timed(10, ev("ApproachBody", { SystemAddress: 1, BodyID: 3 })),
-      analyse(20, 3),
-      analyse(70, 4),
+      jump(0),
+      body("ApproachBody", 5, 3),
+      analyse(10, 3),
+      body("LeaveBody", 12, 3),
+      jump(20),
+      body("ApproachBody", 25, 3),
+      analyse(30, 3),
+      jump(38),
+      analyse(40, 4),
     ];
+    const min = (n: number) => T + n * 60_000;
     // Too soon after the session starts to say.
-    expect(explorationTotals(events.slice(0, 2), T + 60_000).rate).toEqual({
+    expect(explorationTotals(events.slice(0, 2), min(1)).rate).toEqual({
       session: null,
       recent: null,
     });
-    const t = explorationTotals(events, T + 80 * 60_000);
-    // Two species over 80 minutes.
-    expect(t.rate.session).toBeCloseTo((2 * value * 60) / 80);
-    // The last half hour has the second one.
-    expect(t.rate.recent).toBeCloseTo(value * 2);
-    // Body 3 from its approach, 70 minutes ago; body 4 from its first sample, 10 minutes ago.
-    expect(t.planetRate.get("1|3")).toBeCloseTo((value * 60) / 70);
-    expect(t.planetRate.get("1|4")).toBeCloseTo(value * 6);
-    // A rescan adds nothing; mapping adds what the map is worth.
-    const scans = [timed(0, ev("LoadGame")), timed(0, elw("A", 1)), timed(5, elw("A", 1))];
-    const once = explorationTotals(scans, T + 60 * 60_000).rate.session!;
-    expect(once).toBeCloseTo(explorationTotals([elw("A", 1)]).unsoldCartographic);
-    const mapped = [...scans, timed(6, ev("SAAScanComplete", { SystemAddress: 1, BodyID: 1 }))];
-    expect(explorationTotals(mapped, T + 60 * 60_000).rate.session!).toBeCloseTo(
-      explorationTotals([elw("A", 1), ev("SAAScanComplete", { SystemAddress: 1, BodyID: 1 })])
-        .unsoldCartographic,
+    const t = explorationTotals(events, min(45));
+    // Three species over 45 minutes.
+    expect(t.rate.session).toBeCloseTo((3 * value * 60) / 45);
+    // The last half hour has two of them.
+    expect(t.rate.recent).toBeCloseTo(value * 4);
+    // Body 3: 7 minutes on the first visit and 20 on the second, with both species; coming back
+    // keeps the first visit. Body 4 from its first sample, 5 minutes ago.
+    expect(t.planetRate.get("1|3")).toBeCloseTo((2 * value * 60) / 27);
+    expect(t.planetRate.get("1|4")).toBeCloseTo(value * 12);
+    // Time away counts only 10 minutes: two hours docked after 10 minutes of work is 20.
+    const idle = explorationTotals(
+      events.slice(0, 4).filter((e) => e.event !== "ApproachBody"),
+      min(125),
     );
+    expect(idle.rate.session).toBeCloseTo((value * 60) / 20);
+
+    // A rescan adds nothing; mapping adds what the map is worth. Ten minutes in each case.
+    const elwWorth = explorationTotals([elw("A", 1)]).unsoldCartographic;
+    const scans = [timed(0, ev("LoadGame")), timed(0, elw("A", 1)), timed(5, elw("A", 1))];
+    const once = explorationTotals(scans, min(10)).rate.session!;
+    expect(once).toBeCloseTo(elwWorth * 6);
+    const map = body("SAAScanComplete", 6, 1);
+    const mappedWorth = explorationTotals([elw("A", 1), map]).unsoldCartographic;
+    expect(explorationTotals([...scans, map], min(10)).rate.session!).toBeCloseTo(mappedWorth * 6);
     // A sale does not take back what was earned.
     const sold = [...scans, timed(7, ev("SellExplorationData", { Systems: ["A"] }))];
-    expect(explorationTotals(sold, T + 60 * 60_000).rate.session!).toBeCloseTo(once);
+    expect(explorationTotals(sold, min(10)).rate.session!).toBeCloseTo(once);
+    // Dying loses the data, so scanning the body again earns again.
+    const died = [
+      timed(0, ev("LoadGame")),
+      timed(0, elw("A", 1)),
+      timed(1, ev("Died")),
+      timed(2, elw("A", 1)),
+    ];
+    expect(explorationTotals(died, min(10)).rate.session!).toBeCloseTo(elwWorth * 2 * 6);
+  });
+
+  it("shows the session rate once on the exobiology panel", () => {
+    const totals = {
+      unsoldCartographic: 0,
+      unsoldBio: 0,
+      unsoldBioCount: 0,
+      session: { systems: 3, scanned: 2, mapped: 0, firstDiscoveries: 0 },
+      rate: { session: 52_000_000, recent: 80_000_000 },
+      planetRate: new Map([["7|3", 30_000_000]]),
+    };
+    const p = exobiologyPanel({
+      system: "Sys",
+      address: 7,
+      body: {
+        body: "Sys 3",
+        body_id: 3,
+        species: [],
+        not_started: [],
+        genera: [],
+      } as unknown as Parameters<typeof exobiologyPanel>[0]["body"],
+      samples: new Map(),
+      here: null,
+      totals,
+    });
+    // Nothing unsold: the Session line stays, without the rate the Rate line has.
+    expect(p.footer).toEqual([
+      "Session: 3 jumps · 2 scanned · 0 mapped · 0 ★",
+      "Rate: this planet 30.0M/h · session 52.0M/h (30m 80.0M/h)",
+    ]);
   });
 
   it("keeps only systems within 20 ly of the station after a sale", () => {
