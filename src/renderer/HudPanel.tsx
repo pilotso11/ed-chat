@@ -9,6 +9,15 @@ const MARKS: Record<RouteRow["kind"], string> = {
   more: "",
 };
 
+/**
+ * Leading spaces in a row's text indent it under the row above (white-space: nowrap would drop
+ * them): half an em each.
+ */
+function indent(text: string): { paddingLeft: string } | undefined {
+  const n = text.length - text.trimStart().length;
+  return n ? { paddingLeft: `${n / 2}em` } : undefined;
+}
+
 export function HudPanel() {
   const [v, setV] = useState<HudView | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -48,7 +57,9 @@ export function HudPanel() {
               {p.rows.map((r, i) => (
                 <div key={i} className={`row ${r.tone ?? ""}`}>
                   <div className="line">
-                    <span className="text">{r.text}</span>
+                    <span className="text" style={indent(r.text)}>
+                      {r.text.trimStart()}
+                    </span>
                     {r.right && <span className="right">{r.right}</span>}
                   </div>
                   {r.detail && <div className="detail">{r.detail}</div>}

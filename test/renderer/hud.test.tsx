@@ -62,6 +62,7 @@ describe("activity panel", () => {
         rows: [
           { text: "Stratum Tectonicas", right: "2/3", bar: 0.666, tone: "good" },
           { text: "Bacterium", detail: "likely Aurasus" },
+          { text: "  ↔ 600 m / 500 m" },
         ],
         footer: ["one more sample"],
       },
@@ -74,7 +75,12 @@ describe("activity panel", () => {
     expect(hud.querySelector(".head .subtitle")?.textContent).toBe("· Body 3");
     expect(hud.querySelector(".head .right")?.textContent).toBe("95.1M");
     const rows = hud.querySelectorAll(".row");
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
+    // Leading spaces become an indent, which nowrap would otherwise drop.
+    const sub = rows[2]!.querySelector<HTMLSpanElement>(".text")!;
+    expect(sub.textContent).toBe("↔ 600 m / 500 m");
+    expect(sub.style.paddingLeft).toBe("1em");
+    expect(rows[0]!.querySelector<HTMLSpanElement>(".text")!.style.paddingLeft).toBe("");
     expect(rows[0]!.className).toBe("row good");
     expect(rows[0]!.querySelector(".right")?.textContent).toBe("2/3");
     expect(rows[0]!.querySelector<HTMLDivElement>(".bar > div")!.style.width).toBe("67%");

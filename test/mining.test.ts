@@ -257,6 +257,7 @@ describe("where to sell", () => {
     // Alliance Chieftain (and _2, _3 the Crusader and Challenger).
     expect(padFor("type9_military")).toBe("L");
     expect(padFor("typex")).toBe("M");
+    expect(padFor("typex_2")).toBe("M");
     expect(padFor("typex_3")).toBe("M");
     expect(padFor("empire_trader")).toBe("L");
     // A hull not listed yet is taken as large, the safe side.
