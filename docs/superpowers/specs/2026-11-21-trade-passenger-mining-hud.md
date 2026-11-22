@@ -1,7 +1,7 @@
 # Activity HUD: passenger, trade and mining panels
 
 Date: 2026-11-21
-Status: mining and passengers implemented; trade proposed. Follows the activity HUD spec
+Status: mining, passengers and trade implemented. Follows the activity HUD spec
 (2026-11-15), which lists mining as a follow-on.
 
 ## Purpose
@@ -59,7 +59,8 @@ panel shows what to do at each stop. The route rows then give the next hop and t
   stop goes back to todo and a lap count goes up.
 - The activity note needs no new kinds: it already has `missions`, `hauling`, `trading` and
   `mining`. ED Chat shows `missions` and `hauling` notes as the passenger panel, and `mining`
-  notes as the mining panel. `trading` notes set no mode until the trade panel exists.
+  notes as the mining panel, and `trading` notes as the trade panel while the plan has a trade
+  stop to do.
 - The journal library exports the mission list (`JournalState.missions` is already typed).
 - This is a minor version (new optional fields and exports). ED Chat pins the new version.
 
@@ -132,7 +133,7 @@ Route stale: 1 new mission. Ask Claude to re-route
   is open, until a newer activity (a scan, mining). Massacre stacks win. The activity note's kinds
   `missions` and `hauling` choose it too.
 
-### Trade panel
+### Trade panel (built)
 
 ```
 TRADE  Loop: Kremainn ⇄ Wolf 397              lap 3 · 41.2M/h
@@ -260,8 +261,11 @@ Each is its own PR, as the HUD spec says for follow-on modes.
 
 ## Open questions
 
-- Should the panel mark trade stops done on its own (on a finished buy or sell), or only with
-  `routeNext`? Proposed: on its own, since the journal shows the action clearly.
+- ~~Should the panel mark trade stops done on its own?~~ Decided: on its own. A stop is done
+  while docked there when every buy is in the hold (the planned tons, or a full hold after buying
+  it there) and every sale was sold there with none left aboard; a stop with nothing to buy or
+  sell is done on docking. It is judged once per docking, again on the plan as it is now, before
+  ED Chat writes it.
 - Passenger missions to a station the player is docked at, but not yet completed (the hand-in is
   in the mission board): show as "hand in here"?
 - ed-mcp's `commodity_prices` keeps a 2-day default age. While Spansh's market data lags, as it

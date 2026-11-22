@@ -7,6 +7,7 @@ import { HudFeed } from "../src/core/hud/feed.js";
 import { buildHud, type HudView } from "../src/core/hud/hud.js";
 import { HUD_EVENTS } from "../src/core/hud/mode.js";
 import { EXPLORATION_EVENTS } from "../src/core/hud/panels.js";
+import { TRADE_EVENTS, tradeAdvance } from "../src/core/hud/trade.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
 
 // These tests run the bundled ed-mcp for real. A journal file in a temporary folder is read by
@@ -211,6 +212,23 @@ describe("events the panel asks the reader to keep", () => {
     );
     const kept = new Set((await g.events()).map((e) => e.event));
     expect(EXPLORATION_EVENTS.filter((e) => !kept.has(e))).toEqual([]);
+  });
+
+  it("keeps every event the trade panel, its mode and auto-advance read", async () => {
+    // A reader that stopped keeping one would lose a trade's profit or never mark a stop done.
+    const g = game();
+    g.add(
+      ...arrive(),
+      ev("Docked", { StationName: "Port", StarSystem: SYSTEM, MarketID: 7 }),
+      ev("MarketBuy", { MarketID: 7, Type: "gold", Count: 1, BuyPrice: 1, TotalCost: 1 }),
+      ev("MarketSell", { MarketID: 7, Type: "gold", Count: 1, SellPrice: 2, TotalSale: 2 }),
+      ev("Undocked", { StationName: "Port" }),
+      ev("CarrierJump", { StarSystem: SYSTEM, SystemAddress: ADDRESS, StarPos: [100, 0, 100] }),
+      ev("Died"),
+      ev("Shutdown"),
+    );
+    const kept = new Set((await g.events()).map((e) => e.event));
+    expect(TRADE_EVENTS.filter((e) => !kept.has(e))).toEqual([]);
   });
 });
 
@@ -574,6 +592,177 @@ describe("mining from the real ed-mcp journal reader", () => {
     expect(v.panel!.rows.find((r) => r.text.startsWith("Carrier"))).toMatchObject({
       text: `Carrier XFZ-12K · ${SYSTEM}`,
       right: "2 t moved · 9,998 t free",
+    });
+  });
+});
+
+describe("trade from the real ed-mcp journal reader", () => {
+  const gold = (count: number): Event =>
+    ev("Cargo", {
+      Vessel: "Ship",
+      Count: count,
+      Inventory: count ? [{ Name: "gold", Name_Localised: "Gold", Count: count, Stolen: 0 }] : [],
+    });
+  const market = (id: number, station: string, buy: number, sell: number) =>
+    writeFile(
+      path.join(dir, "Market.json"),
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: "Market",
+        MarketID: id,
+        StationName: station,
+        StarSystem: SYSTEM,
+        Items: [{ Name: "$gold_name;", Name_Localised: "Gold", BuyPrice: buy, SellPrice: sell }],
+      }),
+    );
+
+  it("follows a saved trade loop: buys, a jump, a sale, and each stop marked done", async () => {
+    // The plan as ed-mcp's trade_loops saves it, and the note it points at the plan.
+    const stores = openStores({ ED_JOURNAL_DIR: dir, ED_MCP_SYNC_DIR: syncDir });
+    await stores.plans.upsert({
+      id: "trade",
+      name: `Trade loop: ${SYSTEM} ⇄ Wolf 397`,
+      repeat: true,
+      lap: 1,
+      stops: [
+        {
+          system: SYSTEM,
+          station: "Port",
+          purpose: "Sell 10 t Silver, then buy 10 t Gold",
+          label: "Sell 10 t Silver, then buy 10 t Gold at Port",
+          kind: "trade",
+          cargo: [
+            { commodity: "Silver", action: "sell", amount: 10, price: 4_000 },
+            { commodity: "Gold", action: "buy", amount: 10, price: 9_380 },
+          ],
+        },
+        {
+          system: "Wolf 397",
+          station: "Brooks Estate",
+          purpose: "Sell 10 t Gold, then buy 10 t Silver",
+          label: "Sell 10 t Gold, then buy 10 t Silver at Brooks Estate",
+          kind: "trade",
+          cargo: [
+            { commodity: "Gold", action: "sell", amount: 10, price: 30_000 },
+            { commodity: "Silver", action: "buy", amount: 10, price: 3_000 },
+          ],
+        },
+      ],
+    });
+    await stores.activity.set({ kind: "trading", summary: "Trade loop", plan_id: "trade" });
+
+    const g = game();
+    g.add(...arrive(), ev("Docked", { StationName: "Port", StarSystem: SYSTEM, MarketID: 7 }));
+    await market(7, "Port", 9_410, 9_000);
+    let v = await g.hud();
+    expect(v.panel).toMatchObject({
+      mode: "trade",
+      title: "TRADE",
+      subtitle: `Loop: ${SYSTEM} ⇄ Wolf 397`,
+      right: "lap 1",
+    });
+    // The first lap has nothing to sell at the first stop: only its buy.
+    expect(v.panel!.rows).toEqual([
+      { text: `● ${SYSTEM} · Port`, right: "BUY 10 t Gold" },
+      { text: "  hold 0/10 · price 9,410 (plan 9,380)" },
+      {
+        text: "▸ Wolf 397 · Brooks Estate",
+        right: "SELL 10 t Gold · BUY 10 t Silver",
+        tone: "dim",
+      },
+    ]);
+
+    // Bought: the hold has the planned tons, so the stop is done.
+    g.add(
+      ev("MarketBuy", {
+        MarketID: 7,
+        Type: "gold",
+        Type_Localised: "Gold",
+        Count: 10,
+        BuyPrice: 9_410,
+        TotalCost: 94_100,
+      }),
+      gold(10),
+    );
+    v = await g.hud();
+    expect(v.panel!.rows[1]).toEqual({
+      text: "  hold 10/10 · price 9,410 (plan 9,380)",
+      tone: "good",
+    });
+    // What ED Chat's main process judges after each poll.
+    const judge = async () => {
+      // Fresh stores: the journal service keeps its state for a second.
+      const fresh = openStores(
+        { ED_JOURNAL_DIR: dir, ED_MCP_SYNC_DIR: syncDir },
+        { keep: HUD_EVENTS },
+      );
+      const data = await new HudFeed(fresh, dir).poll();
+      return tradeAdvance({
+        plan: data.plan,
+        events: data.journal!.events,
+        cargo: data.journal!.cargo,
+        capacity: data.journal!.ship.cargo_capacity,
+        location: data.journal!.location,
+      });
+    };
+    expect((await judge())?.index).toBe(0);
+    // As ED Chat's main process marks it.
+    await stores.plans.updateStop("trade", { index: 0 }, { status: "done" });
+
+    // Undocking before selling leaves the next stop open.
+    g.add(
+      ev("Undocked", { StationName: "Port" }),
+      ev("FSDJump", { StarSystem: "Wolf 397", SystemAddress: 397, StarPos: [10, 0, 10] }),
+      ev("Docked", { StationName: "Brooks Estate", StarSystem: "Wolf 397", MarketID: 8 }),
+      ev("MarketSell", {
+        MarketID: 8,
+        Type: "gold",
+        Type_Localised: "Gold",
+        Count: 10,
+        SellPrice: 30_000,
+        TotalSale: 300_000,
+        AvgPricePaid: 9_410,
+      }),
+      gold(0),
+    );
+    v = await g.hud();
+    expect(v.panel!.rows.slice(0, 3)).toEqual([
+      { text: "● Wolf 397 · Brooks Estate" },
+      { text: "  SELL 10 t Gold", right: "hold 0/10 · plan 30,000", tone: "good" },
+      { text: "  BUY 10 t Silver", right: "hold 0/10 · plan 3,000" },
+    ]);
+    // 10 t sold at 30,000 that cost 9,410, a few minutes ago.
+    expect(v.panel!.footer).toEqual([expect.stringMatching(/^Session: 206k profit · \d+m$/)]);
+    // The silver is not bought yet, so the stop stays open.
+    expect(await judge()).toBeNull();
+
+    // Bought: the last stop is done, and ed-mcp starts the next lap.
+    g.add(
+      ev("MarketBuy", {
+        MarketID: 8,
+        Type: "silver",
+        Type_Localised: "Silver",
+        Count: 10,
+        BuyPrice: 3_000,
+        TotalCost: 30_000,
+      }),
+      ev("Cargo", {
+        Vessel: "Ship",
+        Count: 10,
+        Inventory: [{ Name: "silver", Name_Localised: "Silver", Count: 10, Stolen: 0 }],
+      }),
+    );
+    await g.hud();
+    expect((await judge())?.index).toBe(1);
+    await stores.plans.updateStop("trade", { index: 1 }, { status: "done" });
+    v = await g.hud();
+    // Then the rate, once the run is five minutes old on the real clock.
+    expect(v.panel!.right).toMatch(/^lap 2( · [\d.]+[kM]\/h)?$/);
+    // On the second lap the first stop sells what the last one bought.
+    expect(v.panel!.rows[0]).toEqual({ text: `● ${SYSTEM} · Port` });
+    expect(v.panel!.rows[1]).toMatchObject({
+      text: "  SELL 10 t Silver",
+      right: "hold 10/10 · plan 4,000",
     });
   });
 });

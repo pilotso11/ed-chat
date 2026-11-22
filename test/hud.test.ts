@@ -135,7 +135,8 @@ describe("choosing the mode", () => {
 
   it("maps the activity note's kind", () => {
     expect(noteMode("massacre")).toBe("massacre");
-    expect(noteMode("trading")).toBeNull();
+    expect(noteMode("trading")).toBe("trade");
+    expect(noteMode("combat")).toBeNull();
     expect(noteMode(undefined)).toBeNull();
   });
 });

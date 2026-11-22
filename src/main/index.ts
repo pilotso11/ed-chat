@@ -128,6 +128,7 @@ import { arrivalCopy, currentSystem, routeStep } from "../core/hud/routeSteps.js
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS } from "../core/hud/mode.js";
 import { todoStops } from "../core/hud/panels.js";
+import { tradeAdvance, tradeNextCopy } from "../core/hud/trade.js";
 import {
   ABOUT_URL,
   noticeMenuItems,
@@ -623,6 +624,7 @@ async function main(): Promise<void> {
       void finishBioBookmarks(hudData).catch((err: unknown) =>
         log.log("warn", `panel bookmarks: ${message(err)}`),
       );
+      void finishTradeStop(hudData);
       lastSystem = system;
       renderHud();
     } catch (err) {
@@ -704,6 +706,43 @@ async function main(): Promise<void> {
     savedBookmarks = { plan: saved, afterPoll: pollsStarted };
     if (hudData) hudData = { ...hudData, bookmarks: saved };
     renderHud();
+  }
+
+  // A trade stop whose buys and sales are done is marked done, once per docking, and the next
+  // stop's system is copied for the galaxy map.
+  const tradeDone = new Set<string>();
+  async function finishTradeStop(data: FeedData): Promise<void> {
+    const plans = hudPlans;
+    const j = data.journal;
+    if (!plans || !j || !data.plan || !settings.hud.modes.trade) return;
+    const judge = (plan: Plan | null) =>
+      tradeAdvance({
+        plan,
+        events: j.events,
+        cargo: j.cargo,
+        capacity: j.ship.cargo_capacity,
+        location: j.location,
+      });
+    const step = judge(data.plan);
+    if (!step || tradeDone.has(step.key)) return;
+    tradeDone.add(step.key);
+    try {
+      // Judged again on the plan as it is now: Claude or a route key can change it after the poll.
+      const now = await plans.get(data.plan.id);
+      if (judge(now)?.key !== step.key) return;
+      const stop = now.stops[step.index]!;
+      const updated = await plans.updateStop(now.id, { index: step.index }, { status: "done" });
+      const next = tradeNextCopy(updated, j.location.system);
+      const done = stop.label ?? stop.purpose;
+      if (next) {
+        clipboard.writeText(next);
+        flash("copy", `📋 ${done}: done. Next stop copied: ${next}`, 6_000);
+      } else flash("route", `✓ ${done}: done`, 4_000);
+    } catch (err) {
+      // Tried again on the next poll.
+      tradeDone.delete(step.key);
+      log.log("warn", `panel trade stop: ${message(err)}`);
+    }
   }
 
   // Bio bookmarks whose species are all analysed are marked done, once each.

@@ -24,7 +24,7 @@ stays out of the way while you fly.
 - **Ask anything, keep flying.** Where to buy a module, which engineer is closest, how
   far to the next stop. Answer approval cards with a key.
 - **Know where you are in what you are doing.** Massacre stacks, the bodies worth mapping,
-  bio samples, mining and passenger runs, each with its own panel.
+  bio samples, mining, passenger and trade runs, each with its own panel.
 - **Your assistant, your login.** ED Chat runs the Claude Code or Codex you already use,
   with your own account and settings. It has no account and no telemetry of its own.
 

@@ -46,6 +46,18 @@ export const HUD_EVENTS = [
   "MissionAccepted",
 ] as const;
 
+/** What the trade rules need to know now: see journalMode(). */
+export interface TradeNow {
+  /** The trade panel has something to show: a trade stop to do, or cargo to trade aboard. */
+  active: boolean;
+  /** The hold has mission cargo, so a market buy may be for the mission, not a trade. */
+  missionCargo: boolean;
+  /** The trade plan's stops still to do: docking at one is following the plan. */
+  stops: { system: string; station?: string }[];
+}
+
+const NO_TRADE: TradeNow = { active: false, missionCargo: false, stops: [] };
+
 export interface Choice {
   mode: HudModeId | "off";
   /** Epoch ms. The newest choice wins. */
@@ -85,6 +97,10 @@ export const LAPSE_JUMPS = 5;
  * `runActive` is whether the passenger panel has a run to show now (the mode on, and a passenger
  * or delivery mission open that it can place): taking one then turns on the passenger mode,
  * which lasts until a newer activity or the last such mission is done.
+ * `trade` is the trade run now (TradeNow): a market buy while the hold has no mission cargo, or
+ * docking at a stop of the trade plan, turns on trade mode, which lasts while the panel has
+ * something to show (a trade stop to do, or cargo aboard) and until LAPSE_JUMPS jumps pass with
+ * no market trade. Passengers taken on a trade run show on the trade panel.
  */
 export function journalMode(
   events: JournalEvent[],
@@ -92,26 +108,34 @@ export function journalMode(
   minedAboard = false,
   on: (m: HudModeId) => boolean = () => true,
   runActive = false,
+  trade: TradeNow = NO_TRADE,
 ): Choice | null {
   const bio = new Set<string>();
   // Exploration and exobiology, followed through every event, before and during a stack.
   // Massacre is kept apart: while a stack is open it wins, and once it is handed in this mode is
   // current, as if there had been no missions.
-  let mode: "exploration" | "exobiology" | "mining" | null = null;
+  let mode: "exploration" | "exobiology" | "mining" | "trade" | null = null;
   let at = 0;
   let massacreAt: number | null = null;
   // The newest passenger or delivery mission taken, which shows those missions while any is left.
   let runAt: number | null = null;
   // Whether the ship left the system after the last mining event.
   let leftMining = false;
-  const set = (m: "exploration" | "exobiology" | "mining") => {
+  const set = (m: "exploration" | "exobiology" | "mining" | "trade") => {
     if (!on(m)) return;
     jumps = 0;
     leftMining = false;
     mode = m;
     at = last;
   };
-  // Jumps since the last exploration event: a trip home ends exploration mode.
+  const tradeStop = (e: JournalEvent) =>
+    trade.stops.some(
+      (s) =>
+        s.system.toLowerCase() === String(e.StarSystem ?? "").toLowerCase() &&
+        (s.station ?? "").toLowerCase() === String(e.StationName ?? "").toLowerCase(),
+    );
+  // Jumps since the last exploration event or market trade: a trip home ends exploration or
+  // trade mode.
   let jumps = 0;
   // The newest readable event time: an event's own, or for one with none, the one before it.
   let last = 0;
@@ -122,13 +146,22 @@ export function journalMode(
       case "FSDJump":
       case "CarrierJump":
         if (e.event === "FSDJump") jumps++;
-        if (mode === "exploration" && jumps >= LAPSE_JUMPS) mode = null;
+        if ((mode === "exploration" || mode === "trade") && jumps >= LAPSE_JUMPS) mode = null;
         if (mode === "mining") leftMining = true;
         break;
       case "MarketSell":
         // Selling ends mining once nothing mined is left. A relog does not: miners relog to reset
         // the asteroids.
         if (mode === "mining") leftMining = true;
+        if (mode === "trade") jumps = 0;
+        break;
+      case "MarketBuy":
+        // Buying for a mission is not a trade run.
+        if (!trade.missionCargo) set("trade");
+        else if (mode === "trade") jumps = 0;
+        break;
+      case "Docked":
+        if (tradeStop(e)) set("trade");
         break;
       case "ProspectedAsteroid":
       case "MiningRefined":
@@ -172,8 +205,11 @@ export function journalMode(
   if (massacreActive && massacreAt !== null && on("massacre"))
     return { mode: "massacre", at: massacreAt };
   if (mode === "mining" && leftMining && !minedAboard) mode = null;
+  // Trade ends once the hold is empty with no trade stop to do: an empty panel never wins.
+  if (mode === "trade" && !trade.active) mode = null;
   // Passengers and deliveries show from when they were taken until another activity is newer.
-  if (runActive && runAt !== null && (mode === null || runAt >= at)) {
+  // On a trade run they show on the trade panel.
+  if (mode !== "trade" && runActive && runAt !== null && (mode === null || runAt >= at)) {
     return { mode: "passenger", at: runAt };
   }
   return mode ? { mode, at } : null;
@@ -204,6 +240,8 @@ export function noteMode(kind: string | undefined): HudModeId | null {
     case "exobiology":
     case "mining":
       return kind;
+    case "trading":
+      return "trade";
     case "missions":
     case "hauling":
       return "passenger";

@@ -14,6 +14,7 @@ import { carrierState, miningPanel, miningState, minedWaiting } from "./mining.j
 import { drops, passengerPanel } from "./passenger.js";
 import type { SellLookup, SellQuery } from "./sell.js";
 import { bookmarkRows } from "./bookmarks.js";
+import { tradeCargo, tradePanel, tradeTodo, type Market } from "./trade.js";
 import { journalMode, noteMode, pickMode, type Choice } from "./mode.js";
 import {
   exobiologyPanel,
@@ -88,6 +89,8 @@ export interface HudInput {
   sell?: (q: SellQuery) => SellLookup;
   /** The surface bookmarks plan, read each poll; null when there is none. */
   bookmarks?: Plan | null;
+  /** Market.json: the market of the last commodity screen opened, for the trade panel. */
+  market?: Market | null;
 }
 
 /** The mode now: off by hotkey, else the newest of the journal, the note and the hotkey. */
@@ -102,6 +105,13 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
       : false;
   // A run the panel can show: with the mode off, or nothing to place, taking one changes nothing.
   const runActive = j && input.settings.modes.passenger ? drops(j.missions).length > 0 : false;
+  // The same for trade: a trade stop to do, or cargo to trade aboard.
+  const tradeStops = input.settings.modes.trade ? tradeTodo(input.plan) : [];
+  const trade = {
+    active: tradeStops.length > 0 || (!!j && input.settings.modes.trade && tradeCargo(j.cargo)),
+    missionCargo: j ? j.cargo.some((c) => c.mission_id !== null) : false,
+    stops: tradeStops.map((i) => input.plan!.stops[i]!),
+  };
   const fromJournal = j
     ? journalMode(
         j.events,
@@ -109,16 +119,20 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
         minedAboard,
         (m) => input.settings.modes[m],
         runActive,
+        trade,
       )
     : null;
   const m = noteMode(input.activity?.kind);
-  // A note for a mode that is off, a missions or hauling note with no run to show, or a massacre
-  // note with no live stack, would leave the panel empty: the journal's mode shows instead.
+  // A note for a mode that is off, a missions or hauling note with no run to show, a trading note
+  // with no trade stop to do, or a massacre note with no live stack, would leave the panel empty:
+  // the journal's mode shows instead.
   const fromNote =
     m &&
     input.activity &&
     input.settings.modes[m] &&
     !(m === "passenger" && !runActive) &&
+    // A trading note shows the panel only with a trade plan to follow.
+    !(m === "trade" && !tradeStops.length) &&
     // With the journal read: before then there is no stack to judge by.
     !(m === "massacre" && j && !groups.length)
       ? { mode: m, at: Date.parse(input.activity.updated_at) }
@@ -143,6 +157,18 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
       missions: j.missions,
       events: j.events,
       plan: input.plan,
+      now: input.now,
+    });
+  }
+  if (mode === "trade") {
+    return tradePanel({
+      plan: input.plan,
+      events: j.events,
+      cargo: j.cargo,
+      capacity: j.ship.cargo_capacity,
+      location: j.location,
+      market: input.market ?? null,
+      missions: j.missions,
       now: input.now,
     });
   }

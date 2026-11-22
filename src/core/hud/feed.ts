@@ -6,17 +6,18 @@ import { parseShipStatus, type ShipStatus } from "./hud.js";
 import { BOOKMARKS_PLAN, isPlanNotFound } from "./bookmarks.js";
 import type { KnownBodies } from "./known.js";
 import { navRouteCleared, parseNavRoute, sampleKey, type Point } from "./panels.js";
+import { parseMarket } from "./trade.js";
 
 export type FeedData = Pick<
   HudInput,
-  "journal" | "status" | "nav" | "activity" | "plan" | "samples" | "known" | "bookmarks"
+  "journal" | "status" | "nav" | "activity" | "plan" | "samples" | "known" | "bookmarks" | "market"
 >;
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /**
- * Reads what the panel shows: the journal through ed-mcp, Status.json and NavRoute.json from the
- * journal folder, and the activity note and its plan. It also notes where each bio sample was
+ * Reads what the panel shows: the journal through ed-mcp, Status.json, NavRoute.json and
+ * Market.json from the journal folder, and the activity note and its plan. It also notes where each bio sample was
  * taken, from the ship's position when the sample appears, since the journal does not say.
  */
 export class HudFeed {
@@ -61,10 +62,11 @@ export class HudFeed {
   }
 
   async poll(): Promise<FeedData> {
-    const [journal, statusText, navText, activity] = await Promise.all([
+    const [journal, statusText, navText, marketText, activity] = await Promise.all([
       this.stores.journal.state().catch((err: unknown) => (this.error("journal", err), null)),
       this.read("Status.json"),
       this.read("NavRoute.json"),
+      this.read("Market.json"),
       this.stores.activity.get().catch((err: unknown) => (this.error("activity", err), null)),
     ]);
     const status = statusText ? parseShipStatus(statusText) : null;
@@ -94,6 +96,7 @@ export class HudFeed {
       samples: this.samples,
       known,
       bookmarks,
+      market: marketText ? parseMarket(marketText) : null,
     };
   }
 

@@ -100,6 +100,27 @@ order, the route below shows the next stop, and arriving copies the next system.
 When you take a mission the route does not cover, the panel says the route is
 stale.
 
+## Trade
+
+Turns on when you buy at a market with no mission cargo aboard, or dock at a stop of
+the trade plan. Ask Claude for a trade loop or route (ed-mcp's `trade_loops` or
+`trade_route` with `save_to_plan`) to make the plan.
+
+The panel shows the plan's current stop with what to buy or sell there (tons and
+planned price), and the hold against the planned tons. While you are docked there,
+it also shows the market's price against the plan, amber when it is more than 5%
+worse. The next stop and its action follow. A loop shows its lap; on the first lap
+there is nothing to sell at the first stop, so only its buy shows. When the plan's
+prices are more than a day old, the header says how old.
+
+The header and the Session line show profit an hour: each sale less what its tons
+cost, counted as for exploration, with the last half hour in brackets. When a stop's
+buys are in the hold and its sales are sold, the stop is marked done and the next
+stop's system is copied for the galaxy map. Undocking first leaves the stop open;
+the route keys still work. Passengers taken on a trade run show on a footer line.
+Trade ends when the hold is empty with no trade stop left, or after five jumps with
+no trade.
+
 ## Route
 
 The current stop of the active ed-mcp plan (with its body or station, what it is
@@ -126,8 +147,8 @@ exploration, and five jumps with no scan turn it off again. Approaching a body w
 biological signals, landing on one, or taking a sample, turns on exobiology, and
 leaving the body goes back to exploration, when that mode is on. Launching a
 prospector limpet, prospecting, refining or cracking a rock turns on mining, and
-taking a passenger or delivery mission turns on passenger mode. A jump alone starts
-nothing.
+taking a passenger or delivery mission turns on passenger mode. Buying at a market,
+or docking at a stop of the trade plan, turns on trade. A jump alone starts nothing.
 
 Telling Claude what you are doing ("I'm doing massacres") sets the ed-mcp activity
 note, which the panel follows. Ctrl+Alt+Shift+P chooses a mode yourself: automatic,
