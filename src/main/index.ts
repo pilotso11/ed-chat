@@ -548,7 +548,7 @@ async function main(): Promise<void> {
       hudMode = mode;
       log.log("info", `panel mode: ${mode}`);
     }
-    const show = hudVisible(settings.hud, saved, focus?.current ?? null, view, hudMoving);
+    const show = hudVisible(visible, view, hudMoving);
     hudWin.webContents.send(IPC.hud, view);
     if (show !== hudShown) {
       hudShown = show;

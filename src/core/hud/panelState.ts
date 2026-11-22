@@ -58,17 +58,9 @@ export function hudCanShow(
   return hud.enabled && !saved.hudHidden && gameUp;
 }
 
-/** Shown when it can be, and only with something to show. */
-export function hudVisible(
-  hud: Settings["hud"],
-  saved: SavedState,
-  foreground: Foreground | null,
-  view: HudView,
-  moving: boolean,
-): boolean {
-  return (
-    hudCanShow(hud, saved, foreground) && (view.panel !== null || view.route !== null || moving)
-  );
+/** Shown when it can be (hudCanShow(), worked out once per render), with something to show. */
+export function hudVisible(canShow: boolean, view: HudView, moving: boolean): boolean {
+  return canShow && (view.panel !== null || view.route !== null || moving);
 }
 
 /**

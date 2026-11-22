@@ -1120,7 +1120,9 @@ describe("one fragment tracker", () => {
     const opal = () => ev("CollectCargo", { Type: "opal" });
     expect(both([crack(), ev("Location", { StarSystem: "A" }), opal()])).toEqual([false, false]);
     // Docking at a carrier beside the ring keeps the core.
-    expect(both([crack(), ev("Docked", { MarketID: 9 }), opal()])).toEqual([true, true]);
+    expect(
+      both([crack(), ev("Docked", { MarketID: 9, StationType: "FleetCarrier" }), opal()]),
+    ).toEqual([true, true]);
     expect(both([crack(), ev("Died"), opal()])).toEqual([false, false]);
   });
 
@@ -1141,7 +1143,11 @@ describe("leaving the ring", () => {
   it("keeps the ring when docking at a carrier beside it, and clears it on a docked login", () => {
     const exit = ev("SupercruiseExit", { Body: "X 1 A Ring", BodyType: "PlanetaryRing" });
     const docked = miningState(
-      [exit, prospect([["Platinum", 30]]), ev("Docked", { MarketID: 9 })],
+      [
+        exit,
+        prospect([["Platinum", 30]]),
+        ev("Docked", { MarketID: 9, StationType: "FleetCarrier" }),
+      ],
       T0 + t * 1000,
     );
     expect(docked.ring).toBe("X 1 A Ring");
@@ -1150,5 +1156,24 @@ describe("leaving the ring", () => {
       T0 + t * 1000,
     );
     expect(login.ring).toBeNull();
+  });
+});
+
+describe("ring and rocks after docking and relogging", () => {
+  const exit = () => ev("SupercruiseExit", { Body: "X 1 A Ring", BodyType: "PlanetaryRing" });
+  it("keeps the ring when relogging docked at a carrier, not at a station", () => {
+    const carrier = [
+      exit(),
+      ev("LoadGame"),
+      ev("Location", { Docked: true, StationType: "FleetCarrier" }),
+    ];
+    expect(miningState(carrier, T0 + t * 1000).ring).toBe("X 1 A Ring");
+    const station = [exit(), ev("Docked", { StationType: "Coriolis" })];
+    expect(miningState(station, T0 + t * 1000).ring).toBeNull();
+  });
+
+  it("clears the prospect with the cracked core on a Location without LoadGame", () => {
+    const events = [exit(), prospect([["Platinum", 30]]), ev("Location", { StarSystem: "A" })];
+    expect(miningState(events, T0 + t * 1000).prospect).toBeNull();
   });
 });

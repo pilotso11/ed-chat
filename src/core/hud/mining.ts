@@ -122,30 +122,38 @@ const RATE_WINDOW_MS = 15 * 60_000;
 
 const LEAVE_EVENTS = new Set(["FSDJump", "CarrierJump", "SupercruiseEntry", "Died"]);
 
+/** Docked, or logged in docked, at a station rather than a fleet carrier (which can sit at a ring). */
+const dockedAtStation = (e: JournalEvent) =>
+  (e.event === "Docked" || (e.event === "Location" && e.Docked === true)) &&
+  e.StationType !== "FleetCarrier";
+
 /**
- * Whether the event takes the ship out of the ring it was mining: a jump, supercruise, death, or a
- * login that starts docked. Docking at a carrier beside the ring does not. The one rule for the
- * ring, the prospect and the cracked core.
+ * Whether the event takes the ship out of the ring it was mining: a jump, supercruise, death, or
+ * docking at a station. Docking at a carrier beside the ring does not, nor relogging there. The
+ * one rule for the ring.
  */
 export function leavesRing(e: JournalEvent): boolean {
-  return LEAVE_EVENTS.has(e.event) || (e.event === "Location" && e.Docked === true);
+  return LEAVE_EVENTS.has(e.event) || dockedAtStation(e);
 }
 
-/** Whether cargo collected after the event cannot be from a core cracked before it. */
-const endsCrack = (e: JournalEvent) =>
-  // A relog resets the rocks, wherever the ship is after it.
+/**
+ * Whether the rocks seen before the event are gone: leaving the ring, or a relog (LoadGame, or the
+ * Location written at login), which resets them. The one rule for the prospect and the cracked
+ * core.
+ */
+const rocksReset = (e: JournalEvent) =>
   leavesRing(e) || e.event === "LoadGame" || e.event === "Location";
 
 /**
- * Follows the journal for cargo collected from a cracked core: step(e) gives a fragment's
- * commodityKey(), else null. One tracker for miningState() and refinedKinds(), so they agree.
- * Docking (at a carrier beside the ring, say) does not end it; leaving the ring or a relog does.
+ * Follows the journal for cargo collected from a cracked core: the returned function gives, for
+ * each event in order, a fragment's commodityKey(), else null. One tracker for miningState() and
+ * refinedKinds(), so they agree.
  */
 function fragmentTracker(): (e: JournalEvent) => string | null {
   let cracked = false;
   return (e) => {
     if (e.event === "AsteroidCracked") cracked = true;
-    else if (endsCrack(e)) cracked = false;
+    else if (rocksReset(e)) cracked = false;
     else if (e.event === "CollectCargo" && cracked && e.Stolen !== true) {
       const key = commodityKey(str(e.Type) ?? "");
       return isMined(key) ? key : null;
@@ -223,16 +231,10 @@ export function miningState(
   for (const e of events) {
     last = Date.parse(e.timestamp) || last;
     const piece = fragment(e);
-    if (leavesRing(e)) {
-      // No longer mining here, though the session's counts stay.
-      ring = null;
-      prospect = null;
-    }
+    // No longer mining here, though the session's counts stay.
+    if (leavesRing(e)) ring = null;
+    if (rocksReset(e)) prospect = null;
     switch (e.event) {
-      case "LoadGame":
-        // A relog resets the rocks: the last prospect is gone.
-        prospect = null;
-        break;
       case "Location":
         // Written at login too, in the same place: not a move.
         here = str(e.StarSystem) ?? here;

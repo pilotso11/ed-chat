@@ -4,6 +4,7 @@ import type { HudView } from "../src/core/hud/hud.js";
 import {
   hotkeyChoice,
   hudInput,
+  hudCanShow,
   hudVisible,
   moveHint,
   nextHudMode,
@@ -87,24 +88,24 @@ describe("panel visibility", () => {
   });
 
   it("shows a panel over the game, over the overlay, or before focus is known", () => {
-    expect(hudVisible(hud, {}, fg({ isGame: true }), panel, false)).toBe(true);
-    expect(hudVisible(hud, {}, fg({ isOverlay: true }), panel, false)).toBe(true);
-    expect(hudVisible(hud, {}, null, panel, false)).toBe(true);
+    expect(hudVisible(hudCanShow(hud, {}, fg({ isGame: true })), panel, false)).toBe(true);
+    expect(hudVisible(hudCanShow(hud, {}, fg({ isOverlay: true })), panel, false)).toBe(true);
+    expect(hudVisible(hudCanShow(hud, {}, null), panel, false)).toBe(true);
   });
 
   it("hides over other apps", () => {
-    expect(hudVisible(hud, {}, fg({}), panel, false)).toBe(false);
+    expect(hudVisible(hudCanShow(hud, {}, fg({})), panel, false)).toBe(false);
   });
 
   it("hides when turned off, or hidden with the hotkey", () => {
-    expect(hudVisible({ ...hud, enabled: false }, {}, null, panel, false)).toBe(false);
-    expect(hudVisible(hud, { hudHidden: true }, null, panel, false)).toBe(false);
+    expect(hudVisible(hudCanShow({ ...hud, enabled: false }, {}, null), panel, false)).toBe(false);
+    expect(hudVisible(hudCanShow(hud, { hudHidden: true }, null), panel, false)).toBe(false);
   });
 
   it("shows with a route, or while it moves, and hides with nothing to show", () => {
-    expect(hudVisible(hud, {}, null, view(), false)).toBe(false);
-    expect(hudVisible(hud, {}, null, view({ route: [] }), false)).toBe(true);
-    expect(hudVisible(hud, {}, null, view(), true)).toBe(true);
+    expect(hudVisible(true, view(), false)).toBe(false);
+    expect(hudVisible(true, view({ route: [] }), false)).toBe(true);
+    expect(hudVisible(true, view(), true)).toBe(true);
   });
 });
 
