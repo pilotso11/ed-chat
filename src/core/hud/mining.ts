@@ -122,18 +122,23 @@ const RATE_WINDOW_MS = 15 * 60_000;
 
 const LEAVE_EVENTS = new Set(["FSDJump", "CarrierJump", "SupercruiseEntry", "Died"]);
 
-/** Docked, or logged in docked, at a station rather than a fleet carrier (which can sit at a ring). */
+/**
+ * Docked, or logged in docked, at a station rather than a carrier (fleet or squadron, which can sit
+ * at a ring).
+ */
 const dockedAtStation = (e: JournalEvent) =>
   (e.event === "Docked" || (e.event === "Location" && e.Docked === true)) &&
-  e.StationType !== "FleetCarrier";
+  !/Carrier$/i.test(String(e.StationType ?? ""));
 
 /**
  * Whether the event takes the ship out of the ring it was mining: a jump, supercruise, death, or
  * docking at a station. Docking at a carrier beside the ring does not, nor relogging there. The
  * one rule for the ring.
  */
-export function leavesRing(e: JournalEvent): boolean {
-  return LEAVE_EVENTS.has(e.event) || dockedAtStation(e);
+function leavesRing(e: JournalEvent, here: string | null = null): boolean {
+  // A login in another system (a carrier that jumped while logged out) is away from the ring too.
+  const moved = e.event === "Location" && here !== null && str(e.StarSystem) !== here;
+  return LEAVE_EVENTS.has(e.event) || dockedAtStation(e) || moved;
 }
 
 /**
@@ -232,7 +237,10 @@ export function miningState(
     last = Date.parse(e.timestamp) || last;
     const piece = fragment(e);
     // No longer mining here, though the session's counts stay.
-    if (leavesRing(e)) ring = null;
+    if (leavesRing(e, here)) {
+      ring = null;
+      stintStart = null;
+    }
     if (rocksReset(e)) prospect = null;
     switch (e.event) {
       case "Location":
@@ -244,7 +252,6 @@ export function miningState(
         here = str(e.StarSystem) ?? here;
         // A carrier jump moves the ship too.
         jumpsSince++;
-        stintStart = null;
         break;
       case "MarketSell":
         lastSale = e.timestamp;

@@ -1177,3 +1177,23 @@ describe("ring and rocks after docking and relogging", () => {
     expect(miningState(events, T0 + t * 1000).prospect).toBeNull();
   });
 });
+
+describe("logging in elsewhere", () => {
+  it("leaves the ring when logging in docked at a carrier that has jumped, and at a squadron carrier keeps it", () => {
+    const at = (s: string) => ev("Location", { StarSystem: s });
+    const exit = ev("SupercruiseExit", { Body: "A 1 A Ring", BodyType: "PlanetaryRing" });
+    const jumped = [
+      at("A"),
+      exit,
+      ev("LoadGame"),
+      ev("Location", { StarSystem: "B", Docked: true, StationType: "FleetCarrier" }),
+    ];
+    expect(miningState(jumped, T0 + t * 1000).ring).toBeNull();
+    const squadron = [
+      at("A"),
+      exit,
+      ev("Docked", { StarSystem: "A", StationType: "SquadronCarrier" }),
+    ];
+    expect(miningState(squadron, T0 + t * 1000).ring).toBe("A 1 A Ring");
+  });
+});
