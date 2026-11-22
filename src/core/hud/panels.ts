@@ -268,6 +268,25 @@ const EXPLORING = new Set([
   "ApproachBody",
 ]);
 
+/**
+ * Every journal event explorationTotals() reads. The journal reader must keep them all: ed-mcp
+ * keeps some, and HUD_EVENTS asks for the rest. A test checks it.
+ */
+export const EXPLORATION_EVENTS = [
+  ...EXPLORING,
+  "Fileheader",
+  "Commander",
+  "LoadGame",
+  "Shutdown",
+  "LeaveBody",
+  "Location",
+  "CarrierJump",
+  "SellExplorationData",
+  "MultiSellExplorationData",
+  "SellOrganicData",
+  "Died",
+] as const;
+
 /** Universal Cartographics does not buy data for systems this close to the station. */
 const SELL_MIN_LY = 20;
 

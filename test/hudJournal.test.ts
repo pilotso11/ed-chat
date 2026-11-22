@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HudFeed } from "../src/core/hud/feed.js";
 import { buildHud, type HudView } from "../src/core/hud/hud.js";
 import { HUD_EVENTS } from "../src/core/hud/mode.js";
+import { EXPLORATION_EVENTS } from "../src/core/hud/panels.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
 
 // These tests run the bundled ed-mcp for real. A journal file in a temporary folder is read by
@@ -142,6 +143,19 @@ function game() {
           PlanetRadius: RADIUS,
         }),
       ),
+    /** The events the reader kept, after writing what was added. */
+    async events() {
+      await appendFile(
+        journal,
+        pending
+          .splice(0)
+          .map((e) => JSON.stringify(e) + "\n")
+          .join(""),
+      );
+      const state = await stores.journal.state();
+      expect((state as { warnings?: string[] }).warnings).toEqual([]);
+      return state.events;
+    },
     async hud(settings = DEFAULT_SETTINGS.hud): Promise<HudView> {
       // Appended, as the game writes it.
       await appendFile(
@@ -168,43 +182,35 @@ function game() {
 const north = (m: number) => (m / RADIUS) * (180 / Math.PI);
 
 describe("events the panel asks the reader to keep", () => {
-  it("keeps every event the exploration rate reads", async () => {
-    // explorationTotals times the session and each planet with these: a reader that stopped
-    // keeping one would quietly drop credits or time.
-    const read = [
-      "LoadGame",
-      "FSDJump",
-      "Scan",
-      "SAAScanComplete",
-      "ApproachBody",
-      "LeaveBody",
-      "ScanOrganic",
-      "Died",
-      "Shutdown",
-    ];
-    const body = { BodyName: `${SYSTEM} 3`, BodyID: 3, SystemAddress: ADDRESS };
-    const stamp = new Date(start).toISOString().slice(0, 19).replace(/:/g, "");
-    await writeFile(
-      path.join(dir, `Journal.${stamp}.01.log`),
-      [
-        ...arrive(),
-        planet(3),
-        ev("SAAScanComplete", body),
-        ev("ApproachBody", { StarSystem: SYSTEM, Body: `${SYSTEM} 3`, ...body }),
-        stratum(3, "Analyse"),
-        ev("LeaveBody", { StarSystem: SYSTEM, Body: `${SYSTEM} 3`, ...body }),
-        ev("Died"),
-        ev("Shutdown"),
-      ]
-        .map((e) => JSON.stringify(e) + "\n")
-        .join(""),
+  it("keeps every event the exploration totals and rate read", async () => {
+    // A reader that stopped keeping one would quietly drop credits or time from the rates.
+    const g = game();
+    const body = { BodyName: `${SYSTEM} 3`, BodyID: 3, SystemAddress: ADDRESS, StarSystem: SYSTEM };
+    const sample = { ...body, Body: `${SYSTEM} 3` };
+    // arrive() writes Fileheader, Commander, LoadGame and FSDJump.
+    g.add(
+      ...arrive(),
+      planet(3),
+      ev("SAAScanComplete", body),
+      ev("ApproachBody", sample),
+      ev("Touchdown", { ...sample, Latitude: 1, Longitude: 2, PlayerControlled: true }),
+      stratum(3, "Analyse"),
+      ev("LeaveBody", sample),
+      ev("Location", { StarSystem: SYSTEM, SystemAddress: ADDRESS, StarPos: [100, 0, 100] }),
+      ev("CarrierJump", { StarSystem: SYSTEM, SystemAddress: ADDRESS, StarPos: [100, 0, 100] }),
+      ev("SellExplorationData", { Systems: [SYSTEM], BaseValue: 1, Bonus: 0, TotalEarnings: 1 }),
+      ev("MultiSellExplorationData", {
+        Discovered: [{ SystemName: SYSTEM, NumBodies: 1 }],
+        BaseValue: 1,
+        Bonus: 0,
+        TotalEarnings: 1,
+      }),
+      ev("SellOrganicData", { MarketID: 1, BioData: [] }),
+      ev("Died"),
+      ev("Shutdown"),
     );
-    const stores = openStores(
-      { ED_JOURNAL_DIR: dir, ED_MCP_SYNC_DIR: syncDir },
-      { keep: HUD_EVENTS },
-    );
-    const kept = new Set((await stores.journal.state()).events.map((e) => e.event));
-    expect(read.filter((e) => !kept.has(e))).toEqual([]);
+    const kept = new Set((await g.events()).map((e) => e.event));
+    expect(EXPLORATION_EVENTS.filter((e) => !kept.has(e))).toEqual([]);
   });
 });
 
