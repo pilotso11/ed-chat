@@ -373,6 +373,9 @@ describe("finished bio bookmarks", () => {
       e.event === "SAASignalsFound" ? { ...e, Signals: [] } : e,
     ) as JournalEvent[];
     expect(finishedBioBookmarks(p, { ...journal, events: noCount })).toEqual([]);
+    // Spansh's count stands in for the journal's.
+    const known = [{ bodyId: 30, bioSignals: 1 }] as never;
+    expect(finishedBioBookmarks(p, { ...journal, events: noCount }, known)).toEqual([0]);
     // A count of 0 from a later scan with no biology listed is no count either.
     const zero = events.map((e) =>
       e.event === "SAASignalsFound"

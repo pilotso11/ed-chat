@@ -41,6 +41,7 @@ import {
   type PanelView,
   type Point,
   wasFootfalled,
+  knownSignals,
   liveMassacre,
 } from "./panels.js";
 
@@ -232,6 +233,7 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
         here,
         totals,
         footfall: wasFootfalled(j.events, address, body.body_id),
+        knownSignals: knownSignals(input.known, body.body_id),
         // Other planets worth a visit after this one.
         highlights: [
           ...highlightRows(system, x, input.known),
@@ -308,6 +310,7 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
         system,
         status: input.status,
         bio: bookmarkBio(input, system),
+        known: input.known,
       });
   // Under the panels about where the ship is. On their own when no panel shows, with no mode or
   // in one of those modes.

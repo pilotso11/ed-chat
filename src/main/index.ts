@@ -818,7 +818,9 @@ async function main(): Promise<void> {
         renderHud();
       }
     }
-    if (!cleared.length) return flash("bookmark", "ⓘ no bookmarks here", 3_000);
+    if (!cleared.length) {
+      return flash("bookmark", scope === "all" ? "ⓘ no bookmarks" : "ⓘ no bookmarks here", 3_000);
+    }
     const one = cleared[0]!;
     flash(
       "bookmark",
@@ -849,7 +851,7 @@ async function main(): Promise<void> {
   const bookmarksDone = new Set<string>();
   async function finishBioBookmarks(data: FeedData): Promise<void> {
     if (!hudPlans || !settings.hud.bookmarks) return;
-    for (const i of finishedBioBookmarks(data.bookmarks ?? null, data.journal)) {
+    for (const i of finishedBioBookmarks(data.bookmarks ?? null, data.journal, data.known)) {
       const stop = data.bookmarks!.stops[i]!;
       // What and where it is: a new bookmark with the same label in another spot is another one.
       const id = JSON.stringify([stop.system, stop.body, stop.label, stop.purpose, stop.position]);

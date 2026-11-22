@@ -136,6 +136,23 @@ describe("exobiology panel", () => {
       signals: 3,
       done: false,
     });
+    // Spansh's count stands in for a journal count of null or 0.
+    expect(bioProgress({ ...done, bio_signals: 0 }, 3).done).toBe(true);
+    expect(bioProgress({ ...done, bio_signals: null }, 4)).toEqual({
+      analysed: 3,
+      signals: 4,
+      done: false,
+    });
+    const header = exobiologyPanel({
+      system: "Sys",
+      address: 7,
+      body: { ...done, bio_signals: null },
+      samples: new Map(),
+      here: null,
+      totals,
+      knownSignals: 3,
+    });
+    expect(header.right).toBe("3/3 genera ✓");
     // More genera found than signals counted: the genera are the total.
     expect(bioProgress({ ...done, bio_signals: 2 })).toEqual({
       analysed: 3,

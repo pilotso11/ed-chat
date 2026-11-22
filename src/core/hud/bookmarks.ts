@@ -10,7 +10,8 @@ import {
 } from "ed-mcp/journal";
 import type { ShipStatus } from "./hud.js";
 import { same } from "./json.js";
-import { bioProgress, shortBody, type HudRow } from "./panels.js";
+import type { KnownBody } from "./known.js";
+import { bioProgress, knownSignals, shortBody, type HudRow } from "./panels.js";
 
 /** The plan that holds surface bookmarks, in ed-mcp's plan store so Claude sees them too. */
 export const BOOKMARKS_PLAN = "bookmarks";
@@ -78,7 +79,12 @@ const BIO_LABEL = /^Bio: /;
  * sample on its body now, not when it was made, so finished species drop off. A label that the
  * player or Claude chose is kept.
  */
-function bookmarkText(s: Stop, bio: ExobiologyBody[] | null, system: string): string {
+function bookmarkText(
+  s: Stop,
+  bio: ExobiologyBody[] | null,
+  known: KnownBody[] | null,
+  system: string,
+): string {
   const label = s.label ?? s.purpose;
   if (s.kind !== "exobiology" || !BIO_LABEL.test(label) || !bio || !s.body) return label;
   const key = bodyKey(s.body, system);
@@ -90,7 +96,7 @@ function bookmarkText(s: Stop, bio: ExobiologyBody[] | null, system: string): st
   // "All sampled" only when the body is done; with no signal count it may hold more.
   const what = left.length
     ? `Bio: ${left.join(", ")}`
-    : bioProgress(body).done
+    : bioProgress(body, knownSignals(known, body.body_id)).done
       ? "Bio: all sampled"
       : "Bio: all found sampled, more may be here";
   return `${what}${n}`;
@@ -154,6 +160,8 @@ export function bookmarkRows(input: {
   status: ShipStatus | null;
   /** The system's exobiology from the journal, for what bio bookmarks still have to sample. */
   bio?: ExobiologyBody[] | null;
+  /** Spansh's bodies in the system, for signal counts the journal lacks. */
+  known?: KnownBody[] | null;
 }): HudRow[] {
   const { plan, system, status } = input;
   if (!plan || !system) return [];
@@ -176,7 +184,7 @@ export function bookmarkRows(input: {
       elsewhere.set(key, { name: seen?.name ?? shortBody(s.body!, system), n: (seen?.n ?? 0) + 1 });
       continue;
     }
-    const text = `📍 ${bookmarkText(s, input.bio ?? null, system)}`;
+    const text = `📍 ${bookmarkText(s, input.bio ?? null, input.known ?? null, system)}`;
     const pos = stopPosition(s);
     if (!pos || !at || radius === null) {
       // On the body, but where it is or where we are is not known.
@@ -297,6 +305,8 @@ export const isPlanNotFound = (err: unknown) =>
 export function finishedBioBookmarks(
   plan: Plan | null,
   journal: (JournalState & { events: JournalEvent[] }) | null,
+  /** Spansh's bodies in the system, for signal counts the journal lacks. */
+  known?: KnownBody[] | null,
 ): number[] {
   const system = journal?.location.system ?? null;
   if (!plan || !journal || !system) return [];
@@ -309,7 +319,7 @@ export function finishedBioBookmarks(
   if (address === null) return [];
   const done = new Set(
     exobiology(journal.events, address, { system })
-      .bodies.filter((b) => bioProgress(b).done)
+      .bodies.filter((b) => bioProgress(b, knownSignals(known, b.body_id)).done)
       .map((b) => bodyKey(b.body, system)),
   );
   return todo.filter((i) => done.has(bodyKey(plan.stops[i]!.body!, system)));

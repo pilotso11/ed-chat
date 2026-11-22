@@ -932,6 +932,10 @@ function bioRateLine(input: {
  * count (null, or 0 from a later scan) the body may hold more, so it is never done. The one rule
  * for the header, the In system rows and bio bookmarks (finishedBioBookmarks).
  */
+/** Spansh's biological signal count for a body, or null. */
+export const knownSignals = (known: KnownBody[] | null | undefined, bodyId: number) =>
+  known?.find((k) => k.bodyId === bodyId)?.bioSignals ?? null;
+
 export function bioProgress(
   b: ExobiologyBody,
   /** Another source's signal count (Spansh), for a body the journal has none for. */
@@ -944,7 +948,8 @@ export function bioProgress(
   // An abandoned species was left for another of its genus: it is neither analysed nor waiting.
   const kept = b.species.filter((s) => !s.abandoned);
   const analysed = kept.filter((s) => s.analysed).length;
-  const count = b.bio_signals ?? knownSignals ?? null;
+  // 0 from a later scan is no count, as null is: Spansh's count stands in for either.
+  const count = b.bio_signals || knownSignals || null;
   const signals = Math.max(count ?? 0, b.genera.length);
   const done = !!count && analysed >= signals && analysed === kept.length && !b.not_started.length;
   return { analysed, signals, done };
@@ -963,6 +968,8 @@ export function exobiologyPanel(input: {
   highlights?: HudRow[];
   /** wasFootfalled() for the body: false pays the first-footfall bonus. */
   footfall?: boolean | null;
+  /** Spansh's signal count for the body, when the journal has none. */
+  knownSignals?: number | null;
 }): PanelView {
   const { body } = input;
   const bonus = input.footfall === false ? FOOTFALL_BONUS : 1;
@@ -1006,7 +1013,7 @@ export function exobiologyPanel(input: {
   if (input.highlights?.length) {
     rows.push({ text: "In system", tone: "dim" }, ...input.highlights);
   }
-  const { analysed, signals, done } = bioProgress(body);
+  const { analysed, signals, done } = bioProgress(body, input.knownSignals);
   return {
     mode: "exobiology",
     title: "EXOBIOLOGY",
