@@ -206,7 +206,10 @@ A plan with no `ship_id` gets one in exactly one of two ways:
 - **A plan with no `buy_ship` action binds by type** (a plan Claude wrote by hand without the
   `ShipID`): events match by `build.ship` (`Ship` in the module events and `Loadout`, `ShipType`
   in the shipyard events) for the ship being flown, and the first time an action is judged
-  done that way the panel writes that `ShipID` into `build.ship_id`.
+  done that way the panel writes that `ShipID` into `build.ship_id`. An `EngineerCraft`, which
+  names no ship, matches such a plan when the newest `Loadout`, `ShipyardSwap` or `ShipyardNew`
+  before it names a ship of type `build.ship`, and that ship's `ShipID` is then written into
+  `build.ship_id` as for any other event.
 
 **One event, one action per role.** An event can do several things at once, and each is a
 role: it finishes at most one action for each role it plays, the first open action in plan order
@@ -285,11 +288,13 @@ not claimed by a done action are shared out to the open actions.
 | `engineer` | Roll FSD Increased Range to G5 | `slot`, `module`?, `blueprint`, `grade`, `engineer`? | An `EngineerCraft` for the ship, that `Slot`, that `BlueprintName` and a `Level` at least `grade`. Any quality. Lower levels show the grade and quality reached |
 | `experimental` | Apply Mass Manager to FSD | `slot`, `experimental` | An `EngineerCraft` for the ship and slot with `ApplyExperimentalEffect` (or `ExperimentalEffect`) of that key |
 
-An `engineer` action's `needs` is the materials for every grade it still has to roll at the
-plan's rolls per grade (`build.rolls_per_grade`; 1, 2, 3, 4, 5 for grades 1 to 5 when
-missing, as `materials_plan` has it), and `needs_by_grade` gives one roll's
-materials for each grade. The game opens the next grade only when the current one is full
-(`Quality` 1), so what is left counts both:
+An `engineer` action is done at the target grade at any quality, so it needs every roll that
+fills the grades below the target, and one roll of the target grade. `needs_by_grade` gives one
+roll's materials for each grade. `needs` is the total: one roll's materials times the rolls left,
+at the plan's rolls per grade (`build.rolls_per_grade`; 1, 2, 3, 4, 5 for grades 1 to 5 when
+missing, as `materials_plan` has it) for each grade below the target, and once for the target
+grade. The game opens the next grade only when the current one is full (`Quality` 1), so the
+rolls left count both grade and quality:
 
 - At grade G with quality q below 1: the rolls to fill G, estimated as the plan's rolls for G
   times (1 - q), rounded up; then the plan's rolls for each grade above G up to the one below
@@ -300,13 +305,14 @@ materials for each grade. The game opens the next grade only when the current on
 - The panel uses the same default as the plan: 1, 2, 3, 4, 5 rolls for grades 1 to 5 when
   `build.rolls_per_grade` is missing.
 - The materials left are those rolls times each grade's one-roll materials. The row shows the
-  grade and quality reached: "G3 64% → G5 · ~7 rolls" (2 to fill G3, 4 for G4, 1 for G5 at rolls 1, 2, 3, 4, 5).
+  grade and quality reached: "G3 64% → G5 · ~7 rolls" (2 to fill G3, 4 for G4, 1 for G5 at rolls
+  1, 2, 3, 4, 5), and `needs` is then 2 rolls of G3's materials, 4 of G4's and 1 of G5's.
 
 ### At a material trader, or anywhere
 
 | Kind | Example | Fields | Done when |
 |---|---|---|---|
-| `trade_material` | Trade 6 Cracked Industrial Firmware → 2 Modified Embedded Firmware | `paid` (material, count), `received` (material, count) | `MaterialTrade` events with that `Received.Material` add up to the count |
+| `trade_material` | Trade 12 Security Firmware Patch → 2 Modified Embedded Firmware | `paid` (material, count), `received` (material, count) | `MaterialTrade` events with that `Received.Material` add up to the count |
 | `collect_material` | Collect 12 Arsenic | `material`, `count` (to hold) | The inventory (`materials` in journal state) holds the count. Collection is spread over many events, so the count held decides |
 | `synthesis` | Synthesise FSD Injection (premium) | `recipe` | A `Synthesis` with that `Name` |
 
@@ -414,7 +420,7 @@ with work to do) and stop 2 is still open before it.
 - **The route rows** are not repeated below: the panel is the route. The galaxy map copy works as
   it does for every plan.
 - **The plan shown leads everything.** When the panel shows a plan that is not the note's (see
-  Two plans open), the route rows under other modes, the arrival copy and the `routeNext` /
+  "Two plans open" in Decisions), the route rows under other modes, the arrival copy and the `routeNext` /
   `routePrev` keys all follow the plan shown, not the note's. The game note sent to Claude has
   the panel's rows, so it is about the plan shown, and when that is not the note's plan it adds
   one line: "Showing build plan <id> (docked at its stop); the activity note names <id>." Claude
@@ -448,12 +454,17 @@ BUILD · Python Mk II · stop 4/6                      8/16 actions
 ```
 BUILD · Python Mk II · stop 1/6                      0/16 actions
 ● Jotunheim · Gaspar de Lemos Ring            trader · encoded
-  Trade 18 Unusual Encrypted Files → 3 Datamined Wake    ready
-  Trade 6 Cracked Industrial Firmware → 2 Modified Embedded
-    have 4/6 Cracked Industrial Firmware
+  Trade 18 Eccentric Hyperspace Trajectories → 3 Datamined Wake
+                                                         ready
+  Trade 12 Security Firmware Patch → 2 Modified Embedded Firmware
+    have 8/12 Security Firmware Patch
 ▸ HIP 36601 · C 3 b                                  collect 1
 5 after · 19.3M to spend · 1.2B held
 ```
+
+Both trades are one grade up within a trade group (Wake Scans grade 4 to 5, Encoded Firmware
+grade 4 to 5), so 6 for 1, the rate ed-mcp's `tradeRate()` gives; `build_plan` writes the
+counts from it.
 
 ### At a collect stop
 
@@ -493,8 +504,8 @@ Target: FSD G5 · thrusters Dirty G5
 
 A plan of purchases alone (a new hull and its modules, or a few modules to swap) is a route of
 outfitting stops. A `buy_ship` stop first, then the outfitting stops. Until the hull exists the
-plan is followed as the note's plan, or while docked at one of its stops (see "A ship not bought
-yet"). After the `ShipyardNew`, the panel writes the new `ShipID` into the plan's
+plan is followed as the note's plan, or while docked at one of its stops (see "A plan with a
+`buy_ship` action never binds by type", under "The ship" in Actions). After the `ShipyardNew`, the panel writes the new `ShipID` into the plan's
 `build.ship_id`, once.
 
 ### No build plan
@@ -503,15 +514,24 @@ With no build plan for the ship, outfitting and engineering events show what was
 visit, and nothing more:
 
 ```
-OUTFITTING · Jameson Memorial                         this visit
+OUTFITTING · Farseer Inc                              this visit
 Bought FSD 5A 5.1M · sold AFM Unit 2A 1.3M · stored 1
-FSD 5A  Increased Range G4 → G5                        7 rolls
+FSD  Increased Range G3 → G5 · 100%                    6 rolls
 Traded 2 · used 41 materials
 Ask Claude to plan a build to track what is left.
 ```
 
-The visit runs from docking to undocking, and the view ends on undocking. With no plan, the
-panel cannot say what is left, so it says only what was done.
+The view shows only this visit's events, from docking (or landing) to undocking:
+
+- Modules bought, sold and stored, with the credits (`ModuleBuy`, `ModuleSell`,
+  `ModuleStore` and the rest).
+- Each module engineered: its blueprint, the grade before the visit's first `EngineerCraft` (from
+  the `Loadout` before it, or G0 for a new blueprint) and the grade and quality of the last one,
+  and the number of `EngineerCraft` events (rolls) this visit.
+- Material trades (`MaterialTrade`) and the materials used (the `Ingredients` of the crafts and
+  syntheses).
+
+There is no target, so it shows no rolls left and nothing still to do. It ends on undocking.
 
 ### On foot (later phase)
 
@@ -553,6 +573,7 @@ The mode is `build`. `hud.modes.build` turns it off.
 |---|---|---|
 | The activity note's `kind` `engineering` with a build plan | build | every action is done or skipped, and the ship undocks |
 | Docking at a stop of the build plan | build | a newer activity |
+| Landing at a gather stop: `Touchdown` on the stop's body in its system (or `Disembark` there, for an SRV or on-foot site reached from orbit) | build | a newer activity; `Liftoff` and `LeaveBody` end the stop's "here", as undocking does for a station stop |
 | An event that matches an open action of the plan: `ModuleBuy`, `ModuleBuyAndStore`, `ModuleSell`, `ModuleSellRemote`, `ModuleSwap`, `ModuleStore`, `MassModuleStore`, `ModuleRetrieve`, `FetchRemoteModule`, `EngineerCraft`, `MaterialTrade`, `TechnologyBroker`, `ShipyardBuy`, `ShipyardRedeem`, `ShipyardNew`, `ShipyardTransfer`, `ShipyardSwap`, `Synthesis` | build | a newer activity |
 | `EngineerProgress` for one engineer (not the list at login) that unlocks the engineer of an open `unlock_engineer` action | build | as above |
 | On foot (later): a `BuySuit`, `BuyWeapon`, `UpgradeSuit`, `UpgradeWeapon`, `TradeMicroResources` or `BuyMicroResources` that matches an open action; a `SwitchSuitLoadout`, `CreateSuitLoadout` or `LoadoutEquipModule` that completes an open modify action | build | as above |
@@ -560,7 +581,7 @@ The mode is `build`. `hud.modes.build` turns it off.
 
 - **Ranking.** Massacre still wins while a stack is open. Otherwise the newest choice wins, as
   for every mode: a scan, a prospect or a trade after the last build event takes over, and
-  docking at the next build stop brings the build back. A jump never ends it: a build means
+  docking or landing at the next build stop brings the build back. A jump never ends it: a build means
   travelling between stops. Under another mode, the plan's route rows still show the next build
   stop, dimmed, as now.
 - `noteMode("engineering")` gives `build`; the note kind exists already. A note of that kind
@@ -583,7 +604,7 @@ The mode is `build`. `hud.modes.build` turns it off.
 As `TradeStopFinisher` does, after each poll (`BuildFinisher`, in `src/core/hud/buildStops.ts`):
 
 - Each action the journal shows done, whose plan status is `todo`, is marked done through
-  `PlanStore.updateAction()`, with its `done_by`, once per key (see "Writing once"). The plan is
+  `PlanStore.updateAction()`, with its `done_by`, once per key (see "Writing once" in Actions). The plan is
   read again first and the action judged again on it; a changed plan or a failed write leaves it
   for the next poll.
 - An engineer action with the blueprint at a lower grade stays `todo`, and its row shows the
@@ -708,7 +729,8 @@ ship for an upgrade) and the ship now (the journal `Loadout`, or CAPI), it write
    from the grade fitted now to the target, and experimentals. With `scope: "upgrade"`, only the
    slots asked for.
 2. **Needs:** for each engineer action, one roll's materials for each grade from the catalog
-   (`needs_by_grade`), and the total for the grades it still has to roll (`needs`) at the rolls
+   (`needs_by_grade`), and the total (`needs`): the rolls that fill the grades from the one fitted
+   now up to the one below the target, plus one roll of the target grade, at the rolls
    per grade (an argument, default 1, 2, 3, 4, 5, saved as `build.rolls_per_grade`); for each
    experimental, its materials; for each purchase, the price from Spansh.
 3. **Trades and collecting:** what the actions need beyond the inventory, as `materials_plan`
@@ -769,7 +791,8 @@ for on foot. ED Chat pins each.
 - **`HUD_EVENTS`** gains `ModuleBuy`, `ModuleSell`, `ModuleSellRemote`, `ModuleSwap`,
   `ModuleStore`, `MassModuleStore`, `ModuleBuyAndStore`, `ModuleRetrieve`, `FetchRemoteModule`,
   `StoredModules`, `ShipyardBuy`, `ShipyardRedeem`, `ShipyardNew`, `ShipyardTransfer`,
-  `Outfitting`, and lists those ed-mcp keeps already (`EngineerCraft`,
+  `Outfitting`, `Liftoff` and `Disembark` (for landing at a gather stop, with `Touchdown` and
+  `LeaveBody`, which it has already), and lists those ed-mcp keeps already (`EngineerCraft`,
   `MaterialTrade`, `Materials`, `EngineerProgress`, `TechnologyBroker`, `Synthesis`,
   `ShipyardSwap`, `Loadout`), as trade's `TRADE_EVENTS` does, with a test that the reader keeps
   every one.
@@ -794,10 +817,10 @@ for on foot. ED Chat pins each.
   open; two events in the same second; a plan with a `buy_ship` not binding to a ship of that
   type; a new blueprint counted from G1; a buy writing its ID into the actions with its `gear`.
 - **Mode tests,** as event sequences and the mode expected: a matching module event, docking at a
-  build stop and the note each turn it on; a `Synthesis` or `MaterialTrade` the plan does not ask
+  build stop, landing at a gather stop and the note each turn it on; a `Synthesis` or `MaterialTrade` the plan does not ask
   for, the login events and a jump do not; massacre wins while a stack is open and the build
-  comes back after; a scan or a prospect after the last build event takes over, and docking at
-  the next build stop brings it back; the visit view ends on undocking; "Build complete" ends on
+  comes back after; a scan or a prospect after the last build event takes over, and docking or
+  landing at the next build stop brings it back; the visit view ends on undocking; "Build complete" ends on
   undocking; two plans open, docked at a stop of the one the note does not name, with the route
   rows and the game note following the plan shown.
 - **Gather stop tests:** a collect stop done when the inventory reaches the count (from
