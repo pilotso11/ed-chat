@@ -244,6 +244,9 @@ class ActiveClock {
 const perHour = (credits: number, ms: number) =>
   ms >= RATE_MIN_MS ? (credits * HOUR_MS) / ms : null;
 
+/** The events a new game's journal starts with, before LoadGame. */
+const NEW_GAME = new Set(["Fileheader", "Commander", "LoadGame"]);
+
 /** Events that start an exploring session's clock. */
 const EXPLORING = new Set([
   "FSDJump",
@@ -296,6 +299,9 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
     planets.set(body, p);
     p.clock.start(at);
   };
+  const haltPlanets = () => {
+    for (const p of planets.values()) p.clock.halt();
+  };
   const stopPlanets = (at: number) => {
     for (const p of planets.values()) p.clock.stop(at);
   };
@@ -323,9 +329,10 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
     if (!Number.isNaN(at)) {
       if (EXPLORING.has(e.event)) session0.start(at);
       session0.tick(at);
-      // A relog is the first event after time away (when Shutdown is missing, as after a crash):
-      // it does not count toward the planets.
-      if (e.event !== "LoadGame") for (const p of planets.values()) p.clock.tick(at);
+      // A new game starts after time away (with no Shutdown after a crash or an exit to the
+      // menu): its first events stop the planets' clocks without counting that time.
+      if (NEW_GAME.has(e.event)) haltPlanets();
+      else for (const p of planets.values()) p.clock.tick(at);
     }
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     const address = num(e.SystemAddress);
@@ -340,7 +347,6 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
         settled.clear();
         session0 = new ActiveClock();
         earned.length = 0;
-        for (const p of planets.values()) p.clock.halt();
         break;
       case "Shutdown":
         if (!Number.isNaN(at)) {

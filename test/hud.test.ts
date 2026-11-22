@@ -448,7 +448,15 @@ describe("exploration totals", () => {
     const before = events.slice(0, 4);
     for (const quit of [[timed(12, ev("Shutdown"))], []]) {
       const relog = explorationTotals(
-        [...before, ...quit, timed(72, ev("LoadGame")), analyse(80)],
+        [
+          ...before,
+          ...quit,
+          // A new game's journal starts with these.
+          timed(72, ev("Fileheader")),
+          timed(72, ev("Commander")),
+          timed(72, ev("LoadGame")),
+          analyse(80),
+        ],
         min(80),
       );
       expect(relog.planetRate.get("1|3")).toBeCloseTo(
