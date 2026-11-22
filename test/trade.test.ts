@@ -1116,7 +1116,11 @@ describe("the trade panel", () => {
       buy(45, "Gold", 10, 1_000),
     ];
     expect(tradeTotals(silent, NOW)).toMatchObject({ quiet: true });
-    expect(planned(100_000, silent).footer[0]).toMatch(/of 100k\/h planned$/);
+    const plain = planned(100_000, silent).footer;
+    expect(plain).toHaveLength(1);
+    // A plain line (a string, not amber), with no half-hour rate.
+    expect(typeof plain[0]).toBe("string");
+    expect(plain[0]).toMatch(/^Session: 5k profit · \d+m · [\d.]+k\/h of 100k\/h planned$/);
     // A route finished: its planned rate no longer applies.
     const finished = route([stop("A", "a", [], "done")], { profit_per_hour: 60_000_000 });
     expect(
