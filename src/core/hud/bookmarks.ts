@@ -134,11 +134,13 @@ export function bookmarkRows(input: {
   const radius = status?.radius ?? null;
   const heading = status?.heading ?? null;
   const near: (HudRow & { d: number })[] = [];
-  const elsewhere = new Map<string, number>();
+  const elsewhere = new Map<string, { name: string; n: number }>();
   for (const s of here) {
     if (bodyKey(s.body!, system) !== onBody) {
-      const name = shortBody(s.body!, system);
-      elsewhere.set(name, (elsewhere.get(name) ?? 0) + 1);
+      // Counted ignoring case, as the body is matched; named as first written.
+      const key = bodyKey(s.body!, system);
+      const seen = elsewhere.get(key);
+      elsewhere.set(key, { name: seen?.name ?? shortBody(s.body!, system), n: (seen?.n ?? 0) + 1 });
       continue;
     }
     const text = `📍 ${s.label ?? s.purpose}`;
@@ -170,7 +172,7 @@ export function bookmarkRows(input: {
   if (near.length > MAX_ROWS) {
     rows.push({ text: `📍 +${near.length - MAX_ROWS} more here`, tone: "dim" });
   }
-  for (const [body, n] of elsewhere) {
+  for (const { name: body, n } of elsewhere.values()) {
     rows.push({
       text: `📍 ${n} bookmark${n === 1 ? "" : "s"} on ${body}`,
       tone: "dim",

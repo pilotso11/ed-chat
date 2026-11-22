@@ -205,7 +205,9 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
         status: input.status,
       });
   // Under the panels about where the ship is; on their own when no panel shows.
-  if (marks.length && (!panel || SURFACE_PANELS.has(panel.mode))) {
+  // Not on their own in massacre or mining mode either, when that mode has nothing to show.
+  const surface = panel ? SURFACE_PANELS.has(panel.mode) : mode !== "massacre" && mode !== "mining";
+  if (marks.length && surface) {
     panel = panel
       ? { ...panel, rows: [...panel.rows, ...marks] }
       : { mode: "bookmarks", title: "BOOKMARKS", rows: marks, footer: [] };
