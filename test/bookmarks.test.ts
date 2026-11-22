@@ -12,6 +12,7 @@ import {
 import {
   BOOKMARKS_PLAN,
   bearing,
+  bioLeft,
   bookmarkRef,
   bookmarkHere,
   bookmarkLabel,
@@ -373,9 +374,10 @@ describe("finished bio bookmarks", () => {
       e.event === "SAASignalsFound" ? { ...e, Signals: [] } : e,
     ) as JournalEvent[];
     expect(finishedBioBookmarks(p, { ...journal, events: noCount })).toEqual([]);
-    // Spansh's count stands in for the journal's.
-    const known = [{ bodyId: 30, bioSignals: 1 }] as never;
-    expect(finishedBioBookmarks(p, { ...journal, events: noCount }, known)).toEqual([0]);
+    // Spansh's count fills in the signals with no genus known yet; auto-done still waits for the journal's.
+    expect(
+      bioLeft({ genera: ["A"], bio_signals: null, species: [], not_started: [] } as never, 3),
+    ).toEqual(["2 signals"]);
     // A count of 0 from a later scan with no biology listed is no count either.
     const zero = events.map((e) =>
       e.event === "SAASignalsFound"
@@ -557,6 +559,16 @@ describe("bio bookmark rows", () => {
       bio_signals: 1,
     });
     expect(rows([done])[0]!.text).toBe("📍 Bio: all sampled");
+    // Spansh's count shows the signals still unknown.
+    expect(
+      bookmarkRows({
+        plan: plan([mark]),
+        system: SYSTEM,
+        status: status({ latitude: null }),
+        bio: [{ ...(done as object), bio_signals: null }] as never,
+        known: [{ bodyId: 6, bioSignals: 3 }] as never,
+      })[0]!.text,
+    ).toBe("📍 Bio: 2 signals");
     // With no signal count the body may hold more.
     expect(rows([{ ...(done as object), bio_signals: null }])[0]!.text).toBe(
       "📍 Bio: all found sampled, more may be here",

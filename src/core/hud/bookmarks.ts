@@ -41,9 +41,10 @@ export function stopPosition(s: Stop): Position | null {
 export function bookmarkLabel(
   bio: ExobiologyBody | null,
   taken: string[],
+  knownCount?: number | null,
 ): { label: string; bio: boolean } {
   const used = new Set(taken.map((t) => t.toLowerCase()));
-  const left = bio ? bioLeft(bio) : [];
+  const left = bio ? bioLeft(bio, knownCount) : [];
   if (left.length) {
     const base = `Bio: ${left.join(", ")}`;
     let label = base;
@@ -61,13 +62,14 @@ export function bookmarkLabel(
  * The biology still to sample on a body: the species started but not analysed, the genera not
  * started, and signals with no genus known yet ("2 signals", before a surface scan).
  */
-export function bioLeft(bio: ExobiologyBody): string[] {
+export function bioLeft(bio: ExobiologyBody, knownCount?: number | null): string[] {
   // Abandoned species are left out: their genus is back among those not started.
   const left = [
     ...bio.species.filter((s) => !s.analysed && !s.abandoned).map((s) => s.species),
     ...bio.not_started,
   ];
-  const unknown = Math.max(0, (bio.bio_signals ?? 0) - bio.genera.length);
+  // Spansh's count stands in when the journal has none (null, or 0 from a later scan).
+  const unknown = Math.max(0, (bio.bio_signals || knownCount || 0) - bio.genera.length);
   return unknown ? [...left, `${unknown} signal${unknown === 1 ? "" : "s"}`] : left;
 }
 
@@ -90,13 +92,14 @@ function bookmarkText(
   const key = bodyKey(s.body, system);
   const body = bio.find((b) => bodyKey(b.body, system) === key);
   if (!body) return label;
-  const left = bioLeft(body);
+  const count = knownSignals(known, body.body_id);
+  const left = bioLeft(body, count);
   // The " (2)" that kept the label unique stays, so two bookmarks on a body still differ.
   const n = / \(\d+\)$/.exec(label)?.[0] ?? "";
   // "All sampled" only when the body is done; with no signal count it may hold more.
   const what = left.length
     ? `Bio: ${left.join(", ")}`
-    : bioProgress(body, knownSignals(known, body.body_id)).done
+    : bioProgress(body, count).done
       ? "Bio: all sampled"
       : "Bio: all found sampled, more may be here";
   return `${what}${n}`;
@@ -230,6 +233,8 @@ export function bookmarkHere(
   journal: (JournalState & { events: JournalEvent[] }) | null,
   status: ShipStatus | null,
   taken: string[],
+  /** Spansh's bodies in the system, for signal counts the journal lacks. */
+  known?: KnownBody[] | null,
 ): { stop: ReturnType<typeof newBookmark> } | { reason: string } {
   const system = journal?.location.system ?? null;
   if (
@@ -249,7 +254,11 @@ export function bookmarkHere(
           (b) => bodyKey(b.body, system) === body,
         ) ?? null)
       : null;
-  const { label, bio: isBio } = bookmarkLabel(bio, taken);
+  const { label, bio: isBio } = bookmarkLabel(
+    bio,
+    taken,
+    bio ? knownSignals(known, bio.body_id) : null,
+  );
   return {
     stop: newBookmark({
       system,
@@ -305,8 +314,6 @@ export const isPlanNotFound = (err: unknown) =>
 export function finishedBioBookmarks(
   plan: Plan | null,
   journal: (JournalState & { events: JournalEvent[] }) | null,
-  /** Spansh's bodies in the system, for signal counts the journal lacks. */
-  known?: KnownBody[] | null,
 ): number[] {
   const system = journal?.location.system ?? null;
   if (!plan || !journal || !system) return [];
@@ -319,7 +326,8 @@ export function finishedBioBookmarks(
   if (address === null) return [];
   const done = new Set(
     exobiology(journal.events, address, { system })
-      .bodies.filter((b) => bioProgress(b, knownSignals(known, b.body_id)).done)
+      // The journal's signal count alone: a stale Spansh count could mark one done early.
+      .bodies.filter((b) => bioProgress(b).done)
       .map((b) => bodyKey(b.body, system)),
   );
   return todo.filter((i) => done.has(bodyKey(plan.stops[i]!.body!, system)));

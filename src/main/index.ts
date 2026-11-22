@@ -109,6 +109,7 @@ import {
   BOOKMARKS_PLAN,
   bookmarkHere,
   bookmarksToClear,
+  sameBookmark,
   todoBookmarks,
   finishedBioBookmarks,
   isPlanNotFound,
@@ -701,6 +702,7 @@ async function main(): Promise<void> {
       hudData.journal,
       status,
       (old?.stops ?? []).map((s) => s.label ?? s.purpose),
+      hudData.known,
     );
     if ("reason" in made) return flash("bookmark", `ⓘ ${made.reason}`, 3_000);
     const saved = await plans.addStop(BOOKMARKS_PLAN, "Bookmarks", made.stop);
@@ -735,21 +737,24 @@ async function main(): Promise<void> {
     }
     askingClearAll = true;
     try {
-      // The count from the plan as it is now, not as the last poll read it.
-      let n = 0;
+      // The bookmarks in the plan as it is now, not as the last poll read it. Only these are
+      // cleared: one added while the question is open was not asked about.
+      let asked: Stop[] = [];
       try {
-        n = todoBookmarks(await plans.get(BOOKMARKS_PLAN)).length;
+        const now = await plans.get(BOOKMARKS_PLAN);
+        asked = todoBookmarks(now).map((i) => now.stops[i]!);
       } catch (err) {
         if (!isPlanNotFound(err)) throw err;
       }
-      if (!n) return flash("bookmark", "ⓘ no bookmarks", 3_000);
-      await askClearAll(n);
+      if (!asked.length) return flash("bookmark", "ⓘ no bookmarks", 3_000);
+      await askClearAll(asked);
     } finally {
       askingClearAll = false;
     }
   }
 
-  async function askClearAll(n: number): Promise<void> {
+  async function askClearAll(asked: Stop[]): Promise<void> {
+    const n = asked.length;
     const r = await dialog.showMessageBox({
       type: "question",
       title: "ED Chat",
@@ -760,14 +765,18 @@ async function main(): Promise<void> {
       cancelId: 1,
       noLink: true,
     });
-    if (r.response === 0) await queueBookmarks(() => unmarkBookmarks("all"));
+    if (r.response === 0) await queueBookmarks(() => unmarkBookmarks("all", true, asked));
   }
 
   // Away from a bookmarked body, the clear key clears the whole system only on a second press.
   const CLEAR_AGAIN_MS = 4_000;
   let clearSystemUntil = 0;
 
-  async function unmarkBookmarks(scope: "here" | "all", confirmed = false): Promise<void> {
+  async function unmarkBookmarks(
+    scope: "here" | "all",
+    confirmed = false,
+    asked: Stop[] = [],
+  ): Promise<void> {
     const plans = hudPlans;
     if (!settings.hud.enabled || !settings.hud.bookmarks || !plans || !hudFeed) {
       return flash("bookmark", "ⓘ bookmarks are off or the panel could not open ed-mcp", 3_000);
@@ -783,7 +792,9 @@ async function main(): Promise<void> {
     const system = hudData?.journal?.location.system ?? null;
     let picked: number[];
     if (scope === "all") {
-      picked = todoBookmarks(plan);
+      picked = todoBookmarks(plan).filter((i) =>
+        asked.some((a) => sameBookmark(a, plan.stops[i]!)),
+      );
     } else {
       const pick = bookmarksToClear({ plan, system, status: await hudFeed.readStatus() });
       picked = pick.stops;
@@ -851,7 +862,7 @@ async function main(): Promise<void> {
   const bookmarksDone = new Set<string>();
   async function finishBioBookmarks(data: FeedData): Promise<void> {
     if (!hudPlans || !settings.hud.bookmarks) return;
-    for (const i of finishedBioBookmarks(data.bookmarks ?? null, data.journal, data.known)) {
+    for (const i of finishedBioBookmarks(data.bookmarks ?? null, data.journal)) {
       const stop = data.bookmarks!.stops[i]!;
       // What and where it is: a new bookmark with the same label in another spot is another one.
       const id = JSON.stringify([stop.system, stop.body, stop.label, stop.purpose, stop.position]);

@@ -739,8 +739,12 @@ export function bioRows(input: {
     const done = progress?.done ?? false;
     // A planet worth mapping says so here too, as it is not listed with the bodies to map.
     const value = x?.value_mapped ?? x?.value_scanned ?? 0;
+    // As the header's "mapped n/m" counts: Earth-like, water and ammonia worlds at any value.
     const map =
-      !!x && input.valuableMin !== undefined && value >= input.valuableMin && !x.mapped_by_you;
+      !!x &&
+      input.valuableMin !== undefined &&
+      (isHighlight(x.type, x.terraformable) || value >= input.valuableMin) &&
+      !x.mapped_by_you;
     const name = x?.body ?? j?.body ?? k?.name ?? String(id);
     const ls = x?.distance_ls ?? k?.distance_ls ?? null;
     const labels = guesses.map((g, i) => g?.label ?? genera[i]!);
@@ -925,17 +929,18 @@ function bioRateLine(input: {
   return parts.length ? [`Rate: ${parts.join(" · ")}`] : [];
 }
 
-/**
- * How far through a body's biology the player is: species analysed (an abandoned one is not)
- * out of the signals, or out of the genera found when there are more of those. Done once every
- * signal has a species analysed and nothing is still in progress or not started. With no signal
- * count (null, or 0 from a later scan) the body may hold more, so it is never done. The one rule
- * for the header, the In system rows and bio bookmarks (finishedBioBookmarks).
- */
 /** Spansh's biological signal count for a body, or null. */
 export const knownSignals = (known: KnownBody[] | null | undefined, bodyId: number) =>
   known?.find((k) => k.bodyId === bodyId)?.bioSignals ?? null;
 
+/**
+ * How far through a body's biology the player is: species analysed (an abandoned one is not)
+ * out of the signals, or out of the genera found when there are more of those. Done once every
+ * signal has a species analysed and nothing is still in progress or not started. With no signal
+ * count (null, or 0 from a later scan) the body may hold more, so it is never done. Spansh's
+ * count stands in for what the panel shows; auto-done bio bookmarks (finishedBioBookmarks) use
+ * the journal's alone, since a stale Spansh count would clear one early.
+ */
 export function bioProgress(
   b: ExobiologyBody,
   /** Another source's signal count (Spansh), for a body the journal has none for. */
