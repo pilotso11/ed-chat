@@ -139,7 +139,7 @@ Route stale: 1 new mission. Ask Claude to re-route
 TRADE  Loop: Kremainn ⇄ Wolf 397              stop 1/2 · lap 3
 ● Kremainn · Wohler Terminal                  BUY  720 t Gold
   hold 0/720 · price 9,410 (plan 9,380)
-▸ Wolf 397 · Brooks Estate · 2 jumps          SELL 720 t Gold
+▸ Wolf 397 · Brooks Estate                    SELL 720 t Gold · 2 jumps
 Session: 31.6M profit · 46m · 41.2M/h (30m 40.0M/h)
 ```
 
