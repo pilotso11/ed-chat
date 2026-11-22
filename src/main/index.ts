@@ -663,8 +663,11 @@ async function main(): Promise<void> {
     // PlanStore.addStop adds the stop in one locked write, so an edit Claude makes to the bookmarks
     // meanwhile is not lost.
     const plans = hudPlans;
-    if (!plans || !hudFeed || !settings.hud.enabled) {
+    if (!settings.hud.enabled) {
       return flash("bookmark", "ⓘ the activity panel is off: turn it on to bookmark", 3_000);
+    }
+    if (!plans || !hudFeed) {
+      return flash("bookmark", "ⓘ the activity panel could not open the journal or ed-mcp", 3_000);
     }
     if (!settings.hud.bookmarks) {
       return flash("bookmark", "ⓘ bookmarks are off: turn on hud.bookmarks", 3_000);
@@ -708,15 +711,17 @@ async function main(): Promise<void> {
         const now = await hudPlans.get(BOOKMARKS_PLAN);
         const index = now.stops.findIndex((s) => s.status === "todo" && sameBookmark(s, stop));
         if (index < 0) continue;
-        // By label, which is unique among bookmarks, so an edit between the read and the write
-        // cannot move another stop under the index.
-        const ref = now.stops[index]!.label ? { label: now.stops[index]!.label! } : { index };
+        // By label when no other stop has it, so an edit between the read and the write cannot move
+        // another stop under the index; Claude can give two stops one label, and then the index.
+        const label = now.stops[index]!.label;
+        const ref =
+          label && now.stops.filter((s) => s.label === label).length === 1 ? { label } : { index };
         await hudPlans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
         flash("bookmark", `📍 done: ${stop.label ?? stop.purpose}`, 4_000);
       } catch (err) {
-        // Tried again on the next poll.
+        // Tried again on the next poll; the other bookmarks are still marked.
         bookmarksDone.delete(id);
-        throw err;
+        log.log("warn", `panel bookmarks: ${message(err)}`);
       }
     }
   }

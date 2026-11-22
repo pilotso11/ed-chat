@@ -247,7 +247,8 @@ export function finishedBioBookmarks(
   const done = new Set(
     exobiology(journal.events, address, { system })
       .bodies.filter((b) => {
-        // An abandoned species was left for another of its genus: it neither blocks nor counts.
+        // An abandoned species was left for another of its genus: it need not be analysed, but it
+        // is not one of the analysed species either, so the signal count still waits for one.
         const kept = b.species.filter((s) => !s.abandoned);
         return (
           kept.length > 0 &&

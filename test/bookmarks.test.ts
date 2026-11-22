@@ -1,6 +1,16 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { JournalEvent, JournalState, Plan, Stop } from "ed-mcp/journal";
 import {
+  PlanStore,
+  type JournalEvent,
+  type JournalState,
+  type Plan,
+  type Stop,
+} from "ed-mcp/journal";
+import {
+  BOOKMARKS_PLAN,
   bearing,
   bookmarkHere,
   bookmarkLabel,
@@ -175,6 +185,29 @@ describe("bookmark rows", () => {
     const v = buildHud(input, null);
     expect(v.panel?.title).toBe("BOOKMARKS");
     expect(v.panel?.rows[0]?.text).toBe("📍 Spot");
+
+    // Under the exploration panel, after its own rows; not under mining.
+    const at = Date.UTC(2026, 10, 22);
+    const jumped = {
+      ...input,
+      journal: {
+        ...input.journal!,
+        events: [
+          {
+            timestamp: "2026-11-21T23:00:00Z",
+            event: "FSDJump",
+            StarSystem: SYSTEM,
+            SystemAddress: 7,
+          },
+        ] as unknown as JournalEvent[],
+      },
+    };
+    const explore = buildHud({ ...jumped, hotkey: { mode: "exploration", at } }, null);
+    expect(explore.panel?.mode).toBe("exploration");
+    expect(explore.panel?.rows.at(-1)?.text).toBe("📍 Spot");
+    const mining = buildHud({ ...input, hotkey: { mode: "mining", at } }, null);
+    expect(mining.panel?.mode).toBe("mining");
+    expect(mining.panel?.rows.some((r) => r.text.startsWith("📍"))).toBe(false);
   });
 });
 
@@ -219,6 +252,14 @@ describe("bookmark review fixes", () => {
       "📍 B2",
       "📍 +2 more here",
     ]);
+  });
+
+  it("knows ed-mcp's own error for a missing plan", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "bookmarks-"));
+    const store = new PlanStore(path.join(dir, "plans.json"));
+    const err = await store.get(BOOKMARKS_PLAN).catch((e: unknown) => e);
+    expect(isPlanNotFound(err)).toBe(true);
+    await rm(dir, { recursive: true, force: true });
   });
 
   it("tells a missing plan from a failed read", () => {
