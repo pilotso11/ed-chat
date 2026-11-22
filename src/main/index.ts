@@ -1574,7 +1574,9 @@ async function main(): Promise<void> {
         return openPath(logDir);
       case "about":
         // A fixed https address: the home page, in the default browser.
-        return void shell.openExternal(ABOUT_URL);
+        return void shell
+          .openExternal(ABOUT_URL)
+          .catch((err: unknown) => log.log("warn", `open about: ${message(err)}`));
       case "quit":
         return app.quit();
       default:

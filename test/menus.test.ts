@@ -55,6 +55,10 @@ describe("tray menu", () => {
       "---",
       "Quit",
     ]);
+    // About opens the home page, not another item's action.
+    expect(trayItems(base).find((i) => "label" in i && i.label === "About ED Chat")).toMatchObject({
+      action: { type: "about" },
+    });
   });
 
   it("lists the chips first, to copy", () => {
