@@ -98,23 +98,27 @@ export interface Prospect {
 export interface MiningState {
   /** The ring being mined, when the journal or Status.json says. */
   ring: string | null;
-  /** The newest prospect since arriving in the system. */
+  /** The newest prospect since the rocks last reset (leaving the ring, or a relog). */
   prospect: Prospect | null;
-  /** This game session's prospects, for the counts. */
+  /** The mining session's prospects, for the counts; a session ends after two hours idle. */
   prospects: Prospect[];
   cracked: number;
   /** The ring's hotspots, from its surface scan. */
   hotspots: { name: string; count: number }[];
-  /** Tons refined this game session, by commodityKey(). */
+  /** Tons mined this session (refined, or collected from a cracked core), by commodityKey(). */
   refined: Map<string, number>;
   /** Tons per hour, over the last 15 minutes of mining; null when too little to say. */
   rate: number | null;
   /**
-   * The system of the newest mining event, while the ship is a few jumps from it at most: buyers
-   * are searched from here, not again at each jump. Null further away, or after a new game.
+   * The system of the newest mining event, buyers are searched from it rather than again at each
+   * jump. Null more than three jumps away, or after a login or respawn in another system; a jump
+   * or login back there makes it the origin again. A relog in the same system keeps it.
    */
   system: string | null;
-  /** When the player last sold anything: a new trip after a sale copies the buyer again. */
+  /**
+   * When the hold was last emptied of mined cargo: a sale of a mined commodity, or a move to the
+   * carrier (selling limpets does not count). A new trip after it copies the buyer again.
+   */
   lastSale: string | null;
 }
 
