@@ -136,18 +136,21 @@ Route stale: 1 new mission. Ask Claude to re-route
 ### Trade panel (built)
 
 ```
-TRADE  Loop: Kremainn ⇄ Wolf 397              lap 3 · 41.2M/h
+TRADE  Loop: Kremainn ⇄ Wolf 397              stop 1/2 · lap 3
 ● Kremainn · Wohler Terminal                  BUY  720 t Gold
   hold 0/720 · price 9,410 (plan 9,380)
-▸ Wolf 397 · Brooks Estate                    SELL 720 t Gold
-Session: 31.6M profit · 46m
+▸ Wolf 397 · Brooks Estate · 2 jumps          SELL 720 t Gold
+Session: 31.6M profit · 46m · 41.2M/h (30m 40.0M/h)
 ```
 
 - The current stop's action from its `cargo`: what to buy or sell and how much. While docked at
   that stop, the second line shows the hold against the plan, and the price in `Market.json`
   against the planned price, so a market that has moved is visible before buying.
 - `MarketBuy` and `MarketSell` keep the session's profit: each sale's total less the average cost
-  paid for those tons. Profit per hour is over the time since the first trade of the session.
+  paid for those tons. Profit an hour is on the Session line, over the active time since the first
+  trade of the session (gaps of more than 10 minutes count 10), with the last half hour in
+  brackets. The header has the stop (stop n/m, in visit order over all the plan's stops) and the
+  lap.
 - When the stop's action is done (hold filled, or the commodity sold), the panel marks the stop
   done through the `PlanStore`, as `routeNext` does, and copies the next system. Undocking with
   the action not done leaves the stop open.
