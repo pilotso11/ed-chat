@@ -22,7 +22,7 @@ hand in. Analysed species and mapped bodies are green with a ✓ too.
 | Ctrl+Alt+Home | Move the panel: for 15 seconds the move keys move the panel, not the chat |
 | Ctrl+Alt+PageDown / PageUp | Mark the current route stop done / go back one stop, and copy the stop's system |
 | Ctrl+Alt+B | Bookmark where you are on a planet |
-| Ctrl+Alt+- | Clear the nearest bookmark on this body; away from a bookmarked body, press twice to clear every bookmark in the system |
+| Ctrl+Alt+- | Clear the nearest bookmark on the body you are on |
 
 ## Massacre
 
@@ -179,11 +179,10 @@ out of date, fills in the panel but does not mark a bookmark done). The
 journal does not say what grows where, so the list is for the whole body, not
 the spot. Only bookmarks the key made keep their list up to date: one renamed,
 or made before ED Chat 0.9, keeps its label as saved.
-Ctrl+Alt+- clears the nearest bookmark on the body you are on. Away from a
-bookmarked body, a second press within 4 seconds clears every bookmark in the
-system. The tray menu's Bookmarks item says which it clears: the nearest here
-in one click, or every one in the system after asking. It can also clear every
-bookmark, after asking. A cleared bookmark
+Ctrl+Alt+- clears the nearest bookmark on the body you are on. The tray menu's
+Bookmarks item clears the nearest one here in one click; away from a bookmarked
+body it offers every bookmark in the system instead, and asks first. It can also
+clear every bookmark, after asking. A cleared bookmark
 is marked skipped in the plan. Bookmarks are an ed-mcp plan, so Claude can see
 and change them too. `hud.bookmarks` turns them off.
 

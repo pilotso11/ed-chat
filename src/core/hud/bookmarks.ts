@@ -284,7 +284,7 @@ export const todoBookmarks = (plan: Plan | null): number[] =>
 /**
  * The bookmarks that the clear key clears, as indexes in the plan. On a body, the nearest
  * bookmark on it (the first when where it is or where the player is is not known). Elsewhere in
- * the system, every bookmark in the system (whole: true, which the key asks to confirm). Only
+ * the system, every bookmark in the system (whole: true: the tray asks first, the key refuses). Only
  * bookmarks with a body, as the panel shows. Empty when the system has none.
  */
 export function bookmarksToClear(input: {

@@ -723,18 +723,11 @@ async function main(): Promise<void> {
     // finds: the player may have lifted off or jumped since.
     if (from === "tray") {
       const named = trayHere;
-      // Every bookmark in the system asks first, as the key's second press and Clear all do.
+      // Every bookmark in the system asks first, as Clear all does.
       if (trayHereWhole) return askClearListed(named, "in this system");
       return queueBookmarks(() => unmarkBookmarks("listed", named));
     }
-    // Timed at the press, not when the queue gets to it, for the second press's window. A held
-    // key repeats every few tens of milliseconds: a press that soon after the last is ignored,
-    // so only letting go and pressing again counts as a second press.
-    const at = Date.now();
-    const repeat = at - lastClearPress < CLEAR_REPEAT_MS;
-    lastClearPress = at;
-    if (repeat) return Promise.resolve();
-    return queueBookmarks(() => unmarkBookmarks("here", [], at));
+    return queueBookmarks(() => unmarkBookmarks("here"));
   }
 
   // The bookmarks the tray's "here" item names, as the menu was built, and whether they are the
@@ -802,21 +795,9 @@ async function main(): Promise<void> {
     if (r.response === 0) await queueBookmarks(() => unmarkBookmarks("listed", asked));
   }
 
-  // Away from a bookmarked body, the clear key clears the whole system only on a second press,
-  // and only the bookmarks the first press named, in the same system.
-  const CLEAR_AGAIN_MS = 4_000;
-  // A held key repeats: a press this soon after the last one is the same press.
-  const CLEAR_REPEAT_MS = 400;
-  let lastClearPress = 0;
-  let clearSystem: { at: number; system: string | null; stops: Stop[] } | null = null;
-
   // Clears the bookmark here (the key), or the listed ones that are still to do (the tray, after
   // naming or asking about them).
-  async function unmarkBookmarks(
-    scope: "here" | "listed",
-    listed: Stop[] = [],
-    pressed = Date.now(),
-  ): Promise<void> {
+  async function unmarkBookmarks(scope: "here" | "listed", listed: Stop[] = []): Promise<void> {
     const plans = hudPlans;
     if (!settings.hud.enabled || !settings.hud.bookmarks || !plans || !hudFeed) {
       return flash("bookmark", "ⓘ bookmarks are off or the panel could not open ed-mcp", 3_000);
@@ -841,22 +822,13 @@ async function main(): Promise<void> {
       if (!status) return flash("bookmark", "ⓘ could not read where you are: try again", 3_000);
       const pick = bookmarksToClear({ plan, system, status });
       picked = pick.stops;
-      const stops = picked.map((i) => plan.stops[i]!);
-      const armed = clearSystem;
-      clearSystem = null;
-      const again =
-        !!armed &&
-        pressed - armed.at <= CLEAR_AGAIN_MS &&
-        armed.system === system &&
-        armed.stops.length === stops.length &&
-        stops.every((s) => armed.stops.some((a) => sameStop(a, s)));
-      if (pick.whole && !again) {
-        clearSystem = { at: pressed, system, stops };
-        const n = picked.length;
+      // The key clears one bookmark, on the body you are on. A whole system is the tray's, which
+      // asks first: a held key repeats, so a second press cannot be told from holding it.
+      if (pick.whole) {
         return flash(
           "bookmark",
-          `ⓘ not on a bookmarked body: press again to clear ${n} bookmark${n === 1 ? "" : "s"} in this system`,
-          CLEAR_AGAIN_MS,
+          "ⓘ not on a bookmarked body: clear this system's bookmarks from the tray menu",
+          4_000,
         );
       }
     }
