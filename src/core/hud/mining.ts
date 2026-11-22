@@ -564,6 +564,7 @@ function readCarrier(events: JournalEvent[], now: number): Carrier | null {
 
 const LARGE = new Set([
   "anaconda",
+  "anacondamkii",
   "belugaliner",
   "cutter",
   "empire_trader",
@@ -594,13 +595,39 @@ const SMALL = new Set([
   "vulture",
 ]);
 
+// Medium-pad ships by the journal's names. A ship on no list is taken as large: a large ship
+// sent to a medium pad cannot dock, while a medium ship taken as large only sees fewer stations.
+const MEDIUM = new Set([
+  "asp",
+  "asp_scout",
+  "corsair",
+  "federation_dropship",
+  "federation_dropship_mkii",
+  "federation_gunship",
+  "ferdelance",
+  "independant_trader",
+  "krait_light",
+  "krait_mkii",
+  "lakonminer",
+  "mamba",
+  "mandalay",
+  "python",
+  "python_nx",
+  "type6",
+  "type8",
+  "typex",
+  "typex_2",
+  "typex_3",
+]);
+
 /** The landing pad the ship needs; null when the ship type is unknown. */
 export function padFor(shipType: string | null): "L" | "M" | "S" | null {
   if (!shipType) return null;
   const t = shipType.toLowerCase();
-  if (LARGE.has(t)) return "L";
   if (SMALL.has(t)) return "S";
-  return "M";
+  if (MEDIUM.has(t)) return "M";
+  // LARGE, and any ship not listed yet, such as a new hull.
+  return "L";
 }
 
 const fits = (h: SellHit, pad: "L" | "M" | "S" | null) =>

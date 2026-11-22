@@ -248,6 +248,10 @@ describe("where to sell", () => {
     expect(padFor("type9")).toBe("L");
     expect(padFor("Python")).toBe("M");
     expect(padFor("cobramkiii")).toBe("S");
+    expect(padFor("type8")).toBe("M");
+    expect(padFor("anacondamkii")).toBe("L");
+    // A hull not listed yet is taken as large, the safe side.
+    expect(padFor("somenewhull")).toBe("L");
     expect(padFor(null)).toBeNull();
   });
 
