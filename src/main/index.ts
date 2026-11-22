@@ -111,6 +111,8 @@ import {
   finishedBioBookmarks,
   isPlanNotFound,
   bookmarkRef,
+  keepSavedBookmarks,
+  type SavedBookmarks,
 } from "../core/hud/bookmarks.js";
 import { SellPrices, postSpansh, type SellQuery } from "../core/hud/sell.js";
 import { buildHud, type HudView } from "../core/hud/hud.js";
@@ -592,16 +594,18 @@ async function main(): Promise<void> {
   let hudPolling = false;
   let lastSystem: string | null = null;
   // The bookmarks plan a key press saved; a poll that started before it read the plan without it.
-  let savedBookmarks: { plan: Plan; at: number } | null = null;
+  let savedBookmarks: SavedBookmarks | null = null;
+  // Polls started so far, which dates a save against the polls around it.
+  let pollsStarted = 0;
   async function pollHud(): Promise<void> {
     if (hudPolling || !hudFeed || !settings.hud.enabled) return;
     hudPolling = true;
-    const started = Date.now();
+    const poll = ++pollsStarted;
     try {
-      const data = await hudFeed.poll();
-      // A poll that started after the save read it: the override is no longer needed.
-      if (savedBookmarks && savedBookmarks.at < started) savedBookmarks = null;
-      hudData = savedBookmarks ? { ...data, bookmarks: savedBookmarks.plan } : data;
+      const read = await hudFeed.poll();
+      const kept = keepSavedBookmarks(read, savedBookmarks, poll);
+      savedBookmarks = kept.saved;
+      hudData = kept.data;
       hudFreshAt = Date.now();
       const stops = todoStops(hudData.plan);
       if (JSON.stringify(stops) !== JSON.stringify(chipStops)) {
@@ -691,7 +695,7 @@ async function main(): Promise<void> {
     const saved = await plans.addStop(BOOKMARKS_PLAN, "Bookmarks", made.stop);
     flash("bookmark", `📍 bookmarked ${made.stop.purpose} on ${made.stop.body}`, 4_000);
     // Shown at once, not after the next poll, which may have read the plan before the save.
-    savedBookmarks = { plan: saved, at: Date.now() };
+    savedBookmarks = { plan: saved, afterPoll: pollsStarted };
     if (hudData) hudData = { ...hudData, bookmarks: saved };
     renderHud();
   }

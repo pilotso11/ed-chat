@@ -293,3 +293,23 @@ export function bookmarkRef(plan: Plan, stop: Stop): { label: string } | { index
     ? { label }
     : { index };
 }
+
+/** The bookmarks plan a key press saved, and how many polls had started by then. */
+export interface SavedBookmarks {
+  plan: Plan;
+  afterPoll: number;
+}
+
+/**
+ * A poll's data with the bookmarks just saved, when the poll (number `poll`, counting from 1)
+ * started before the save and so read the plan without them. A poll that started after the save
+ * read it: the saved plan is dropped, so Claude's later edits show.
+ */
+export function keepSavedBookmarks<T extends { bookmarks?: Plan | null }>(
+  data: T,
+  saved: SavedBookmarks | null,
+  poll: number,
+): { data: T; saved: SavedBookmarks | null } {
+  if (!saved || poll > saved.afterPoll) return { data, saved: null };
+  return { data: { ...data, bookmarks: saved.plan }, saved };
+}

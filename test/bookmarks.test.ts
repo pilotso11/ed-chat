@@ -18,6 +18,7 @@ import {
   bookmarkRows,
   finishedBioBookmarks,
   isPlanNotFound,
+  keepSavedBookmarks,
   newBookmark,
   sameBookmark,
   stopPosition,
@@ -412,5 +413,25 @@ describe("marking a bookmark done", () => {
       { body: BODY, label: "B", position: spot },
     ]);
     expect(bookmarkRef(twins, twins.stops[1]!)).toEqual({ label: "B" });
+  });
+});
+
+describe("a bookmark saved during a poll", () => {
+  const read = plan([]);
+  const saved = { plan: plan([{ body: BODY, label: "Spot" }]), afterPoll: 3 };
+
+  it("is kept over a poll that started before the save", () => {
+    expect(keepSavedBookmarks({ bookmarks: read }, saved, 3)).toEqual({
+      data: { bookmarks: saved.plan },
+      saved,
+    });
+  });
+
+  it("is dropped once a poll started after it, so later edits show", () => {
+    expect(keepSavedBookmarks({ bookmarks: read }, saved, 4)).toEqual({
+      data: { bookmarks: read },
+      saved: null,
+    });
+    expect(keepSavedBookmarks({ bookmarks: read }, null, 1).data.bookmarks).toBe(read);
   });
 });
