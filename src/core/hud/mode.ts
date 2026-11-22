@@ -29,6 +29,16 @@ export const HUD_EVENTS = [
   "CarrierJumpCancelled",
   "CarrierDecommission",
   "CarrierCancelDecommission",
+  // Read by the mining rules; ed-mcp keeps most of these for itself, but the panel does not rely
+  // on that.
+  "LoadGame",
+  "Location",
+  "FSDJump",
+  "CarrierJump",
+  "Docked",
+  "Undocked",
+  "Died",
+  "Cargo",
 ] as const;
 
 export interface Choice {

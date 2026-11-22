@@ -275,8 +275,15 @@ export function miningState(
         if (isMined(commodityKey(str(e.Type) ?? ""))) lastSale = e.timestamp;
         break;
       case "CargoTransfer":
-        // The hold emptied to the carrier: the next full hold is a new trip.
-        if (objs(e.Transfers).some((x) => x.Direction === "tocarrier")) lastSale = e.timestamp;
+        // Mined cargo moved to the carrier: the next full hold is a new trip. Moving other cargo
+        // (limpets, trade goods) is not.
+        if (
+          objs(e.Transfers).some(
+            (x) => x.Direction === "tocarrier" && isMined(commodityKey(str(x.Type) ?? "")),
+          )
+        ) {
+          lastSale = e.timestamp;
+        }
         break;
       case "SupercruiseExit":
         if (e.BodyType === "PlanetaryRing") ring = str(e.Body);
@@ -912,7 +919,10 @@ export function miningPanel(input: {
     if (!pick) {
       rows.push({
         text: `Sell ${t.name} ${t.tons} t`,
-        right: `no buyer within ${t.query.radiusLy} ly`,
+        // Buyers found but none usable says why, rather than that there are none.
+        right: found.length
+          ? "no buyer with a pad for this ship"
+          : `no buyer within ${t.query.radiusLy} ly`,
         tone: "dim",
       });
       continue;

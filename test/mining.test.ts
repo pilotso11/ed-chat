@@ -20,7 +20,7 @@ import {
   pickSell,
   sellQueries,
 } from "../src/core/hud/mining.js";
-import { journalMode, noteMode } from "../src/core/hud/mode.js";
+import { HUD_EVENTS, journalMode, noteMode } from "../src/core/hud/mode.js";
 import { parseSellHits, sellSearchBody, SellPrices, type SellHit } from "../src/core/hud/sell.js";
 import { DEFAULT_MINING_TARGETS, DEFAULT_SETTINGS } from "../src/core/settings.js";
 
@@ -1295,5 +1295,47 @@ describe("a rock with no materials", () => {
       now: T0 + t * 1000,
     });
     expect(p.rows[0]).toEqual({ text: "No materials · High", right: "skip", tone: "dim" });
+  });
+});
+
+describe("trips, kept events and the no-buyer message", () => {
+  it("starts a trip only when mined cargo goes to the carrier", () => {
+    const move = (type: string) =>
+      ev("CargoTransfer", { Transfers: [{ Type: type, Count: 4, Direction: "tocarrier" }] });
+    expect(miningState([refined("Platinum"), move("drones")], T0 + t * 1000).lastSale).toBeNull();
+    const m = move("platinum");
+    expect(miningState([refined("Platinum"), m], T0 + t * 1000).lastSale).toBe(m.timestamp);
+  });
+
+  it("keeps every event the mining rules read", () => {
+    for (const e of [
+      "LoadGame",
+      "Location",
+      "FSDJump",
+      "CarrierJump",
+      "Docked",
+      "Undocked",
+      "Died",
+    ]) {
+      expect(HUD_EVENTS).toContain(e);
+    }
+  });
+
+  it("says when buyers were found but none fits the ship", () => {
+    const p = miningPanel({
+      system: "A",
+      state: miningState([refined("Platinum")], T0 + t * 1000),
+      events: [refined("Platinum")],
+      cargo: [{ name: "platinum", count: 5, stolen: false, mission_id: null }],
+      capacity: null,
+      shipType: "type9",
+      carrier: null,
+      settings: M,
+      now: T0 + t * 1000,
+      sell: () => [hit({ largePad: false, mediumPad: true })],
+    });
+    expect(p.rows.find((r) => r.text.startsWith("Sell"))?.right).toBe(
+      "no buyer with a pad for this ship",
+    );
   });
 });
