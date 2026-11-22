@@ -456,7 +456,7 @@ describe("helpers", () => {
   it("reads the ship's position from Status.json", () => {
     expect(
       parseShipStatus('{"BodyName":"X 1","Latitude":1.5,"Longitude":-2,"PlanetRadius":3e6}'),
-    ).toEqual({ body: "X 1", latitude: 1.5, longitude: -2, radius: 3e6 });
+    ).toEqual({ body: "X 1", latitude: 1.5, longitude: -2, radius: 3e6, heading: null });
     expect(parseShipStatus("{")).toBeNull();
   });
 

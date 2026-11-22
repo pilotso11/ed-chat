@@ -116,7 +116,7 @@ describe("chordBinding", () => {
 describe("bindings", () => {
   it("expands copyChip to 9 bindings and lists the rest", () => {
     const b = bindings(DEFAULT_SETTINGS.hotkeys);
-    expect(b).toHaveLength(18 + 9);
+    expect(b).toHaveLength(19 + 9);
     expect(b.find((x) => x.accelerator === "Ctrl+Alt+3")?.action).toEqual({
       type: "copyChip",
       n: 3,
@@ -140,7 +140,7 @@ describe("HotkeyManager", () => {
     m.setBindings(bindings(DEFAULT_SETTINGS.hotkeys));
     expect(live.size).toBe(0);
     expect(m.activate()).toEqual([]);
-    expect(live.size).toBe(27);
+    expect(live.size).toBe(28);
     live.get("Ctrl+Alt+Enter")!();
     expect(ran).toEqual([{ type: "openChat" }]);
     m.deactivate();

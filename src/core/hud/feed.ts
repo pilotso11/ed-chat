@@ -2,13 +2,14 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { systemAddress, type JournalEvent, type Stores } from "ed-mcp/journal";
 import type { HudInput } from "./hud.js";
-import { parseShipStatus } from "./hud.js";
+import { parseShipStatus, type ShipStatus } from "./hud.js";
+import { BOOKMARKS_PLAN, isPlanNotFound } from "./bookmarks.js";
 import type { KnownBodies } from "./known.js";
 import { navRouteCleared, parseNavRoute, sampleKey, type Point } from "./panels.js";
 
 export type FeedData = Pick<
   HudInput,
-  "journal" | "status" | "nav" | "activity" | "plan" | "samples" | "known"
+  "journal" | "status" | "nav" | "activity" | "plan" | "samples" | "known" | "bookmarks"
 >;
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -35,6 +36,18 @@ export class HudFeed {
     } = {},
   ) {}
 
+  /** Status.json as it is now, for a key press that must not use the last poll's position. */
+  async readStatus(): Promise<ShipStatus | null> {
+    // The game rewrites the file several times a second: a read caught mid-write is tried again.
+    for (let tries = 0; tries < 3; tries++) {
+      const text = await this.read("Status.json");
+      const status = text ? parseShipStatus(text) : null;
+      if (status) return status;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return null;
+  }
+
   private read(name: string): Promise<string | null> {
     const read = this.opts.read ?? ((f: string) => readFile(f, "utf8"));
     return read(path.join(this.journalDir, name)).catch(() => null);
@@ -55,12 +68,19 @@ export class HudFeed {
       this.stores.activity.get().catch((err: unknown) => (this.error("activity", err), null)),
     ]);
     const status = statusText ? parseShipStatus(statusText) : null;
-    let plan = null;
-    if (activity?.plan_id) {
-      plan = await this.stores.plans
-        .get(activity.plan_id)
-        .catch((err: unknown) => (this.error("plan", err), null));
-    }
+    // Read together; no bookmarks plan is the usual case, not an error.
+    const [plan, bookmarks] = await Promise.all([
+      activity?.plan_id
+        ? this.stores.plans
+            .get(activity.plan_id)
+            .catch((err: unknown) => (this.error("plan", err), null))
+        : null,
+      this.stores.plans
+        .get(BOOKMARKS_PLAN)
+        .catch((err: unknown) =>
+          isPlanNotFound(err) ? null : (this.error("bookmarks", err), null),
+        ),
+    ]);
     if (journal) this.noteSamples(journal.events, status);
     const system = journal?.location.system ?? null;
     const address = journal && system ? systemAddress(journal.events, system) : null;
@@ -73,6 +93,7 @@ export class HudFeed {
       plan,
       samples: this.samples,
       known,
+      bookmarks,
     };
   }
 

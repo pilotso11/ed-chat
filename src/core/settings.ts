@@ -48,6 +48,7 @@ const HotkeysSchema = z.strictObject({
   hudMove: keys.default("Ctrl+Alt+Home"),
   routeNext: keys.default("Ctrl+Alt+PageDown"),
   routePrev: keys.default("Ctrl+Alt+PageUp"),
+  bookmark: keys.default("Ctrl+Alt+B"),
 });
 
 // Windows turns Shift+numpad digit into End, Down and so on, so the numpad keys use Ctrl only.
@@ -87,6 +88,8 @@ const HudSchema = z.strictObject({
   // Look up each system's planets on Spansh when you arrive, to call out Earth-like, water and
   // ammonia worlds and terraformables before they are scanned.
   spansh: z.boolean().default(true),
+  // Show surface bookmarks (the bookmark key) on the body and in the system.
+  bookmarks: z.boolean().default(true),
   // Planets with biological signals worth less than this are left off the exploration panel.
   // Before the species are known, a planet is judged by the least its genera can be worth.
   bioMin: z.number().int().min(0).default(5_000_000),

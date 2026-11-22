@@ -229,6 +229,7 @@ the ed-mcp activity note, which the panel follows.
 | Ctrl+Alt+Shift+P | Mode: auto, massacre, exploration, exobiology, route, off |
 | Ctrl+Alt+Home | Move the panel: for 15 seconds the move keys move the panel, not the chat |
 | Ctrl+Alt+PageDown / PageUp | Mark the current route stop done / go back one stop, and copy the stop's system |
+| Ctrl+Alt+B | Bookmark where you are on a planet |
 
 The panel uses the same activity note and plans as ed-mcp. ED Chat finds the
 ed-mcp sync folder where ed-mcp is set up: Claude Code's `~/.claude.json`, the
@@ -377,6 +378,7 @@ next start.
 | `hud.mining.carrierMarkets` | `false` | Include other players' fleet carriers as buyers |
 | `hud.mining.sellRadiusLy` / `carrierRadiusLy` | `100` / `500` | How far to search for buyers from the ship, or from the carrier |
 | `hud.mining.maxPriceAgeDays` | `7` | Leave out buyers with older Spansh market data |
+| `hud.bookmarks` | `true` | Show surface bookmarks (Ctrl+Alt+B) on the body and in the system |
 | `hud.edMcpDataDir` | `null` | The ed-mcp sync folder; `null` finds it in ed-mcp's setup |
 
 With the chat open you can also drag the overlay by its status line. It snaps
