@@ -128,3 +128,28 @@ for (const which of ["chat", "panel"] as const) {
     }
   });
 }
+
+for (const command of ["/quit", "/exit"]) {
+  test(`quits on ${command} typed in the chat`, async () => {
+    t = await launch();
+    // Started, so main is listening for the chat's sends.
+    await expect(t.chat.locator(".strip .state")).toContainText("idle");
+    const exited = new Promise<{ code: number | null; signal: string | null }>((r) =>
+      t!.app.process().once("exit", (code, signal) => r({ code, signal })),
+    );
+    // As the chat's submit sends typed text. After this call returns, as for a closed window: the
+    // app quits, and Playwright cannot finish a call to a gone app.
+    await t.chat.evaluate((c) => {
+      setTimeout(() => void window.overlay.send(c), 0);
+    }, command);
+    let timer: NodeJS.Timeout | undefined;
+    const stillRunning = new Promise<never>((_r, reject) => {
+      timer = setTimeout(() => reject(new Error(`the app kept running after ${command}`)), 15_000);
+    });
+    try {
+      expect(await Promise.race([exited, stillRunning])).toEqual({ code: 0, signal: null });
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+}
