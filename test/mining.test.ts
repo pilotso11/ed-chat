@@ -1077,3 +1077,15 @@ describe("after the final review", () => {
     expect([...refinedKinds(events)]).toEqual([]);
   });
 });
+
+describe("after the PR review", () => {
+  it("does not count fragments scooped after a relog as from the core cracked before", () => {
+    const events = [
+      ev("AsteroidCracked", { Body: "R" }),
+      ev("LoadGame"),
+      ev("Location", { StarSystem: "A" }),
+      ev("CollectCargo", { Type: "opal" }),
+    ];
+    expect(miningState(events, T0 + t * 1000).refined.size).toBe(0);
+  });
+});

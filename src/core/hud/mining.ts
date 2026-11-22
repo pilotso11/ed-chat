@@ -190,9 +190,12 @@ export function miningState(
   for (const e of events) {
     last = Date.parse(e.timestamp) || last;
     switch (e.event) {
+      case "LoadGame":
       case "Location":
-        // Written at login too, in the same place: not a move.
-        here = str(e.StarSystem) ?? here;
+        // Written at login too, in the same place: not a move. But a relog resets the rocks, so
+        // fragments scooped after it are not from the core cracked before.
+        if (e.event === "Location") here = str(e.StarSystem) ?? here;
+        crackedHere = false;
         break;
       case "FSDJump":
       case "CarrierJump":
