@@ -170,6 +170,8 @@ function fragmentTracker(): (e: JournalEvent) => string | null {
 const SESSION_GAP_MS = 2 * 3_600_000;
 /** Buyers are searched from the mining system for this many jumps, then from where the ship is. */
 const SEARCH_FROM_MINING_JUMPS = 3;
+
+const sameSystem = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const RATE_MIN_MS = 3 * 60_000;
 
 function prospectOf(e: JournalEvent, at: number): Prospect {
@@ -216,6 +218,8 @@ export function miningState(
   let lastSale: string | null = null;
   let lastMining = 0;
   let jumpsSince = 0;
+  // Logged in, or respawned, in a system other than the mining system.
+  let away = false;
   const fragment = fragmentTracker();
   const rings = new Map<string, { name: string; count: number }[]>();
   const mined = () => {
@@ -232,6 +236,7 @@ export function miningState(
     lastMining = last;
     system = here;
     jumpsSince = 0;
+    away = false;
   };
   for (const e of events) {
     last = Date.parse(e.timestamp) || last;
@@ -243,20 +248,24 @@ export function miningState(
     }
     if (rocksReset(e)) prospect = null;
     switch (e.event) {
-      case "Location":
-        // Written at login too, usually in the same place: not a move. A login in another system
-        // (a carrier that jumped while logged out) is away from the mining system, as a jump is.
-        if (here !== null && str(e.StarSystem) !== null && str(e.StarSystem) !== here) {
-          jumpsSince = SEARCH_FROM_MINING_JUMPS + 1;
-        }
-        here = str(e.StarSystem) ?? here;
+      case "Location": {
+        // Written at login and after a respawn: away from the mining system when it is another
+        // system (a carrier that jumped while logged out, say), back when it is the same one.
+        const at = str(e.StarSystem);
+        if (at && system) away = !sameSystem(at, system);
+        here = at ?? here;
         break;
+      }
       case "FSDJump":
-      case "CarrierJump":
+      case "CarrierJump": {
         here = str(e.StarSystem) ?? here;
-        // A carrier jump moves the ship too.
-        jumpsSince++;
+        // A carrier jump moves the ship too. Back in the mining system, it is searched from again.
+        if (here && system && sameSystem(here, system)) {
+          jumpsSince = 0;
+          away = false;
+        } else jumpsSince++;
         break;
+      }
       case "MarketSell":
         // Selling mined cargo ends the trip; selling spare limpets does not.
         if (isMined(commodityKey(str(e.Type) ?? ""))) lastSale = e.timestamp;
@@ -336,7 +345,7 @@ export function miningState(
     refined,
     rate,
     lastSale,
-    system: jumpsSince <= SEARCH_FROM_MINING_JUMPS ? system : null,
+    system: !away && jumpsSince <= SEARCH_FROM_MINING_JUMPS ? system : null,
   };
 }
 
@@ -566,7 +575,7 @@ function readCarrier(events: JournalEvent[], now: number): Carrier | null {
 
 // ---------- Where to sell ----------
 
-export const LARGE = new Set([
+export const LARGE: ReadonlySet<string> = new Set([
   "anaconda",
   "anacondamkii",
   "belugaliner",
@@ -580,7 +589,7 @@ export const LARGE = new Set([
   "type9",
   "type9_military",
 ]);
-export const SMALL = new Set([
+export const SMALL: ReadonlySet<string> = new Set([
   "adder",
   "cobramkiii",
   "cobramkiv",
@@ -600,7 +609,7 @@ export const SMALL = new Set([
 ]);
 
 // Medium-pad ships by the journal's names.
-export const MEDIUM = new Set([
+export const MEDIUM: ReadonlySet<string> = new Set([
   "asp",
   "asp_scout",
   "corsair",
@@ -632,9 +641,9 @@ export const MEDIUM = new Set([
 export function padFor(shipType: string | null): "L" | "M" | "S" | null {
   if (!shipType) return null;
   const t = shipType.toLowerCase();
-  if (LARGE.has(t)) return "L";
   if (SMALL.has(t)) return "S";
   if (MEDIUM.has(t)) return "M";
+  // LARGE, and any hull not listed yet.
   return "L";
 }
 
@@ -735,9 +744,21 @@ export function sellQueries(input: SellInput): ToSell[] {
 
 // ---------- The panel ----------
 
-/** hud.mining.targets by commodityKey(), for judge(). */
-export const targetsMap = (targets: Record<string, number>) =>
-  new Map(Object.entries(targets).map(([k, v]) => [commodityKey(k), v]));
+/**
+ * Mining targets by commodityKey(), for judge(): the defaults, then the player's entries over
+ * them whatever their spelling; null removes a default.
+ */
+export function targetsMap(
+  player: Record<string, number | null>,
+  defaults: Readonly<Record<string, number>> = {},
+): Map<string, number> {
+  const m = new Map(Object.entries(defaults).map(([k, v]) => [commodityKey(k), v]));
+  for (const [k, v] of Object.entries(player)) {
+    if (v === null) m.delete(commodityKey(k));
+    else m.set(commodityKey(k), v);
+  }
+  return m;
+}
 
 /** The prospect's material that best clears its target, else its richest; null when none listed. */
 export function judge(
@@ -781,7 +802,7 @@ export function miningPanel(input: {
   const { state, settings } = input;
   const rows: HudRow[] = [];
   // The player's entries change or add to the defaults, one commodity at a time.
-  const targets = targetsMap({ ...DEFAULT_MINING_TARGETS, ...settings.targets });
+  const targets = targetsMap(settings.targets, DEFAULT_MINING_TARGETS);
   const p = state.prospect;
   if (p) {
     const j = judge(p, targets);

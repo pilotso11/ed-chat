@@ -1259,3 +1259,25 @@ describe("pad lists", () => {
     expect(new Set(all).size).toBe(all.length);
   });
 });
+
+describe("targets and the mining system, more", () => {
+  it("lets null remove a default, and the player's entry win whatever its spelling", () => {
+    const m = targetsMap({ Painite: null, platinum: 35 }, DEFAULT_MINING_TARGETS);
+    expect(m.has("painite")).toBe(false);
+    expect(m.get("platinum")).toBe(35);
+    expect(m.get("osmium")).toBe(25);
+  });
+
+  it("keeps the mining system on a relog there, and gets it back on jumping back", () => {
+    const start = [ev("Location", { StarSystem: "A" }), refined("Platinum")];
+    const relog = [...start, ev("LoadGame"), ev("Location", { StarSystem: "A" })];
+    expect(miningState(relog, T0 + t * 1000).system).toBe("A");
+    const back = [
+      ...start,
+      ev("LoadGame"),
+      ev("Location", { StarSystem: "B" }),
+      ev("FSDJump", { StarSystem: "A" }),
+    ];
+    expect(miningState(back, T0 + t * 1000).system).toBe("A");
+  });
+});

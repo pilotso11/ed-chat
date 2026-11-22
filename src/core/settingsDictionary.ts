@@ -1,3 +1,4 @@
+import { DEFAULT_MINING_TARGETS } from "./miningTargets.js";
 // What each setting does, written into settings.schema.json with the types, limits and
 // defaults that come from the schema itself. Editors show it on hover, and the assistant reads it
 // to show or change settings for the player.
@@ -176,10 +177,11 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "hud.mining.targets": {
     text:
       "The least percentage of each commodity in a rock that is worth mining, by English " +
-      'commodity name, such as { "Platinum": 30 }. Entries change or add to the defaults ' +
-      "(Platinum 20, Painite 25, Osmium 25, Low Temperature Diamonds 25, Bromellite 25, " +
-      "Tritium 30); set one to 100 to mine it only from a pure rock. Other commodities are " +
-      "shown but never marked worth mining.",
+      'commodity name, such as { "Platinum": 30 }. Entries change or add to the defaults (' +
+      Object.entries(DEFAULT_MINING_TARGETS)
+        .map(([k, v]) => `${k} ${v}`)
+        .join(", ") +
+      "); null removes one. Other commodities are shown but never marked worth mining.",
   },
   "hud.mining.useCarrier": {
     text:
