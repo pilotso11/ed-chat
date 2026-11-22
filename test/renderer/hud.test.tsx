@@ -49,6 +49,23 @@ describe("activity panel", () => {
     expect(hud.children).toHaveLength(0);
   });
 
+  it("turns the head green when the panel's work is done", () => {
+    const { overlay, hud } = setup();
+    overlay.hud({
+      ...base,
+      panel: {
+        mode: "exobiology",
+        title: "EXOBIOLOGY",
+        right: "4/4 genera ✓",
+        tone: "good",
+        rows: [],
+        footer: [],
+      },
+    });
+    expect(hud.querySelector(".head")?.className).toBe("head good");
+    expect(hud.querySelector(".head.good .right")?.textContent).toBe("4/4 genera ✓");
+  });
+
   it("draws a panel's head, rows and footer", () => {
     const { overlay, hud } = setup();
     overlay.hud({
@@ -79,6 +96,8 @@ describe("activity panel", () => {
     expect(hud.querySelector(".head .title")?.textContent).toBe("EXOBIOLOGY");
     expect(hud.querySelector(".head .subtitle")?.textContent).toBe("· Body 3");
     expect(hud.querySelector(".head .right")?.textContent).toBe("95.1M");
+    // No tone: a plain header.
+    expect(hud.querySelector(".head")?.className).toBe("head");
     const rows = hud.querySelectorAll(".row");
     expect(rows).toHaveLength(3);
     // Leading spaces become an indent, which nowrap would otherwise drop.
