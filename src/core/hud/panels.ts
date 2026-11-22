@@ -233,7 +233,11 @@ class ActiveClock {
 
   /** The time counted, until now; with `since`, only the stretches that ended after it. */
   total(now: number, since = -Infinity): number {
-    const tail = this.last !== null ? Math.min(Math.max(0, now - this.last), IDLE_MS) : 0;
+    // Since the last event, up to IDLE_MS, and only the part after `since`.
+    const tail =
+      this.last !== null
+        ? Math.max(0, Math.min(now, this.last + IDLE_MS) - Math.max(this.last, since))
+        : 0;
     // A stretch that began before `since` counts from it.
     return this.spans
       .filter((s) => s.at > since)
@@ -244,8 +248,14 @@ class ActiveClock {
 const perHour = (credits: number, ms: number) =>
   ms >= RATE_MIN_MS ? (credits * HOUR_MS) / ms : null;
 
-/** The events a new game's journal starts with, before LoadGame. */
-const NEW_GAME = new Set(["Fileheader", "Commander", "LoadGame"]);
+/**
+ * The events a new game's journal starts with, before LoadGame. A full journal rolls over to a
+ * new part mid-game with a Fileheader too, but its part is 2 or more.
+ */
+const newGame = (e: JournalEvent) =>
+  e.event === "Commander" ||
+  e.event === "LoadGame" ||
+  (e.event === "Fileheader" && !(typeof e.part === "number" && e.part > 1));
 
 /** Events that start an exploring session's clock. */
 const EXPLORING = new Set([
@@ -331,7 +341,7 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
       session0.tick(at);
       // A new game starts after time away (with no Shutdown after a crash or an exit to the
       // menu): its first events stop the planets' clocks without counting that time.
-      if (NEW_GAME.has(e.event)) haltPlanets();
+      if (newGame(e)) haltPlanets();
       else for (const p of planets.values()) p.clock.tick(at);
     }
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;

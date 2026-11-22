@@ -463,6 +463,18 @@ describe("exploration totals", () => {
         ((mapped - scanned + 2 * species) * 60) / (quit.length ? 7 : 5),
       );
     }
+    // A journal that fills rolls over to its next part with a Fileheader mid-game: the planet's
+    // clock keeps running, 5 to 12.
+    const rolled = explorationTotals(
+      [...before, timed(12, ev("Fileheader", { part: 2 })), analyse(12)],
+      min(12),
+    );
+    expect(rolled.planetRate.get("1|3")).toBeCloseTo(((mapped - scanned + 2 * species) * 60) / 7);
+    // The last half hour leaves out time away that ended before it: 40 minutes of jumps, then
+    // an hour away, has no time in the window, so no rate rather than 0/h.
+    const jumps = [timed(0, ev("LoadGame"))];
+    for (let n = 0; n <= 40; n += 5) jumps.push(timed(n, ev("FSDJump", { SystemAddress: 1 })));
+    expect(explorationTotals(jumps, min(100)).rate.recent).toBeNull();
     // Dying stops the planet's clock: an hour later it still has its 7 minutes.
     const died = explorationTotals([...events.slice(0, 4), timed(12, ev("Died"))], min(72));
     expect(died.planetRate.get("1|3")).toBeCloseTo(((mapped - scanned + species) * 60) / 7);
