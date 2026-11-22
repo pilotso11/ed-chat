@@ -81,6 +81,8 @@ export interface MarketItem {
 export interface Market {
   marketId: number;
   station: string;
+  /** When the game wrote it (epoch ms), or null when it does not say. */
+  at: number | null;
   /** By commodityKey(). */
   items: Map<string, MarketItem>;
 }
@@ -97,7 +99,8 @@ export function parseMarket(text: string): Market | null {
       if (!key) continue;
       items.set(key, { buy: num(i.BuyPrice) ?? 0, sell: num(i.SellPrice) ?? 0 });
     }
-    return { marketId, station, items };
+    const at = Date.parse(String(j.timestamp));
+    return { marketId, station, at: Number.isNaN(at) ? null : at, items };
   } catch {
     return null;
   }
@@ -283,7 +286,7 @@ export interface TradeJournal {
 
 const journals = new WeakMap<
   JournalEvent[],
-  { length: number; now: string; journal: TradeJournal }
+  { length: number; tail: string; now: string; journal: TradeJournal }
 >();
 
 /**
@@ -294,9 +297,13 @@ export function tradeJournal(events: JournalEvent[], now: MissionsNow = NO_MISSI
   // Only what tradeBuys() reads: callers pass MissionsNow inside larger objects.
   const key = JSON.stringify([now.missionCargo, now.wanted, now.planSells ?? []]);
   const kept = journals.get(events);
-  if (kept && kept.length === events.length && kept.now === key) return kept.journal;
+  // The last event too: an array trimmed and appended to the same length has a new tail.
+  const last = events.at(-1);
+  const tail = last ? `${last.timestamp}|${last.event}` : "";
+  if (kept && kept.length === events.length && kept.tail === tail && kept.now === key)
+    return kept.journal;
   const journal = replay(events, tradeBuys(events, now), new Set(now.planSells ?? []));
-  journals.set(events, { length: events.length, now: key, journal });
+  journals.set(events, { length: events.length, tail, now: key, journal });
   return journal;
 }
 
@@ -520,6 +527,13 @@ export function dockedAt(events: JournalEvent[], location: JournalState["locatio
   };
 }
 
+/**
+ * Whether Market.json is of this visit: the docked station's market, written at or after docking.
+ * A file left from an earlier visit has old prices.
+ */
+const fromVisit = (m: Market, dock: Dock) =>
+  m.marketId === dock.marketId && m.at !== null && m.at >= Date.parse(dock.at);
+
 const atStop = (s: Stop, dock: Dock | null) =>
   dock !== null && stopAt(s, dock.system, dock.station);
 
@@ -683,8 +697,7 @@ export function tradePanel(input: {
     const cargo = stopCargo(plan, todo[0]!);
     const here = atStop(cur, dock) ? dock : null;
     // The market only of this station: Market.json is of the last market screen opened.
-    const market =
-      here && input.market && input.market.marketId === here.marketId ? input.market : null;
+    const market = here && input.market && fromVisit(input.market, here) ? input.market : null;
     const line = (c: Cargo) =>
       status(c, hold, market, here !== null && actionDone(c, hold, input.events, here));
     if (cargo.length === 1) {

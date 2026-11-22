@@ -139,6 +139,7 @@ describe("the market file", () => {
   it("reads the prices by commodity", () => {
     const m = market(7, { Gold: [9_410, 9_000] })!;
     expect(m.marketId).toBe(7);
+    expect(m.at).toBe(NOW);
     expect(m.items.get("gold")).toEqual({ buy: 9_410, sell: 9_000 });
   });
 
@@ -249,6 +250,16 @@ describe("trade profit", () => {
       "silver",
     ]);
     expect(missionsNow({ cargo: [], missions: [] }).planSells).toEqual([]);
+  });
+
+  it("replays again when the same array's tail changes at the same length", () => {
+    const events = [buy(5, "Gold", 1, 1), buy(4, "Gold", 1, 1)];
+    expect(tradeJournal(events).trades).toBe(2);
+    events.shift();
+    events.push(sell(3, "Gold", 1, 3));
+    const j = tradeJournal(events);
+    expect(j.sales.size).toBe(1);
+    expect(tradeTotals(events, NOW).profit).toBe(2);
   });
 
   it("takes cargo moved by its internal name out of the cost", () => {
@@ -578,6 +589,7 @@ describe("commodity names", () => {
   it("matches the market, the hold and the journal by the game's names", () => {
     const market = parseMarket(
       JSON.stringify({
+        timestamp: new Date(NOW).toISOString(),
         MarketID: 7,
         StationName: "Wohler Terminal",
         Items: [
@@ -870,6 +882,18 @@ describe("the trade panel", () => {
       text: "  hold 300/720 · price 10,000 (plan 9,380)",
       tone: "warn",
     });
+    // A file from an earlier visit to this station has old prices.
+    const old = market(7, { Gold: [1, 1] })!;
+    expect(tradePanel({ ...input, market: { ...old, at: NOW - 20 * MIN } })!.rows[1]!.text).toBe(
+      "  hold 300/720 · plan 9,380",
+    );
+    expect(tradePanel({ ...input, market: { ...old, at: null } })!.rows[1]!.text).toBe(
+      "  hold 300/720 · plan 9,380",
+    );
+    // Written at the docking time is this visit's.
+    expect(tradePanel({ ...input, market: { ...old, at: NOW - 10 * MIN } })!.rows[1]!.text).toBe(
+      "  hold 300/720 · price 1 (plan 9,380)",
+    );
     // Another station's market file is not this one's.
     expect(tradePanel({ ...input, market: market(8, { Gold: [1, 1] }) })!.rows[1]!.text).toBe(
       "  hold 300/720 · plan 9,380",
