@@ -110,7 +110,7 @@ import {
   bookmarkHere,
   finishedBioBookmarks,
   isPlanNotFound,
-  sameBookmark,
+  bookmarkRef,
 } from "../core/hud/bookmarks.js";
 import { SellPrices, postSpansh, type SellQuery } from "../core/hud/sell.js";
 import { buildHud, type HudView } from "../core/hud/hud.js";
@@ -709,17 +709,8 @@ async function main(): Promise<void> {
       try {
         // Found again in the plan as it is now: an edit since the poll can move it.
         const now = await hudPlans.get(BOOKMARKS_PLAN);
-        const index = now.stops.findIndex((s) => s.status === "todo" && sameBookmark(s, stop));
-        if (index < 0) continue;
-        // By label when no other stop has it, so an edit between the read and the write cannot move
-        // another stop under the index; Claude can give two stops one label, and then the index.
-        const label = now.stops[index]!.label;
-        const ref =
-          label &&
-          // ed-mcp matches labels ignoring case.
-          now.stops.filter((s) => s.label?.toLowerCase() === label.toLowerCase()).length === 1
-            ? { label }
-            : { index };
+        const ref = bookmarkRef(now, stop);
+        if (!ref) continue;
         await hudPlans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
         flash("bookmark", `📍 done: ${stop.label ?? stop.purpose}`, 4_000);
       } catch (err) {

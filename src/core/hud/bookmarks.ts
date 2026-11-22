@@ -274,3 +274,16 @@ export const sameBookmark = (a: Stop, b: Stop) =>
   a.body === b.body &&
   a.purpose === b.purpose &&
   JSON.stringify(stopPosition(a)) === JSON.stringify(stopPosition(b));
+
+/**
+ * How to name a bookmark still to do in the plan as it is now, for updateStop: by its label when
+ * no other stop has it (ignoring case, as ed-mcp matches labels), so an edit between the read and
+ * the write cannot move another stop under an index; else by its index. Null when it is gone.
+ */
+export function bookmarkRef(plan: Plan, stop: Stop): { label: string } | { index: number } | null {
+  const index = plan.stops.findIndex((s) => s.status === "todo" && sameBookmark(s, stop));
+  if (index < 0) return null;
+  const label = plan.stops[index]!.label;
+  const same = (s: Stop) => s.label?.toLowerCase() === label?.toLowerCase();
+  return label && plan.stops.filter(same).length === 1 ? { label } : { index };
+}

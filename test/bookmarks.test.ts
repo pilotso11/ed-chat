@@ -12,6 +12,7 @@ import {
 import {
   BOOKMARKS_PLAN,
   bearing,
+  bookmarkRef,
   bookmarkHere,
   bookmarkLabel,
   bookmarkRows,
@@ -373,5 +374,33 @@ describe("bookmark labels and finishing, more", () => {
     expect(
       sameBookmark(a as never, { ...a, position: { latitude: 1, longitude: 3 } } as never),
     ).toBe(false);
+  });
+});
+
+describe("marking a bookmark done", () => {
+  const spot = { latitude: 1, longitude: 2 };
+  it("names it by a label no other stop has, ignoring case", () => {
+    const p = plan([{ body: BODY, label: "Bio: Concha", position: spot }]);
+    expect(bookmarkRef(p, p.stops[0]!)).toEqual({ label: "Bio: Concha" });
+  });
+
+  it("uses the index when another stop has the same label", () => {
+    const p = plan([
+      { body: BODY, label: "Spot", position: { latitude: 9, longitude: 9 } },
+      { body: BODY, label: "spot", position: spot },
+    ]);
+    expect(bookmarkRef(p, p.stops[1]!)).toEqual({ index: 1 });
+  });
+
+  it("finds it again after an edit moved it, and skips one that is gone or done", () => {
+    const stop = plan([{ body: BODY, label: "Spot", position: spot }]).stops[0]!;
+    const moved = plan([
+      { body: BODY, label: "Other" },
+      { body: BODY, label: "Spot", position: spot },
+    ]);
+    expect(bookmarkRef(moved, stop)).toEqual({ label: "Spot" });
+    expect(bookmarkRef(plan([]), stop)).toBeNull();
+    const done = plan([{ body: BODY, label: "Spot", position: spot, status: "done" }]);
+    expect(bookmarkRef(done, stop)).toBeNull();
   });
 });
