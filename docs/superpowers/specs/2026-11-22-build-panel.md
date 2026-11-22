@@ -485,7 +485,7 @@ UPGRADE · Krait Mk II · stop 2/3                      1/4 actions
   Roll FSD Increased Range to G5          G3 100% → G5 · ~5 rolls
     short 4 Chemical Manipulators · trade at stop 1
 ▸ Kuwemaki · Elvira Martuuk                               roll 1
-1 stop open before · 1 after
+1 open before · 1 after
 Target: FSD G5 · thrusters Dirty G5
 ```
 
