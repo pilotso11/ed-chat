@@ -295,6 +295,46 @@ describe("passengers from the real ed-mcp journal reader", () => {
     expect(v.panel!.rows[0]!.text).toBe("Ochosi · Perez Market");
   });
 
+  it("keeps passengers redirected home aboard, and drops the mission once completed", async () => {
+    const g = game();
+    g.add(
+      ...arrive(),
+      ev("Docked", { StationName: "Port", StarSystem: SYSTEM, SystemAddress: ADDRESS }),
+      ev("MissionAccepted", {
+        Faction: "Giver One",
+        Name: "Mission_Sightseeing",
+        LocalisedName: "Show tourists the sights",
+        PassengerCount: 4,
+        PassengerType: "Tourist",
+        DestinationSystem: "Ochosi",
+        DestinationStation: "Perez Market",
+        Expiry: new Date(Date.now() + 86_400_000).toISOString().replace(/\.\d+Z$/, "Z"),
+        Reward: 1_000_000,
+        MissionID: 203,
+      }),
+      ev("Undocked", { StationName: "Port" }),
+      // The tour is done: ed-mcp marks it complete, to hand in back at the giver.
+      ev("MissionRedirected", {
+        MissionID: 203,
+        NewDestinationSystem: SYSTEM,
+        NewDestinationStation: "Port",
+        OldDestinationSystem: "Ochosi",
+        OldDestinationStation: "Perez Market",
+      }),
+    );
+    let v = await g.hud();
+    expect(v.panel).toMatchObject({ mode: "passenger", right: expect.stringMatching(/^4 berths/) });
+    expect(v.panel!.rows[0]).toMatchObject({ text: `${SYSTEM} · Port`, tone: "dim" });
+    expect(v.panel!.rows[0]!.right).toMatch(/^4 pax · hand in/);
+    expect(v.panel!.footer).toEqual(["1 mission · 1 to hand in"]);
+
+    // Handed in: ed-mcp drops the mission, and the run is over.
+    g.add(ev("MissionCompleted", { MissionID: 203, Faction: "Giver One", Reward: 1_000_000 }));
+    v = await g.hud();
+    // Nothing else is going on in this journal, so the panel is empty.
+    expect(v.panel).toBeNull();
+  });
+
   it("names a delivery's goods as the game does, not by their journal symbol", async () => {
     const g = game();
     g.add(
