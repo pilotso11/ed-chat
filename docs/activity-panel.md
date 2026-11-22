@@ -177,12 +177,13 @@ species drop off, and is marked done once every species there is analysed and
 the journal has the body's signal count from a scan (Spansh's count, which can be
 out of date, fills in the panel but does not mark a bookmark done). The
 journal does not say what grows where, so the list is for the whole body, not
-the spot.
+the spot. Only bookmarks the key made keep their list up to date: one renamed,
+or made before ED Chat 0.9, keeps its label as saved.
 Ctrl+Alt+- clears the nearest bookmark on the body you are on. Away from a
 bookmarked body, a second press within 4 seconds clears every bookmark in the
-system. The tray menu's Bookmarks item says which it clears (the nearest here,
-or every one in the system) and clears them in one click, and can clear every
-bookmark after asking. A cleared bookmark
+system. The tray menu's Bookmarks item says which it clears: the nearest here
+in one click, or every one in the system after asking. It can also clear every
+bookmark, after asking. A cleared bookmark
 is marked skipped in the plan. Bookmarks are an ed-mcp plan, so Claude can see
 and change them too. `hud.bookmarks` turns them off.
 
