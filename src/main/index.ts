@@ -155,7 +155,7 @@ import { displaySetting, hudWindowSize, onNextDisplay, overlaySize } from "../co
 import { PlayerOnlyGuard } from "../core/playerOnlyGuard.js";
 import { PLAYER_ONLY_PATHS_V0_5 } from "../core/settingsDictionary.js";
 import { buildView, pickNotice, shortTool } from "../core/view.js";
-import { graphicsOverrideFile, lookVars, parseHudMatrix, type Matrix } from "../core/theme.js";
+import { gameMatrixFrom, graphicsOverrideFile, lookVars, type Matrix } from "../core/theme.js";
 import { fetchLatestEdMcp, freshLatest, versionText, type Versions } from "../core/version.js";
 import { IPC } from "../shared/ipc.js";
 import {
@@ -1425,21 +1425,16 @@ async function main(): Promise<void> {
   );
   status.start();
 
-  await openHudFeed().catch((err) => log.log("warn", `panel: ${message(err)}`));
-  const hudTimer = setInterval(() => void pollHud(), 1_000);
-  void pollHud();
-
-  // The game's HUD colour, for style.theme "game": read at start and when the player changes it.
+  // The game's HUD colour, for style.theme "game": read before the first draw, so a blue or
+  // green overlay does not start orange, and again when the player changes it.
   const colourXml = graphicsOverrideFile(process.env.LOCALAPPDATA, os.homedir());
-  const readGameMatrix = async () => {
-    // A file that is not there means the game's colour; one that cannot be read for now, as
-    // while the game rewrites it, keeps the colour already shown.
-    const xml = await readFile(colourXml, "utf8").catch((err: NodeJS.ErrnoException) =>
+  const readColourXml = () =>
+    readFile(colourXml, "utf8").catch((err: NodeJS.ErrnoException) =>
       err.code === "ENOENT" ? "" : null,
     );
-    // A file cut off in the middle of a write is the same: it has no closing tag yet.
-    if (xml === null || (xml !== "" && !/<\/GraphicsConfig>/i.test(xml))) return;
-    const next = parseHudMatrix(xml);
+  gameMatrix = gameMatrixFrom(await readColourXml(), null);
+  const readGameMatrix = async () => {
+    const next = gameMatrixFrom(await readColourXml(), gameMatrix);
     if (JSON.stringify(next) === JSON.stringify(gameMatrix)) return;
     gameMatrix = next;
     if (settings.style.theme === "game") {
@@ -1447,9 +1442,11 @@ async function main(): Promise<void> {
       renderHud();
     }
   };
-  // Before the first draw, so a blue or green overlay does not start orange.
-  await readGameMatrix();
   watchFile(colourXml, { interval: 5_000 }, () => void readGameMatrix());
+
+  await openHudFeed().catch((err) => log.log("warn", `panel: ${message(err)}`));
+  const hudTimer = setInterval(() => void pollHud(), 1_000);
+  void pollHud();
 
   const displayXml = displaySettingsFile(process.env.LOCALAPPDATA, os.homedir());
   const checkFullscreen = async () => {

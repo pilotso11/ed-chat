@@ -150,3 +150,15 @@ export function parseHudMatrix(xml: string): Matrix | null {
   const matrix: Matrix = [r, g, b];
   return Math.max(...mix(matrix, ACCENT)) < DARKEST_ACCENT ? null : matrix;
 }
+
+/**
+ * The colour to show after reading the game's colour file. xml is the file's text, "" when the
+ * file is not there, or null when it could not be read for now, as while the game rewrites it.
+ * A file that is not there means the game's own orange; one that cannot be read, or has been cut
+ * off in the middle of a write (no closing tag yet), keeps the colour already shown.
+ */
+export function gameMatrixFrom(xml: string | null, current: Matrix | null): Matrix | null {
+  if (xml === null) return current;
+  if (xml !== "" && !/<\/GraphicsConfig>/i.test(xml)) return current;
+  return parseHudMatrix(xml);
+}

@@ -4,6 +4,7 @@ import {
   THEME_MATRICES,
   THEME_NAMES,
   fontVars,
+  gameMatrixFrom,
   graphicsOverrideFile,
   lookVars,
   parseHudMatrix,
@@ -154,5 +155,30 @@ describe("graphicsOverrideFile", () => {
 
   it("finds the folder without LOCALAPPDATA", () => {
     expect(graphicsOverrideFile(undefined, String.raw`C:\Users\a`)).toContain("AppData");
+  });
+});
+
+describe("gameMatrixFrom", () => {
+  const blue = THEME_MATRICES.blue;
+  const file = override("0, 0, 1", "0, 1, 0", "1, 0, 0");
+
+  it("reads the colour in the file", () => {
+    expect(gameMatrixFrom(file, null)).toEqual(blue);
+  });
+
+  it("goes back to the game's orange when the file is gone", () => {
+    expect(gameMatrixFrom("", blue)).toBeNull();
+  });
+
+  it("keeps the colour shown when the file cannot be read for now", () => {
+    expect(gameMatrixFrom(null, blue)).toBe(blue);
+  });
+
+  it("keeps the colour shown when the file is cut off in the middle of a write", () => {
+    expect(gameMatrixFrom(file.slice(0, file.indexOf("<MatrixBlue>")), blue)).toBe(blue);
+  });
+
+  it("goes back to orange when the file has no colour section", () => {
+    expect(gameMatrixFrom("<GraphicsConfig></GraphicsConfig>", blue)).toBeNull();
   });
 });
