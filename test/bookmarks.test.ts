@@ -210,8 +210,9 @@ describe("bookmark rows", () => {
     const mining = buildHud({ ...input, hotkey: { mode: "mining", at } }, null);
     expect(mining.panel?.mode).toBe("mining");
     expect(mining.panel?.rows.some((r) => r.text.startsWith("📍"))).toBe(false);
-    // Nor on their own in massacre mode with no stack to show.
+    // Nor on their own in massacre mode with no stack to show, or passenger mode with no run.
     expect(buildHud({ ...input, hotkey: { mode: "massacre", at } }, null).panel).toBeNull();
+    expect(buildHud({ ...input, hotkey: { mode: "passenger", at } }, null).panel).toBeNull();
   });
 });
 
