@@ -1,7 +1,14 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { systemAddress, type JournalEvent, type Plan, type Stores } from "ed-mcp/journal";
-import { parseOutfitting, type Outfitting } from "./build.js";
+import {
+  systemAddress,
+  type JournalEvent,
+  type JournalState,
+  type Plan,
+  type Stores,
+} from "ed-mcp/journal";
+import { landedAt, parseOutfitting, type Outfitting } from "./build.js";
+import { dockedAt } from "./trade.js";
 import type { HudInput } from "./hud.js";
 import { parseShipStatus, type ShipStatus } from "./hud.js";
 import { BOOKMARKS_PLAN, isPlanNotFound } from "./bookmarks.js";
@@ -40,7 +47,7 @@ export class HudFeed {
   private market: { text: string; parsed: Market | null } | null = null;
   private outfitting: { text: string; parsed: Outfitting | null } | null = null;
   /** Build plans as last read, by ID: read again only when the plan list says one changed. */
-  private builds = new Map<string, { updated: string; plan: Plan }>();
+  private builds = new Map<string, { updated: string; plan: Plan; openAt: string | null }>();
 
   constructor(
     private readonly stores: Pick<Stores, "journal" | "activity" | "plans">,
@@ -99,7 +106,7 @@ export class HudFeed {
         .catch((err: unknown) =>
           isPlanNotFound(err) ? null : (this.error("bookmarks", err), null),
         ),
-      this.buildPlans().catch((err: unknown) => (this.error("build plans", err), [])),
+      this.buildPlans(journal).catch((err: unknown) => (this.error("build plans", err), [])),
     ]);
     if (journal) this.noteSamples(journal.events, status);
     const system = journal?.location.system ?? null;
@@ -122,17 +129,32 @@ export class HudFeed {
 
   /**
    * The build plans with an action still to do: docking at one of their stops or acting on one
-   * shows it, whatever plan the note names. A plan is read again only when it changed.
+   * shows it, whatever plan the note names. A plan finished while docked or landed where it was
+   * last open stays until the ship leaves, for "Build complete". A plan is read again only when it
+   * changed. (PlanStore has no call that reads every plan at once: list() then get() each.)
    */
-  private async buildPlans(): Promise<Plan[]> {
+  private async buildPlans(
+    journal: (JournalState & { events: JournalEvent[] }) | null,
+  ): Promise<Plan[]> {
     const list = await this.stores.plans.list();
-    const open = list.filter((p) => (p.actions ?? 0) > (p.actions_done ?? 0));
+    // Where the ship is: this docking or landing, named by its event.
+    const dock = journal ? dockedAt(journal.events, journal.location) : null;
+    const landed = journal && !dock ? landedAt(journal.events) : null;
+    const place = dock
+      ? `dock|${dock.at}`
+      : landed
+        ? `land|${journal!.events[landed.index]!.timestamp}`
+        : null;
     const out: Plan[] = [];
     const keep = new Set<string>();
-    for (const p of open) {
-      keep.add(p.id);
+    for (const p of list) {
+      if (!p.actions) continue;
+      const open = p.actions > (p.actions_done ?? 0);
       const kept = this.builds.get(p.id);
+      if (!open && !(kept && place !== null && kept.openAt === place)) continue;
+      keep.add(p.id);
       if (kept && kept.updated === p.updated_at) {
+        if (open) kept.openAt = place;
         out.push(kept.plan);
         continue;
       }
@@ -142,7 +164,11 @@ export class HudFeed {
         return null;
       });
       if (!plan) continue;
-      this.builds.set(p.id, { updated: plan.updated_at, plan });
+      this.builds.set(p.id, {
+        updated: plan.updated_at,
+        plan,
+        openAt: open ? place : (kept?.openAt ?? null),
+      });
       out.push(plan);
     }
     for (const id of this.builds.keys()) if (!keep.has(id)) this.builds.delete(id);

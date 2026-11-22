@@ -77,7 +77,6 @@ next start.
 | `hud.mining.sellRadiusLy` / `carrierRadiusLy` | `100` / `500` | How far to search for buyers from the ship, or from the carrier |
 | `hud.mining.maxPriceAgeDays` | `7` | Leave out buyers with older Spansh market data |
 | `hud.build.doneShown` | `3` | Done actions listed at the build panel's current stop before they fold into one "✓ N done" row |
-| `hud.build.outfittingVisit` | `true` | With no build plan for the ship, show what was done this visit while docked. Not built yet: kept for a later release |
 | `hud.bookmarks` | `true` | Show surface bookmarks (Ctrl+Alt+B) on the body and in the system |
 | `hud.edMcpDataDir` | `null` | The ed-mcp sync folder; `null` finds it in ed-mcp's setup |
 

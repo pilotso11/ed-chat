@@ -301,11 +301,15 @@ export interface BuildNow {
 export const NO_BUILD: BuildNow = { active: false, stops: [], matched: new Set(), ships: [] };
 
 /** The BuildNow for the journal and the open build plans. */
-export function buildNow(input: {
-  note: Plan | null;
-  plans: Plan[];
-  journal: Journal | null;
-}): BuildNow {
+export function buildNow(
+  input: {
+    note: Plan | null;
+    plans: Plan[];
+    journal: Journal | null;
+  },
+  /** The plan shown, when the caller has chosen it already. */
+  chosen?: BuildChoice | null,
+): BuildNow {
   const journal = input.journal;
   if (!journal) return NO_BUILD;
   const plans = [
@@ -324,7 +328,7 @@ export function buildNow(input: {
       }
     if (j.shipId !== null && j.actions.some((x) => !x.done)) ships.push(j.shipId);
   }
-  const choice = chooseBuild(input);
+  const choice = chosen === undefined ? chooseBuild(input) : chosen;
   return { active: !!choice && buildActive(choice, journal), stops, matched, ships };
 }
 
@@ -345,11 +349,11 @@ export function atBuildStop(e: JournalEvent, stops: BuildNow["stops"]): boolean 
   const system = str(e.StarSystem) ?? "";
   if (isDocking(e)) {
     const station = str(e.StationName) ?? "";
-    return stops.some((s) => s.kind !== "gather" && stopAt(s, system, station));
+    return stops.some((s) => !(s.kind === "gather" && s.body) && stopAt(s, system, station));
   }
   if (e.event === "Touchdown" || (e.event === "Disembark" && e.OnPlanet === true)) {
     const body = str(e.Body) ?? "";
-    return stops.some((s) => s.kind === "gather" && onBody(s, system, body));
+    return stops.some((s) => s.kind === "gather" && !!s.body && onBody(s, system, body));
   }
   return false;
 }

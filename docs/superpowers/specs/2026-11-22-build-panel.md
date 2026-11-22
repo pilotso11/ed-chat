@@ -861,8 +861,7 @@ for on foot. ED Chat pins each.
      the mode on.
    - The header shows the ship type, not its `ShipName`. The trader stop shows "trader", not its
      type: the stop has no field for it.
-   - A done row shows no price. `hud.build.outfittingVisit` is in the settings for step 4 and
-     does nothing yet.
+   - A done row shows no price. `hud.build.outfittingVisit` comes with step 4.
 3. **ed-mcp: `build_plan`.** The diff, needs, trades, engineers and route, `save_to_plan`.
    Tested against SLEF from Coriolis and EDSY and real `Loadout` events. Release.
 4. **ED Chat: the no-plan outfitting visit.** Needs no ed-mcp change; can go at any point.

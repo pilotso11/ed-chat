@@ -824,6 +824,40 @@ describe("judging ship actions", () => {
     expect(j.boundId).toBe(77);
   });
 
+  it("takes a bought hull delivered before the journal's window as the ship flown of its type", () => {
+    const hull = (status: "todo" | "done") =>
+      shop(
+        [
+          act({ id: "h", kind: "buy_ship", label: "Buy Krait", ship: "krait_mkii", status }),
+          ...buys(1),
+        ],
+        {
+          build: { target: "ship", scope: "full", ship: "krait_mkii", started_at: iso(0) },
+        },
+      );
+    // Marked bought, no ShipyardNew in the journal: the Krait flown now is the hull.
+    let j = judgeBuild(hull("done"), journal([buy(1)]));
+    expect(j.actions.map((x) => x.done)).toEqual([true, true]);
+    expect(j.boundId).toBe(KRAIT);
+    // Not bought yet: the Krait flown is another one.
+    expect(judgeBuild(hull("todo"), journal([buy(1)])).actions[1]!.done).toBe(false);
+    // Flying another type: no ship.
+    j = judgeBuild(
+      hull("done"),
+      journal([buy(1)], { ship: { ...journal([]).ship, type: "python_nx", id: PYTHON } }),
+    );
+    expect(j.shipId).toBeNull();
+  });
+
+  it("judges a plan read again as the same plan, and a changed one again", () => {
+    const j = journal([buy(1)]);
+    const a = judgeBuild(shop(buys(1)), j);
+    expect(judgeBuild(shop(buys(1)), j)).toBe(a);
+    const changed = shop(buys(1));
+    changed.stops[0]!.actions![0]!.status = "skipped";
+    expect(judgeBuild(changed, j)).not.toBe(a);
+  });
+
   it("judges a transfer and a swap to a ship_id", () => {
     const plan = shop([
       act({ id: "t", kind: "transfer_ship", label: "Transfer", ship_id: PYTHON }),
@@ -971,6 +1005,35 @@ describe("the build mode", () => {
       atBuildStop(ev(1, "Touchdown", { StarSystem: "HIP 36601", Body: "HIP 36601 C 4" }), b.stops),
     ).toBe(false);
     expect(journalMode([land], false, false, on, false, undefined, b)?.mode).toBe("build");
+  });
+
+  it("takes docking at a gather stop with no body as at the stop, as the panel does", () => {
+    const stop = {
+      system: "Jotunheim",
+      station: "Gaspar de Lemos Ring",
+      purpose: "Collect",
+      kind: "gather" as const,
+      status: "todo" as const,
+      actions: [
+        act({
+          id: "c",
+          kind: "collect_material",
+          label: "Collect",
+          material: "Selenium",
+          count: 4,
+        }),
+      ],
+    };
+    const j = journal(
+      [dock(1, "Jotunheim", "Gaspar de Lemos Ring")],
+      docked("Jotunheim", "Gaspar de Lemos Ring"),
+    );
+    const b = now(upgrade({}, [stop]), j);
+    expect(atBuildStop(j.events[0]!, b.stops)).toBe(true);
+    expect(journalMode(j.events, false, false, on, false, undefined, b)?.mode).toBe("build");
+    expect(chooseBuild({ note: null, plans: [upgrade({}, [stop])], journal: j })?.here).toBe(
+      "docked",
+    );
   });
 
   it("lets massacre win while a stack is open, and the build come back after", () => {

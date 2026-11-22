@@ -130,7 +130,11 @@ export function buildChoice(input: HudInput): BuildChoice | null {
 }
 
 /** The mode now: off by hotkey, else the newest of the journal, the note and the hotkey. */
-export function currentMode(input: HudInput): HudModeId | "off" | null {
+export function currentMode(
+  input: HudInput,
+  /** The build plan shown (buildChoice()), when the caller has it already. */
+  choice: BuildChoice | null = buildChoice(input),
+): HudModeId | "off" | null {
   if (input.hotkey?.mode === "off") return "off";
   const j = input.journal;
   // Expired on the panel's clock, and a stack whose missions all expired is not open.
@@ -155,7 +159,7 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
   };
   const build =
     j && input.settings.modes.build
-      ? buildNow({ note: input.plan, plans: input.buildPlans ?? [], journal: j })
+      ? buildNow({ note: input.plan, plans: input.buildPlans ?? [], journal: j }, choice)
       : undefined;
   const fromJournal = j
     ? journalMode(
@@ -191,7 +195,7 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
   return chosen;
 }
 
-function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
+function panelFor(mode: HudModeId, input: HudInput, choice: BuildChoice | null): PanelView | null {
   const j = input.journal;
   if (!j || mode === "route") return null;
   if (mode === "massacre")
@@ -223,7 +227,6 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
     });
   }
   if (mode === "build") {
-    const choice = buildChoice(input);
     return choice
       ? buildPanel({
           choice,
@@ -326,9 +329,11 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
     width: s.width,
     look: input.look ?? {},
   };
-  const mode = currentMode(input);
+  // The build plan to show, chosen once for the mode, the panel and the route keys.
+  const choice = buildChoice(input);
+  const mode = currentMode(input, choice);
   if (mode === "off") return { ...base, mode, panel: null, route: null };
-  let panel = mode ? panelFor(mode, input) : null;
+  let panel = mode ? panelFor(mode, input, choice) : null;
   // Bookmarks in this system, from the bookmarks plan.
   const marks = !s.bookmarks
     ? []
@@ -358,7 +363,7 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
     navLeadsTo(input.plan, input.nav, system) !== "other";
   // The build panel is the route: its stops are not repeated below. The plan it shows leads the
   // route keys and the arrival copy, which follow the note's plan otherwise.
-  const shown = panel?.mode === "build" ? buildChoice(input) : null;
+  const shown = panel?.mode === "build" ? choice : null;
   const follow =
     shown && (shown.plan.id !== input.plan?.id || shown.current !== currentStop(shown.plan))
       ? { planId: shown.plan.id, stop: shown.current }

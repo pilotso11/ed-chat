@@ -51,15 +51,32 @@ export class BuildFinisher {
   /** The ship flown at the last poll, for the ship-swap note rule. */
   private ship: number | null | undefined = undefined;
   private lastError: string | null = null;
+  /** The finish() running now: polls come each second, and a write can take longer. */
+  private running: Promise<void> | null = null;
 
   constructor(private readonly deps: BuildStopDeps) {}
 
   /**
    * After a poll: marks the actions the journal shows done (each judged again on the plan as it is
    * now), marks a stop done when its last open action becomes done, writes a found ShipID, and on
-   * a ship swap points the note at the new ship's build plan.
+   * a ship swap points the note at the new ship's build plan. A call while one is running does
+   * nothing: the next poll judges again, so no action is written twice and no copy repeats.
    */
-  async finish(input: {
+  finish(input: {
+    note: Plan | null;
+    plans: Plan[];
+    journal: Journal | null;
+    activity: Activity | null;
+  }): Promise<void> {
+    if (this.running) return Promise.resolve();
+    const run = this.run(input).finally(() => {
+      this.running = null;
+    });
+    this.running = run;
+    return run;
+  }
+
+  private async run(input: {
     note: Plan | null;
     plans: Plan[];
     journal: Journal | null;
@@ -72,17 +89,22 @@ export class BuildFinisher {
     for (const p of [input.note, ...input.plans]) if (isBuildPlan(p)) all.set(p.id, p);
     // The stop shown as current, before this poll's writes: finishing it copies the next one.
     const shown = chooseBuild({ note: input.note, plans: input.plans, journal });
-    try {
-      for (const plan of all.values()) {
-        const current = shown?.plan.id === plan.id && shown.current !== null ? shown.current : null;
-        await this.finishPlan(plans, plan, journal, current);
+    // Each plan on its own: one that fails is tried again on the next poll, the others go on.
+    let failed: string | null = null;
+    const attempt = async (what: () => Promise<void>) => {
+      try {
+        await what();
+      } catch (err) {
+        failed ??= message(err);
       }
-      await this.swapNote(input, journal);
-      this.lastError = null;
-    } catch (err) {
-      if (message(err) !== this.lastError) this.deps.warn(message(err));
-      this.lastError = message(err);
+    };
+    for (const plan of all.values()) {
+      const current = shown?.plan.id === plan.id && shown.current !== null ? shown.current : null;
+      await attempt(() => this.finishPlan(plans, plan, journal, current));
     }
+    await attempt(() => this.swapNote(input, journal));
+    if (failed !== null && failed !== this.lastError) this.deps.warn(failed);
+    this.lastError = failed;
   }
 
   private async finishPlan(
@@ -95,9 +117,13 @@ export class BuildFinisher {
     const writes = judgeBuild(plan, journal).actions.filter(
       (x) => x.write && !this.done.has(x.write.key),
     );
+    // The stops open before this poll's writes, and the stops this poll wrote an action of.
+    let openBefore = openStops(plan);
+    const wrote = new Set<string>();
     if (writes.length) {
       // Judged again on the plan as it is now: Claude or a route key can change it after the poll.
       now = await plans.get(plan.id);
+      openBefore = openStops(now);
       const fresh = judgeBuild(now, journal);
       for (const w of writes) {
         const key = w.write!.key;
@@ -111,6 +137,7 @@ export class BuildFinisher {
             { stop: { index: again.stop }, action: again.action.id },
             patch,
           );
+          wrote.add(stopId(now, again.stop));
         } catch (err) {
           this.done.delete(key);
           throw err;
@@ -132,14 +159,16 @@ export class BuildFinisher {
       }
     }
     // A stop is marked done only on the change: its last open action became done since the last
-    // poll. The first poll only notes which stops are open.
+    // poll, or by this poll's own writes. Otherwise the first poll only notes which stops are open,
+    // so a stop done while ED Chat was off waits for a route key.
     const open = openStops(now);
     const before = this.open.get(now.id);
     this.open.set(now.id, open);
-    if (!before) return;
     for (const i of visitOrder(now)) {
       const s = now.stops[i]!;
-      if (!before.has(stopId(now, i)) || open.has(stopId(now, i))) continue;
+      const id = stopId(now, i);
+      const changed = before?.has(id) || (wrote.has(id) && openBefore.has(id));
+      if (!changed || open.has(id)) continue;
       if (s.status !== "todo" || !s.actions?.length) continue;
       const updated = await plans.updateStop(now.id, { index: i }, { status: "done" });
       const name = s.label ?? (s.station ? `${s.system} · ${s.station}` : s.system);

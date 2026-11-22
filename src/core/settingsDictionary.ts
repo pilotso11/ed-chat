@@ -217,11 +217,6 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "hud.build.doneShown": {
     text: 'Done actions listed at the current stop before they fold into one "✓ N done" row.',
   },
-  "hud.build.outfittingVisit": {
-    text:
-      "With no build plan for the ship, show what was bought, sold and engineered this visit " +
-      "while docked. Not built yet: kept for a later release.",
-  },
   "hud.mining": { text: "The mining panel." },
   "hud.mining.targets": {
     text:

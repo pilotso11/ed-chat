@@ -102,7 +102,11 @@ function setup(start = plan(), o: { activity?: Activity | null; fail?: boolean }
   const store = new Map<string, Plan>([[start.id, start]]);
   const touch = (p: Plan): Plan => ({ ...p, updated_at: iso(1000 + log.writes.length) });
   const plans = {
-    get: async (id: string) => structuredClone(store.get(id)!),
+    get: async (id: string) => {
+      const p = store.get(id);
+      if (!p) throw new Error(`Plan "${id}" not found`);
+      return structuredClone(p);
+    },
     updateAction: async (
       id: string,
       ref: { stop: { index?: number }; action: string },
@@ -181,13 +185,41 @@ describe("BuildFinisher", () => {
     expect(t.log.writes).toHaveLength(3);
   });
 
-  it("marks nothing on the first poll's stops, and leaves a reopened stop open", async () => {
+  it("marks a stop its own writes finish on the first poll", async () => {
     const t = setup();
-    // Both buys already in the journal at start: the actions are marked, the stop is not.
     await t.poll(journal([buy(5), buy(6)]));
-    expect(t.log.writes.filter((w) => w.includes("stop"))).toEqual([]);
+    expect(t.log.writes.filter((w) => w.includes("stop"))).toEqual(["krait:stop 0:done"]);
     await t.poll(journal([buy(5), buy(6)]));
-    expect(t.log.writes.filter((w) => w.includes("stop"))).toEqual([]);
+    expect(t.log.writes.filter((w) => w.includes("stop"))).toHaveLength(1);
+  });
+
+  it("leaves a stop done before the first poll, or reopened, for a route key", async () => {
+    // Both actions marked done already (ED Chat was off), and the stop reopened: not marked.
+    const p = plan();
+    for (const a of p.stops[0]!.actions!) Object.assign(a, { status: "done", done_by: [] });
+    const t = setup(p);
+    await t.poll(journal([]));
+    await t.poll(journal([]));
+    expect(t.log.writes).toEqual([]);
+  });
+
+  it("runs one finish at a time, so nothing is written or copied twice", async () => {
+    const t = setup();
+    await t.poll(journal([buy(5)]));
+    const j = journal([buy(5), buy(6)]);
+    await Promise.all([t.poll(j), t.poll(j), t.poll(j)]);
+    expect(t.log.writes.filter((w) => w.includes(":b2:"))).toHaveLength(1);
+    expect(t.log.writes.filter((w) => w.includes("stop 0"))).toHaveLength(1);
+    expect(t.log.copies).toHaveLength(1);
+  });
+
+  it("goes on with the other plans when one fails", async () => {
+    const t = setup();
+    const broken = plan({ id: "broken" });
+    // Not in the store: get() fails for it.
+    await t.poll(journal([buy(5)]), [broken]);
+    expect(t.log.warnings).toHaveLength(1);
+    expect(t.log.writes.some((w) => w.startsWith("krait:0:b1"))).toBe(true);
   });
 
   it("marks a stop Claude finished by hand, but never a stop with no actions", async () => {

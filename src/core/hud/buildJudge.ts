@@ -403,32 +403,54 @@ export function materialCount(
 const UNLOCKED = (journal: Pick<JournalState, "engineers">, name: string | undefined) =>
   journal.engineers.some((e) => same(e.name, name) && e.progress === "Unlocked");
 
-type Journal = Pick<JournalState, "materials" | "engineers"> & { events: JournalEvent[] };
+type Journal = Pick<JournalState, "materials" | "engineers"> & {
+  events: JournalEvent[];
+  /** The ship flown now: a bought hull whose delivery is before the journal's window. */
+  ship?: Pick<JournalState["ship"], "id" | "type">;
+};
 
 const cache = new WeakMap<
   JournalEvent[],
-  Map<
-    string,
-    { plan: Plan; length: number; last: JournalEvent | undefined; result: BuildJudgement }
-  >
+  Map<string, { length: number; last: JournalEvent | undefined; result: BuildJudgement }>
 >();
+
+/**
+ * What a judgement depends on in a plan, cheaply: its ID and updated_at (every store write sets
+ * it), and each stop's and action's status and claims, for a plan changed in memory.
+ */
+const planKey = (plan: Plan) =>
+  [
+    plan.id,
+    plan.updated_at,
+    plan.build?.ship_id ?? "",
+    ...plan.stops.map(
+      (s) =>
+        s.status +
+        (s.actions ?? []).map((a) => `${a.id}:${a.status}:${a.done_by?.length ?? "-"}`).join(","),
+    ),
+  ].join("|");
 
 /**
  * Judges a build plan's actions from the journal (see "Actions" in the build panel spec). Kept
  * for the same journal, plan and inventory: the panel, its mode and BuildFinisher all ask on every
- * poll. A plan read again is a new object, and judged again.
+ * poll. The plan is keyed by its content, so the same plan read again is not judged again.
  */
 export function judgeBuild(plan: Plan, journal: Journal): BuildJudgement {
   const events = journal.events;
-  const key = JSON.stringify([plan.id, journal.materials, journal.engineers]);
+  const key = JSON.stringify([
+    planKey(plan),
+    journal.materials,
+    journal.engineers,
+    journal.ship?.id ?? null,
+    journal.ship?.type ?? null,
+  ]);
   let m = cache.get(events);
   const kept = m?.get(key);
   const last = events.at(-1);
-  if (kept && kept.plan === plan && kept.length === events.length && kept.last === last)
-    return kept.result;
+  if (kept && kept.length === events.length && kept.last === last) return kept.result;
   const result = judge(plan, journal);
   if (!m) cache.set(events, (m = new Map()));
-  m.set(key, { plan, length: events.length, last, result });
+  m.set(key, { length: events.length, last, result });
   return result;
 }
 
@@ -440,8 +462,23 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
   // The plan's ship: its ship_id; else none until a bought hull is delivered (a buy_ship plan);
   // else the first ship of its type (or of any type, when it names none) an action is done on.
   let boundId: number | null = plan.build?.ship_id ?? null;
-  const fromPlan = boundId !== null;
   const shipType = lower(plan.build?.ship);
+  // A hull marked bought whose delivery (ShipyardNew) is before the journal's window: the ship
+  // flown now, when it is of that type.
+  const hull = plan.stops
+    .flatMap((s) => s.actions ?? [])
+    .find((a) => a.kind === "buy_ship" && a.status === "done");
+  const hullType = lower(hull?.ship ?? plan.build?.ship);
+  if (
+    boundId === null &&
+    hull &&
+    hullType &&
+    !events.some((e) => e.event === "ShipyardNew" && lower(e.ShipType) === hullType) &&
+    journal.ship?.id != null &&
+    lower(journal.ship.type) === hullType
+  )
+    boundId = journal.ship.id;
+  const fromPlan = plan.build?.ship_id !== undefined;
   let armed = false;
   const shipOk = (ship: ShipOf | null) => {
     if (!ship) return true;

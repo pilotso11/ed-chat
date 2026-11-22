@@ -1081,6 +1081,8 @@ describe("builds from the real ed-mcp journal reader", () => {
       status: "done",
       done_by: [{ event: "EngineerCraft", n: 0, role: "rolled" }],
     });
-    expect(notices).toEqual([]);
+    // The stop's last action was written on this first poll: the stop is done, the next copied.
+    expect(saved.stops[0]!.status).toBe("done");
+    expect(notices).toEqual(["Deciat · Farseer Inc: done. Next stop copied: Shinrarta Dezhra"]);
   });
 });
