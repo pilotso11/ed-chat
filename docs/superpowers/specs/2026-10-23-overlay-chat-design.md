@@ -139,8 +139,9 @@ returns to it. Notices only set the dot, so background notices do not expand it.
 
 ### Tray icon
 
-The overlay has no window frame or taskbar button, so a tray icon is the way to
-quit. Its menu has Show/Hide overlay, Open settings, Open log folder and Quit.
+The overlay has no window frame or taskbar button, so a tray icon is one way to
+quit; `/quit` or `/exit` in the chat is the other. Its menu has Show/Hide
+overlay, Open settings, Open log folder and Quit.
 The tooltip is "ED Chat".
 
 Icon mode is saved in `state.json` and survives a restart. `strip.startAsIcon`
@@ -161,6 +162,7 @@ input box. `style.fontSize` scales the whole window.
 - Enter sends and gives focus back to the game. Shift+Enter adds a new line.
 - Esc closes the chat without sending, and gives focus back.
 - `/new` starts a new session.
+- `/quit` and `/exit` quit ED Chat; focus goes back to the game first when it can.
 - Send is disabled while a reply is running. `cancel` stops the reply.
 - `copyChip` with digit *n* copies chip *n* of the latest reply. The chat does
   not open.
