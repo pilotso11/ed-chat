@@ -1459,13 +1459,23 @@ async function main(): Promise<void> {
   );
   status.start();
 
+  // One read at a time: a slow folder must not stack reads that finish out of order.
+  let colourReading = false;
   const readGameMatrix = async () => {
-    const next = gameMatrixFrom(await readColourXml(), gameMatrix);
-    if (JSON.stringify(next) === JSON.stringify(gameMatrix)) return;
-    gameMatrix = next;
-    if (settings.style.theme === "game") {
-      render();
-      renderHud();
+    if (colourReading) return;
+    colourReading = true;
+    try {
+      const next = gameMatrixFrom(await readColourXml(), gameMatrix);
+      if (JSON.stringify(next) === JSON.stringify(gameMatrix)) return;
+      gameMatrix = next;
+      if (settings.style.theme === "game") {
+        render();
+        renderHud();
+      }
+    } catch (err) {
+      log.log("warn", `colour: ${message(err)}`);
+    } finally {
+      colourReading = false;
     }
   };
   // A timer, not a file watch: a read that failed for now, as with the file locked at start, is
