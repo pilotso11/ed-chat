@@ -871,7 +871,7 @@ describe("mining after leaving, selling and relogging (1)", () => {
     expect(p.rows.find((r) => r.text === "Sell Platinum 10 t")?.right).toMatch(/^400k · /);
     expect(p.footer[0]?.endsWith(" · 400k+ to sell")).toBe(true);
     // More commodities aboard than sell rows: the ones without a row have no price.
-    p = panel(events, {
+    p = panel([...events, refined("Gold")], {
       cargo: ["platinum", "osmium", "painite", "gold"].map((name, i) => ({
         name,
         count: 10 - i,

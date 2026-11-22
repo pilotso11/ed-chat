@@ -40,18 +40,21 @@ export interface Scene {
   history?: number;
 }
 
-// Times the panel reads against now: moved with the rest.
-const FIELDS = ["timestamp", "Expiry", "DepartureTime"];
+// Every time in the journal's own form, such as timestamp, Expiry and DepartureTime, is moved.
+const JOURNAL_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/;
 const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d+Z$/, "Z");
 
 /** A file's first line, without reading the rest. */
 async function firstLine(file: string): Promise<string> {
-  const lines = createInterface({ input: createReadStream(file, "utf8"), crlfDelay: Infinity });
+  const stream = createReadStream(file, "utf8");
+  const lines = createInterface({ input: stream, crlfDelay: Infinity });
   try {
     for await (const line of lines) return line;
     return "";
   } finally {
+    // Closing the lines leaves the file open: the stream is stopped too.
     lines.close();
+    stream.destroy();
   }
 }
 
@@ -96,9 +99,8 @@ async function scene(s: Scene, journalDir: string, all: { file: string; start: n
         })
         .filter((e) => Date.parse(String(e.timestamp)) <= cut);
       for (const e of lines)
-        for (const f of FIELDS)
-          if (typeof e[f] === "string" && !Number.isNaN(Date.parse(e[f])))
-            e[f] = iso(Date.parse(e[f]) + shift);
+        for (const [f, v] of Object.entries(e))
+          if (typeof v === "string" && JOURNAL_TIME.test(v)) e[f] = iso(Date.parse(v) + shift);
       // ed-mcp finds the newest journal by its name, read as UTC.
       const stamp = iso(j.start + shift)
         .slice(0, 19)

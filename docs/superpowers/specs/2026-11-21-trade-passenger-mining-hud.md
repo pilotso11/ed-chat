@@ -162,11 +162,11 @@ Platinum 31.4% · High                                   MINE
   Gallite 5.0%
 Hotspots: Platinum ×2 · Painite
 Hold 256/256 t                        0 t free · 10 limpets
-Sell Platinum 246 t                          59.9M · 12 ly
+Sell Platinum 246 t                          60.0M · 12 ly
   Haber Hub, Ngalinn · 244k/t
   or nearer                                  56.6M · 4.0 ly
   Brooks Estate, Wolf 397 · 230k/t
-Session: 23 prospected · 4 worth mining · 86 t refined · 59.9M to sell
+Session: 23 prospected · 4 worth mining · 86 t refined · 60.0M to sell
 ```
 
 - The newest `ProspectedAsteroid` since arriving in the system: the material that best clears its
@@ -189,8 +189,8 @@ Session: 23 prospected · 4 worth mining · 86 t refined · 59.9M to sell
   - Each sell row shows what the load sells for there (what the buyer takes, when its demand is
     less), and the buyer line its price a ton. The session line ends with the tons refined this
     session and the total to sell: the cargo to sell at the picked prices. It is a floor (16.6M+)
-    when some of it has no price yet, a buyer takes less than the load, or more commodities are
-    aboard than have sell rows.
+    when any mined cargo has no usable price: not looked up yet, no usable buyer, a buyer that
+    takes less than the load, or more commodities aboard than have sell rows.
   - When the hold fills while still mining in the ring, the best buyer's system is copied for the
     galaxy map, with a note in the chat strip, once per trip (until the next sale or move to the
     carrier), whichever buyer is best. Not after leaving, where the route
