@@ -134,6 +134,11 @@ describe("parseHudMatrix", () => {
     expect(parseHudMatrix(xml)).toBeNull();
   });
 
+  it("does not read a Default section outside the colour section", () => {
+    const xml = `<GraphicsConfig><GUIColour><Other></Other></GUIColour><Default><MatrixRed>0,0,1</MatrixRed><MatrixGreen>0,1,0</MatrixGreen><MatrixBlue>1,0,0</MatrixBlue></Default></GraphicsConfig>`;
+    expect(parseHudMatrix(xml)).toBeNull();
+  });
+
   it("reads the default section, not another colour set", () => {
     const xml = `<GraphicsConfig><GUIColour><Default><MatrixRed>0,0,1</MatrixRed><MatrixGreen>0,1,0</MatrixGreen><MatrixBlue>1,0,0</MatrixBlue></Default><Other><MatrixRed>1,0,0</MatrixRed></Other></GUIColour></GraphicsConfig>`;
     expect(parseHudMatrix(xml)?.[0]).toEqual([0, 0, 1]);
@@ -142,12 +147,12 @@ describe("parseHudMatrix", () => {
 
 describe("graphicsOverrideFile", () => {
   it("is in the game's graphics options folder", () => {
-    expect(graphicsOverrideFile("C:\Users\a\AppData\Local", "C:\Users\a")).toMatch(
-      /Elite Dangerous.Options.Graphics.GraphicsConfigurationOverride\.xml$/,
-    );
+    expect(
+      graphicsOverrideFile(String.raw`C:\Users\a\AppData\Local`, String.raw`C:\Users\a`),
+    ).toMatch(/Elite Dangerous.Options.Graphics.GraphicsConfigurationOverride\.xml$/);
   });
 
   it("finds the folder without LOCALAPPDATA", () => {
-    expect(graphicsOverrideFile(undefined, "C:\Users\a")).toContain("AppData");
+    expect(graphicsOverrideFile(undefined, String.raw`C:\Users\a`)).toContain("AppData");
   });
 });

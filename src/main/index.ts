@@ -1437,7 +1437,8 @@ async function main(): Promise<void> {
     const xml = await readFile(colourXml, "utf8").catch((err: NodeJS.ErrnoException) =>
       err.code === "ENOENT" ? "" : null,
     );
-    if (xml === null) return;
+    // A file cut off in the middle of a write is the same: it has no closing tag yet.
+    if (xml === null || (xml !== "" && !/<\/GraphicsConfig>/i.test(xml))) return;
     const next = parseHudMatrix(xml);
     if (JSON.stringify(next) === JSON.stringify(gameMatrix)) return;
     gameMatrix = next;
@@ -1446,7 +1447,8 @@ async function main(): Promise<void> {
       renderHud();
     }
   };
-  void readGameMatrix();
+  // Before the first draw, so a blue or green overlay does not start orange.
+  await readGameMatrix();
   watchFile(colourXml, { interval: 5_000 }, () => void readGameMatrix());
 
   const displayXml = displaySettingsFile(process.env.LOCALAPPDATA, os.homedir());

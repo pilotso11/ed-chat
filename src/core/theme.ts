@@ -66,7 +66,7 @@ const list = (c: Rgb) => c.join(", ");
 /**
  * The CSS variables for a theme. Body text takes a little of the colour and stays near white:
  * mixed in full, a green or blue matrix makes it hard to read. The orange theme is the
- * original palette exactly.
+ * original palette, with its two light oranges made one.
  */
 export function themeVars(theme: ThemeName, game: Matrix | null): Record<string, string> {
   const m = theme === "game" ? (game ?? IDENTITY) : THEME_MATRICES[theme];
@@ -140,7 +140,8 @@ function row(xml: string, tag: string): Rgb | null {
  * would leave the overlay unreadable, such as a matrix of zeros.
  */
 export function parseHudMatrix(xml: string): Matrix | null {
-  const block = /<GUIColour>[\s\S]*?<Default>([\s\S]*?)<\/Default>/i.exec(xml)?.[1];
+  const section = /<GUIColour>([\s\S]*?)<\/GUIColour>/i.exec(xml)?.[1];
+  const block = section && /<Default>([\s\S]*?)<\/Default>/i.exec(section)?.[1];
   if (!block) return null;
   const r = row(block, "MatrixRed");
   const g = row(block, "MatrixGreen");
