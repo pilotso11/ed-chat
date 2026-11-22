@@ -191,27 +191,64 @@ Module symbols are compared lower case, with `$`, `_name;` and `_free` taken off
 
 **The ship.** An event is for the plan's ship when its `ShipID` is the plan's `build.ship_id`.
 `EngineerCraft` has no `ShipID`, so it counts for the ship of the newest `Loadout`,
-`ShipyardSwap` or `ShipyardNew` before it. A plan with no `ship_id` yet is matched by
-`build.ship`, the ship type (`Ship` in the module events and `Loadout`, `ShipType` in the
-shipyard events), for the ship being flown; the first time an action is judged done that way,
-the panel writes that `ShipID` into `build.ship_id`. ed-mcp's journal state gives the current
-ship's `id`, so Claude can write `ship_id` from the start (see Part 1).
+`ShipyardSwap` or `ShipyardNew` before it. ed-mcp's journal state gives the current ship's
+`id`, so Claude writes `ship_id` from the start for a ship the player owns (see Part 1).
 
-**A ship not bought yet.** A purchases plan whose hull is still to buy matches no ship. Until
-`ShipyardNew` gives it a ship, it is chosen only by being the activity note's plan, or by the
-ship being docked at one of its stops. The `buy_ship` action is judged by `ShipyardBuy`, and the
-next `ShipyardNew`'s `NewShipID` becomes `build.ship_id`. Module events and `EngineerCraft`
-after that `ShipyardNew` count for the new ship.
+A plan with no `ship_id` gets one in exactly one of two ways:
 
-**One event, one action.** An event counts for one action at most: the first open action it
-matches, in plan order (stops in visit order, then actions in stop order). Eight `buy_module`
-actions for the same shield booster need eight `ModuleBuy` events. Sums are shared out the same
-way: a `MaterialTrade` that received 6 fills the first open trade action for that material up to
-its count, and the rest goes to the next one. So that the share-out is the same on every poll,
-the panel writes into each action it marks done the events it used (`done_by`: each event's
-timestamp, name and the amount taken). An action marked done with `done_by` keeps those events;
-one marked done by hand (by Claude or a route key) takes none. The rest of the events after
-`started_at` are shared out to the open actions.
+- **A plan with a `buy_ship` action never binds by type.** Its ship does not exist yet, so
+  until then it matches no ship, even one of the same type (a ModuleBuy on the player's
+  current Python never binds a plan for a second Python). It is chosen only by being the
+  activity note's plan, or by the ship being docked at one of its stops. Its `buy_ship` is judged
+  by `ShipyardBuy` (or `ShipyardRedeem`), and the next `ShipyardNew`'s `NewShipID` becomes
+  `build.ship_id`. Module events and `EngineerCraft` after that `ShipyardNew` count for the new
+  ship.
+- **A plan with no `buy_ship` action binds by type** (a plan Claude wrote by hand without the
+  `ShipID`): events match by `build.ship` (`Ship` in the module events and `Loadout`, `ShipType`
+  in the shipyard events) for the ship being flown, and the first time an action is judged
+  done that way the panel writes that `ShipID` into `build.ship_id`.
+
+**One event, one action per role.** An event can do several things at once, and each is a
+role: it finishes at most one action for each role it plays, the first open action in plan order
+(stops in visit order, then actions in stop order) that the role matches. The roles are:
+
+| Role | Played by |
+|---|---|
+| bought module | `ModuleBuy` (`BuyItem`), `ModuleBuyAndStore` (`BuyItem`) |
+| sold module | `ModuleSell`, `ModuleSellRemote`, `ModuleBuy` (`SellItem`) |
+| stored module | `ModuleStore` (`StoredItem`), each `MassModuleStore` item, `ModuleBuy` (`StoredItem`), `ModuleRetrieve` (`SwapOutItem`) |
+| retrieved module | `ModuleRetrieve` (`RetrievedItem`) |
+| fetched module | `FetchRemoteModule` (`StoredItem`) |
+| moved module | `ModuleSwap`: one role for `FromItem`, one for `ToItem` |
+| new ship | `ShipyardBuy` or `ShipyardRedeem` (`ShipType`) |
+| swapped-to ship | `ShipyardSwap` (`ShipID`), `ShipyardNew` (`NewShipID`) |
+| transferred ship | `ShipyardTransfer` (`ShipID`) |
+| blueprint rolled | `EngineerCraft` (`BlueprintName`, `Level`) |
+| experimental applied | `EngineerCraft` (`ApplyExperimentalEffect`) |
+| material received | `MaterialTrade` (`Received`), `TradeMicroResources` (`Received`), `BuyMicroResources` (each item) |
+| synthesised | `Synthesis` |
+| unlocked tech | `TechnologyBroker` (each of `ItemsUnlocked`) |
+| suit or weapon bought, upgraded | `BuySuit`, `BuyWeapon`, `UpgradeSuit`, `UpgradeWeapon` |
+
+So a `ModuleBuy` that sells the old module can finish a `buy_module` and a `sell_module`, and a
+`ShipyardBuy` plus its `ShipyardNew` can finish a `buy_ship` and a `swap_ship`. Within a role,
+eight `buy_module` actions for the same shield booster need eight `ModuleBuy` events. Sums are
+shared out the same way: a `MaterialTrade` that received 6 fills the first open trade action for
+that material up to its count, and the rest goes to the next one.
+
+**Which events an action used.** So that the share-out is the same on every poll, the panel
+writes into each action it marks done the events it used (`done_by`). An event is named by its
+`timestamp`, its `event` name and `n`, its place among the events with that name and that
+timestamp in the journal (0 for the first): journal files are only appended to, so two events in
+the same second keep their names. With the role and, for a sum, the amount taken, that names each
+claim exactly. An action marked done with `done_by` keeps those events.
+
+**An action marked done by hand** (by Claude, the player or a route key) has no `done_by`. When
+the panel first sees it, it gives it the first unclaimed events that match it, at or before the
+plan's `updated_at` at that moment (when it was marked, or later), and writes them as its
+`done_by`, so the real event is not counted again for the next identical action. With no such
+event it writes an empty `done_by`, and the action claims nothing. The events after `started_at`
+not claimed by a done action are shared out to the open actions.
 
 **Writing once.** The panel writes an action's status once, keyed by kind:
 
@@ -258,6 +295,10 @@ materials for each grade. The game opens the next grade only when the current on
   times (1 - q), rounded up; then the plan's rolls for each grade above G up to the one below
   the target; then one roll of the target grade, which finishes the action at any quality.
 - At grade G with quality 1: no more rolls of G.
+- A module with no blueprint yet, or with another blueprint, starts again: the rolls are counted
+  from G1 at quality 0, since the game starts a new blueprint at grade 1.
+- The panel uses the same default as the plan: 1, 2, 3, 4, 5 rolls for grades 1 to 5 when
+  `build.rolls_per_grade` is missing.
 - The materials left are those rolls times each grade's one-roll materials. The row shows the
   grade and quality reached: "G3 64% → G5 · ~7 rolls" (2 to fill G3, 4 for G4, 1 for G5 at rolls 1, 2, 3, 4, 5).
 
@@ -281,8 +322,8 @@ early still counts: the journal shows it, and the stop has one less thing to do.
 
 | Kind | Example | Fields | Done when |
 |---|---|---|---|
-| `buy_suit` | Buy Dominator G3 | `suit` (name), `grade` | A `BuySuit` whose `Name` is that suit (its `_ClassN` suffix at least `grade`); the panel writes its `SuitID` into the plan's later actions for that suit |
-| `buy_weapon` | Buy Karma AR-50 G2 | `weapon`, `grade` | A `BuyWeapon` with that `Name` and `Class` at least `grade`; the panel writes its `SuitModuleID` into the later actions for that weapon as `weapon_id` |
+| `buy_suit` | Buy Dominator G3 | `suit` (name), `grade`, `gear` | A `BuySuit` whose `Name` is that suit (its `_ClassN` suffix at least `grade`); the panel writes its `SuitID` as `suit_id` into every action with the same `gear` |
+| `buy_weapon` | Buy Karma AR-50 G2 | `weapon`, `grade`, `gear` | A `BuyWeapon` with that `Name` and `Class` at least `grade`; the panel writes its `SuitModuleID` as `weapon_id` into every action with the same `gear` |
 | `upgrade_suit` | Upgrade Maverick to G3 | `suit_id`, `grade` | An `UpgradeSuit` for that `SuitID` with `Class` at least `grade` |
 | `upgrade_weapon` | Upgrade Karma AR-50 to G4 | `weapon_id`, `grade` | An `UpgradeWeapon` for that `SuitModuleID` with `Class` at least `grade` |
 | `modify_suit` | Apply Extra Ammo Capacity to Maverick | `suit_id`, `modification` | A loadout event (`SuitLoadout`, `SwitchSuitLoadout`, `CreateSuitLoadout`) for that `SuitID` whose `SuitMods` has it |
@@ -290,6 +331,12 @@ early still counts: the journal shows it, and the stop has one less thing to do.
 | `trade_resource` | Trade for 4 Health Monitor (bartender) | `received` (material, count) | `TradeMicroResources` events whose `Received` is that material add up (by their `Count`) to `received.count` |
 | `buy_resource` | Buy 10 Mineral Survey (bartender) | `resource`, `count` | `BuyMicroResources` with it add up to the count |
 | `collect_resource` | Collect 3 Suit Schematic | `resource`, `count` (to hold) | The ship locker and the backpack together (ed-mcp's journal state `locker` and `backpack`) hold the count |
+
+**Gear keys.** A suit or weapon not bought yet has no ID, so `build_plan` (or Claude) gives
+its buy and every later upgrade or modification of it the same plan-local `gear` key, such as
+`dominator-1`. An upgrade or modify action with a `gear` and no ID yet waits; when the buy is
+done, the ID is written into every action with that key. Gear the player owns already gets its
+`suit_id` or `weapon_id` from the start, from journal state `suits`.
 
 The game writes no event when an on-foot modification is applied. It shows in the next loadout
 event, written when the loadout is equipped or at the next login. Until then a modify action
@@ -308,24 +355,43 @@ now", and the plan is left as it is. The panel never reopens an action.
 
 ### Ship build
 
+The examples below are moments of one route: six stops, sixteen actions.
+
+| Stop | Place | Actions |
+|---|---|---|
+| 1 | Jotunheim · Gaspar de Lemos Ring (encoded trader) | 2 trades |
+| 2 | HIP 36601 · C 3 b (collect) | collect 12 Arsenic |
+| 3 | Deciat · Farseer Inc | unlock Farseer, roll PD to G5, roll FSD to G5, apply Mass Manager |
+| 4 | Shinrarta Dezhra · Jameson Memorial | buy Shield Booster 0A (0.3M), retrieve stored Shield Booster, transfer Power Plant (0.1M), buy Shield Generator 6A (18.9M), sell AFM Unit |
+| 5 | Kuwemaki · Elvira Martuuk | roll thrusters Dirty Drives to G5, roll shield generator Reinforced to G5 |
+| 6 | Laksak · Didi Vatermann | roll 2 Shield Boosters Heavy Duty to G5 |
+
+Credits to spend are the open purchases and transfers: 19.3M until the 0A booster is bought.
+
 ```
-BUILD · Python Mk II · stop 3/7                      4/20 actions
-● Deciat · Farseer Inc                                 engineer
+BUILD · Python Mk II · stop 3/6                      4/16 actions
+● Deciat · Farseer Inc                        engineer · docked
   ✓ Unlock Felicity Farseer
   ✓ Roll Power Distributor Charge Enhanced to G5
   Roll FSD Increased Range to G5            G3 64% → G5 · ~7 rolls
     short 5 Arsenic (have 7/12) · collect at stop 2
-  Apply Mass Manager to FSD                     ready
-▸ Shinrarta Dezhra · Jameson Memorial       buy 2 · retrieve 1
-1 stop open before · 4 after · 33.4M to spend · 1.2B held
-Target: FSD G5 · PD G5 · shields Reinforced G5 · 8 boosters HD G5
+  Apply Mass Manager to FSD                     after FSD G5
+▸ Shinrarta Dezhra · Jameson Memorial
+    buy 2 · retrieve 1 · transfer 1 · sell 1
+1 open before · 3 after · 19.3M to spend · 1.2B held
+Target: FSD G5 · PD G5 · shields Reinforced G5 · boosters HD G5
 ```
+
+Here the player docked at Farseer before collecting the Arsenic, so stop 3 is current (docked,
+with work to do) and stop 2 is still open before it.
 
 - **Header:** BUILD, the ship (type, then its `ShipName` when the panel is wide enough), the
   current stop's place in the route, and the actions done out of all.
 - **The current stop (●):** the plan stop the ship is docked at (or landed at, for a collect
-  stop) while it has actions to do; otherwise the plan's current stop in visit order, as the
-  route rows have it. Its kind is on the right, with the jumps left on the plotted route when away
+  stop) while it has actions to do; otherwise `currentStop()`, the first stop to do in visit
+  order, as the route rows and keys have it on `origin/t3/trade-panel`. So the panel's current
+  stop differs from `currentStop()` only while docked at a later stop with work to do, and then
+  the footer says how many stops before it are still open. Its kind is on the right, with the jumps left on the plotted route when away
   from it. Then its actions in order:
   - Done ones with ✓, dim. More than three done ones fold into "✓ 3 done".
   - Ones to do, with their key need on the right or on a dim line below: the grade reached and
@@ -334,10 +400,13 @@ Target: FSD G5 · PD G5 · shields Reinforced G5 · 8 boosters HD G5
     ("short 5 Arsenic (have 7/12) · collect at stop 2"), the credits short in amber, or "ready"
     when everything is in hand.
   - An action blocked by another one at the same stop (an experimental before its blueprint is
-    rolled) shows after it, with no need line.
+    rolled) shows after it, with "after <the action>" in place of a need ("after FSD G5").
   - Amber "not fitted now" for a done action the `Loadout` no longer shows.
-- **The next stop (▸):** its place and a count of its actions by kind ("buy 2 · retrieve 1").
-- **Footer:** the stops still open before it (when the player came here early) and after it,
+- **The next stop (▸):** its place and a count of every kind of action still to do there, in
+  the stop's order ("buy 2 · retrieve 1 · transfer 1 · sell 1"), on a second line when it does
+  not fit beside the place. No kind is left out.
+- **Footer:** the stops still open before the current one ("1 open before", only when the player
+  came here early) and the stops after it, the next one included ("3 after"),
   the credits still to spend on open purchases against the credits held (amber when short), and
   at most one line of the target from the plan (`build.summary`, written by `build_plan`).
   Nothing else from the target is shown. The credits held are `Balance` from `Status.json`,
@@ -354,16 +423,16 @@ Target: FSD G5 · PD G5 · shields Reinforced G5 · 8 boosters HD G5
 ### At an outfitting station
 
 ```
-BUILD · Python Mk II · stop 4/7                      5/20 actions
+BUILD · Python Mk II · stop 4/6                      8/16 actions
 ● Shinrarta Dezhra · Jameson Memorial                  docked
-  ✓ Buy FSD 5A                                         5.1M
+  ✓ Buy Shield Booster 0A                              0.3M
   Retrieve stored Shield Booster (Heavy Duty G5)       here
-  Transfer Power Plant 6A from Belach               ~25 min
+  Transfer Power Plant 6A from Belach        0.1M · ~25 min
   Buy Shield Generator 6A                            18.9M
     not sold here
   Sell AFM Unit 2A
 ▸ Kuwemaki · Elvira Martuuk                         roll 2
-1 stop open before · 2 after · 18.9M to spend · 1.2B held
+2 after · 19.0M to spend · 1.2B held
 ```
 
 - While docked at the stop, `Outfitting.json` (written when the outfitting screen opens) shows
@@ -377,24 +446,24 @@ BUILD · Python Mk II · stop 4/7                      5/20 actions
 ### At a material trader
 
 ```
-BUILD · Python Mk II · stop 1/7                      0/20 actions
+BUILD · Python Mk II · stop 1/6                      0/16 actions
 ● Jotunheim · Gaspar de Lemos Ring            trader · encoded
   Trade 18 Unusual Encrypted Files → 3 Datamined Wake    ready
   Trade 6 Cracked Industrial Firmware → 2 Modified Embedded
     have 4/6 Cracked Industrial Firmware
 ▸ HIP 36601 · C 3 b                                  collect 1
-5 stops after
+5 after · 19.3M to spend · 1.2B held
 ```
 
 ### At a collect stop
 
 ```
-BUILD · Python Mk II · stop 2/7                      2/20 actions
+BUILD · Python Mk II · stop 2/6                      2/16 actions
 ● HIP 36601 · C 3 b                                     collect
   Collect 12 Arsenic                                      7/12
     Outcrop field near 12.4, -60.1 · mine with SRV
 ▸ Deciat · Farseer Inc              unlock 1 · roll 2 · apply 1
-5 stops after
+4 after · 19.3M to spend · 1.2B held
 ```
 
 - The count held against the count to hold, from journal state `materials` (the ship locker on
@@ -406,11 +475,12 @@ BUILD · Python Mk II · stop 2/7                      2/20 actions
 The same panel with a shorter route. The header says UPGRADE when the plan's `build.scope` is
 `upgrade`. Here the route is three stops and four actions: a trade at a material trader (stop 1,
 not done yet, since the player went to the engineer first), the unlock and the FSD at Farseer
-(stop 2), and the thrusters at Martuuk (stop 3):
+(stop 2), and the thrusters at Martuuk (stop 3). The player is docked at Farseer with work to do
+there, so stop 2 is current although stop 1 is the first stop to do:
 
 ```
 UPGRADE · Krait Mk II · stop 2/3                      1/4 actions
-● Deciat · Farseer Inc                                   2 jumps
+● Deciat · Farseer Inc                        engineer · docked
   ✓ Unlock Felicity Farseer
   Roll FSD Increased Range to G5          G3 100% → G5 · ~5 rolls
     short 4 Chemical Manipulators · trade at stop 1
@@ -446,17 +516,20 @@ panel cannot say what is left, so it says only what was done.
 ### On foot (later phase)
 
 ```
-BUILD · Dominator loadout · stop 1/3                  2/6 actions
+BUILD · Dominator loadout · stop 1/3                  1/6 actions
 ● Kuwemaki · Mitchell Ring · Pioneer Supplies           docked
   ✓ Upgrade Dominator to G3
   Upgrade Dominator to G4                             2.25M
     short 1 Health Monitor (have 1/2) · trade at stop 2
-  Upgrade Karma AR-50 to G4                           ready
-▸ Kuwemaki · Mitchell Ring · bartender      trade 1
+  Upgrade Karma AR-50 to G4                    1.5M · ready
+▸ Kuwemaki · Mitchell Ring · bartender                 trade 1
+2 after · 3.75M to spend · 1.2B held
 Target: Dominator G5 · Karma AR-50 G5 · Extra Ammo · Faster Handling
 ```
 
-- A plan for one suit loadout (`build.loadout_id`): its suit and weapons.
+- A plan for one suit loadout (`build.loadout_id`): its suit and weapons. Here three stops and
+  six actions: three upgrades at Pioneer Supplies (stop 1), a trade at the bartender (stop 2),
+  and two modifications at Domino Green (stop 3).
 - The needs (credits and resources for each grade step, each modification's recipe) are written
   into each action by Claude, which can take them from Inara or from what the player tells it.
   The panel compares them with the ship locker and the backpack. ed-mcp has no table of on-foot
@@ -526,14 +599,16 @@ As `TradeStopFinisher` does, after each poll (`BuildFinisher`, in `src/core/hud/
 - A stop with no actions is never marked done by the panel: only `routeNext` marks it.
 - After a `ShipyardNew` for a `buy_ship`, the plan's `build.ship_id` is written once
   (`setBuildShip()`). After a `BuySuit` or `BuyWeapon`, its `SuitID` or `SuitModuleID` is written
-  into the plan's later actions for that suit or weapon (`updateAction()` with `suit_id` or
-  `weapon_id`), once.
+  into every action with the same `gear` key (`updateAction()` with `suit_id` or `weapon_id`),
+  once.
 - On a ship swap (`ShipyardSwap`, or a `Loadout` with another `ShipID`) to a ship with a build
   plan, when the note's plan is another ship's build, ED Chat sets the note's `plan_id` to that
   ship's plan through the `ActivityStore`, so the panel, the route rows and Claude agree. This is
   the only time the panel changes the note: when it shows another plan for any other reason
   (docked at its stop, its newest done action), the note is left to Claude.
-- `routeNext` and `routePrev` still mark the current stop done or reopen the last one, for a
+- `routeNext` and `routePrev` act on the stop the panel shows as current (the docked one, when it
+  differs from `currentStop()`), so the key marks what the player sees. They still mark the
+  current stop done or reopen the last one, for a
   stop the journal cannot judge.
 
 ## Answers to the issue's questions
@@ -571,10 +646,14 @@ As `TradeStopFinisher` does, after each poll (`BuildFinisher`, in `src/core/hud/
     kind: ActionKind,                       // the kinds in Actions above
     label: z.string().min(1),               // "Roll FSD Increased Range to G5"
     status: z.enum(["todo", "done", "skipped"]).default("todo"),
-    // The events the panel counted for it: timestamp, event name, and the amount for a sum.
+    // The events the panel counted for it. An event is its timestamp, name and n, its place
+    // among the events of that name and timestamp; role and amount say what it was used for.
     done_by: z.array(z.object({
-      at: z.string(), event: z.string(), amount: z.number().int().optional(),
+      at: z.string(), event: z.string(), n: z.number().int().min(0),
+      role: z.string(), amount: z.number().int().optional(),
     })).optional(),
+    // On foot: a plan-local key shared by a buy and the later actions for that suit or weapon.
+    gear: z.string().optional(),
     needs: Needs.optional(),
     // One roll's materials for each grade, for an engineer action.
     needs_by_grade: z.record(z.string(), Needs).optional(),
@@ -628,9 +707,10 @@ ship for an upgrade) and the ship now (the journal `Loadout`, or CAPI), it write
    `StoredModules`: retrieve here, or fetch first), to store or sell, to move; blueprints to roll
    from the grade fitted now to the target, and experimentals. With `scope: "upgrade"`, only the
    slots asked for.
-2. **Needs:** for each engineer action, the materials per grade from the catalog at the rolls per
-   grade (an argument, default 1, 2, 3, 4, 5, saved as `build.rolls_per_grade`); for each experimental, its materials; for each purchase, the
-   price from Spansh.
+2. **Needs:** for each engineer action, one roll's materials for each grade from the catalog
+   (`needs_by_grade`), and the total for the grades it still has to roll (`needs`) at the rolls
+   per grade (an argument, default 1, 2, 3, 4, 5, saved as `build.rolls_per_grade`); for each
+   experimental, its materials; for each purchase, the price from Spansh.
 3. **Trades and collecting:** what the actions need beyond the inventory, as `materials_plan`
    works it out: trades at the nearest trader of each type (`trade_material` actions at a
    `trader` stop), and what no trade covers as `collect_material` actions at a `gather` stop of
@@ -708,7 +788,11 @@ for on foot. ED Chat pins each.
   swap between two ships with plans; an action done at a later stop first; a done action no
   longer fitted; eight identical buys needing eight events; a trade shared across two actions;
   a stop reopened with `routePrev` that stays open; a stop with no actions; a partial roll's
-  rolls left; a `MassModuleStore` filling two store actions.
+  rolls left; a `MassModuleStore` filling two store actions; a `ModuleBuy` that sells the old
+  module finishing a buy and a sell; a `ShipyardBuy` and `ShipyardNew` finishing a buy and a
+  swap; an action marked done by hand claiming its event, so the next identical action stays
+  open; two events in the same second; a plan with a `buy_ship` not binding to a ship of that
+  type; a new blueprint counted from G1; a buy writing its ID into the actions with its `gear`.
 - **Mode tests,** as event sequences and the mode expected: a matching module event, docking at a
   build stop and the note each turn it on; a `Synthesis` or `MaterialTrade` the plan does not ask
   for, the login events and a jump do not; massacre wins while a stack is open and the build
