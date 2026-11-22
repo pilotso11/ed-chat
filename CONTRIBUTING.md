@@ -41,8 +41,9 @@ since release-please builds the changelog from them.
   in front, so the tests refuse to run while Elite is running; set `E2E_FORCE=1` to run them
   anyway. `npm run check` does not run them.
 
-CI runs `npm run check`, then the Playwright tests on the app that its installer build made,
-and shows the coverage summary on each run. The release workflow attaches `coverage.json`
+CI runs `npm run check`, builds and packages the app (without the installers, which only the
+release workflow builds), then runs the Playwright tests, and shows the coverage summary on
+each run. The release workflow attaches `coverage.json`
 (from `scripts/coverage-badge.ts`) to each release, and the README's coverage badge reads it from
 the latest release, so CI commits and publishes nothing for it.
 
