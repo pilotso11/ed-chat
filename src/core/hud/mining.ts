@@ -818,6 +818,13 @@ export function miningPanel(input: {
         tone: j.worth ? "good" : "dim",
         ...(others.length ? { detail: others.join(" · ") } : {}),
       });
+    } else if (!p.motherlode) {
+      // A rock with nothing worth listing (or only a core): still say it was read.
+      rows.push({
+        text: `No materials${p.content ? ` · ${p.content}` : ""}${left}`,
+        right: "skip",
+        tone: "dim",
+      });
     }
     if (p.motherlode)
       rows.push({ text: `Motherlode: ${p.motherlode}`, right: "crack", tone: "warn" });

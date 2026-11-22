@@ -1281,3 +1281,19 @@ describe("targets and the mining system, more", () => {
     expect(miningState(back, T0 + t * 1000).system).toBe("A");
   });
 });
+
+describe("a rock with no materials", () => {
+  it("still shows a row", () => {
+    const p = miningPanel({
+      system: "A",
+      state: miningState([prospect([])], T0 + t * 1000),
+      cargo: [],
+      capacity: null,
+      shipType: null,
+      carrier: null,
+      settings: M,
+      now: T0 + t * 1000,
+    });
+    expect(p.rows[0]).toEqual({ text: "No materials · High", right: "skip", tone: "dim" });
+  });
+});

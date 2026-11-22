@@ -264,3 +264,68 @@ describe("panel from the real ed-mcp journal reader", () => {
     });
   });
 });
+
+describe("mining from the real ed-mcp journal reader", () => {
+  // The mining rules read events outside HUD_EVENTS (Docked, Location, LoadGame, Died, FSDJump,
+  // CarrierJump, Cargo), from ed-mcp's own keep set: a test here fails if ed-mcp stops keeping one.
+  const RING = `${SYSTEM} 2 A Ring`;
+  const cargo = (platinum: number): Event =>
+    ev("Cargo", {
+      Vessel: "Ship",
+      Count: platinum + 10,
+      Inventory: [
+        { Name: "drones", Name_Localised: "Limpet", Count: 10, Stolen: 0 },
+        ...(platinum ? [{ Name: "platinum", Count: platinum, Stolen: 0 }] : []),
+      ],
+    });
+
+  it("shows the rock and hotspots, keeps the ring at a carrier, and ends after selling", async () => {
+    const g = game();
+    g.add(
+      ...arrive(),
+      ev("SupercruiseExit", { StarSystem: SYSTEM, Body: RING, BodyType: "PlanetaryRing" }),
+      ev("SAASignalsFound", {
+        BodyName: RING,
+        SystemAddress: ADDRESS,
+        BodyID: 9,
+        Signals: [{ Type: "Platinum", Count: 2 }],
+      }),
+      ev("ProspectedAsteroid", {
+        Materials: [{ Name: "Platinum", Proportion: 31.4 }],
+        Content: "$AsteroidMaterialContent_High;",
+        Remaining: 100,
+      }),
+      ev("MiningRefined", { Type: "$platinum_name;", Type_Localised: "Platinum" }),
+      cargo(1),
+    );
+    let v = await g.hud();
+    expect(v.panel).toMatchObject({ mode: "mining", title: "MINING", subtitle: "2 A Ring" });
+    expect(v.panel!.rows[0]).toMatchObject({ text: "Platinum 31.4% · High", right: "MINE" });
+    expect(v.panel!.rows.some((r) => r.text === "Hotspots: Platinum ×2")).toBe(true);
+
+    // Docking at a carrier beside the ring keeps the ring (Docked must be kept).
+    g.add(
+      ev("Docked", {
+        StationName: "XFZ-12K",
+        StationType: "FleetCarrier",
+        StarSystem: SYSTEM,
+        MarketID: 9,
+      }),
+    );
+    v = await g.hud();
+    expect(v.panel!.subtitle).toBe("2 A Ring");
+
+    // A jump with the platinum aboard keeps mining, to sell it.
+    g.add(
+      ev("Undocked"),
+      ev("FSDJump", { StarSystem: "Other", SystemAddress: 1, StarPos: [0, 0, 0] }),
+    );
+    v = await g.hud();
+    expect(v.panel!.mode).toBe("mining");
+
+    // Selling it ends mining.
+    g.add(ev("MarketSell", { Type: "platinum", Count: 1 }), cargo(0));
+    v = await g.hud();
+    expect(v.panel?.mode).not.toBe("mining");
+  });
+});
