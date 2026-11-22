@@ -99,7 +99,7 @@ const HudSchema = z.strictObject({
         Tritium: 30,
       }),
       // Sell from your fleet carrier: buyers are searched around the carrier, for what is in the
-      // hold and what was moved to the carrier this session.
+      // hold and what was moved to the carrier in the last 12 hours.
       useCarrier: z.boolean().default(false),
       // Include other players' fleet carriers as buyers.
       carrierMarkets: z.boolean().default(false),

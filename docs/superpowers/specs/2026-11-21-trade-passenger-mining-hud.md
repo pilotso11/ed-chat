@@ -199,7 +199,7 @@ whole stock later, either by jumping the carrier near a buyer or by carrying it 
   undoes it.
 - Cargo moved this game session: `CargoTransfer` to and from the carrier, and `MarketSell` /
   `MarketBuy` at the carrier's own market (its `MarketID` is the carrier ID). The game does not
-  log what other players sell to or buy from the carrier, so this is "moved this session", not
+  log what other players sell to or buy from the carrier, so this is "moved in the last 12 hours", not
   the stock. Free space is the newest `CarrierStats` less the moves since.
 - With `useCarrier`, the buyer search is around the carrier (`carrierRadiusLy`, 500 ly, about
   one laden carrier jump) for the hold plus what was moved, and a full hold copies nothing,

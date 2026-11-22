@@ -1059,3 +1059,21 @@ describe("after the eighth review", () => {
     expect(ownCarrierId(cancelled, T0 + (t + 200) * 1000)).toBe(9);
   });
 });
+
+describe("after the final review", () => {
+  it("counts core fragments as mined tons, but not stolen cargo", () => {
+    const events = [
+      ev("AsteroidCracked", { Body: "R" }),
+      ev("CollectCargo", { Type: "opal" }),
+      ev("CollectCargo", { Type: "opal" }),
+    ];
+    expect(miningState(events, T0 + t * 1000).refined.get("opal")).toBe(2);
+    const stolen = [{ name: "opal", count: 5, stolen: true, mission_id: null }];
+    expect(holdOf(stolen, new Set(["opal"])).mined.size).toBe(0);
+  });
+
+  it("does not count a canister scooped after only prospecting", () => {
+    const events = [prospect([["Gold", 30]]), ev("CollectCargo", { Type: "gold" })];
+    expect([...refinedKinds(events)]).toEqual([]);
+  });
+});

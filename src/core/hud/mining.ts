@@ -169,6 +169,8 @@ export function miningState(
   let lastSale: string | null = null;
   let lastMining = 0;
   let jumpsSince = 0;
+  // A core cracked since arriving in the ring: fragments collected now come from it.
+  let crackedHere = false;
   const rings = new Map<string, { name: string; count: number }[]>();
   const mined = () => {
     // A long break starts a new session; a relog does not, since miners relog to reset rocks.
@@ -200,6 +202,7 @@ export function miningState(
         prospect = null;
         ring = null;
         stintStart = null;
+        crackedHere = false;
         break;
       case "MarketSell":
         lastSale = e.timestamp;
@@ -215,6 +218,7 @@ export function miningState(
       case "Docked":
         // Left the ring: no longer mining here, though the session's counts stay.
         ring = null;
+        crackedHere = false;
         prospect = null;
         break;
       case "SAASignalsFound": {
@@ -241,8 +245,18 @@ export function miningState(
       case "AsteroidCracked":
         mined();
         cracked++;
+        crackedHere = true;
         ring = str(e.Body) ?? ring;
         break;
+      case "CollectCargo": {
+        // Fragments from a cracked core count as mined, like refined tons.
+        const key = commodityKey(str(e.Type) ?? "");
+        if (!crackedHere || !isMined(key) || e.Stolen === true) break;
+        mined();
+        refined.set(key, (refined.get(key) ?? 0) + 1);
+        refinedAt.push(last);
+        break;
+      }
       case "MiningRefined": {
         mined();
         const key = commodityKey(str(e.Type) ?? str(e.Type_Localised) ?? "");
@@ -315,7 +329,7 @@ export function refinedKinds(events: JournalEvent[]): Set<string> {
       // Fragments from a cracked core; a canister salvaged elsewhere is not mined.
       const key = commodityKey(str(e.Type) ?? "");
       if (cracking && isMined(key) && e.Stolen !== true) kinds.add(key);
-    } else if (e.event === "AsteroidCracked" || e.event === "ProspectedAsteroid") {
+    } else if (e.event === "AsteroidCracked") {
       cracking = true;
     } else if (LEAVE_RING.has(e.event)) {
       cracking = false;
@@ -343,7 +357,8 @@ export function holdOf(
     used += c.count;
     const key = commodityKey(c.name);
     if (key === "drones") limpets += c.count;
-    else if (c.mission_id === null && isMined(key) && (!kinds || kinds.has(key))) {
+    // Stolen cargo goes to a black market, not the buyers suggested here.
+    else if (c.mission_id === null && !c.stolen && isMined(key) && (!kinds || kinds.has(key))) {
       mined.set(key, (mined.get(key) ?? 0) + c.count);
     }
   }
@@ -753,7 +768,10 @@ export function miningPanel(input: {
         tone: "dim",
       });
     } else {
-      const moved = [...carrier.moved.values()].reduce((n, t) => n + t, 0);
+      // Only what was mined: traded cargo moved to the carrier is not waiting here.
+      const moved = [...carrier.moved]
+        .filter(([k]) => !kinds || kinds.has(k))
+        .reduce((n, [, t]) => n + t, 0);
       const where = carrier.jumping
         ? `→ ${carrier.jumping.system}`
         : (carrier.system ?? "location unknown");

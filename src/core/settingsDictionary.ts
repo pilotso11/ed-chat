@@ -182,7 +182,7 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "hud.mining.useCarrier": {
     text:
       "Sell from your fleet carrier: search for buyers around the carrier, for the hold and " +
-      "what you moved to the carrier this session.",
+      "what you moved to the carrier in the last 12 hours.",
   },
   "hud.mining.carrierMarkets": {
     text: "Include other players' fleet carriers as buyers. Their prices change often.",

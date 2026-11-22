@@ -196,7 +196,7 @@ front.
   load, and a nearer station that pays at least 90% of that. When the hold fills,
   the best buyer's system is copied for the galaxy map. With
   `hud.mining.useCarrier`, the search is around your fleet carrier and includes
-  what you moved to it this session. After a jump, the panel stays on while mined
+  what you moved to it in the last 12 hours. After a jump, the panel stays on while mined
   cargo is aboard.
 - **Route:** the current stop of the active ed-mcp plan (with its body or
   station, what it is for and the jumps left on the plotted route), the next
