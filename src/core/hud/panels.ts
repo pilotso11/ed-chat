@@ -114,12 +114,14 @@ export function massacrePanel(
   const rows: HudRow[] = [];
   // A mission that expired before it was done pays nothing and takes no kills: ed-mcp marks it,
   // and the panel only counts it.
-  const all = groups.flatMap((g) => g.factions.flatMap((f) => f.missions));
+  const targets = liveMassacre(groups);
+  // Nothing live: the stack has lapsed, and there is nothing left to do.
+  if (!targets.length) return null;
+  // Only the targets shown: a lapsed target's missions are not counted as expired here.
+  const all = targets.flatMap((g) => g.factions.flatMap((f) => f.missions));
   const missions = all.filter((m) => !m.expired);
   const expired = all.length - missions.length;
-  // Nothing live: the stack has lapsed, and there is nothing left to do.
-  if (!missions.length) return null;
-  for (const g of liveMassacre(groups)) {
+  for (const g of targets) {
     // What the stack still pays for each kill left: one kill counts for every giver at once.
     const open = rewards(
       g.factions.flatMap((f) => f.missions).filter((m) => !m.done && !m.expired),
@@ -147,7 +149,8 @@ export function massacrePanel(
         text: f.faction,
         right: `${got}/${need}`,
         bar: need ? got / need : 1,
-        tone: got === need ? "good" : undefined,
+        // ed-mcp's kills left: a mission the game marked complete is done, whatever was counted.
+        tone: f.kills_left === 0 ? "good" : undefined,
       });
     }
   }

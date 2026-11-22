@@ -112,10 +112,15 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
       )
     : null;
   const m = noteMode(input.activity?.kind);
-  // A note for a mode that is off, or a missions or hauling note with no run to show, would leave
-  // the panel empty: the journal's mode shows instead.
+  // A note for a mode that is off, a missions or hauling note with no run to show, or a massacre
+  // note with no live stack, would leave the panel empty: the journal's mode shows instead.
   const fromNote =
-    m && input.activity && input.settings.modes[m] && !(m === "passenger" && !runActive)
+    m &&
+    input.activity &&
+    input.settings.modes[m] &&
+    !(m === "passenger" && !runActive) &&
+    // With the journal read: before then there is no stack to judge by.
+    !(m === "massacre" && j && !groups.length)
       ? { mode: m, at: Date.parse(input.activity.updated_at) }
       : null;
   // journalMode skips modes that are off itself, so the run or an older mode still shows.

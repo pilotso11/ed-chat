@@ -165,6 +165,21 @@ describe("currentMode", () => {
     expect(currentMode(baseInput({ activity, hotkey: { mode: "off", at: 0 } }))).toBe("off");
   });
 
+  it("ignores a massacre note when the journal has no live stack", () => {
+    const activity = { kind: "massacre" as const, summary: "x", updated_at: "2026-11-15T11:00Z" };
+    const journal = {
+      location: { system: "Sys", station: null, station_type: null, docked: false },
+      ship: { type: null, cargo_capacity: null },
+      cargo: [],
+      missions: [],
+      events: [],
+    } as unknown as HudInput["journal"];
+    // The stack is over, so the note would leave an empty panel.
+    expect(currentMode(baseInput({ activity, journal }))).toBeNull();
+    // Before the journal is read, the note still chooses.
+    expect(currentMode(baseInput({ activity }))).toBe("massacre");
+  });
+
   it("ignores a mode turned off in settings", () => {
     const activity = { kind: "massacre" as const, summary: "x", updated_at: "2026-11-15T11:00Z" };
     const settings = {
@@ -302,10 +317,30 @@ describe("massacrePanel", () => {
       minPerKill: 0,
     })!;
     expect(p.rows.map((r) => r.text)).toEqual(["Kumo Crew", "Lugh"]);
-    expect(p.footer.at(-1)).toBe("1 expired");
+    // The lapsed target is not shown, so its mission is not counted as expired either.
+    expect(p.footer).toEqual(["Stack 1.0M"]);
     // Every mission expired: the stack has lapsed, and there is no panel.
     expect(massacrePanel([target("Pirates", true)], 0, { minPerKill: 0 })).toBeNull();
     expect(liveMassacre([target("Pirates", true)])).toEqual([]);
+  });
+
+  it("shows a giver done when the game completed its missions, whatever kills were counted", () => {
+    const done = { ...mission(1, 24, 20, null), done: true, kills_left: 0 };
+    const p = massacrePanel(
+      [
+        {
+          target_faction: "Kumo Crew",
+          kills_left: 5,
+          factions: [
+            { faction: "Lugh", kills_left: 0, missions: [done] },
+            { faction: "Eravate", kills_left: 5, missions: [mission(2, 10, 5, null)] },
+          ],
+        },
+      ],
+      0,
+      { minPerKill: 0 },
+    )!;
+    expect(p.rows[1]).toMatchObject({ text: "Lugh", right: "20/24", tone: "good" });
   });
 
   it("is null with no missions", () => {
