@@ -223,6 +223,11 @@ class ActiveClock {
 
   stop(at: number): void {
     this.tick(at);
+    this.halt();
+  }
+
+  /** Stops without counting the time since the last event: it was spent away. */
+  halt(): void {
     this.last = null;
   }
 
@@ -318,7 +323,9 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
     if (!Number.isNaN(at)) {
       if (EXPLORING.has(e.event)) session0.start(at);
       session0.tick(at);
-      for (const p of planets.values()) p.clock.tick(at);
+      // A relog is the first event after time away (when Shutdown is missing, as after a crash):
+      // it does not count toward the planets.
+      if (e.event !== "LoadGame") for (const p of planets.values()) p.clock.tick(at);
     }
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     const address = num(e.SystemAddress);
@@ -333,7 +340,7 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
         settled.clear();
         session0 = new ActiveClock();
         earned.length = 0;
-        if (!Number.isNaN(at)) stopPlanets(at);
+        for (const p of planets.values()) p.clock.halt();
         break;
       case "Shutdown":
         if (!Number.isNaN(at)) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { JournalEvent, Plan } from "ed-mcp/journal";
+import { exploration, type JournalEvent, type Plan } from "ed-mcp/journal";
 import { syncDirOf } from "../src/core/edMcp.js";
 import { HudFeed } from "../src/core/hud/feed.js";
 import { buildHud, currentMode, parseShipStatus, type HudInput } from "../src/core/hud/hud.js";
@@ -11,6 +11,7 @@ import {
   previousStop,
   explorationTotals,
   exobiologyPanel,
+  explorationPanel,
   jumpsLeft,
   massacrePanel,
   parseNavRoute,
@@ -436,10 +437,24 @@ describe("exploration totals", () => {
       analyse(20),
     ];
     const t = explorationTotals(events, min(25));
-    // 5 to 12 and 20 to 25: 12 minutes, with the map and two species.
-    expect(t.planetRate.get("1|3")).toBeCloseTo(((mapped - scanned + 2 * species) * 60) / 12);
+    // 5 to 10, the last event before the relog, and 20 to 25: 10 minutes, with the map and two
+    // species.
+    expect(t.planetRate.get("1|3")).toBeCloseTo(((mapped - scanned + 2 * species) * 60) / 10);
     // The new session: from the sample at 20, five minutes.
     expect(t.rate.session).toBeCloseTo(species * 12);
+    // Quitting, or a relog after a long break with no Shutdown (a crash), adds nothing to the
+    // planet's time when sampling starts again an hour later: 7 minutes, to the Shutdown, or 5,
+    // to the last event before the relog.
+    const before = events.slice(0, 4);
+    for (const quit of [[timed(12, ev("Shutdown"))], []]) {
+      const relog = explorationTotals(
+        [...before, ...quit, timed(72, ev("LoadGame")), analyse(80)],
+        min(80),
+      );
+      expect(relog.planetRate.get("1|3")).toBeCloseTo(
+        ((mapped - scanned + 2 * species) * 60) / (quit.length ? 7 : 5),
+      );
+    }
     // Dying stops the planet's clock: an hour later it still has its 7 minutes.
     const died = explorationTotals([...events.slice(0, 4), timed(12, ev("Died"))], min(72));
     expect(died.planetRate.get("1|3")).toBeCloseTo(((mapped - scanned + species) * 60) / 7);
@@ -450,6 +465,25 @@ describe("exploration totals", () => {
     work.push(analyse(50));
     const away = explorationTotals(work, min(75));
     expect(away.rate.recent).toBeCloseTo((species * 60) / 15);
+  });
+
+  it("shows the rate on the exploration panel's Session line, even with no jumps or scans", () => {
+    const totals = {
+      unsoldCartographic: 0,
+      unsoldBio: 0,
+      unsoldBioCount: 0,
+      session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+      rate: { session: 52_000_000, recent: null },
+      planetRate: new Map(),
+    };
+    const p = explorationPanel({
+      system: "Sys",
+      exploration: exploration([], 1),
+      bio: [],
+      totals,
+      valuableMin: 0,
+    });
+    expect(p.footer).toEqual(["Session: 0 jumps · 0 scanned · 0 mapped · 0 ★ · 52.0M/h"]);
   });
 
   it("shows the session rate once on the exobiology panel", () => {

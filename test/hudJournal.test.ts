@@ -167,6 +167,22 @@ function game() {
 // Metres north on the test planet, in degrees of latitude.
 const north = (m: number) => (m / RADIUS) * (180 / Math.PI);
 
+describe("events the panel asks the reader to keep", () => {
+  it("keeps Shutdown, which stops the exploration rate's clocks", async () => {
+    const stamp = new Date(start).toISOString().slice(0, 19).replace(/:/g, "");
+    await writeFile(
+      path.join(dir, `Journal.${stamp}.01.log`),
+      [...arrive(), ev("Shutdown")].map((e) => JSON.stringify(e) + "\n").join(""),
+    );
+    const stores = openStores(
+      { ED_JOURNAL_DIR: dir, ED_MCP_SYNC_DIR: syncDir },
+      { keep: HUD_EVENTS },
+    );
+    const state = await stores.journal.state();
+    expect(state.events.map((e) => e.event)).toContain("Shutdown");
+  });
+});
+
 describe("panel from the real ed-mcp journal reader", () => {
   it("shows the species being sampled, its value and the colony distance", async () => {
     const g = game();
@@ -224,7 +240,11 @@ describe("panel from the real ed-mcp journal reader", () => {
           right: "500 ls  ~11.8M ×5",
         },
       ],
-      footer: ["Unsold: 500 cartographic", "Session: 1 jumps · 1 scanned · 0 mapped · 0 ★"],
+      // The rate joins the Session line after 5 minutes, which a slow run can reach.
+      footer: [
+        "Unsold: 500 cartographic",
+        expect.stringMatching(/^Session: 1 jumps · 1 scanned · 0 mapped · 0 ★( · .+\/h)?$/),
+      ],
     });
   });
 
