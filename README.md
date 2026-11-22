@@ -15,9 +15,11 @@ asking the assistant.
 
 ## Why
 
-Elite is a game you play with a browser open: Inara, Spansh, EDSM, the wiki. ED Chat puts
-one assistant that can use all of them in the game, in a small window that stays out of
-the way while you fly.
+Elite is a game you play with a browser open. I use EDSM plus a browser and chat, but I
+wanted an integrated experience, tailored for the way I play E:D.
+
+ED Chat puts one assistant that can use all of them in the game, in a small window that
+stays out of the way while you fly.
 
 - **Ask anything, keep flying.** Where to buy a module, which engineer is closest, how
   far to the next stop. Answer approval cards with a key.
