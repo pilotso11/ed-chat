@@ -636,6 +636,16 @@ describe("bio bookmark rows", () => {
         known: [{ bodyId: 6, bioSignals: 3 }] as never,
       })[0]!.text,
     ).toBe("📍 Bio: 2 signals");
+    // Done on Spansh's count alone: said so, as the header shows it.
+    expect(
+      bookmarkRows({
+        plan: plan([mark]),
+        system: SYSTEM,
+        status: status({ latitude: null }),
+        bio: [{ ...(done as object), bio_signals: null }] as never,
+        known: [{ bodyId: 6, bioSignals: 1 }] as never,
+      })[0]!.text,
+    ).toBe("📍 Bio: all sampled by Spansh's count");
     // With no signal count the body may hold more.
     expect(rows([{ ...(done as object), bio_signals: null }])[0]!.text).toBe(
       "📍 Bio: all found sampled, more may be here",

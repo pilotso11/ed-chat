@@ -106,12 +106,15 @@ function bookmarkText(
   const left = bioLeft(body, count);
   // The " (2)" that kept the label unique stays, so two bookmarks on a body still differ.
   const n = / \(\d+\)$/.exec(label)?.[0] ?? "";
-  // "All sampled" only when the journal says the body is done; with no count it may hold more.
+  // "All sampled" when the journal says the body is done. On Spansh's count alone, the row says
+  // so, as the header does, but auto-done waits for the journal's (it can be out of date).
   const what = left.length
     ? `Bio: ${left.join(", ")}`
     : bioProgress(body).done
       ? "Bio: all sampled"
-      : "Bio: all found sampled, more may be here";
+      : bioProgress(body, count).done
+        ? "Bio: all sampled by Spansh's count"
+        : "Bio: all found sampled, more may be here";
   return `${what}${n}`;
 }
 

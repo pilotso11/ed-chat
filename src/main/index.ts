@@ -111,7 +111,6 @@ import {
   bookmarksToClear,
   isKeyRepeat,
   keyClearStops,
-  sameBookmark,
   sameStop,
   todoBookmarks,
   finishedBioBookmarks,
