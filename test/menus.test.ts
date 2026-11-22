@@ -51,6 +51,7 @@ describe("tray menu", () => {
       "Minimize to tray",
       "Open settings",
       "Open log folder",
+      "About ED Chat",
       "---",
       "Quit",
     ]);

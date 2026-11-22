@@ -128,7 +128,13 @@ import { arrivalCopy, currentSystem, routeStep } from "../core/hud/routeSteps.js
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS } from "../core/hud/mode.js";
 import { todoStops } from "../core/hud/panels.js";
-import { noticeMenuItems, trayItems, type TrayAction, type TrayItem } from "../core/menus.js";
+import {
+  ABOUT_URL,
+  noticeMenuItems,
+  trayItems,
+  type TrayAction,
+  type TrayItem,
+} from "../core/menus.js";
 import {
   COMMAND_COPIED,
   FULLSCREEN,
@@ -1566,6 +1572,9 @@ async function main(): Promise<void> {
         return openPath(settingsFile);
       case "openLogs":
         return openPath(logDir);
+      case "about":
+        // A fixed https address: the home page, in the default browser.
+        return void shell.openExternal(ABOUT_URL);
       case "quit":
         return app.quit();
       default:
