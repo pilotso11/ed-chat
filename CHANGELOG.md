@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/pilotso11/ed-chat/compare/v0.6.1...v0.7.0) (2026-11-22)
+
+
+### Features
+
+* mining panel with where-to-sell suggestions and fleet carrier support ([#67](https://github.com/pilotso11/ed-chat/issues/67)) ([a837bbd](https://github.com/pilotso11/ed-chat/commit/a837bbdb506d65c0559042d2278a88039339ba23))
+
 ## [0.6.1](https://github.com/pilotso11/ed-chat/compare/v0.6.0...v0.6.1) (2026-11-21)
 
 
