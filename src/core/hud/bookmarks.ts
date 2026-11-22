@@ -287,7 +287,8 @@ export const todoBookmarks = (plan: Plan | null): number[] =>
 
 /**
  * The bookmarks that the clear key clears, as indexes in the plan. On a body, the nearest
- * bookmark on it (the first when where it is or where the player is is not known). Elsewhere in
+ * bookmark on it; when there are several and which is nearest is not known (no position for the
+ * player or the bookmark), the first, with unsure: true, so the key refuses. Elsewhere in
  * the system, every bookmark in the system (whole: true: the tray asks first, the key refuses). Only
  * bookmarks with a body, as the panel shows. Empty when the system has none.
  */
@@ -295,7 +296,7 @@ export function bookmarksToClear(input: {
   plan: Plan | null;
   system: string | null;
   status: ShipStatus | null;
-}): { stops: number[]; whole: boolean } {
+}): { stops: number[]; whole: boolean; unsure?: true } {
   const { plan, system, status } = input;
   if (!plan || !system) return { stops: [], whole: false };
   const here = todoBookmarks(plan).filter((i) => same(plan.stops[i]!.system, system));
@@ -311,13 +312,11 @@ export function bookmarksToClear(input: {
     return pos && at ? surfaceDistance(at, pos, at.radius) : Infinity;
   };
   // The first of the nearest: a stable sort keeps the plan's order among equals.
-  return { stops: [[...body].sort((a, b) => far(a) - far(b))[0]!], whole: false };
+  const nearest = [...body].sort((a, b) => far(a) - far(b))[0]!;
+  const unsure = body.length > 1 && far(nearest) === Infinity;
+  return { stops: [nearest], whole: false, ...(unsure ? { unsure: true as const } : {}) };
 }
 
-/**
- * What the clear key may clear: the one bookmark on the body you are on, never a whole system.
- * A held key repeats, so no second press can be told from holding it; the tray asks instead.
- */
 /**
  * A held key repeats after up to a second (Windows' longest delay), then every few tens of
  * milliseconds. A clear-key press this soon after the last one, repeat or not, is the same
@@ -328,13 +327,23 @@ export const KEY_REPEAT_MS = 1_100;
 /** Whether a clear-key press at `at` is a repeat of the last press at `last`. */
 export const isKeyRepeat = (at: number, last: number) => at - last < KEY_REPEAT_MS;
 
+/**
+ * What the clear key may clear: the one bookmark on the body you are on, never a whole system.
+ * A held key repeats, so no second press can be told from holding it; the tray asks instead.
+ * Nor a guess: with several bookmarks on the body and no position to tell the nearest, none.
+ */
 export function keyClearStops(pick: {
   stops: number[];
   whole: boolean;
+  unsure?: true;
 }): { stops: number[] } | { reason: string } {
-  return pick.whole
-    ? { reason: "not on a bookmarked body: clear this system's bookmarks from the tray menu" }
-    : { stops: pick.stops };
+  if (pick.whole) {
+    return { reason: "not on a bookmarked body: clear this system's bookmarks from the tray menu" };
+  }
+  if (pick.unsure) {
+    return { reason: "position not known, so not which bookmark is nearest: land and try again" };
+  }
+  return { stops: pick.stops };
 }
 
 /** Whether an ed-mcp plan store error says the plan does not exist. */

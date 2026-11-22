@@ -734,7 +734,10 @@ async function main(): Promise<void> {
     const at = Date.now();
     const repeat = isKeyRepeat(at, lastClearPress);
     lastClearPress = at;
-    if (repeat) return Promise.resolve();
+    if (repeat) {
+      flash("bookmark", "ⓘ one bookmark a press: let go, wait a moment and press again", 2_000);
+      return Promise.resolve();
+    }
     return queueBookmarks(() => unmarkBookmarks("here"));
   }
   let lastClearPress = 0;
@@ -1809,6 +1812,8 @@ async function main(): Promise<void> {
           status: hudData.status,
         })
       : { stops: [], whole: false };
+    // Not a guess at which is nearest: with no position for that, no "here" item.
+    if (here.unsure) here.stops = [];
     trayHere = here.stops.map((i) => hudData!.bookmarks!.stops[i]!);
     trayHereWhole = here.whole;
     const items = trayItems({

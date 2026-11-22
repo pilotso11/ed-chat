@@ -503,7 +503,23 @@ describe("clearing bookmarks", () => {
 
   it("clears the first on the body when positions are not known", () => {
     const p = plan([other, { body: BODY, label: "A" }, { body: BODY, label: "B" }]);
-    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: status() }).stops).toEqual([1]);
+    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: status() })).toEqual({
+      stops: [1],
+      whole: false,
+      unsure: true,
+    });
+    // The key will not guess.
+    expect(keyClearStops({ stops: [1], whole: false, unsure: true })).toEqual({
+      reason: expect.stringContaining("position not known"),
+    });
+    // One bookmark on the body is no guess.
+    expect(
+      bookmarksToClear({
+        plan: plan([{ body: BODY, label: "A" }]),
+        system: SYSTEM,
+        status: status(),
+      }),
+    ).toEqual({ stops: [0], whole: false });
     const q = plan([far, near]);
     expect(
       bookmarksToClear({ plan: q, system: SYSTEM, status: status({ latitude: null }) }).stops,
