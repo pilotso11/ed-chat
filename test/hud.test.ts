@@ -317,6 +317,56 @@ describe("exploration totals", () => {
     expect(explorationTotals([later, map]).unsoldCartographic).toBeGreaterThan(known);
   });
 
+  it("works out credits an hour for the session, the last half hour and each planet", () => {
+    const T = Date.UTC(2026, 10, 15, 10);
+    const at = (min: number) => new Date(T + min * 60_000).toISOString();
+    const timed = (min: number, e: JournalEvent) => ({ ...e, timestamp: at(min) });
+    const analyse = (min: number, body: number) =>
+      timed(
+        min,
+        ev("ScanOrganic", {
+          ScanType: "Analyse",
+          Species: "$Codex_Ent_Stratum_07_Name;",
+          SystemAddress: 1,
+          Body: body,
+        }),
+      );
+    const value = explorationTotals([analyse(0, 3)]).unsoldBio;
+    expect(value).toBeGreaterThan(0);
+    const events = [
+      timed(0, ev("LoadGame")),
+      timed(0, ev("FSDJump", { SystemAddress: 1 })),
+      timed(10, ev("ApproachBody", { SystemAddress: 1, BodyID: 3 })),
+      analyse(20, 3),
+      analyse(70, 4),
+    ];
+    // Too soon after the session starts to say.
+    expect(explorationTotals(events.slice(0, 2), T + 60_000).rate).toEqual({
+      session: null,
+      recent: null,
+    });
+    const t = explorationTotals(events, T + 80 * 60_000);
+    // Two species over 80 minutes.
+    expect(t.rate.session).toBeCloseTo((2 * value * 60) / 80);
+    // The last half hour has the second one.
+    expect(t.rate.recent).toBeCloseTo(value * 2);
+    // Body 3 from its approach, 70 minutes ago; body 4 from its first sample, 10 minutes ago.
+    expect(t.planetRate.get("1|3")).toBeCloseTo((value * 60) / 70);
+    expect(t.planetRate.get("1|4")).toBeCloseTo(value * 6);
+    // A rescan adds nothing; mapping adds what the map is worth.
+    const scans = [timed(0, ev("LoadGame")), timed(0, elw("A", 1)), timed(5, elw("A", 1))];
+    const once = explorationTotals(scans, T + 60 * 60_000).rate.session!;
+    expect(once).toBeCloseTo(explorationTotals([elw("A", 1)]).unsoldCartographic);
+    const mapped = [...scans, timed(6, ev("SAAScanComplete", { SystemAddress: 1, BodyID: 1 }))];
+    expect(explorationTotals(mapped, T + 60 * 60_000).rate.session!).toBeCloseTo(
+      explorationTotals([elw("A", 1), ev("SAAScanComplete", { SystemAddress: 1, BodyID: 1 })])
+        .unsoldCartographic,
+    );
+    // A sale does not take back what was earned.
+    const sold = [...scans, timed(7, ev("SellExplorationData", { Systems: ["A"] }))];
+    expect(explorationTotals(sold, T + 60 * 60_000).rate.session!).toBeCloseTo(once);
+  });
+
   it("keeps only systems within 20 ly of the station after a sale", () => {
     const jump = (id: number, pos: number[]) => ev("FSDJump", { SystemAddress: id, StarPos: pos });
     const t = explorationTotals([

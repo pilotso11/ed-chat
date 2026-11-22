@@ -7,6 +7,8 @@ const totals = {
   unsoldBio: 0,
   unsoldBioCount: 0,
   session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+  rate: { session: null, recent: null },
+  planetRate: new Map(),
 };
 
 const species = (over: Partial<ExobiologyBody["species"][number]>) => ({

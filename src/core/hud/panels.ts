@@ -187,7 +187,30 @@ export interface ExplorationTotals {
   unsoldBio: number;
   unsoldBioCount: number;
   session: { systems: number; scanned: number; mapped: number; firstDiscoveries: number };
+  /** Credits an hour, from what scans, maps and samples are worth when made; null while too new. */
+  rate: { session: number | null; recent: number | null };
+  /** Credits an hour on each body visited, by "address|bodyId"; null while too new. */
+  planetRate: Map<string, number | null>;
 }
+
+/** A rate needs this long, so the first scan does not read as a huge hourly rate. */
+const RATE_MIN_MS = 5 * 60_000;
+/** The recent rate: the last half hour. */
+const RECENT_MS = 30 * 60_000;
+const HOUR_MS = 3_600_000;
+
+const perHour = (credits: number, ms: number) =>
+  ms >= RATE_MIN_MS ? (credits * HOUR_MS) / ms : null;
+
+/** Events that start an exploring session's clock. */
+const EXPLORING = new Set([
+  "FSDJump",
+  "Scan",
+  "SAAScanComplete",
+  "ScanOrganic",
+  "Touchdown",
+  "ApproachBody",
+]);
 
 /** Universal Cartographics does not buy data for systems this close to the station. */
 const SELL_MIN_LY = 20;
@@ -197,7 +220,7 @@ const SELL_MIN_LY = 20;
  * the data it can, so it clears what it lists, and also every system it could have sold but did
  * not: only systems within 20 ly of the station stay unsold.
  */
-export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
+export function explorationTotals(events: JournalEvent[], now = Date.now()): ExplorationTotals {
   const scans = new Map<
     string,
     { system: string | null; address: number | null; scan: Obj; mapped: boolean }
@@ -217,7 +240,32 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
   // First discoveries settled by a sale this session, and the bodies they were.
   let firstFound = 0;
   const settled = new Set<string>();
+  // What each body is worth so far, so a rescan or a map adds only the difference. Kept over a
+  // relog, so a rescan after one is not counted again.
+  const worth = new Map<string, number>();
+  // This session's earnings, from its first exploring event.
+  let start: number | null = null;
+  const earned: { at: number; credits: number }[] = [];
+  // Each body's visit: from approaching it (else its first sample), and what its samples earned.
+  const planets = new Map<string, { start: number; credits: number }>();
+  const earn = (at: number, credits: number) => {
+    if (credits > 0) earned.push({ at, credits });
+  };
+  const rework = (key: string, at: number, scan: Obj, mapped: boolean) => {
+    const v =
+      bodyValue(scan, {
+        mapped: mapped && typeof scan.PlanetClass === "string",
+        efficient: true,
+        firstDiscovery: scan.WasDiscovered === false,
+        firstMapped: scan.WasMapped === false,
+      }) ?? 0;
+    const before = worth.get(key) ?? 0;
+    earn(at, v - before);
+    worth.set(key, Math.max(v, before));
+  };
   for (const e of events) {
+    const at = Date.parse(e.timestamp);
+    if (start === null && !Number.isNaN(at) && EXPLORING.has(e.event)) start = at;
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     const address = num(e.SystemAddress);
     if (address !== null && Array.isArray(e.StarPos) && e.StarPos.length === 3) {
@@ -229,6 +277,12 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         found.clear();
         firstFound = 0;
         settled.clear();
+        start = null;
+        earned.length = 0;
+        planets.clear();
+        break;
+      case "ApproachBody":
+        if (!Number.isNaN(at)) planets.set(key, { start: at, credits: 0 });
         break;
       case "FSDJump":
         session.systems++;
@@ -252,6 +306,8 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
           mapped: prev?.mapped ?? false,
         });
         if (e.WasDiscovered === true) discovered.add(key);
+        const cur = scans.get(key)!;
+        if (!Number.isNaN(at)) rework(key, at, cur.scan, cur.mapped);
         if (e.ScanType === "Detailed") {
           session.scanned++;
           if (e.WasDiscovered === false && !settled.has(key)) found.add(key);
@@ -262,6 +318,7 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         const s = scans.get(key);
         if (s) s.mapped = true;
         session.mapped++;
+        if (s && !Number.isNaN(at)) rework(key, at, s.scan, true);
         break;
       }
       case "SellExplorationData":
@@ -299,11 +356,18 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
         break;
       }
       case "ScanOrganic":
+        const body = `${address}|${num(e.Body)}`;
+        // A sample on a body not approached this session starts its visit there.
+        if (!Number.isNaN(at) && !planets.has(body)) planets.set(body, { start: at, credits: 0 });
         if (e.ScanType === "Analyse") {
           const v = speciesValue(String(e.Species ?? "")) ?? 0;
-          const first = untrodden.has(`${address}|${num(e.Body)}`);
-          bio += first ? v * FOOTFALL_BONUS : v;
+          const value = untrodden.has(body) ? v * FOOTFALL_BONUS : v;
+          bio += value;
           bioCount++;
+          if (!Number.isNaN(at)) {
+            earn(at, value);
+            planets.get(body)!.credits += value;
+          }
         }
         break;
       case "SellOrganicData":
@@ -329,7 +393,38 @@ export function explorationTotals(events: JournalEvent[]): ExplorationTotals {
       }) ?? 0;
   }
   session.firstDiscoveries = firstFound + [...found].filter((k) => !discovered.has(k)).length;
-  return { unsoldCartographic: carto, unsoldBio: bio, unsoldBioCount: bioCount, session };
+  const sum = (list: { credits: number }[]) => list.reduce((n, x) => n + x.credits, 0);
+  const elapsed = start !== null ? now - start : 0;
+  const rate = {
+    session: perHour(sum(earned), elapsed),
+    // Only once the session is longer than the window, else it repeats the session rate.
+    recent:
+      elapsed > RECENT_MS
+        ? perHour(sum(earned.filter((x) => x.at > now - RECENT_MS)), RECENT_MS)
+        : null,
+  };
+  const planetRate = new Map(
+    [...planets].map(([k, p]) => [k, perHour(p.credits, now - p.start)] as const),
+  );
+  return {
+    unsoldCartographic: carto,
+    unsoldBio: bio,
+    unsoldBioCount: bioCount,
+    session,
+    rate,
+    planetRate,
+  };
+}
+
+/** "52M/h", or null with no rate yet. */
+const hourly = (n: number | null | undefined) => (n != null ? `${credits(n)}/h` : null);
+
+/** The session and last half hour rates: "52M/h (30m 80M/h)". */
+function rateText(t: ExplorationTotals): string | null {
+  const session = hourly(t.rate.session);
+  if (!session) return null;
+  const recent = hourly(t.rate.recent);
+  return recent ? `${session} (30m ${recent})` : session;
 }
 
 function totalsFooter(t: ExplorationTotals): string[] {
@@ -341,7 +436,15 @@ function totalsFooter(t: ExplorationTotals): string[] {
   return [
     unsold.length ? `Unsold: ${unsold.join(" · ")}` : null,
     s.systems || s.scanned
-      ? `Session: ${s.systems} jumps · ${s.scanned} scanned · ${s.mapped} mapped · ${s.firstDiscoveries} ★`
+      ? `Session: ${[
+          `${s.systems} jumps`,
+          `${s.scanned} scanned`,
+          `${s.mapped} mapped`,
+          `${s.firstDiscoveries} ★`,
+          rateText(t),
+        ]
+          .filter(Boolean)
+          .join(" · ")}`
       : null,
   ].filter((x): x is string => x !== null);
 }
@@ -682,6 +785,23 @@ export interface Point {
 export const sampleKey = (address: number | null, bodyId: number, species: string) =>
   `${address}|${bodyId}|${species}`;
 
+/**
+ * This planet's rate against the session's: when the planet earns less, it may be time to move
+ * on. "Rate: this planet 30M/h · session 52M/h (30m 80M/h)".
+ */
+function bioRateLine(input: {
+  address: number | null;
+  body: ExobiologyBody;
+  totals: ExplorationTotals;
+}): string[] {
+  const planet = hourly(input.totals.planetRate.get(`${input.address}|${input.body.body_id}`));
+  const session = rateText(input.totals);
+  const parts = [planet && `this planet ${planet}`, session && `session ${session}`].filter(
+    Boolean,
+  );
+  return parts.length ? [`Rate: ${parts.join(" · ")}`] : [];
+}
+
 export function exobiologyPanel(input: {
   system: string | null;
   address: number | null;
@@ -744,7 +864,7 @@ export function exobiologyPanel(input: {
     subtitle: shortBody(body.body, input.system),
     right: `${bonus > 1 ? "first footfall ×5 · " : ""}${body.genera.length || body.bio_signals || 0} genera`,
     rows,
-    footer: totalsFooter(input.totals).slice(0, 1),
+    footer: [...totalsFooter(input.totals).slice(0, 1), ...bioRateLine(input)],
   };
 }
 

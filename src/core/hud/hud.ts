@@ -152,7 +152,7 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
   }
   const address = system ? systemAddress(j.events, system) : null;
   if (address === null) return null;
-  const totals = explorationTotals(j.events);
+  const totals = explorationTotals(j.events, input.now);
   const bio = exobiology(j.events, address, { system }).bodies;
   const x = exploration(j.events, address);
   if (mode === "exobiology") {
