@@ -53,7 +53,8 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
     text:
       "Copies chip 1 to 9 from the reply. Must contain {n}, which stands for the number. " +
       "Windows sends AltGr as Ctrl+Alt, so the default Ctrl+Alt+{n} keeps AltGr+digit from " +
-      'typing outside the chat (@ and { on many layouts); "Ctrl+Shift+{n}" avoids that.',
+      "typing in the game while it is in front, or in every app with scope always (@ and { " +
+      'on many layouts). "Ctrl+Shift+{n}" avoids that.',
   },
   "hotkeys.copyChipNumpad": {
     text: "Also copy chips with Ctrl+numpad 1 to 9. Windows changes Shift+numpad keys.",

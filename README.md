@@ -142,7 +142,7 @@ use the left Ctrl and Alt keys, because AltGr types the letter.
 Outside the chat, Windows sends AltGr as Ctrl+Alt, so in the game's own chat
 AltGr+Y, N or A answers a waiting tool request, AltGr+H shows the history and
 AltGr+1…9 copies a chip instead of typing a character: € on a UK keyboard, and
-@, #, {, [, ], } or \ on German, French, Spanish, Nordic and other layouts. With
+@, #, {, [, ] or \ on German, French, Spanish, Nordic and other layouts. With
 `hotkeys.scope` set to `"always"` this happens in every app. If that gets in your
 way, set those keys in `settings.json`, for example `"copyChip": "Ctrl+Shift+{n}"`.
 
