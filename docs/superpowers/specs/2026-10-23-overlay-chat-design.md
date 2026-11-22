@@ -140,8 +140,9 @@ returns to it. Notices only set the dot, so background notices do not expand it.
 ### Tray icon
 
 The overlay has no window frame or taskbar button, so a tray icon is one way to
-quit; `/quit` or `/exit` in the chat is the other. Its menu has Show/Hide
-overlay, Open settings, Open log folder and Quit.
+quit. `/quit` or `/exit` in the chat is another, and closing either window (Alt+F4
+on the open chat, say) quits too. Its menu has Show/Hide overlay, Open settings,
+Open log folder and Quit.
 The tooltip is "ED Chat".
 
 Icon mode is saved in `state.json` and survives a restart. `strip.startAsIcon`
