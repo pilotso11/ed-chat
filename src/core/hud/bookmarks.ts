@@ -281,9 +281,15 @@ export const sameBookmark = (a: Stop, b: Stop) =>
  * the write cannot move another stop under an index; else by its index. Null when it is gone.
  */
 export function bookmarkRef(plan: Plan, stop: Stop): { label: string } | { index: number } | null {
-  const index = plan.stops.findIndex((s) => s.status === "todo" && sameBookmark(s, stop));
+  const todo = (s: Stop) => s.status === "todo" && sameBookmark(s, stop);
+  // Two bookmarks in one spot can differ only by label: the one with this label first.
+  let index = plan.stops.findIndex((s) => todo(s) && s.label === stop.label);
+  if (index < 0) index = plan.stops.findIndex(todo);
   if (index < 0) return null;
   const label = plan.stops[index]!.label;
-  const same = (s: Stop) => s.label?.toLowerCase() === label?.toLowerCase();
-  return label && plan.stops.filter(same).length === 1 ? { label } : { index };
+  if (!label) return { index };
+  const lc = label.toLowerCase();
+  return plan.stops.filter((s) => s.label?.toLowerCase() === lc).length === 1
+    ? { label }
+    : { index };
 }

@@ -403,4 +403,14 @@ describe("marking a bookmark done", () => {
     const done = plan([{ body: BODY, label: "Spot", position: spot, status: "done" }]);
     expect(bookmarkRef(done, stop)).toBeNull();
   });
+
+  it("uses the index for a bookmark with no label, and tells two in one spot by label", () => {
+    const bare = plan([{ body: BODY, position: spot }]);
+    expect(bookmarkRef(bare, bare.stops[0]!)).toEqual({ index: 0 });
+    const twins = plan([
+      { body: BODY, label: "A", position: spot },
+      { body: BODY, label: "B", position: spot },
+    ]);
+    expect(bookmarkRef(twins, twins.stops[1]!)).toEqual({ label: "B" });
+  });
 });
