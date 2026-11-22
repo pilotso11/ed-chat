@@ -260,6 +260,9 @@ describe("trade profit", () => {
     const j = tradeJournal(events);
     expect(j.sales.size).toBe(1);
     expect(tradeTotals(events, NOW).profit).toBe(2);
+    // The same kind of event in the same second, but another one.
+    events[events.length - 1] = sell(3, "Gold", 1, 5);
+    expect(tradeTotals(events, NOW).profit).toBe(4);
   });
 
   it("takes cargo moved by its internal name out of the cost", () => {
@@ -889,6 +892,33 @@ describe("the trade panel", () => {
     );
     expect(tradePanel({ ...input, market: { ...old, at: null } })!.rows[1]!.text).toBe(
       "  hold 300/720 · plan 9,380",
+    );
+    // A game restarted while docked: the visit began before the events, so the file counts.
+    const restarted = {
+      ...input,
+      events: [
+        at(10, "Location", {
+          StarSystem: "Kremainn",
+          StationName: "Wohler Terminal",
+          Docked: true,
+          MarketID: 7,
+        }),
+      ],
+    };
+    expect(
+      tradePanel({ ...restarted, market: { ...old, at: NOW - 20 * MIN } })!.rows[1]!.text,
+    ).toBe("  hold 300/720 · price 1 (plan 9,380)");
+    // Still only this station's.
+    expect(tradePanel({ ...restarted, market: { ...old, marketId: 8 } })!.rows[1]!.text).toBe(
+      "  hold 300/720 · plan 9,380",
+    );
+    // An unreadable docking time.
+    const noTime = {
+      ...input,
+      events: [{ ...docked(10, "Kremainn", "Wohler Terminal", 7), timestamp: "" }],
+    };
+    expect(tradePanel({ ...noTime, market: { ...old, at: null } })!.rows[1]!.text).toBe(
+      "  hold 300/720 · price 1 (plan 9,380)",
     );
     // Written at the docking time is this visit's.
     expect(tradePanel({ ...input, market: { ...old, at: NOW - 10 * MIN } })!.rows[1]!.text).toBe(

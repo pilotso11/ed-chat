@@ -113,8 +113,9 @@ its system. Ask Claude for a trade loop or route (ed-mcp's `trade_loops` or
 
 The panel shows the plan's current stop with what to buy or sell there (tons and
 planned price), and the hold against the planned tons. While you are docked there,
-it also shows the market's price (once you open its market screen) against the plan, amber when it is more than 5%
-worse. The next stop and its action follow. The header says how far through the
+it also shows the market's price against the plan, amber when it is more than 5%
+worse. The live price shows once the station's market has been opened on this visit
+(a relog while docked keeps it). The next stop and its action follow. The header says how far through the
 plan you are (stop 2/4) and, for a loop, its lap; on the first lap there is nothing
 to sell at the first stop, so only its buy shows. When the plan's prices are more
 than a day old, the header says how old. With a plotted route to the current or

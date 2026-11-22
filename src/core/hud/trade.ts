@@ -286,7 +286,7 @@ export interface TradeJournal {
 
 const journals = new WeakMap<
   JournalEvent[],
-  { length: number; tail: string; now: string; journal: TradeJournal }
+  { length: number; last: JournalEvent | undefined; now: string; journal: TradeJournal }
 >();
 
 /**
@@ -297,13 +297,13 @@ export function tradeJournal(events: JournalEvent[], now: MissionsNow = NO_MISSI
   // Only what tradeBuys() reads: callers pass MissionsNow inside larger objects.
   const key = JSON.stringify([now.missionCargo, now.wanted, now.planSells ?? []]);
   const kept = journals.get(events);
-  // The last event too: an array trimmed and appended to the same length has a new tail.
+  // The last event too, itself: an array trimmed and appended to the same length has a new tail,
+  // and two events of one kind often share a second.
   const last = events.at(-1);
-  const tail = last ? `${last.timestamp}|${last.event}` : "";
-  if (kept && kept.length === events.length && kept.tail === tail && kept.now === key)
+  if (kept && kept.length === events.length && kept.last === last && kept.now === key)
     return kept.journal;
   const journal = replay(events, tradeBuys(events, now), new Set(now.planSells ?? []));
-  journals.set(events, { length: events.length, tail, now: key, journal });
+  journals.set(events, { length: events.length, last, now: key, journal });
   return journal;
 }
 
@@ -499,6 +499,11 @@ export interface Dock {
   /** The Docked (or Location) event's index in events, and its time. */
   index: number;
   at: string;
+  /**
+   * The visit starts with a Location, Docked true, with no docking before it in the events: the
+   * game restarted while docked, so the visit began before the events show.
+   */
+  restart: boolean;
 }
 
 export function dockedAt(events: JournalEvent[], location: JournalState["location"]): Dock | null {
@@ -524,15 +529,21 @@ export function dockedAt(events: JournalEvent[], location: JournalState["locatio
     marketId: num(e.MarketID),
     index,
     at: e.timestamp,
+    restart: e.event === "Location",
   };
 }
 
 /**
  * Whether Market.json is of this visit: the docked station's market, written at or after docking.
- * A file left from an earlier visit has old prices.
+ * A file left from an earlier visit has old prices. When the visit began before the events show
+ * (a restart while docked) or its time is unreadable, the station's file is taken as this visit's.
  */
-const fromVisit = (m: Market, dock: Dock) =>
-  m.marketId === dock.marketId && m.at !== null && m.at >= Date.parse(dock.at);
+const fromVisit = (m: Market, dock: Dock) => {
+  if (m.marketId !== dock.marketId) return false;
+  const docked = Date.parse(dock.at);
+  if (dock.restart || Number.isNaN(docked)) return true;
+  return m.at !== null && m.at >= docked;
+};
 
 const atStop = (s: Stop, dock: Dock | null) =>
   dock !== null && stopAt(s, dock.system, dock.station);
@@ -696,7 +707,7 @@ export function tradePanel(input: {
       leads === on && jumpText ? [right, jumpText].filter(Boolean).join(" · ") : right;
     const cargo = stopCargo(plan, todo[0]!);
     const here = atStop(cur, dock) ? dock : null;
-    // The market only of this station: Market.json is of the last market screen opened.
+    // Market.json is of the last market screen opened: only this station's, opened on this visit.
     const market = here && input.market && fromVisit(input.market, here) ? input.market : null;
     const line = (c: Cargo) =>
       status(c, hold, market, here !== null && actionDone(c, hold, input.events, here));
