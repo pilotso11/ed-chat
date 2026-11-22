@@ -89,5 +89,60 @@
         }
       ]
     }
+  },
+  {
+    "name": "hud-trade",
+    "file": "Journal.210915182810.01.log",
+    "until": "2021-09-15T18:30:20Z",
+    "plan": {
+      "title": "Trade loop: Dvorsi ⇄ Ys",
+      "kind": "trading",
+      "repeat": true,
+      "lap": 2,
+      "stops": [
+        {
+          "system": "Dvorsi",
+          "station": "Chernykh Ring",
+          "purpose": "Sell 642 t Uranium, then buy 656 t Agronomic Treatment",
+          "label": "Sell 642 t Uranium, then buy 656 t Agronomic Treatment at Chernykh Ring",
+          "kind": "trade",
+          "cargo": [
+            {
+              "commodity": "Uranium",
+              "action": "sell",
+              "amount": 642,
+              "price": 3177
+            },
+            {
+              "commodity": "Agronomic Treatment",
+              "action": "buy",
+              "amount": 656,
+              "price": 2618
+            }
+          ]
+        },
+        {
+          "system": "Ys",
+          "station": "Ender's Dream",
+          "purpose": "Sell 656 t Agronomic Treatment, then buy 642 t Uranium",
+          "label": "Sell 656 t Agronomic Treatment, then buy 642 t Uranium at Ender's Dream",
+          "kind": "trade",
+          "cargo": [
+            {
+              "commodity": "Agronomic Treatment",
+              "action": "sell",
+              "amount": 656,
+              "price": 29658
+            },
+            {
+              "commodity": "Uranium",
+              "action": "buy",
+              "amount": 642,
+              "price": 2972
+            }
+          ]
+        }
+      ]
+    }
   }
 ]

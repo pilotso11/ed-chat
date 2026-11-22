@@ -39,6 +39,7 @@ The activity panel, built by ED Chat's own code from a commander's journals:
 | ![Massacre panel partway through a stack](docs/images/hud-massacre.png) | **Massacre.** Each giver's progress, and what each target still pays for each kill left, with ⚠ when it is time to take more missions. |
 | ![Mining panel on a rich platinum rock, with buyers for the hold](docs/images/hud-mining.png) | **Mining.** Whether the rock is worth mining, the hold, and where to sell each load. |
 | ![Passenger panel after taking six missions, with the route below](docs/images/hud-passenger.png) | **Passengers and deliveries.** Each stop's passengers or goods and deadlines, with the planned route. |
+| ![Trade panel on the second lap of a two-stop loop](docs/images/hud-trade.png) | **Trade.** The loop's current stop with what to sell and buy there, the next stop, the lap, and profit an hour. |
 
 The panel picks its mode from what you do in the game. [The activity panel](docs/activity-panel.md)
 explains each mode.
