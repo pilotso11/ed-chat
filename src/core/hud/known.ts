@@ -1,4 +1,5 @@
 import type { BioConditions } from "ed-mcp/journal";
+import { type Obj } from "./json.js";
 
 /** A planet in the current system as Spansh knows it, before the player scans it. */
 export interface KnownBody {
@@ -29,8 +30,6 @@ const JOURNAL_TYPE: Record<string, string> = {
 export function isHighlight(type: string | null, terraformable: boolean): boolean {
   return terraformable || /^(earthlike body|water world|ammonia world)$/i.test(type ?? "");
 }
-
-type Obj = Record<string, unknown>;
 
 function bioOf(v: unknown): { bioSignals: number; genera: string[] } {
   const s = (v ?? {}) as { signals?: Record<string, unknown>; genuses?: unknown };
@@ -139,13 +138,28 @@ export class KnownBodies {
   }
 }
 
-/** fetch() as JSON; a 404 means Spansh does not know the system yet. */
-export async function fetchSpansh(url: string): Promise<unknown> {
+/**
+ * A Spansh request as JSON, with ED Chat's User-Agent and a timeout. A 404 gives {} when
+ * `notFoundEmpty` (a system dump Spansh does not have yet), else fails like any error.
+ */
+export async function spanshJson(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 15_000,
+  notFoundEmpty = true,
+): Promise<unknown> {
+  const headers = new Headers(init.headers);
+  headers.set("User-Agent", "ED-Chat");
+  const timeout = AbortSignal.timeout(timeoutMs);
   const res = await fetch(url, {
-    headers: { "User-Agent": "ED-Chat" },
-    signal: AbortSignal.timeout(15_000),
+    ...init,
+    headers,
+    signal: init.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
   });
-  if (res.status === 404) return {};
+  if (res.status === 404 && notFoundEmpty) return {};
   if (!res.ok) throw new Error(`Spansh ${res.status}`);
   return res.json();
 }
+
+/** GET as JSON; a 404 means Spansh does not know the system yet. */
+export const fetchSpansh = (url: string): Promise<unknown> => spanshJson(url);

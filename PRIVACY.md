@@ -22,9 +22,19 @@ Those servers can contact other services, for example EDSM, Inara, Spansh or
 Frontier, when the assistant uses them to answer you. Each server's own documentation
 says what it sends.
 
-ED Chat's only network connection is a local one: it listens on `127.0.0.1` so
-that Claude Code can ask it for your approval of an action. Nothing outside your
-PC can connect to it.
+The activity panel looks things up on [Spansh](https://spansh.co.uk) when
+`hud.spansh` is on (the default):
+
+- When you arrive in a system, its planets: only the system's ID is sent.
+- While the mining panel shows, the stations that buy what you mined: the system
+  name to search from, the commodity name, and the pad size and price age to
+  filter by.
+
+Set `hud.spansh` to `false` to turn both off.
+
+Apart from those lookups, ED Chat's only network connection is a local one: it
+listens on `127.0.0.1` so that Claude Code can ask it for your approval of an
+action. Nothing outside your PC can connect to it.
 
 ## What stays on your PC
 

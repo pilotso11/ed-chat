@@ -1,5 +1,6 @@
 import type { JournalEvent } from "ed-mcp/journal";
 import type { HudModeId } from "../settings.js";
+import { num, objs, type Obj } from "./json.js";
 
 /** Journal events the mode rules and panels read, besides the ones ed-mcp keeps. */
 export const HUD_EVENTS = [
@@ -10,6 +11,34 @@ export const HUD_EVENTS = [
   "MultiSellExplorationData",
   "NavRoute",
   "NavRouteClear",
+  // Mining and the fleet carrier.
+  "ProspectedAsteroid",
+  "MiningRefined",
+  "CollectCargo",
+  "SupercruiseEntry",
+  "AsteroidCracked",
+  "LaunchDrone",
+  "SupercruiseExit",
+  "MarketBuy",
+  "MarketSell",
+  "CargoTransfer",
+  "CarrierBuy",
+  "CarrierStats",
+  "CarrierLocation",
+  "CarrierJumpRequest",
+  "CarrierJumpCancelled",
+  "CarrierDecommission",
+  "CarrierCancelDecommission",
+  // Read by the mining rules; ed-mcp keeps most of these for itself, but the panel does not rely
+  // on that.
+  "LoadGame",
+  "Location",
+  "FSDJump",
+  "CarrierJump",
+  "Docked",
+  "Undocked",
+  "Died",
+  "Cargo",
 ] as const;
 
 export interface Choice {
@@ -17,11 +46,6 @@ export interface Choice {
   /** Epoch ms. The newest choice wins. */
   at: number;
 }
-
-type Obj = Record<string, unknown>;
-const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const objs = (v: unknown): Obj[] =>
-  Array.isArray(v) ? v.filter((x): x is Obj => typeof x === "object" && x !== null) : [];
 
 const isMassacre = (e: JournalEvent) =>
   typeof e.Name === "string" && /massacre/i.test(e.Name) && typeof e.KillCount === "number";
@@ -37,20 +61,31 @@ export const LAPSE_JUMPS = 5;
 /**
  * The mode the journal asks for, and when it asked. Massacre missions turn on massacre mode;
  * a discovery scan or a detailed scan turns on exploration; a body with biological signals, or
- * a bio sample, turns on exobiology. A jump alone starts nothing, and LAPSE_JUMPS jumps with no
- * scan end exploration.
+ * a bio sample, turns on exobiology; a prospector, a prospect, refining or a cracked asteroid
+ * turns on mining. A jump alone starts nothing, and LAPSE_JUMPS jumps with no scan end
+ * exploration. A jump or a sale ends mining unless mined cargo is still waiting to be sold.
  * `massacreActive` is whether a massacre mission is still open now (from ed-mcp's massacre()).
+ * `minedAboard` is whether mined cargo is waiting to be sold now (minedWaiting()).
+ * `miningOn` is false when the mining mode is off: mining then changes no mode.
  */
-export function journalMode(events: JournalEvent[], massacreActive: boolean): Choice | null {
+export function journalMode(
+  events: JournalEvent[],
+  massacreActive: boolean,
+  minedAboard = false,
+  miningOn = true,
+): Choice | null {
   const bio = new Set<string>();
   // Exploration and exobiology, followed through every event, before and during a stack.
   // Massacre is kept apart: while a stack is open it wins, and once it is handed in this mode is
   // current, as if there had been no missions.
-  let mode: "exploration" | "exobiology" | null = null;
+  let mode: "exploration" | "exobiology" | "mining" | null = null;
   let at = 0;
   let massacreAt: number | null = null;
-  const set = (m: "exploration" | "exobiology") => {
+  // Whether the ship left the system after the last mining event.
+  let leftMining = false;
+  const set = (m: "exploration" | "exobiology" | "mining") => {
     jumps = 0;
+    leftMining = false;
     mode = m;
     at = last;
   };
@@ -63,8 +98,23 @@ export function journalMode(events: JournalEvent[], massacreActive: boolean): Ch
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     switch (e.event) {
       case "FSDJump":
-        jumps++;
+      case "CarrierJump":
+        if (e.event === "FSDJump") jumps++;
         if (mode === "exploration" && jumps >= LAPSE_JUMPS) mode = null;
+        if (mode === "mining") leftMining = true;
+        break;
+      case "MarketSell":
+        // Selling ends mining once nothing mined is left. A relog does not: miners relog to reset
+        // the asteroids.
+        if (mode === "mining") leftMining = true;
+        break;
+      case "ProspectedAsteroid":
+      case "MiningRefined":
+      case "AsteroidCracked":
+        if (miningOn) set("mining");
+        break;
+      case "LaunchDrone":
+        if (miningOn && e.Type === "Prospector") set("mining");
         break;
       case "MissionAccepted":
         // An acceptance with no readable time still counts, dated by the newest readable event.
@@ -93,6 +143,7 @@ export function journalMode(events: JournalEvent[], massacreActive: boolean): Ch
     }
   }
   if (massacreActive && massacreAt !== null) return { mode: "massacre", at: massacreAt };
+  if (mode === "mining" && leftMining && !minedAboard) return null;
   return mode ? { mode, at } : null;
 }
 
@@ -119,6 +170,7 @@ export function noteMode(kind: string | undefined): HudModeId | null {
     case "massacre":
     case "exploration":
     case "exobiology":
+    case "mining":
       return kind;
     default:
       return null;

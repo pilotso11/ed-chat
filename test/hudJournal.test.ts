@@ -142,7 +142,7 @@ function game() {
           PlanetRadius: RADIUS,
         }),
       ),
-    async hud(): Promise<HudView> {
+    async hud(settings = DEFAULT_SETTINGS.hud): Promise<HudView> {
       // Appended, as the game writes it.
       await appendFile(
         journal,
@@ -159,10 +159,7 @@ function game() {
       expect(errors).toEqual([]);
       // ed-mcp reports a journal it could not read as a warning, with an empty state.
       expect((data.journal as { warnings?: string[] } | null)?.warnings).toEqual([]);
-      return buildHud(
-        { ...data, hotkey: null, settings: DEFAULT_SETTINGS.hud, now: Date.now() },
-        null,
-      );
+      return buildHud({ ...data, hotkey: null, settings, now: Date.now() }, null);
     },
   };
 }
@@ -261,6 +258,114 @@ describe("panel from the real ed-mcp journal reader", () => {
       ],
       // Read against the real clock, so a slow run can take a minute off.
       footer: [expect.stringMatching(/^next expires 23h 5\dm$/)],
+    });
+  });
+});
+
+describe("mining from the real ed-mcp journal reader", () => {
+  // The mining rules read Docked, Location, LoadGame, Died, FSDJump, CarrierJump and Cargo, all in
+  // HUD_EVENTS: this runs them through ed-mcp's real reader, so a test fails if one stops arriving.
+  const RING = `${SYSTEM} 2 A Ring`;
+  const cargo = (platinum: number): Event =>
+    ev("Cargo", {
+      Vessel: "Ship",
+      Count: platinum + 10,
+      Inventory: [
+        { Name: "drones", Name_Localised: "Limpet", Count: 10, Stolen: 0 },
+        ...(platinum ? [{ Name: "platinum", Count: platinum, Stolen: 0 }] : []),
+      ],
+    });
+
+  it("shows the rock and hotspots, keeps the ring at a carrier, and ends after selling", async () => {
+    const g = game();
+    g.add(
+      ...arrive(),
+      ev("SupercruiseExit", { StarSystem: SYSTEM, Body: RING, BodyType: "PlanetaryRing" }),
+      ev("SAASignalsFound", {
+        BodyName: RING,
+        SystemAddress: ADDRESS,
+        BodyID: 9,
+        Signals: [{ Type: "Platinum", Count: 2 }],
+      }),
+      ev("ProspectedAsteroid", {
+        Materials: [{ Name: "Platinum", Proportion: 31.4 }],
+        Content: "$AsteroidMaterialContent_High;",
+        Remaining: 100,
+      }),
+      ev("MiningRefined", { Type: "$platinum_name;", Type_Localised: "Platinum" }),
+      cargo(1),
+    );
+    let v = await g.hud();
+    expect(v.panel).toMatchObject({ mode: "mining", title: "MINING", subtitle: "2 A Ring" });
+    expect(v.panel!.rows[0]).toMatchObject({ text: "Platinum 31.4% · High", right: "MINE" });
+    expect(v.panel!.rows.some((r) => r.text === "Hotspots: Platinum ×2")).toBe(true);
+    // The reader's cargo reaches the hold row; the refined ton comes from MiningRefined.
+    expect(v.panel!.rows.find((r) => r.text.startsWith("Hold"))).toMatchObject({
+      text: "Hold 11 t",
+      right: expect.stringContaining("10 limpets"),
+    });
+    expect(v.panel!.rows.some((r) => r.text === "Refined: Platinum 1 t")).toBe(true);
+
+    // Docking at a carrier beside the ring keeps the ring (Docked must be kept).
+    g.add(
+      ev("Docked", {
+        StationName: "XFZ-12K",
+        StationType: "FleetCarrier",
+        StarSystem: SYSTEM,
+        MarketID: 9,
+      }),
+    );
+    v = await g.hud();
+    expect(v.panel!.subtitle).toBe("2 A Ring");
+
+    // A jump ends mining unless mined cargo is aboard, so this checks that the reader's cargo (no
+    // MissionID) counts as the ship's own mined platinum.
+    g.add(
+      ev("Undocked"),
+      ev("FSDJump", { StarSystem: "Other", SystemAddress: 1, StarPos: [0, 0, 0] }),
+    );
+    v = await g.hud();
+    expect(v.panel!.mode).toBe("mining");
+
+    // Selling it ends mining.
+    g.add(ev("MarketSell", { Type: "platinum", Count: 1 }), cargo(0));
+    v = await g.hud();
+    expect(v.panel?.mode).not.toBe("mining");
+  });
+
+  it("finds the carrier and the tons moved to it", async () => {
+    const ID = 3_700_000_001;
+    const g = game();
+    g.add(
+      ...arrive(),
+      ev("CarrierLocation", { CarrierType: "FleetCarrier", CarrierID: ID, StarSystem: SYSTEM }),
+      ev("CarrierStats", {
+        CarrierID: ID,
+        Callsign: "XFZ-12K",
+        Name: "DISTANT HORIZONS",
+        SpaceUsage: { FreeSpace: 10_000 },
+      }),
+      ev("SupercruiseExit", { StarSystem: SYSTEM, Body: RING, BodyType: "PlanetaryRing" }),
+      ev("MiningRefined", { Type: "$platinum_name;", Type_Localised: "Platinum" }),
+      ev("MiningRefined", { Type: "$platinum_name;", Type_Localised: "Platinum" }),
+      cargo(2),
+      ev("Docked", {
+        StationName: "XFZ-12K",
+        StationType: "FleetCarrier",
+        StarSystem: SYSTEM,
+        MarketID: ID,
+      }),
+      ev("CargoTransfer", {
+        Transfers: [{ Type: "platinum", Count: 2, Direction: "tocarrier" }],
+      }),
+      cargo(0),
+    );
+    const hud = DEFAULT_SETTINGS.hud;
+    const v = await g.hud({ ...hud, mining: { ...hud.mining, useCarrier: true } });
+    expect(v.panel!.mode).toBe("mining");
+    expect(v.panel!.rows.find((r) => r.text.startsWith("Carrier"))).toMatchObject({
+      text: `Carrier XFZ-12K · ${SYSTEM}`,
+      right: "2 t moved · 9,998 t free",
     });
   });
 });

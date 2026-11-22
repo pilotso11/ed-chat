@@ -10,6 +10,8 @@ import {
 } from "ed-mcp/journal";
 import type { HudModeId, Settings } from "../settings.js";
 import type { KnownBody } from "./known.js";
+import { carrierState, miningPanel, miningState, minedWaiting } from "./mining.js";
+import type { SellLookup, SellQuery } from "./sell.js";
 import { journalMode, noteMode, pickMode, type Choice } from "./mode.js";
 import {
   exobiologyPanel,
@@ -28,6 +30,8 @@ import {
 
 /** What the panel window shows. */
 export interface HudView {
+  /** The mode chosen: currentMode(). */
+  mode?: HudModeId | "off" | null;
   /** The mode's panel; null shows only the route line, or nothing. */
   panel: PanelView | null;
   /** The route, one stop to a row: the whole panel when there is no other, else below it. */
@@ -74,6 +78,8 @@ export interface HudInput {
   known: KnownBody[] | null;
   settings: Settings["hud"];
   now: number;
+  /** Spansh's sale prices for the mining panel; none when the lookup is off. */
+  sell?: (q: SellQuery) => SellLookup;
 }
 
 /** The mode now: off by hotkey, else the newest of the journal, the note and the hotkey. */
@@ -81,7 +87,13 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
   if (input.hotkey?.mode === "off") return "off";
   const j = input.journal;
   const groups = j ? massacre(j.missions, j.events).groups : [];
-  const fromJournal = j ? journalMode(j.events, groups.length > 0) : null;
+  const minedAboard =
+    j && input.settings.modes.mining
+      ? minedWaiting(j.cargo, j.events, input.now, input.settings.mining)
+      : false;
+  const fromJournal = j
+    ? journalMode(j.events, groups.length > 0, minedAboard, input.settings.modes.mining)
+    : null;
   const m = noteMode(input.activity?.kind);
   const fromNote =
     m && input.activity ? { mode: m, at: Date.parse(input.activity.updated_at) } : null;
@@ -95,6 +107,20 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
   if (!j || mode === "route") return null;
   if (mode === "massacre") return massacrePanel(massacre(j.missions, j.events).groups, input.now);
   const system = j.location.system;
+  if (mode === "mining") {
+    return miningPanel({
+      system,
+      state: miningState(j.events, input.now, input.status?.body ?? null),
+      events: j.events,
+      cargo: j.cargo,
+      capacity: j.ship.cargo_capacity,
+      shipType: j.ship.type,
+      carrier: carrierState(j.events, input.now),
+      settings: input.settings.mining,
+      now: input.now,
+      sell: input.sell,
+    });
+  }
   const address = system ? systemAddress(j.events, system) : null;
   if (address === null) return null;
   const totals = explorationTotals(j.events);
@@ -159,7 +185,7 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
     width: s.width,
   };
   const mode = currentMode(input);
-  if (mode === "off") return { ...base, panel: null, route: null };
+  if (mode === "off") return { ...base, mode, panel: null, route: null };
   const panel = mode ? panelFor(mode, input) : null;
   const route = s.modes.route
     ? routeRows({
@@ -168,5 +194,5 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
         system: input.journal?.location.system ?? null,
       })
     : null;
-  return { ...base, panel, route };
+  return { ...base, mode, panel, route };
 }

@@ -3,6 +3,7 @@ import { HUD_MODES, keyList, type Settings } from "../settings.js";
 import type { SavedState } from "../stores.js";
 import type { FeedData } from "./feed.js";
 import type { HudInput, HudView } from "./hud.js";
+import type { PanelView } from "./panels.js";
 import { cycleMode } from "./mode.js";
 
 // What the activity panel shows and when, from the feed, the saved state and the settings;
@@ -44,22 +45,23 @@ export function moveHint(hotkeys: Settings["hotkeys"]): string {
   );
 }
 
-/** Shown over the game only, like the hotkeys in game scope, and only with something to show. */
-export function hudVisible(
+/**
+ * Whether the panel can be seen now, whatever it shows: on, not hidden, and over the game, like the
+ * hotkeys in game scope. Spansh searches and clipboard copies wait for it.
+ */
+export function hudCanShow(
   hud: Settings["hud"],
   saved: SavedState,
   foreground: Foreground | null,
-  view: HudView,
-  moving: boolean,
 ): boolean {
   const f = foreground;
   const gameUp = !f || f.isGame || f.isOverlay;
-  return (
-    hud.enabled &&
-    !saved.hudHidden &&
-    gameUp &&
-    (view.panel !== null || view.route !== null || moving)
-  );
+  return hud.enabled && !saved.hudHidden && gameUp;
+}
+
+/** Shown when it can be (hudCanShow(), worked out once per render), with something to show. */
+export function hudVisible(canShow: boolean, view: HudView, moving: boolean): boolean {
+  return canShow && (view.panel !== null || view.route !== null || moving);
 }
 
 /**
@@ -81,4 +83,19 @@ export function nextHudMode(
         ? { ...rest, hudHidden: false }
         : { ...rest, hudHidden: false, hudMode: { mode: next, at: now.toISOString() } },
   };
+}
+
+/**
+ * The galaxy-map copy the panel asks for, if it is new: copied only while the panel can be seen,
+ * and once per key. `copied` is the key copied last; it is kept through gaps (a hidden panel, a
+ * hold no longer full, a search in progress), so the same trip is not copied again.
+ */
+export function panelCopy(
+  copy: PanelView["copy"] | null,
+  canShow: boolean,
+  copied: string | null,
+): { copy: { text: string; note: string } | null; copied: string | null } {
+  const c = canShow ? (copy ?? null) : null;
+  if (!c) return { copy: null, copied };
+  return { copy: c.key === copied ? null : { text: c.text, note: c.note }, copied: c.key };
 }

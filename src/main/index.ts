@@ -105,8 +105,16 @@ import {
 } from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
-import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
-import { hudInput, hudVisible, moveHint, nextHudMode } from "../core/hud/panelState.js";
+import { SellPrices, postSpansh, type SellQuery } from "../core/hud/sell.js";
+import { buildHud, type HudView } from "../core/hud/hud.js";
+import {
+  hudCanShow,
+  hudInput,
+  hudVisible,
+  moveHint,
+  nextHudMode,
+  panelCopy,
+} from "../core/hud/panelState.js";
 import { arrivalCopy, currentSystem, routeStep } from "../core/hud/routeSteps.js";
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS } from "../core/hud/mode.js";
@@ -489,6 +497,12 @@ async function main(): Promise<void> {
   // Activity panel.
   let hudSize = { width: 0, height: 0 };
   let hudData: FeedData | null = null;
+  // Where to sell mined cargo, searched on Spansh only while the mining panel shows.
+  const sellPrices = new SellPrices(postSpansh, {
+    onError: (m) => log.log("warn", `panel spansh prices: ${m}`),
+  });
+  // The panel's last copy for the galaxy map, so each is copied once.
+  let hudCopied: string | null = null;
   // The panel's last view, for the game note sent with each message.
   let lastHudView: HudView | null = null;
   // When the feed last read the game, so a note is never sent from a stopped feed.
@@ -519,15 +533,26 @@ async function main(): Promise<void> {
 
   function renderHud(): void {
     if (windowsGone()) return;
-    const input = hudInput(hudData, saved, settings.hud, Date.now());
+    // Spansh searches and clipboard copies only for a panel the player can see.
+    const visible = hudCanShow(settings.hud, saved, focus?.current ?? null);
+    const input = {
+      ...hudInput(hudData, saved, settings.hud, Date.now()),
+      sell: settings.hud.spansh && visible ? (q: SellQuery) => sellPrices.get(q) : undefined,
+    };
     const view = buildHud(input, hudMoving ? moveHint(settings.hotkeys) : null);
     lastHudView = view;
-    const mode = String(currentMode(input));
+    const next = panelCopy(view.panel?.copy, visible, hudCopied);
+    hudCopied = next.copied;
+    if (next.copy) {
+      clipboard.writeText(next.copy.text);
+      flash("copy", `📋 ${next.copy.note}`, 6_000);
+    }
+    const mode = String(view.mode ?? null);
     if (mode !== hudMode) {
       hudMode = mode;
       log.log("info", `panel mode: ${mode}`);
     }
-    const show = hudVisible(settings.hud, saved, focus?.current ?? null, view, hudMoving);
+    const show = hudVisible(visible, view, hudMoving);
     hudWin.webContents.send(IPC.hud, view);
     if (show !== hudShown) {
       hudShown = show;

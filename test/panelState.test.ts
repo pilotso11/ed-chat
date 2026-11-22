@@ -4,9 +4,11 @@ import type { HudView } from "../src/core/hud/hud.js";
 import {
   hotkeyChoice,
   hudInput,
+  hudCanShow,
   hudVisible,
   moveHint,
   nextHudMode,
+  panelCopy,
 } from "../src/core/hud/panelState.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
 
@@ -87,24 +89,24 @@ describe("panel visibility", () => {
   });
 
   it("shows a panel over the game, over the overlay, or before focus is known", () => {
-    expect(hudVisible(hud, {}, fg({ isGame: true }), panel, false)).toBe(true);
-    expect(hudVisible(hud, {}, fg({ isOverlay: true }), panel, false)).toBe(true);
-    expect(hudVisible(hud, {}, null, panel, false)).toBe(true);
+    expect(hudVisible(hudCanShow(hud, {}, fg({ isGame: true })), panel, false)).toBe(true);
+    expect(hudVisible(hudCanShow(hud, {}, fg({ isOverlay: true })), panel, false)).toBe(true);
+    expect(hudVisible(hudCanShow(hud, {}, null), panel, false)).toBe(true);
   });
 
   it("hides over other apps", () => {
-    expect(hudVisible(hud, {}, fg({}), panel, false)).toBe(false);
+    expect(hudVisible(hudCanShow(hud, {}, fg({})), panel, false)).toBe(false);
   });
 
   it("hides when turned off, or hidden with the hotkey", () => {
-    expect(hudVisible({ ...hud, enabled: false }, {}, null, panel, false)).toBe(false);
-    expect(hudVisible(hud, { hudHidden: true }, null, panel, false)).toBe(false);
+    expect(hudVisible(hudCanShow({ ...hud, enabled: false }, {}, null), panel, false)).toBe(false);
+    expect(hudVisible(hudCanShow(hud, { hudHidden: true }, null), panel, false)).toBe(false);
   });
 
   it("shows with a route, or while it moves, and hides with nothing to show", () => {
-    expect(hudVisible(hud, {}, null, view(), false)).toBe(false);
-    expect(hudVisible(hud, {}, null, view({ route: [] }), false)).toBe(true);
-    expect(hudVisible(hud, {}, null, view(), true)).toBe(true);
+    expect(hudVisible(true, view(), false)).toBe(false);
+    expect(hudVisible(true, view({ route: [] }), false)).toBe(true);
+    expect(hudVisible(true, view(), true)).toBe(true);
   });
 });
 
@@ -114,12 +116,20 @@ describe("mode hotkey", () => {
   it("goes from automatic through each enabled mode to off and back", () => {
     let saved = {};
     const seen: string[] = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 7; i++) {
       const next = nextHudMode(saved, hud, now);
       seen.push(next.mode);
       saved = next.saved;
     }
-    expect(seen).toEqual(["massacre", "exploration", "exobiology", "route", "off", "auto"]);
+    expect(seen).toEqual([
+      "massacre",
+      "exploration",
+      "exobiology",
+      "mining",
+      "route",
+      "off",
+      "auto",
+    ]);
     expect(saved).toEqual({ hudHidden: false });
   });
 
@@ -134,5 +144,27 @@ describe("mode hotkey", () => {
       hudHidden: false,
       hudMode: { mode: "massacre", at: now.toISOString() },
     });
+  });
+});
+
+describe("galaxy-map copy", () => {
+  const copy = (key: string) => ({ key, text: "Ngalinn", note: "n" });
+
+  it("copies a new key once, only while the panel can be seen", () => {
+    const first = panelCopy(copy("hold-full|"), true, null);
+    expect(first.copy).toEqual({ text: "Ngalinn", note: "n" });
+    expect(panelCopy(copy("hold-full|"), true, first.copied).copy).toBeNull();
+    expect(panelCopy(copy("hold-full|"), false, null)).toEqual({ copy: null, copied: null });
+  });
+
+  it("keeps the last key while hidden and through a gap, and copies the next trip", () => {
+    expect(panelCopy(copy("hold-full|"), false, "hold-full|")).toEqual({
+      copy: null,
+      copied: "hold-full|",
+    });
+    const gap = panelCopy(null, true, "hold-full|");
+    expect(gap).toEqual({ copy: null, copied: "hold-full|" });
+    expect(panelCopy(copy("hold-full|"), true, gap.copied).copy).toBeNull();
+    expect(panelCopy(copy("hold-full|2026"), true, gap.copied).copy).not.toBeNull();
   });
 });
