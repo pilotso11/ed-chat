@@ -3,9 +3,13 @@ import { credits, timeLeft, todoStops, type HudRow, type PanelView } from "./pan
 
 type Obj = Record<string, unknown>;
 
-/** Missions that carry people or goods to a station: what the passenger panel lists. */
+/**
+ * Missions that carry people or goods to a station: what the passenger panel lists. Goods need a
+ * destination: source, collect and mining missions have a commodity and count but none.
+ */
 export const isRun = (m: Mission) =>
-  m.passengers != null || (m.commodity != null && m.count != null && m.kill_count == null);
+  m.passengers != null ||
+  (m.commodity != null && m.count != null && m.kill_count == null && m.destination_system != null);
 
 // Berths by cabin size and class (1 economy, 2 business, 3 first, 4 luxury).
 const BERTHS: Record<string, number> = {
@@ -102,7 +106,7 @@ export function passengerPanel(input: {
   const expiry = (d: Drop) =>
     Math.min(
       ...d.missions
-        .filter((m) => m.status === "active" && m.expires)
+        .filter((m) => m.expires)
         .map((m) => Date.parse(m.expires!))
         .filter((t) => !Number.isNaN(t)),
       Infinity,
@@ -117,9 +121,12 @@ export function passengerPanel(input: {
 
   const rows: HudRow[] = all.map((d) => {
     const active = d.missions.filter((m) => m.status === "active");
-    const pax = active.reduce((n, m) => n + (m.passengers ?? 0), 0);
-    const vip = active.filter((m) => m.vips).reduce((n, m) => n + (m.passengers ?? 0), 0);
-    const wanted = active.filter((m) => m.wanted).reduce((n, m) => n + (m.passengers ?? 0), 0);
+    // Passengers on a mission redirected back to its origin (complete in ed-mcp) are still aboard
+    // until it is handed in there; ed-mcp drops a mission once it is completed.
+    const aboard = d.missions;
+    const pax = aboard.reduce((n, m) => n + (m.passengers ?? 0), 0);
+    const vip = aboard.filter((m) => m.vips).reduce((n, m) => n + (m.passengers ?? 0), 0);
+    const wanted = aboard.filter((m) => m.wanted).reduce((n, m) => n + (m.passengers ?? 0), 0);
     const goods = active
       .filter((m) => m.passengers == null)
       .map((m) => `${m.count} t ${m.commodity}`);
@@ -154,9 +161,8 @@ export function passengerPanel(input: {
     rows.push({ text: "No mission route: ask Claude to plan one", tone: "dim" });
   }
 
-  // Berths used: passengers on active missions. A passenger mission completes on arrival, when
-  // the passengers leave, so one listed as complete has none aboard.
-  const pax = active.reduce((n, m) => n + (m.passengers ?? 0), 0);
+  // Berths used: every open passenger mission's passengers, those to hand in at the origin too.
+  const aboard = input.missions.filter(isRun).reduce((n, m) => n + (m.passengers ?? 0), 0);
   const reward = input.missions.filter(isRun).reduce((n, m) => n + (m.reward ?? 0), 0);
   const cabins = berths(input.events);
   const ready = input.missions.filter((m) => isRun(m) && m.status === "complete").length;
@@ -167,7 +173,7 @@ export function passengerPanel(input: {
       ? "PASSENGERS"
       : "DELIVERIES",
     right: [
-      pax || cabins ? `${pax}${cabins ? `/${cabins}` : ""} berths` : null,
+      aboard || cabins ? `${aboard}${cabins ? `/${cabins}` : ""} berths` : null,
       reward ? credits(reward) : null,
     ]
       .filter(Boolean)

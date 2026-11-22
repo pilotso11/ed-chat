@@ -51,9 +51,13 @@ export interface Choice {
 }
 
 /** A passenger mission, or a delivery: goods to take to a station. */
+// As passenger.ts's isRun, on the acceptance event: goods need a destination.
 const isRun = (e: JournalEvent) =>
   typeof e.PassengerCount === "number" ||
-  (typeof e.Commodity === "string" && typeof e.Count === "number" && !isMassacre(e));
+  (typeof e.Commodity === "string" &&
+    typeof e.Count === "number" &&
+    typeof e.DestinationSystem === "string" &&
+    !isMassacre(e));
 
 const isMassacre = (e: JournalEvent) =>
   typeof e.Name === "string" && /massacre/i.test(e.Name) && typeof e.KillCount === "number";

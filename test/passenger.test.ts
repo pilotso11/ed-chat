@@ -64,6 +64,10 @@ describe("passenger missions", () => {
     expect(isRun(mission(2, { commodity: "Gold", count: 10 }))).toBe(true);
     expect(isRun(mission(3, { kill_count: 20, commodity: "x", count: 1 }))).toBe(false);
     expect(isRun(mission(4, {}))).toBe(false);
+    // A source or collect mission has goods but no destination.
+    expect(isRun(mission(5, { commodity: "Tea", count: 20, destination_system: null }))).toBe(
+      false,
+    );
   });
 
   it("counts the berths in the fitted cabins", () => {
@@ -107,12 +111,14 @@ describe("passengerPanel", () => {
   it("lists each destination with passengers, flags and expiry, soonest first", () => {
     const p = passengerPanel({ missions, events: [loadout], plan: null, now: NOW })!;
     expect(p.title).toBe("PASSENGERS");
-    expect(p.right).toBe("10/22 berths · 4.0M");
+    // The 2 passengers redirected home to hand in are still aboard.
+    expect(p.right).toBe("12/22 berths · 4.0M");
     expect(p.rows.slice(0, 4)).toEqual([
       { text: "Ochosi · Perez Market", right: "6 pax (6 VIP)  1h 0m", tone: "warn" },
       { text: "Ngalinn · Haber Hub", right: "4 pax (4 wanted)  1d 0h", tone: undefined },
+      // Redirected home: the passengers fly back before the deadline.
+      { text: "Sol · Abraham Lincoln", right: "2 pax · hand in  1d 0h", tone: "dim" },
       { text: "Wolf 397 · Brooks Estate", right: "32 t Gold  2d 2h", tone: undefined },
-      { text: "Sol · Abraham Lincoln", right: "hand in", tone: "dim" },
     ]);
     expect(p.rows[4]).toEqual({ text: "No mission route: ask Claude to plan one", tone: "dim" });
     expect(p.footer).toEqual(["3 missions · 1 to hand in"]);
@@ -203,8 +209,15 @@ describe("passenger mode", () => {
   it("turns on for a passenger or delivery mission while one is open", () => {
     expect(journalMode([taken()], false, false, ALL, true)?.mode).toBe("passenger");
     expect(journalMode([taken()], false, false, ALL, false)).toBeNull();
-    const delivery = ev("MissionAccepted", { Commodity: "$Gold_Name;", Count: 10, MissionID: 2 });
+    const delivery = ev("MissionAccepted", {
+      Commodity: "$Gold_Name;",
+      Count: 10,
+      DestinationSystem: "Wolf 397",
+      MissionID: 2,
+    });
     expect(journalMode([delivery], false, false, ALL, true)?.mode).toBe("passenger");
+    const source = ev("MissionAccepted", { Commodity: "$Tea_Name;", Count: 20, MissionID: 3 });
+    expect(journalMode([source], false, false, ALL, true)).toBeNull();
   });
 
   it("gives way to a newer activity, and to massacres", () => {
