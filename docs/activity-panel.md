@@ -104,7 +104,10 @@ stale.
 
 Turns on when you buy at a market, or dock at a stop of the trade plan. Some buys
 are not trade: limpets, goods a mission has aboard or asks for, and anything bought
-within two hours of supplying a colonisation depot. They do not count toward profit. A stop with no station stands for any station in
+within two hours of supplying a colonisation depot, and goods a colonisation depot you
+viewed in the last two hours still needs. They do not count toward profit. A sale of
+goods the plan sells counts, at the game's price paid, even when the buy was before
+the journal the panel reads. A stop with no station stands for any station in
 its system. Ask Claude for a trade loop or route (ed-mcp's `trade_loops` or
 `trade_route` with `save_to_plan`) to make the plan.
 
@@ -114,10 +117,11 @@ it also shows the market's price against the plan, amber when it is more than 5%
 worse. The next stop and its action follow. The header says how far through the
 plan you are (stop 2/4) and, for a loop, its lap; on the first lap there is nothing
 to sell at the first stop, so only its buy shows. When the plan's prices are more
-than a day old, the header says how old. With a plotted route, the jumps left show
-on the row of the stop it leads to. For a plan of only trade stops, the route rows
-that other plans show below are left out, since the panel already lists the stops;
-a plan with a fuel or mission stop keeps them.
+than a day old, the header says how old. With a plotted route to the current or
+next stop, the jumps left show on that stop's row. For a plan of only trade stops,
+the route rows that other plans show below are left out, since the panel already
+lists the stops. They show for a plan with a fuel or mission stop, for a plotted
+route anywhere else (a fuel stop, home), and once the plan is done.
 
 The Session line shows profit an hour: each sale less what its tons
 cost, counted as for exploration, with the last half hour in brackets. Traded cargo

@@ -17,6 +17,7 @@ import { bookmarkRows } from "./bookmarks.js";
 import {
   isTradePlan,
   missionsNow,
+  navLeadsTo,
   NO_MISSIONS,
   tradeCargo,
   tradeJournal,
@@ -116,7 +117,7 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
   const runActive = j && input.settings.modes.passenger ? drops(j.missions).length > 0 : false;
   // The same for trade: a trade stop to do, or cargo to trade aboard.
   const tradeStops = input.settings.modes.trade ? tradeTodo(input.plan) : [];
-  const missions = j ? missionsNow(j) : NO_MISSIONS;
+  const missions = j ? missionsNow(j, input.plan) : NO_MISSIONS;
   // Replayed only with trade on; kept for the same journal, so journalMode() reuses it.
   const aboard =
     !!j && input.settings.modes.trade && tradeCargo(j.cargo, tradeJournal(j.events, missions));
@@ -184,7 +185,7 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
       market: input.market ?? null,
       missions: j.missions,
       now: input.now,
-      missionsNow: missionsNow(j),
+      missionsNow: missionsNow(j, input.plan),
       nav: input.nav,
     });
   }
@@ -299,10 +300,15 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
   }
   // A plan of only trade stops: the trade panel already shows them, the jumps left and how far
   // through it you are. A fuel or mission stop still shows in the route rows.
+  // Only while a trade stop is to do and the plotted route, if any, leads to the panel's stops: a
+  // route elsewhere (a fuel stop, home) shows below with its jumps.
+  const system = input.journal?.location.system ?? null;
   const tradePlan =
     panel?.mode === "trade" &&
     isTradePlan(input.plan) &&
-    input.plan.stops.every((x) => x.kind === "trade");
+    input.plan.stops.every((x) => x.kind === "trade") &&
+    tradeTodo(input.plan).length > 0 &&
+    navLeadsTo(input.plan, input.nav, system) !== "other";
   const route =
     s.modes.route && !tradePlan
       ? routeRows({

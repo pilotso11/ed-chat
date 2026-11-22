@@ -22,6 +22,7 @@ import {
   tradeTodo,
   tradeTotals,
   tradeJournal,
+  missionsNow,
   NO_MISSIONS,
 } from "../src/core/hud/trade.js";
 import { commodityKey } from "../src/core/hud/mining.js";
@@ -229,6 +230,25 @@ describe("trade profit", () => {
     expect(tradeJournal(events, { ...missions, wanted: [{ id: 2, commodity: "Tea" }] })).not.toBe(
       first,
     );
+  });
+
+  it("counts a sale the trade plan makes though its buy is not in the journal", () => {
+    const gold = sell(30, "Gold", 10, 30_000, { AvgPricePaid: 10_000 });
+    const plan = { planSells: ["gold"], missionCargo: [], wanted: [] };
+    expect(tradeTotals([gold], NOW, plan)).toMatchObject({ profit: 200_000, trades: 1 });
+    expect(tradeJournal([gold], plan).sales.size).toBe(1);
+    // Goods the plan does not sell, never bought: a reward, stolen or mined.
+    const tea = sell(29, "Tea", 10, 3_000, { AvgPricePaid: 1_000 });
+    expect(tradeTotals([tea], NOW, plan).trades).toBe(0);
+    // With no price paid, nothing to cost it at.
+    const free = sell(28, "Gold", 10, 30_000, { AvgPricePaid: 0 });
+    expect(tradeTotals([free], NOW, plan).trades).toBe(0);
+    // The plan's sells, from its trade stops.
+    expect(missionsNow({ cargo: [], missions: [] }, loop()).planSells?.sort()).toEqual([
+      "gold",
+      "silver",
+    ]);
+    expect(missionsNow({ cargo: [], missions: [] }).planSells).toEqual([]);
   });
 
   it("takes cargo moved by its internal name out of the cost", () => {
@@ -504,6 +524,44 @@ describe("buys that are trade", () => {
     expect(trade([gave, built, tea(20)])).toHaveLength(1);
     const failed = at(30, "ColonisationConstructionDepot", { ConstructionFailed: true });
     expect(trade([gave, failed, tea(20)])).toHaveLength(1);
+  });
+
+  it("leaves out buys of the goods a viewed colonisation depot still needs", () => {
+    // As the game writes it.
+    const depot = (m: number, o: Record<string, unknown> = {}) =>
+      at(m, "ColonisationConstructionDepot", {
+        MarketID: 3958194946,
+        ConstructionProgress: 0.48,
+        ConstructionComplete: false,
+        ConstructionFailed: false,
+        ResourcesRequired: [
+          {
+            Name: "$aluminium_name;",
+            Name_Localised: "Aluminium",
+            RequiredAmount: 10055,
+            ProvidedAmount: 5702,
+            Payment: 3239,
+          },
+          {
+            Name: "$copper_name;",
+            Name_Localised: "Copper",
+            RequiredAmount: 644,
+            ProvidedAmount: 644,
+            Payment: 1050,
+          },
+        ],
+        ...o,
+      });
+    const aluminium = (m: number) => buy(m, "Aluminium", 100, 300);
+    expect(trade([depot(60), aluminium(20)])).toEqual([]);
+    // Goods it no longer needs, and other goods, are trades.
+    expect(trade([depot(60), buy(20, "Copper", 100, 300)])).toHaveLength(1);
+    expect(trade([depot(60), tea(20)])).toHaveLength(1);
+    // Long ago, or since built.
+    expect(trade([depot(200), aluminium(20)])).toHaveLength(1);
+    expect(
+      trade([depot(60), depot(40, { ConstructionComplete: true }), aluminium(20)]),
+    ).toHaveLength(1);
   });
 });
 
@@ -1205,6 +1263,26 @@ describe("trade in the panel", () => {
     const nav = { systems: ["Kremainn", "Mid", "Wolf 397"] };
     const x = buildHud(input({ activity: note, plan: loop({ lap: 2 }), nav }), null);
     expect(x.panel?.rows.find((r) => r.text.startsWith("▸"))?.right).toMatch(/· 2 jumps$/);
+    expect(x.route).toBeNull();
+  });
+
+  it("shows the route rows for a plotted route elsewhere, or once the plan is done", () => {
+    // A route to a fuel stop, not one of the plan's: below, with its jumps, not on a stop's row.
+    const nav = { systems: ["Kremainn", "Mid", "Fuel Star"] };
+    const v = buildHud(input({ activity: note, plan: loop({ lap: 2 }), nav }), null);
+    expect(v.route?.[0]).toMatchObject({ kind: "current", right: "2 jumps" });
+    expect(v.panel?.rows.some((r) => r.right?.includes("jump"))).toBe(false);
+    // The plan done, with cargo still aboard: the panel shows the hold; the route home shows.
+    const plan = route([stop("Kremainn", "Wohler Terminal", [], "done")]);
+    const events = [buy(5, "Gold", 5, 1)];
+    const done = input({
+      plan,
+      nav: { systems: ["Kremainn", "Home"] },
+      journal: journal({ cargo: hold({ Gold: 5 }) }, events),
+    });
+    const w = buildHud(done, null);
+    expect(w.panel?.mode).toBe("trade");
+    expect(w.route?.[0]).toMatchObject({ kind: "current", text: "Home", right: "1 jump" });
   });
 
   it("does not follow a trading note with no trade stop to do, or with the mode off", () => {

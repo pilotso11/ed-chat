@@ -982,6 +982,9 @@ function stopPlace(s: PlanStop, prev: PlanStop | undefined, full = false): strin
   return sameSystem ? s.body : `${s.system} ${s.body}`;
 }
 
+/** "1 jump", "5 jumps". */
+export const jumpsText = (n: number) => `${n} jump${n === 1 ? "" : "s"}`;
+
 /** Jumps left on the plotted route from the current system; null when there is no route. */
 export function jumpsLeft(nav: NavRoute | null, system: string | null): number | null {
   if (!nav) return null;
@@ -1010,7 +1013,7 @@ export function routeRows(input: {
   system: string | null;
 }): RouteRow[] | null {
   const jumps = jumpsLeft(input.nav, input.system);
-  const right = jumps !== null ? `${jumps} jump${jumps === 1 ? "" : "s"}` : undefined;
+  const right = jumps !== null ? jumpsText(jumps) : undefined;
   const withRight = (r: RouteRow): RouteRow => (right ? { ...r, right } : r);
   const plan = input.plan;
   if (plan && plan.stops.length) {
