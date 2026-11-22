@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { JournalEvent, Mission, Plan } from "ed-mcp/journal";
 import { buildHud, currentMode, type HudInput } from "../src/core/hud/hud.js";
 import { HUD_EVENTS, journalMode, noteMode } from "../src/core/hud/mode.js";
-import { berths, drops, isRun, passengerPanel } from "../src/core/hud/passenger.js";
+import { berths, drops, goodsName, isRun, passengerPanel } from "../src/core/hud/passenger.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
 
 /** Every mode on. */
@@ -121,7 +121,7 @@ describe("passengerPanel", () => {
       { text: "Wolf 397 · Brooks Estate", right: "32 t Gold  2d 2h", tone: undefined },
     ]);
     expect(p.rows[4]).toEqual({ text: "No mission route: ask Claude to plan one", tone: "dim" });
-    expect(p.footer).toEqual(["3 missions · 1 to hand in"]);
+    expect(p.footer).toEqual(["4 missions · 1 to hand in"]);
   });
 
   it("follows the plan's order and says when new missions are not in it", () => {
@@ -158,6 +158,17 @@ describe("passengerPanel", () => {
     })!;
     expect(p.title).toBe("DELIVERIES");
     expect(p.right).toBe("1.0M");
+    // A journal symbol with no localised name is shown readably.
+    const raw = passengerPanel({
+      missions: [mission(1, { commodity: "$gold_name;", count: 5 })],
+      events: [],
+      plan: null,
+      now: NOW,
+    })!;
+    expect(raw.rows[0]!.right).toMatch(/^5 t Gold/);
+    expect(goodsName("$PowerGenerators_Name;")).toBe("Power Generators");
+    expect(goodsName("$Agronomic_Treatment_name;")).toBe("Agronomic Treatment");
+    expect(goodsName("Liquid Oxygen")).toBe("Liquid Oxygen");
     expect(passengerPanel({ missions: [], events: [], plan: null, now: NOW })).toBeNull();
     // Passengers left only to hand in still make it a passenger run.
     const done = passengerPanel({

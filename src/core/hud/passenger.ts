@@ -84,6 +84,20 @@ function planned(plan: Plan | null): Set<number> | null {
   return new Set(stops.filter((s) => s.status === "todo").flatMap((s) => s.missions ?? []));
 }
 
+/**
+ * Goods as the game names them. ed-mcp keeps the localised name; with none it has the journal
+ * symbol, "$PowerGenerators_Name;", which reads as "Power Generators".
+ */
+export function goodsName(commodity: string): string {
+  if (!commodity.startsWith("$")) return commodity;
+  const words = commodity
+    .replace(/^\$|_name;$/gi, "")
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 /** A mission expiring this soon is shown in amber. */
 const SOON_MS = 2 * 3_600_000;
 
@@ -129,7 +143,7 @@ export function passengerPanel(input: {
     const wanted = aboard.filter((m) => m.wanted).reduce((n, m) => n + (m.passengers ?? 0), 0);
     const goods = active
       .filter((m) => m.passengers == null)
-      .map((m) => `${m.count} t ${m.commodity}`);
+      .map((m) => `${m.count} t ${goodsName(m.commodity!)}`);
     const flags = [vip ? `${vip} VIP` : null, wanted ? `${wanted} wanted` : null].filter(Boolean);
     const what = [
       pax ? `${pax} pax${flags.length ? ` (${flags.join(", ")})` : ""}` : null,
@@ -166,6 +180,7 @@ export function passengerPanel(input: {
   const reward = input.missions.filter(isRun).reduce((n, m) => n + (m.reward ?? 0), 0);
   const cabins = berths(input.events);
   const ready = input.missions.filter((m) => isRun(m) && m.status === "complete").length;
+  const open = input.missions.filter(isRun).length;
   return {
     mode: "passenger",
     // Passengers still to hand in make it a passenger run too.
@@ -181,7 +196,8 @@ export function passengerPanel(input: {
     rows,
     footer: [
       [
-        `${active.length} mission${active.length === 1 ? "" : "s"}`,
+        // Every open mission, those to hand in too: "0 missions · 2 to hand in" read as none left.
+        `${open} mission${open === 1 ? "" : "s"}`,
         ready ? `${ready} to hand in` : null,
       ]
         .filter(Boolean)
