@@ -101,6 +101,13 @@ const HudSchema = z.strictObject({
   // Planets with biological signals worth less than this are left off the exploration panel.
   // Before the species are known, a planet is judged by the least its genera can be worth.
   bioMin: z.number().int().min(0).default(5_000_000),
+  massacre: z
+    .strictObject({
+      // Credits a kill: a target whose missions still to finish pay less than this a kill left is
+      // marked ⚠. 0 turns it off.
+      minPerKill: z.number().min(0).default(1_000_000),
+    })
+    .prefault({}),
   mining: z
     .strictObject({
       // The least percentage of each commodity in a prospected rock that is worth mining. Entries

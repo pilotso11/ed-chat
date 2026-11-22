@@ -314,8 +314,9 @@ UI shows them well.
   - The route rows, `previousStop` and `nextStopAfter` on a plan visited out of listing order,
     and a cleared route.
   - The Spansh parse, cache and retry.
-- `scripts/hud-probe.ts` prints the panel for the current journal, and
-  `scripts/hud-screenshots.cjs` renders the README's mock-ups.
+- `scripts/hud-probe.ts` prints the panel for the current journal.
+  `scripts/hud-scenes.ts` builds the README's panels from moments in real journals, and
+  `scripts/hud-screenshots.cjs` renders them in the panel's own page.
 - Tested live in the game: exobiology, exploration with Spansh highlights, route rows and chip
   targets.
 

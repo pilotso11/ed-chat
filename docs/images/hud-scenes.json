@@ -1,0 +1,93 @@
+[
+  {
+    "name": "hud-explore-scanned",
+    "file": "Journal.2026-11-21T190841.01.log",
+    "until": "2026-11-21T22:29:42Z"
+  },
+  {
+    "name": "hud-exobiology",
+    "file": "Journal.2026-11-21T190841.01.log",
+    "until": "2026-11-21T20:23:16Z",
+    "status": {
+      "BodyName": "Wredguia NN-J d9-0 AB 1 f",
+      "Latitude": -22.1761,
+      "Longitude": -43.2712,
+      "PlanetRadius": 714765.8,
+      "Heading": 200
+    },
+    "bookmarks": [
+      {
+        "system": "Wredguia NN-J d9-0",
+        "body": "Wredguia NN-J d9-0 AB 1 f",
+        "purpose": "Ship",
+        "label": "Ship",
+        "kind": "other",
+        "position": {
+          "latitude": -22.208155,
+          "longitude": -43.278763
+        }
+      }
+    ]
+  },
+  {
+    "name": "hud-massacre",
+    "file": "Journal.2026-11-07T191009.01.log",
+    "until": "2026-11-07T21:16:58Z"
+  },
+  {
+    "name": "hud-mining",
+    "file": "Journal.220129172449.01.log",
+    "until": "2022-01-29T18:25:25Z",
+    "cargo": {
+      "platinum": 142,
+      "osmium": 35,
+      "gold": 17,
+      "silver": 10,
+      "drones": 15
+    }
+  },
+  {
+    "name": "hud-passenger",
+    "file": "Journal.2022-04-03T145042.01.log",
+    "until": "2022-04-03T14:18:40Z",
+    "plan": {
+      "title": "Passenger run from Warnates",
+      "stops": [
+        {
+          "system": "LTT 10918",
+          "station": "Fujimori City",
+          "purpose": "Drop tourists and aid workers",
+          "kind": "mission",
+          "missions": [858029009, 858029085]
+        },
+        {
+          "system": "Itza",
+          "station": "Ellison Station",
+          "purpose": "Drop VIPs",
+          "kind": "mission",
+          "missions": [858029335]
+        },
+        {
+          "system": "Itza",
+          "station": "Ore Terminal",
+          "purpose": "Drop VIPs",
+          "kind": "mission",
+          "missions": [858029420]
+        },
+        {
+          "system": "LHS 1612",
+          "station": "Frobenius Station",
+          "purpose": "Drop VIPs",
+          "kind": "mission",
+          "missions": [858029523]
+        },
+        {
+          "system": "Phekda",
+          "purpose": "Sightseeing",
+          "kind": "mission",
+          "missions": [858029568]
+        }
+      ]
+    }
+  }
+]

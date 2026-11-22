@@ -21,7 +21,14 @@ import {
   sellQueries,
 } from "../src/core/hud/mining.js";
 import { HUD_EVENTS, journalMode, noteMode } from "../src/core/hud/mode.js";
-import { parseSellHits, sellSearchBody, SellPrices, type SellHit } from "../src/core/hud/sell.js";
+import {
+  parseSellHits,
+  sellSearchBody,
+  SellPrices,
+  type SellHit,
+  type SellLookup,
+  type SellQuery,
+} from "../src/core/hud/sell.js";
 import { DEFAULT_MINING_TARGETS, DEFAULT_SETTINGS } from "../src/core/settings.js";
 
 const T0 = Date.UTC(2026, 10, 21, 10, 0, 0);
@@ -379,16 +386,19 @@ describe("miningPanel", () => {
       right: "0 t free · 10 limpets",
       tone: "warn",
     });
+    // The row has what the load sells for; the buyer's line, the price a ton.
     expect(p.rows.find((r) => r.text === "Sell Platinum 246 t")).toMatchObject({
-      right: "244k · 12 ly",
-      detail: "Haber Hub, Ngalinn",
+      right: "59.9M · 12 ly",
+      detail: "Haber Hub, Ngalinn · 244k/t",
     });
-    expect(p.rows.find((r) => r.text === "  or nearer")?.detail).toBe("Brooks Estate, Wolf 397");
-    expect(p.rows.find((r) => r.text.startsWith("Refined"))).toMatchObject({
-      text: "Refined: Platinum 2 t",
-      right: "~487k",
+    expect(p.rows.find((r) => r.text === "  or nearer")).toMatchObject({
+      right: "56.6M · 4.0 ly",
+      detail: "Brooks Estate, Wolf 397 · 230k/t",
     });
-    expect(p.footer).toEqual(["Session: 1 prospected · 1 worth mining"]);
+    expect(p.rows.some((r) => r.text.startsWith("Refined"))).toBe(false);
+    expect(p.footer).toEqual([
+      "Session: 1 prospected · 1 worth mining · 2 t refined · 59.9M to sell",
+    ]);
     // A full hold copies the best buyer's system.
     expect(p.copy?.text).toBe("Ngalinn");
   });
@@ -430,7 +440,9 @@ describe("miningPanel", () => {
       ...base(),
       sell: () => [hit({ station: "Old Hub", system: "Ngalinn", updatedAt: at(t - 3 * 86_400) })],
     });
-    expect(p.rows.find((r) => r.text.startsWith("Sell"))?.detail).toBe("Old Hub, Ngalinn · 3d old");
+    expect(p.rows.find((r) => r.text.startsWith("Sell"))?.detail).toBe(
+      "Old Hub, Ngalinn · 200k/t · 3d old",
+    );
   });
 
   it("asks for a prospect before the first one", () => {
@@ -675,7 +687,9 @@ describe("mining edge cases", () => {
     expect(p.rows[1]).toMatchObject({ text: "Motherlode: Void Opal", right: "crack" });
     expect(p.rows[2]!.text).toBe("Hotspots: Painite");
     expect(p.rows[3]).toMatchObject({ text: "Hold 0 t", right: "0 limpets", tone: "warn" });
-    expect(p.footer[0]).toBe("Session: 1 prospected · 0 worth mining · 1 motherlode · 1 cracked");
+    expect(p.footer[0]).toBe(
+      "Session: 1 prospected · 0 worth mining · 1 motherlode · 1 cracked · 10 t refined",
+    );
     expect(p.rows.find((r) => r.text.startsWith("Refined"))?.right).toBeUndefined();
   });
 
@@ -706,7 +720,7 @@ describe("mining edge cases", () => {
       sell: () => [hit({ station: "FC", carrier: true, demand: 2 })],
     });
     expect(carriers.rows.find((r) => r.text.startsWith("Sell"))?.detail).toBe(
-      "FC (carrier), Sol · demand 2",
+      "FC (carrier), Sol · 200k/t · demand 2",
     );
   });
 
@@ -830,19 +844,28 @@ describe("mining after leaving, selling and relogging (1)", () => {
     ]);
   });
 
-  it("prices refined commodities that are no longer aboard", () => {
+  it("totals what the cargo sells for, as a floor while some has no price", () => {
     const events = [refined("Platinum"), refined("Osmium"), refined("Painite")];
     const seen: string[] = [];
-    const p = panel(events, {
-      cargo: cargo(10),
-      sell: (q) => {
-        seen.push(q.commodity);
-        return q.commodity === "Painite" ? "pending" : [hit({ price: 100_000 })];
-      },
-    });
-    expect(seen).toEqual(["Platinum", "Osmium", "Painite"]);
-    // Painite has no price yet: the value is a floor.
-    expect(p.rows.find((r) => r.text.startsWith("Refined"))?.right).toBe("~200k+");
+    const hold = (painite: number) => [
+      ...cargo(10),
+      { name: "painite", count: painite, stolen: false, mission_id: null },
+    ];
+    const prices = (painite: SellLookup) => (q: SellQuery) => {
+      seen.push(q.commodity);
+      return q.commodity === "Painite" ? painite : [hit({ price: 100_000 })];
+    };
+    // Only what is aboard is priced: the osmium was sold.
+    let p = panel(events, { cargo: hold(5), sell: prices("pending") });
+    expect(seen).toEqual(["Platinum", "Painite"]);
+    expect(p.footer[0]?.endsWith(" · 1.0M+ to sell")).toBe(true);
+    p = panel(events, { cargo: hold(5), sell: prices([]) });
+    expect(p.footer[0]?.endsWith(" · 1.0M+ to sell")).toBe(true);
+    p = panel(events, { cargo: hold(5), sell: prices([hit({ price: 200_000 })]) });
+    expect(p.footer[0]?.endsWith(" · 2.0M to sell")).toBe(true);
+    // No price at all: no total.
+    p = panel(events, { cargo: hold(5), sell: () => "pending" });
+    expect(p.footer[0]).not.toMatch(/to sell/);
   });
 
   it("forgets old failed searches", async () => {
@@ -892,7 +915,7 @@ describe("buyer search origin, pads and trips", () => {
       },
     });
     expect(seen).toEqual(["HIP 1"]);
-    expect(p.rows.find((r) => r.text.startsWith("Sell"))?.right).toBe("200k · 10 ly from HIP 1");
+    expect(p.rows.find((r) => r.text.startsWith("Sell"))?.right).toBe("1.0M · 10 ly from HIP 1");
   });
 
   it("copies again after a sale, for the next full hold", () => {

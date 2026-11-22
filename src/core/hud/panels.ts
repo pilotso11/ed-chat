@@ -12,6 +12,7 @@ import {
   type Exploration,
   type JournalEvent,
   type MassacreGroup,
+  type MassacreMission,
   type Plan,
 } from "ed-mcp/journal";
 import type { HudModeId } from "../settings.js";
@@ -80,12 +81,38 @@ export function timeLeft(ms: number): string {
 
 // ---------- Massacre ----------
 
-export function massacrePanel(groups: MassacreGroup[], now: number): PanelView | null {
+/** The missions' rewards; "+" when some have none in the journal. */
+function rewards(missions: MassacreMission[]): string {
+  const sum = missions.reduce((n, m) => n + (m.reward ?? 0), 0);
+  return `${credits(sum)}${missions.some((m) => m.reward === null) ? "+" : ""}`;
+}
+
+export function massacrePanel(
+  groups: MassacreGroup[],
+  now: number,
+  settings: { minPerKill: number } = { minPerKill: 0 },
+): PanelView | null {
   if (!groups.length) return null;
   const rows: HudRow[] = [];
   const missions = groups.flatMap((g) => g.factions.flatMap((f) => f.missions));
   for (const g of groups) {
-    rows.push({ text: g.target_faction, right: `${g.kills_left} left`, tone: "accent" });
+    // What the stack still pays for each kill left: one kill counts for every giver at once.
+    const open = g.factions.flatMap((f) => f.missions).filter((m) => !m.done);
+    const perKill = g.kills_left
+      ? open.reduce((n, m) => n + (m.reward ?? 0), 0) / g.kills_left
+      : null;
+    const low = perKill !== null && perKill < settings.minPerKill;
+    // ⚠ when it pays too little: time to take more missions.
+    rows.push({
+      text: g.target_faction,
+      right: [
+        `${g.kills_left} left`,
+        perKill !== null ? `${low ? "⚠ " : ""}${credits(perKill)}/kill` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      tone: "accent",
+    });
     for (const f of g.factions) {
       const need = f.missions.reduce((n, m) => n + m.kills_required, 0);
       const got = f.missions.reduce((n, m) => n + Math.min(m.kills_counted, m.kills_required), 0);
@@ -97,19 +124,18 @@ export function massacrePanel(groups: MassacreGroup[], now: number): PanelView |
       });
     }
   }
-  const ready = missions.filter((m) => m.done).length;
+  const done = missions.filter((m) => m.done);
+  const ready = done.length;
   const expiries = missions
     .filter((m) => !m.done && m.expires)
     .map((m) => Date.parse(m.expires!))
     .filter((t) => !Number.isNaN(t));
   const footer = [
-    [
-      ready ? `${ready} ready to hand in` : null,
-      expiries.length ? `next expires ${timeLeft(Math.min(...expiries) - now)}` : null,
-    ]
+    [`Stack ${rewards(missions)}`, ready ? `${ready} ready to hand in ${rewards(done)}` : null]
       .filter(Boolean)
       .join(" · "),
-  ].filter(Boolean);
+    expiries.length ? `next expires ${timeLeft(Math.min(...expiries) - now)}` : null,
+  ].filter((f) => f !== null);
   const total = groups.reduce((n, g) => n + g.kills_left, 0);
   return { mode: "massacre", title: "MASSACRE", right: `${total} left`, rows, footer };
 }

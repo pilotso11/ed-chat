@@ -210,10 +210,34 @@ describe("massacrePanel", () => {
       Date.UTC(2026, 10, 15, 12),
     )!;
     expect(p.right).toBe("12 left");
-    expect(p.rows[0]).toMatchObject({ text: "Kumo Crew", tone: "accent" });
+    // The unfinished mission's 1.0M over the 12 kills left.
+    expect(p.rows[0]).toMatchObject({
+      text: "Kumo Crew",
+      right: "12 left · 83k/kill",
+      tone: "accent",
+    });
     expect(p.rows[1]).toMatchObject({ text: "Lugh", right: "18/30", bar: 0.6 });
     expect(p.rows[2]).toMatchObject({ text: "Eravate", tone: "good" });
-    expect(p.footer).toEqual(["1 ready to hand in · next expires 1d 4h"]);
+    expect(p.footer).toEqual(["Stack 2.0M · 1 ready to hand in 1.0M", "next expires 1d 4h"]);
+  });
+
+  it("marks a target that pays too little a kill left", () => {
+    const groups = (reward: number | null) => [
+      {
+        target_faction: "Kumo Crew",
+        kills_left: 10,
+        factions: [
+          { faction: "Lugh", kills_left: 10, missions: [{ ...mission(1, 10, 0, null), reward }] },
+        ],
+      },
+    ];
+    const low = massacrePanel(groups(15_000_000), 0, { minPerKill: 2_000_000 })!;
+    expect(low.rows[0]).toMatchObject({ right: "10 left · ⚠ 1.5M/kill", tone: "accent" });
+    expect(low.rows[1]!.text).toBe("Lugh");
+    const ok = massacrePanel(groups(25_000_000), 0, { minPerKill: 2_000_000 })!;
+    expect(ok.rows[0]).toMatchObject({ right: "10 left · 2.5M/kill", tone: "accent" });
+    // A reward missing from the journal: the stack value is a floor.
+    expect(massacrePanel(groups(null), 0)!.footer[0]).toBe("Stack 0+");
   });
 
   it("is null with no missions", () => {

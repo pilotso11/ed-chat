@@ -696,8 +696,6 @@ export interface ToSell {
 }
 
 const MAX_SELL_ROWS = 3;
-/** Refined commodities no longer aboard are priced too, for the session's value: at most these. */
-const MAX_EXTRA_PRICES = 3;
 
 interface SellInput {
   system: string | null;
@@ -734,18 +732,23 @@ function queryFor(input: SellInput, key: string): SellQuery | null {
   };
 }
 
-/**
- * What to look up a buyer for: the mined commodities in the hold, plus those moved to the carrier
- * when selling from it, most tons first.
- */
-export function sellQueries(input: SellInput): ToSell[] {
+/** The mined tons to sell, by commodity, most first. */
+function tonsToSell(input: SellInput): [string, number][] {
   const fromCarrier = sellingCarrier(input);
   const tons = new Map(input.hold);
   for (const [k, n] of fromCarrier?.moved ?? []) {
     if (!input.kinds || input.kinds.has(k)) tons.set(k, (tons.get(k) ?? 0) + n);
   }
+  return [...tons].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+}
+
+/**
+ * What to look up a buyer for: the mined commodities in the hold, plus those moved to the carrier
+ * when selling from it, most tons first.
+ */
+export function sellQueries(input: SellInput): ToSell[] {
   const out: ToSell[] = [];
-  for (const [key, n] of [...tons].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1])) {
+  for (const [key, n] of tonsToSell(input)) {
     if (out.length === MAX_SELL_ROWS) break;
     const query = queryFor(input, key);
     if (query) out.push({ key, name: commodityName(key), tons: n, query });
@@ -902,11 +905,14 @@ export function miningPanel(input: {
   const pad = padFor(input.shipType);
   // Distances are from where the search was made: say so when that is not here.
   const from = (near: string) => (near !== input.system ? ` from ${near}` : "");
-  const prices = new Map<string, number>();
+  // What the cargo sells for at the best buyers; "+" when some of it has no price.
+  let worth = 0;
+  let unpriced = toSell.length < tonsToSell(sellInput).length;
   let copy: PanelView["copy"];
   for (const t of toSell) {
     const found = input.sell?.(t.query);
     if (!found) continue;
+    unpriced ||= !Array.isArray(found);
     if (found === "pending" || found === "failed") {
       rows.push({
         text: `Sell ${t.name} ${t.tons} t`,
@@ -917,6 +923,7 @@ export function miningPanel(input: {
     }
     const pick = pickSell(found, t.tons, pad, input.carrier?.id ?? null);
     if (!pick) {
+      unpriced = true;
       rows.push({
         text: `Sell ${t.name} ${t.tons} t`,
         // Buyers found but none usable says why, rather than that there are none.
@@ -929,25 +936,29 @@ export function miningPanel(input: {
       });
       continue;
     }
-    prices.set(t.key, pick.best.price);
+    worth += pick.best.price * t.tons;
+    // The load's value on the row; the price a ton with the buyer.
     const place = (h: SellHit) =>
       [
         `${h.station}${h.carrier ? " (carrier)" : ""}, ${h.system}`,
+        `${credits(h.price)}/t`,
         h.demand !== null && h.demand < t.tons ? `demand ${h.demand}` : null,
         priceAge(h, input.now),
       ]
         .filter(Boolean)
         .join(" · ");
+    const right = (h: SellHit) =>
+      `${credits(h.price * t.tons)} · ${ly(h.distanceLy)}${from(t.query.near)}`;
     rows.push({
       text: `Sell ${t.name} ${t.tons} t`,
-      right: `${credits(pick.best.price)} · ${ly(pick.best.distanceLy)}${from(t.query.near)}`,
+      right: right(pick.best),
       detail: place(pick.best),
       tone: "accent",
     });
     if (pick.near) {
       rows.push({
         text: "  or nearer",
-        right: `${credits(pick.near.price)} · ${ly(pick.near.distanceLy)}${from(t.query.near)}`,
+        right: right(pick.near),
         detail: place(pick.near),
         tone: "dim",
       });
@@ -963,40 +974,29 @@ export function miningPanel(input: {
     }
   }
 
-  const refined = [...state.refined].sort((a, b) => b[1] - a[1]);
-  // Refined commodities already sold or not among the rows are priced with their own search.
-  const unpricedKinds = refined.filter(([k]) => !prices.has(k) && isMined(k));
-  for (const [key, tons] of unpricedKinds.slice(0, MAX_EXTRA_PRICES)) {
-    const q = queryFor(sellInput, key);
-    const found = q ? input.sell?.(q) : undefined;
-    if (!Array.isArray(found)) continue;
-    const pick = pickSell(found, tons, pad, input.carrier?.id ?? null);
-    if (pick) prices.set(key, pick.best.price);
-  }
-  if (refined.length) {
-    const worth = refined.reduce((n, [k, t]) => n + (prices.get(k) ?? 0) * t, 0);
-    const unpriced = refined.some(([k]) => !prices.has(k));
-    rows.push({
-      text: `Refined: ${refined.map(([k, t]) => `${commodityName(k)} ${t} t`).join(" · ")}`,
-      right: worth ? `~${credits(worth)}${unpriced ? "+" : ""}` : undefined,
-    });
-  }
-
   const worthCount = state.prospects.filter((x) => judge(x, targets)?.worth).length;
   const motherlodes = state.prospects.filter((x) => x.motherlode).length;
+  const refinedTons = [...state.refined.values()].reduce((a, b) => a + b, 0);
   const session = [
     state.prospects.length ? `${state.prospects.length} prospected` : null,
     state.prospects.length ? `${worthCount} worth mining` : null,
     motherlodes ? `${motherlodes} motherlode${motherlodes === 1 ? "" : "s"}` : null,
     state.cracked ? `${state.cracked} cracked` : null,
+    refinedTons ? `${refinedTons} t refined` : null,
   ].filter(Boolean);
+  // What the cargo sells for ends the line, as the exploration panel's unsold data does.
+  const toSellText = worth ? `${credits(worth)}${unpriced ? "+" : ""} to sell` : null;
   return {
     mode: "mining",
     title: "MINING",
     subtitle: state.ring ? shortBody(state.ring, input.system) : (input.system ?? undefined),
     right: state.rate !== null ? `${state.rate} t/h` : undefined,
     rows,
-    footer: session.length ? [`Session: ${session.join(" · ")}`] : [],
+    footer: session.length
+      ? [`Session: ${[...session, toSellText].filter(Boolean).join(" · ")}`]
+      : toSellText
+        ? [toSellText]
+        : [],
     ...(copy ? { copy } : {}),
   };
 }

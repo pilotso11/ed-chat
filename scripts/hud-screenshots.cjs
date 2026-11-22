@@ -1,31 +1,55 @@
-// Renders each .scene of docs/images/hud-mock.html to a PNG at 2x, for the README.
-// Usage: npx electron --force-device-scale-factor=2 scripts/hud-screenshots.cjs docs/images/hud-mock.html docs/images hud-explore-arrival,hud-explore-unknown,hud-explore-scanned,hud-exobiology
-const { app, BrowserWindow } = require("electron");
+// Renders each panel in a scenes file (from scripts/hud-scenes.ts) in the app's own panel page,
+// over a dark space background, to a PNG at 2x for the README.
+// Usage: npm run build && npx electron --force-device-scale-factor=2 scripts/hud-screenshots.cjs out/hud-scenes.json docs/images
+const { app, BrowserWindow, ipcMain } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const [html, out, names] = process.argv.slice(-3).map((a, i) => (i < 2 ? path.resolve(a) : a));
+const [scenesFile, outDir] = process.argv.slice(-2).map((a) => path.resolve(a));
+const root = path.join(__dirname, "..", "out");
+const PAD = 24;
+const BACKGROUND = `
+  html, body {
+    background:
+      radial-gradient(circle at 80% 30%, rgba(255, 190, 120, 0.35), transparent 30%),
+      radial-gradient(circle at 15% 80%, rgba(90, 120, 200, 0.25), transparent 40%),
+      #05060a !important;
+  }
+  #root { display: inline-block; padding: ${PAD}px; }
+`;
+
 app.whenReady().then(async () => {
+  const scenes = JSON.parse(fs.readFileSync(scenesFile, "utf8"));
   const win = new BrowserWindow({
-    width: 900,
-    height: 1400,
+    width: 1200,
+    height: 1600,
     show: false,
-    webPreferences: { zoomFactor: 1, offscreen: false },
+    webPreferences: {
+      preload: path.join(root, "preload", "index.cjs"),
+      contextIsolation: true,
+      sandbox: true,
+    },
   });
-  await win.loadFile(html);
-  await win.webContents.insertCSS(
-    ".cap{display:none} .scene{display:inline-block; padding:24px 28px; border-radius:0} body{margin:0}",
-  );
-  await new Promise((r) => setTimeout(r, 300));
-  const rects = await win.webContents.executeJavaScript(
-    `[...document.querySelectorAll('.scene')].map(e=>{const r=e.getBoundingClientRect();return {x:Math.floor(r.x),y:Math.floor(r.y),width:Math.ceil(r.width),height:Math.ceil(r.height)}})`,
-  );
-  const list = names.split(",");
-  fs.mkdirSync(out, { recursive: true });
-  for (let i = 0; i < rects.length && i < list.length; i++) {
-    const img = await win.webContents.capturePage(rects[i]);
-    fs.writeFileSync(path.join(out, `${list[i]}.png`), img.toPNG());
-    console.log(list[i], img.getSize());
+  // The panel reports its size after each render, as it does to the app.
+  let sized = null;
+  ipcMain.on("hud:size", (_e, w, h) => sized?.({ width: w, height: h }));
+  await win.loadFile(path.join(root, "renderer", "hud.html"));
+  await win.webContents.insertCSS(BACKGROUND);
+  fs.mkdirSync(outDir, { recursive: true });
+  for (const { name, view } of scenes) {
+    const size = new Promise((r) => (sized = r));
+    win.webContents.send("hud:view", view);
+    const { width, height } = await size;
+    // Fonts and layout settle a frame after the size is reported.
+    await new Promise((r) => setTimeout(r, 300));
+    const img = await win.webContents.capturePage({
+      x: 0,
+      y: 0,
+      width: Math.ceil(width) + 2 * PAD,
+      height: Math.ceil(height) + 2 * PAD,
+    });
+    fs.writeFileSync(path.join(outDir, `${name}.png`), img.toPNG());
+    console.log(name, img.getSize());
   }
   app.quit();
 });
