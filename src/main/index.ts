@@ -110,6 +110,7 @@ import {
   bookmarkHere,
   bookmarksToClear,
   sameBookmark,
+  sameStop,
   todoBookmarks,
   finishedBioBookmarks,
   isPlanNotFound,
@@ -722,6 +723,8 @@ async function main(): Promise<void> {
     // finds: the player may have lifted off or jumped since.
     if (from === "tray") {
       const named = trayHere;
+      // Every bookmark in the system asks first, as the key's second press and Clear all do.
+      if (trayHereWhole) return askClearListed(named, "in this system");
       return queueBookmarks(() => unmarkBookmarks("listed", named));
     }
     // Timed at the press, not when the queue gets to it, for the second press's window.
@@ -729,8 +732,10 @@ async function main(): Promise<void> {
     return queueBookmarks(() => unmarkBookmarks("here", [], at));
   }
 
-  // The bookmarks the tray's "here" item names, as the menu was built.
+  // The bookmarks the tray's "here" item names, as the menu was built, and whether they are the
+  // whole system's.
   let trayHere: Stop[] = [];
+  let trayHereWhole = false;
 
   function queueBookmarks(run: () => Promise<void>): Promise<void> {
     bookmarking = bookmarking.then(run, run);
@@ -758,18 +763,31 @@ async function main(): Promise<void> {
         if (!isPlanNotFound(err)) throw err;
       }
       if (!asked.length) return flash("bookmark", "ⓘ no bookmarks", 3_000);
-      await askClearAll(asked);
+      await askClear(asked, null);
     } finally {
       askingClearAll = false;
     }
   }
 
-  async function askClearAll(asked: Stop[]): Promise<void> {
+  // The tray's whole-system item: asks first, one question at a time.
+  async function askClearListed(listed: Stop[], where: string): Promise<void> {
+    if (askingClearAll || !listed.length) return;
+    askingClearAll = true;
+    try {
+      await askClear(listed, where);
+    } finally {
+      askingClearAll = false;
+    }
+  }
+
+  // Asks before clearing these bookmarks: all of them (where null), or those somewhere.
+  async function askClear(asked: Stop[], where: string | null): Promise<void> {
     const n = asked.length;
+    const what = `${n} bookmark${n === 1 ? "" : "s"}`;
     const r = await dialog.showMessageBox({
       type: "question",
       title: "ED Chat",
-      message: `Clear all ${n} bookmark${n === 1 ? "" : "s"}?`,
+      message: where === null ? `Clear all ${what}?` : `Clear ${what} ${where}?`,
       detail: "They are marked skipped in the ed-mcp plan bookmarks.",
       buttons: ["Clear", "Cancel"],
       defaultId: 1,
@@ -806,7 +824,7 @@ async function main(): Promise<void> {
     let picked: number[];
     if (scope === "listed") {
       // The same bookmark, label too: one added since with the same place is not the one named.
-      const named = (s: Stop) => listed.some((a) => sameBookmark(a, s) && a.label === s.label);
+      const named = (s: Stop) => listed.some((a) => sameStop(a, s));
       picked = todoBookmarks(plan).filter((i) => named(plan.stops[i]!));
     } else {
       // The system and position read now: the last poll may be from before a jump.
@@ -823,7 +841,7 @@ async function main(): Promise<void> {
         pressed <= armed.until &&
         armed.system === system &&
         armed.stops.length === stops.length &&
-        stops.every((s) => armed.stops.some((a) => sameBookmark(a, s)));
+        stops.every((s) => armed.stops.some((a) => sameStop(a, s)));
       if (pick.whole && !again) {
         clearSystem = { until: pressed + CLEAR_AGAIN_MS, system, stops };
         const n = picked.length;
@@ -908,13 +926,15 @@ async function main(): Promise<void> {
         await queueBookmarks(async () => {
           const now = await plans.get(BOOKMARKS_PLAN);
           // This very bookmark, label too, still to do: not another in the same place.
-          const still = now.stops.some(
-            (s) => s.status === "todo" && sameBookmark(s, stop) && s.label === stop.label,
-          );
+          const still = now.stops.some((s) => s.status === "todo" && sameStop(s, stop));
           const ref = still ? bookmarkRef(now, stop) : null;
           if (!ref) return;
-          await plans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
+          const plan = await plans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
           flash("bookmark", `📍 done: ${stop.label ?? stop.purpose}`, 4_000);
+          // Shown at once, as for a new or cleared bookmark.
+          savedBookmarks = { plan, afterPoll: pollsStarted };
+          if (hudData) hudData = { ...hudData, bookmarks: plan };
+          renderHud();
         });
       } catch (err) {
         // Tried again on the next poll; the other bookmarks are still marked.
@@ -1808,6 +1828,7 @@ async function main(): Promise<void> {
         })
       : { stops: [], whole: false };
     trayHere = here.stops.map((i) => hudData!.bookmarks!.stops[i]!);
+    trayHereWhole = here.whole;
     const items = trayItems({
       chips: withTargets(currentChips(state), chipStops),
       agentId,

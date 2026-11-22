@@ -10,6 +10,7 @@ import {
   type Stop,
 } from "ed-mcp/journal";
 import {
+  BIO_NOTE,
   BOOKMARKS_PLAN,
   bearing,
   bioLeft,
@@ -117,7 +118,17 @@ describe("making a bookmark", () => {
       body: BODY,
       status: "todo",
       position: { latitude: 54.142864, longitude: -51.743507 },
+      notes: BIO_NOTE,
     });
+    // Only a bio bookmark carries the note that lets the panel redraw its label.
+    const other = newBookmark({
+      system: SYSTEM,
+      body: BODY,
+      here: { latitude: 0, longitude: 0 },
+      label: "Bookmark 1",
+      bio: false,
+    });
+    expect(other.notes).toBeUndefined();
   });
 
   it("needs a position on a planet", () => {
@@ -538,6 +549,7 @@ describe("bio bookmark rows", () => {
     body: BODY,
     kind: "exobiology" as const,
     label: "Bio: Frutexa Acus, Bacterium, Concha, Tussock",
+    notes: BIO_NOTE,
   };
   const rows = (b: unknown[], stops: TestStop[] = [mark], s = status({ latitude: null })) =>
     bookmarkRows({ plan: plan(stops), system: SYSTEM, status: s, bio: b as never });
@@ -584,6 +596,8 @@ describe("bio bookmark rows", () => {
     expect(rows([now], [{ ...mark, label: "Concha by the crater" }])[0]!.text).toBe(
       "📍 Concha by the crater",
     );
+    // A "Bio: " label without the key's note is someone's own, and kept.
+    expect(rows([now], [{ ...mark, notes: undefined }])[0]!.text).toBe(`📍 ${mark.label}`);
     expect(rows([now], [{ ...mark, kind: "other" }])[0]!.text).toBe(`📍 ${mark.label}`);
     expect(rows([])[0]!.text).toBe(`📍 ${mark.label}`);
     expect(

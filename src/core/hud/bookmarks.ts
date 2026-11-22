@@ -73,13 +73,17 @@ export function bioLeft(bio: ExobiologyBody, knownCount?: number | null): string
   return unknown ? [...left, `${unknown} signal${unknown === 1 ? "" : "s"}`] : left;
 }
 
-/** A label the bookmark key made for biology, which the panel redraws from the journal. */
-const BIO_LABEL = /^Bio: /;
+/**
+ * The note on a bio bookmark the key made: while its label still starts "Bio: ", the panel
+ * redraws it. A label the player or Claude wrote, even one starting "Bio: ", has no such note,
+ * and a renamed one no longer starts so; both are kept.
+ */
+export const BIO_NOTE = "ED Chat keeps this label up to date from the journal.";
 
 /**
- * What a bookmark's row says. A bio bookmark that the key labelled shows what is still to
- * sample on its body now, not when it was made, so finished species drop off. A label that the
- * player or Claude chose is kept.
+ * What a bookmark's row says. A bio bookmark that the key made shows what is still to sample on
+ * its body now, not when it was made, so finished species drop off. "All sampled" waits for the
+ * journal's own signal count, as auto-done does (finishedBioBookmarks).
  */
 function bookmarkText(
   s: Stop,
@@ -88,7 +92,9 @@ function bookmarkText(
   system: string,
 ): string {
   const label = s.label ?? s.purpose;
-  if (s.kind !== "exobiology" || !BIO_LABEL.test(label) || !bio || !s.body) return label;
+  // The key's own label, not renamed since: it has the note and still starts "Bio: ".
+  const own = s.notes === BIO_NOTE && label.startsWith("Bio: ");
+  if (s.kind !== "exobiology" || !own || !bio || !s.body) return label;
   const key = bodyKey(s.body, system);
   const body = bio.find((b) => bodyKey(b.body, system) === key);
   if (!body) return label;
@@ -96,10 +102,10 @@ function bookmarkText(
   const left = bioLeft(body, count);
   // The " (2)" that kept the label unique stays, so two bookmarks on a body still differ.
   const n = / \(\d+\)$/.exec(label)?.[0] ?? "";
-  // "All sampled" only when the body is done; with no signal count it may hold more.
+  // "All sampled" only when the journal says the body is done; with no count it may hold more.
   const what = left.length
     ? `Bio: ${left.join(", ")}`
-    : bioProgress(body, count).done
+    : bioProgress(body).done
       ? "Bio: all sampled"
       : "Bio: all found sampled, more may be here";
   return `${what}${n}`;
@@ -121,6 +127,7 @@ export function newBookmark(input: {
     kind: input.bio ? "exobiology" : "other",
     status: "todo",
     position: { ...input.here },
+    ...(input.bio ? { notes: BIO_NOTE } : {}),
   };
 }
 
@@ -332,6 +339,9 @@ export function finishedBioBookmarks(
   );
   return todo.filter((i) => done.has(bodyKey(plan.stops[i]!.body!, system)));
 }
+
+/** The same bookmark and label: not another one added since in the same place. */
+export const sameStop = (a: Stop, b: Stop) => sameBookmark(a, b) && a.label === b.label;
 
 /** The same bookmark: what it is, not where it sits in the plan, which changes with edits. */
 export const sameBookmark = (a: Stop, b: Stop) =>

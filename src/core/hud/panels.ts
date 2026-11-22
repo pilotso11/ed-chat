@@ -944,7 +944,7 @@ export const knownSignals = (known: KnownBody[] | null | undefined, bodyId: numb
 export function bioProgress(
   b: ExobiologyBody,
   /** Another source's signal count (Spansh), for a body the journal has none for. */
-  knownSignals?: number | null,
+  spanshCount?: number | null,
 ): {
   analysed: number;
   signals: number;
@@ -954,7 +954,7 @@ export function bioProgress(
   const kept = b.species.filter((s) => !s.abandoned);
   const analysed = kept.filter((s) => s.analysed).length;
   // 0 from a later scan is no count, as null is: Spansh's count stands in for either.
-  const count = b.bio_signals || knownSignals || null;
+  const count = b.bio_signals || spanshCount || null;
   const signals = Math.max(count ?? 0, b.genera.length);
   const done = !!count && analysed >= signals && analysed === kept.length && !b.not_started.length;
   return { analysed, signals, done };
