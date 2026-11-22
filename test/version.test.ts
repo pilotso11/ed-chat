@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { BUNDLED_ED_MCP, fetchLatestEdMcp, versionText } from "../src/core/version.js";
+import {
+  BUNDLED_ED_MCP,
+  LATEST_TTL_MS,
+  fetchLatestEdMcp,
+  freshLatest,
+  versionText,
+} from "../src/core/version.js";
 
 const base = { app: "0.4.0", claude: "2.1.308", edMcpStatus: "ok" as const };
 
@@ -57,5 +63,14 @@ describe("fetchLatestEdMcp", () => {
       throw new TypeError("fetch failed");
     }) as unknown as typeof fetch;
     expect(await fetchLatestEdMcp(down)).toBeNull();
+  });
+});
+
+describe("freshLatest", () => {
+  it("reuses the npm lookup for ten minutes", () => {
+    const cached = { version: "1.2.3", at: 1_000 };
+    expect(freshLatest(cached, 1_000 + LATEST_TTL_MS - 1)).toBe(cached);
+    expect(freshLatest(cached, 1_000 + LATEST_TTL_MS)).toBeNull();
+    expect(freshLatest(null, 0)).toBeNull();
   });
 });

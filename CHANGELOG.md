@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/pilotso11/ed-chat/compare/v0.6.0...v0.6.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* count actual jumps in route answers ([#62](https://github.com/pilotso11/ed-chat/issues/62)) ([a953a1d](https://github.com/pilotso11/ed-chat/commit/a953a1dad9a6410f2e458eb4f62d8a3afcb1f07d))
+
 ## [0.6.0](https://github.com/pilotso11/ed-chat/compare/v0.5.0...v0.6.0) (2026-11-21)
 
 

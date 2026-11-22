@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipLabel, firstLine, parseChips, withTargets } from "../src/core/chips.js";
+import { chipCopy, chipLabel, firstLine, parseChips, withTargets } from "../src/core/chips.js";
 import { HUD_PROMPT } from "../src/core/prompt.js";
 
 describe("parseChips", () => {
@@ -121,5 +121,25 @@ describe("HUD_PROMPT", () => {
     expect(HUD_PROMPT).toMatch(
       /If ed-mcp journal tools are listed, read the game journal with them, not with shell commands/,
     );
+  });
+});
+
+describe("chipCopy", () => {
+  const chips = [
+    { n: 1, text: "Sol" },
+    { n: 2, text: "Achenar", detail: "Dawes Hub" },
+  ];
+
+  it("copies the chip's system, and names its target", () => {
+    expect(chipCopy(chips, 1)).toEqual({ text: "Sol", notice: "📋 copied Sol" });
+    expect(chipCopy(chips, 2)).toEqual({
+      text: "Achenar",
+      notice: "📋 copied Achenar (for Dawes Hub)",
+    });
+  });
+
+  it("copies nothing for a chip the reply does not have", () => {
+    expect(chipCopy(chips, 3)).toEqual({ text: null, notice: "📋 no chip 3; the reply has 2" });
+    expect(chipCopy([], 1)).toEqual({ text: null, notice: "📋 no chip 1; the reply has none" });
   });
 });

@@ -71,3 +71,11 @@ export async function fetchLatestEdMcp(
     return null;
   }
 }
+
+/** How long the npm lookup of the latest ed-mcp is reused. */
+export const LATEST_TTL_MS = 10 * 60_000;
+
+/** The cached npm lookup while it is fresh, else null: look again. */
+export function freshLatest<T extends { at: number }>(cached: T | null, now: number): T | null {
+  return cached && now - cached.at < LATEST_TTL_MS ? cached : null;
+}

@@ -117,3 +117,22 @@ export class ApprovalBroker {
     });
   }
 }
+
+/** The player's answer to a request as the broker takes it; Always also allows the tool. */
+export function approvalAnswers(
+  req: ApprovalRequest,
+  queue: readonly ApprovalRequest[],
+  answer: "approve" | "deny" | "alwaysAllow",
+): { allowTool: string | null; answers: [string, ApprovalDecision][] } {
+  if (answer !== "alwaysAllow")
+    return { allowTool: null, answers: [[req.id, answer === "deny" ? "deny" : "allow"]] };
+  // Requests for the same tool that already wait in the queue are allowed too.
+  const same = queue.filter((r) => r.id !== req.id && r.toolName === req.toolName);
+  return {
+    allowTool: req.toolName,
+    answers: [
+      [req.id, "allowSession"],
+      ...same.map((r): [string, ApprovalDecision] => [r.id, "allowSession"]),
+    ],
+  };
+}
