@@ -19,7 +19,7 @@ import {
 } from "../src/core/hud/mining.js";
 import { journalMode, noteMode } from "../src/core/hud/mode.js";
 import { parseSellHits, sellSearchBody, SellPrices, type SellHit } from "../src/core/hud/sell.js";
-import { DEFAULT_SETTINGS } from "../src/core/settings.js";
+import { DEFAULT_MINING_TARGETS, DEFAULT_SETTINGS } from "../src/core/settings.js";
 
 const T0 = Date.UTC(2026, 10, 21, 10, 0, 0);
 let t = 0;
@@ -318,7 +318,11 @@ describe("judge", () => {
       ],
       T0,
     ).prospect!;
-    expect(judge(p, targetsMap(M.targets))).toEqual({ name: "Platinum", percent: 22, worth: true });
+    expect(judge(p, targetsMap(DEFAULT_MINING_TARGETS))).toEqual({
+      name: "Platinum",
+      percent: 22,
+      worth: true,
+    });
     expect(judge(p, targetsMap({ Platinum: 30 }))?.worth).toBe(false);
     expect(judge(p, new Map())).toEqual({ name: "Gallite", percent: 40, worth: false });
   });
@@ -1211,5 +1215,34 @@ describe("trips for the hold-full copy", () => {
     ).toBeNull();
     const sold = ev("MarketSell", { Type: "platinum", Count: 4 });
     expect(miningState([...base, sold], T0 + t * 1000).lastSale).toBe(sold.timestamp);
+  });
+});
+
+describe("targets and logins elsewhere", () => {
+  it("adds the player's targets to the defaults", () => {
+    const panel = (targets: Record<string, number>) =>
+      miningPanel({
+        system: "A",
+        state: miningState([prospect([["Painite", 30]])], T0 + t * 1000),
+        cargo: [],
+        capacity: null,
+        shipType: null,
+        carrier: null,
+        settings: { ...M, targets },
+        now: T0 + t * 1000,
+      });
+    // Setting only Platinum keeps the Painite default.
+    expect(panel({ Platinum: 30 }).rows[0]!.right).toBe("MINE");
+    expect(panel({ Painite: 40 }).rows[0]!.right).toBe("skip");
+  });
+
+  it("searches from the ship after logging in in another system", () => {
+    const events = [
+      ev("Location", { StarSystem: "A" }),
+      refined("Platinum"),
+      ev("LoadGame"),
+      ev("Location", { StarSystem: "B" }),
+    ];
+    expect(miningState(events, T0 + t * 1000).system).toBeNull();
   });
 });

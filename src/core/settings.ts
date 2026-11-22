@@ -63,6 +63,16 @@ export type Position = z.infer<typeof PositionSchema>;
 export const HUD_MODES = ["massacre", "exploration", "exobiology", "mining", "route"] as const;
 export type HudModeId = (typeof HUD_MODES)[number];
 
+/** The mining targets that apply unless hud.mining.targets changes them. */
+export const DEFAULT_MINING_TARGETS: Readonly<Record<string, number>> = {
+  Platinum: 20,
+  Painite: 25,
+  Osmium: 25,
+  "Low Temperature Diamonds": 25,
+  Bromellite: 25,
+  Tritium: 30,
+};
+
 const HudSchema = z.strictObject({
   enabled: z.boolean().default(true),
   position: positionSchema("top-right", 120).prefault({}),
@@ -89,15 +99,9 @@ const HudSchema = z.strictObject({
   bioMin: z.number().int().min(0).default(5_000_000),
   mining: z
     .strictObject({
-      // The least percentage of each commodity in a prospected rock that is worth mining.
-      targets: z.record(z.string().min(1), z.number().min(0).max(100)).default({
-        Platinum: 20,
-        Painite: 25,
-        Osmium: 25,
-        "Low Temperature Diamonds": 25,
-        Bromellite: 25,
-        Tritium: 30,
-      }),
+      // The least percentage of each commodity in a prospected rock that is worth mining, on top
+      // of DEFAULT_MINING_TARGETS: an entry changes or adds one commodity, not the whole list.
+      targets: z.record(z.string().min(1), z.number().min(0).max(100)).default({}),
       // Sell from your fleet carrier: buyers are searched around the carrier, for what is in the
       // hold and what was moved to the carrier in the last 12 hours.
       useCarrier: z.boolean().default(false),

@@ -175,9 +175,11 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "hud.mining": { text: "The mining panel." },
   "hud.mining.targets": {
     text:
-      "The least percentage of each commodity in a prospected rock that is worth mining, by " +
-      'English commodity name, such as { "Platinum": 20 }. Other commodities are shown but ' +
-      "never marked worth mining.",
+      "The least percentage of each commodity in a rock that is worth mining, by English " +
+      'commodity name, such as { "Platinum": 30 }. Entries change or add to the defaults ' +
+      "(Platinum 20, Painite 25, Osmium 25, Low Temperature Diamonds 25, Bromellite 25, " +
+      "Tritium 30); set one to 100 to mine it only from a pure rock. Other commodities are " +
+      "shown but never marked worth mining.",
   },
   "hud.mining.useCarrier": {
     text:

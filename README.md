@@ -369,7 +369,7 @@ next start.
 | `hud.valuableMin` | `500000` | Bodies worth less when mapped are left off the exploration panel. Those with geological signals are counted on one line |
 | `hud.bioMin` | `5000000` | Planets whose likely species are worth less than this in total are left off the exploration panel |
 | `hud.spansh` | `true` | Look up each system's planets on Spansh when you arrive, and buyers for mined cargo. Only the system's ID, or for buyers the system name and commodity, is sent |
-| `hud.mining.targets` | Platinum 20, Painite 25, … | The least percentage of each commodity in a rock that is worth mining |
+| `hud.mining.targets` | Platinum 20, Painite 25, … | The least percentage of each commodity in a rock that is worth mining; entries change or add to the defaults |
 | `hud.mining.useCarrier` | `false` | Sell from your fleet carrier: search for buyers around it |
 | `hud.mining.carrierMarkets` | `false` | Include other players' fleet carriers as buyers |
 | `hud.mining.sellRadiusLy` / `carrierRadiusLy` | `100` / `500` | How far to search for buyers from the ship, or from the carrier |

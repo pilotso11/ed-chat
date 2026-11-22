@@ -1,5 +1,5 @@
 import type { JournalEvent, JournalState } from "ed-mcp/journal";
-import type { Settings } from "../settings.js";
+import { DEFAULT_MINING_TARGETS, type Settings } from "../settings.js";
 import { credits, shortBody, type HudRow, type PanelView } from "./panels.js";
 import type { SellHit, SellLookup, SellQuery } from "./sell.js";
 
@@ -244,7 +244,11 @@ export function miningState(
     if (rocksReset(e)) prospect = null;
     switch (e.event) {
       case "Location":
-        // Written at login too, in the same place: not a move.
+        // Written at login too, usually in the same place: not a move. A login in another system
+        // (a carrier that jumped while logged out) is away from the mining system, as a jump is.
+        if (here !== null && str(e.StarSystem) !== null && str(e.StarSystem) !== here) {
+          jumpsSince = SEARCH_FROM_MINING_JUMPS + 1;
+        }
         here = str(e.StarSystem) ?? here;
         break;
       case "FSDJump":
@@ -772,7 +776,8 @@ export function miningPanel(input: {
 }): PanelView {
   const { state, settings } = input;
   const rows: HudRow[] = [];
-  const targets = targetsMap(settings.targets);
+  // The player's entries change or add to the defaults, one commodity at a time.
+  const targets = targetsMap({ ...DEFAULT_MINING_TARGETS, ...settings.targets });
   const p = state.prospect;
   if (p) {
     const j = judge(p, targets);
