@@ -24,7 +24,7 @@ stays out of the way while you fly.
 - **Ask anything, keep flying.** Where to buy a module, which engineer is closest, how
   far to the next stop. Answer approval cards with a key.
 - **Know where you are in what you are doing.** Massacre stacks, the bodies worth mapping,
-  bio samples, mining and passenger runs, each with its own panel.
+  bio samples, mining, passenger and trade runs, each with its own panel.
 - **Your assistant, your login.** ED Chat runs the Claude Code or Codex you already use,
   with your own account and settings. It has no account and no telemetry of its own.
 
@@ -39,6 +39,7 @@ The activity panel, built by ED Chat's own code from a commander's journals:
 | ![Massacre panel partway through a stack](docs/images/hud-massacre.png) | **Massacre.** Each giver's progress, and what each target still pays for each kill left, with ⚠ when it is time to take more missions. |
 | ![Mining panel on a rich platinum rock, with buyers for the hold](docs/images/hud-mining.png) | **Mining.** Whether the rock is worth mining, the hold, and where to sell each load. |
 | ![Passenger panel after taking six missions, with the route below](docs/images/hud-passenger.png) | **Passengers and deliveries.** Each stop's passengers or goods and deadlines, with the planned route. |
+| ![Trade panel on the second lap of a two-stop loop](docs/images/hud-trade.png) | **Trade.** The loop's current stop with what to sell and buy there, the next stop, the lap, and profit an hour, against the plan's rate when it has one. |
 
 The panel picks its mode from what you do in the game. [The activity panel](docs/activity-panel.md)
 explains each mode.

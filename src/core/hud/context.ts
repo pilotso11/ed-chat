@@ -1,4 +1,5 @@
 import type { HudView, ShipStatus } from "./hud.js";
+import { footerText } from "./panels.js";
 
 /** Where the player is, from the journal and Status.json. */
 export interface Whereabouts {
@@ -47,7 +48,7 @@ export function gameContext(
     lines.push(
       `Panel: ${head}`,
       ...rows.map((r) => `- ${r}`),
-      ...p.footer.map((f) => `- ${clean(f)}`),
+      ...p.footer.map((f) => `- ${clean(footerText(f))}`),
     );
   }
   if (view?.route?.length) {

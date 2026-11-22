@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.1](https://github.com/pilotso11/ed-chat/compare/v0.8.0...v0.8.1) (2026-11-22)
+
+
+### Features
+
+* the trade panel shows the session's rate against the plan's ([#88](https://github.com/pilotso11/ed-chat/issues/88)) ([3df5bf9](https://github.com/pilotso11/ed-chat/commit/3df5bf9946cf4cbc85a0678677eeaa4e5929ed1d))
+* trade panel: the trade plan's stops, the hold and market against the plan, profit an hour ([#83](https://github.com/pilotso11/ed-chat/issues/83)) ([59d7ea6](https://github.com/pilotso11/ed-chat/commit/59d7ea64304973ab2ab6992f36af37b52d1aae9e))
+
 ## [0.8.0](https://github.com/pilotso11/ed-chat/compare/v0.7.1...v0.8.0) (2026-11-22)
 
 

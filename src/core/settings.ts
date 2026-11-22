@@ -71,6 +71,7 @@ export const HUD_MODES = [
   "exobiology",
   "mining",
   "passenger",
+  "trade",
   "route",
 ] as const;
 export type HudModeId = (typeof HUD_MODES)[number];
@@ -88,6 +89,7 @@ const HudSchema = z.strictObject({
       exobiology: z.boolean().default(true),
       mining: z.boolean().default(true),
       passenger: z.boolean().default(true),
+      trade: z.boolean().default(true),
       route: z.boolean().default(true),
     })
     .prefault({}),

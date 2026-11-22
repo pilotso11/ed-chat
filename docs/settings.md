@@ -66,7 +66,7 @@ next start.
 | `hud.position` | `top-right`, 24, 120 | Where the panel sits, like `position` |
 | `hud.width` | `380` | Least panel width in pixels at font size 15. The panel grows so long names fit |
 | `hud.fontSize` / `hud.backgroundOpacity` | `15` / `0.55` | Panel text size and background |
-| `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology`, `mining`, `passenger` or `route` |
+| `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology`, `mining`, `passenger`, `trade` or `route` |
 | `hud.massacre.minPerKill` | `1000000` | Credits a kill. A target whose unfinished missions pay less than this for each kill left is marked ⚠. `0` turns it off |
 | `hud.valuableMin` | `500000` | Bodies worth less when mapped are left off the exploration panel. Those with geological signals are counted on one line |
 | `hud.bioMin` | `5000000` | Planets whose likely species are worth less than this in total are left off the exploration panel |

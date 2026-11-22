@@ -57,14 +57,18 @@ body {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
-.row.accent {
+/* A row's tone, and a footer line's. */
+.row.accent,
+.footer.accent {
   color: var(--light, #ffd08a);
 }
-.row.good {
+.row.good,
+.footer.good {
   color: #8fe388;
 }
 /* A warning stays amber in every theme: in green or white it would not stand apart. */
-.row.warn {
+.row.warn,
+.footer.warn {
   color: #ffb347;
 }
 .row.dim,

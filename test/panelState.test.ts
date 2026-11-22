@@ -116,7 +116,7 @@ describe("mode hotkey", () => {
   it("goes from automatic through each enabled mode to off and back", () => {
     let saved = {};
     const seen: string[] = [];
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 9; i++) {
       const next = nextHudMode(saved, hud, now);
       seen.push(next.mode);
       saved = next.saved;
@@ -127,6 +127,7 @@ describe("mode hotkey", () => {
       "exobiology",
       "mining",
       "passenger",
+      "trade",
       "route",
       "off",
       "auto",

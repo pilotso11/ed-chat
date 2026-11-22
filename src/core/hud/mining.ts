@@ -3,7 +3,7 @@ import { DEFAULT_MINING_TARGETS, type Settings } from "../settings.js";
 import { credits, shortBody, type HudRow, type PanelView } from "./panels.js";
 import type { SellHit, SellLookup, SellQuery } from "./sell.js";
 
-import { num, objs, str, type Obj } from "./json.js";
+import { num, objs, same, str, type Obj } from "./json.js";
 
 // ---------- Commodity names ----------
 
@@ -175,7 +175,6 @@ const SESSION_GAP_MS = 2 * 3_600_000;
 /** Buyers are searched from the mining system for this many jumps, then from where the ship is. */
 const SEARCH_FROM_MINING_JUMPS = 3;
 
-const sameSystem = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const RATE_MIN_MS = 3 * 60_000;
 
 function prospectOf(e: JournalEvent, at: number): Prospect {
@@ -256,7 +255,7 @@ export function miningState(
         // Written at login and after a respawn: away from the mining system when it is another
         // system (a carrier that jumped while logged out, say), back when it is the same one.
         const at = str(e.StarSystem);
-        if (at && system) away = !sameSystem(at, system);
+        if (at && system) away = !same(at, system);
         here = at ?? here;
         break;
       }
@@ -264,7 +263,7 @@ export function miningState(
       case "CarrierJump": {
         here = str(e.StarSystem) ?? here;
         // A carrier jump moves the ship too. Back in the mining system, it is searched from again.
-        if (here && system && sameSystem(here, system)) {
+        if (here && system && same(here, system)) {
           jumpsSince = 0;
           away = false;
         } else jumpsSince++;
