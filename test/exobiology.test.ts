@@ -162,6 +162,16 @@ describe("exobiology panel", () => {
         species: [done.species[0]!, done.species[1]!],
       }),
     ).toMatchObject({ analysed: 2, signals: 2 });
+    // Two species of one genus analysed and a genus not started: 2/3, not done.
+    expect(
+      bioProgress({
+        ...done,
+        bio_signals: 2,
+        genera: ["Bacterium", "Fungoida"],
+        species: [done.species[0]!, done.species[1]!],
+        not_started: ["Fungoida"],
+      }),
+    ).toEqual({ analysed: 2, signals: 3, done: false });
     // More genera found than signals counted: the genera are the total.
     expect(bioProgress({ ...done, bio_signals: 2 })).toEqual({
       analysed: 3,

@@ -19,6 +19,7 @@ import {
   bookmarkLabel,
   bookmarkRows,
   bookmarksToClear,
+  isKeyRepeat,
   keyClearStops,
   finishedBioBookmarks,
   isPlanNotFound,
@@ -526,6 +527,14 @@ describe("clearing bookmarks", () => {
     expect(whole).toEqual({ reason: expect.stringContaining("tray menu") });
   });
 
+  it("takes a held key's repeats as one press", () => {
+    // Windows' first repeat comes after up to a second, then every few tens of ms.
+    expect(isKeyRepeat(1_000, 0)).toBe(true);
+    expect(isKeyRepeat(1_033, 1_000)).toBe(true);
+    expect(isKeyRepeat(5_000, 1_000)).toBe(false);
+    expect(isKeyRepeat(1_000_000, 0)).toBe(false);
+  });
+
   it("clears nothing in a system without bookmarks", () => {
     const none = { stops: [], whole: false };
     expect(bookmarksToClear({ plan: plan([far]), system: "Sol", status: status() })).toEqual(none);
@@ -589,6 +598,17 @@ describe("bio bookmark rows", () => {
       bio_signals: 2,
     });
     expect(bioLeft(twoOfOne)).toEqual([]);
+    // Two species of one genus started and another genus not started: all 3 signals are known.
+    const mixed = bio({
+      species: [
+        { species: "A one", analysed: true },
+        { species: "A two", analysed: false },
+      ],
+      not_started: ["B"],
+      genera: ["A", "B"],
+      bio_signals: 3,
+    });
+    expect(bioLeft(mixed)).toEqual(["A two", "B"]);
     expect(rows([twoOfOne])[0]!.text).toBe("📍 Bio: all sampled");
     // Spansh's count shows the signals still unknown.
     expect(

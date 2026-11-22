@@ -69,9 +69,10 @@ export function bioLeft(bio: ExobiologyBody, knownCount?: number | null): string
     ...bio.not_started,
   ];
   // Spansh's count stands in when the journal has none (null, or 0 from a later scan).
-  // Every started species accounts for a signal: one genus can grow two species on a body.
+  // Every started species and every genus not started accounts for a signal: one genus can grow
+  // two species on a body.
   const started = bio.species.filter((s) => !s.abandoned).length;
-  const accounted = Math.max(bio.genera.length, started);
+  const accounted = Math.max(bio.genera.length, started + bio.not_started.length);
   const unknown = Math.max(0, (bio.bio_signals || knownCount || 0) - accounted);
   return unknown ? [...left, `${unknown} signal${unknown === 1 ? "" : "s"}`] : left;
 }
@@ -317,6 +318,16 @@ export function bookmarksToClear(input: {
  * What the clear key may clear: the one bookmark on the body you are on, never a whole system.
  * A held key repeats, so no second press can be told from holding it; the tray asks instead.
  */
+/**
+ * A held key repeats after up to a second (Windows' longest delay), then every few tens of
+ * milliseconds. A clear-key press this soon after the last one, repeat or not, is the same
+ * press: one key-down clears one bookmark.
+ */
+export const KEY_REPEAT_MS = 1_100;
+
+/** Whether a clear-key press at `at` is a repeat of the last press at `last`. */
+export const isKeyRepeat = (at: number, last: number) => at - last < KEY_REPEAT_MS;
+
 export function keyClearStops(pick: {
   stops: number[];
   whole: boolean;

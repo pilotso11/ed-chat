@@ -109,6 +109,7 @@ import {
   BOOKMARKS_PLAN,
   bookmarkHere,
   bookmarksToClear,
+  isKeyRepeat,
   keyClearStops,
   sameBookmark,
   sameStop,
@@ -729,8 +730,14 @@ async function main(): Promise<void> {
       if (trayHereWhole) return askClearListed(named, "in this system");
       return queueBookmarks(() => unmarkBookmarks("listed", named));
     }
+    // One key-down clears one bookmark: a held key's repeats are ignored.
+    const at = Date.now();
+    const repeat = isKeyRepeat(at, lastClearPress);
+    lastClearPress = at;
+    if (repeat) return Promise.resolve();
     return queueBookmarks(() => unmarkBookmarks("here"));
   }
+  let lastClearPress = 0;
 
   // The bookmarks the tray's "here" item names, as the menu was built, and whether they are the
   // whole system's.
