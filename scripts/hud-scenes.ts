@@ -33,7 +33,14 @@ export interface Scene {
   /** Cargo.json: the hold, by journal name and tons. Older journals' Cargo events have no list. */
   cargo?: Record<string, number>;
   /** A route plan, set as the activity note's plan. */
-  plan?: { title: string; stops: PlanStopInput[] };
+  plan?: {
+    title: string;
+    stops: PlanStopInput[];
+    /** The activity note's kind; missions unless given. */
+    kind?: "missions" | "trading";
+    repeat?: boolean;
+    lap?: number;
+  };
   /** Surface bookmarks. */
   bookmarks?: PlanStopInput[];
   /** Earlier journal files to read, oldest dropped first. */
@@ -132,8 +139,13 @@ async function scene(s: Scene, journalDir: string, all: { file: string; start: n
         id: "route",
         name: s.plan.title,
         stops: s.plan.stops,
+        ...(s.plan.repeat ? { repeat: true, lap: s.plan.lap ?? 1 } : {}),
       });
-      await stores.activity.set({ kind: "missions", summary: s.plan.title, plan_id: plan.id });
+      await stores.activity.set({
+        kind: s.plan.kind ?? "missions",
+        summary: s.plan.title,
+        plan_id: plan.id,
+      });
     }
     for (const b of s.bookmarks ?? []) await stores.plans.addStop("bookmarks", "Bookmarks", b);
     const errors: string[] = [];

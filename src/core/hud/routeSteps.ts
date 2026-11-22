@@ -1,4 +1,5 @@
 import type { Plan } from "ed-mcp/journal";
+import { same } from "./json.js";
 import { currentStop, nextStopAfter, previousStop } from "./panels.js";
 
 // The route keys and arriving at a stop: what changes in the plan, and what is copied.
@@ -10,7 +11,7 @@ import { currentStop, nextStopAfter, previousStop } from "./panels.js";
 export function arrivalCopy(plan: Plan | null | undefined, system: string): string | null {
   if (!plan) return null;
   const i = currentStop(plan);
-  if (i === null || plan.stops[i]!.system.toLowerCase() !== system.toLowerCase()) return null;
+  if (i === null || !same(plan.stops[i]!.system, system)) return null;
   const j = nextStopAfter(plan, i);
   return j === null ? null : plan.stops[j]!.system;
 }
