@@ -170,8 +170,9 @@ describe("passengerPanel", () => {
     ]);
     // Another plan's stops (an exobiology plan, say) do not order the run.
     const bio = plan([{ system: "Wolf 397", kind: "exobiology" }]);
-    expect(passengerPanel({ missions, events: [], plan: bio, now: NOW })!.rows[0]!.text).not.toBe(
-      "Wolf 397 · Brooks Estate",
+    // Soonest expiry first instead.
+    expect(passengerPanel({ missions, events: [], plan: bio, now: NOW })!.rows[0]!.text).toBe(
+      "Ochosi · Perez Market",
     );
     const p = passengerPanel({ missions, events: [], plan: route, now: NOW })!;
     expect(p.rows[0]!.text).toBe("Wolf 397 · Brooks Estate");

@@ -65,6 +65,13 @@ export function drops(missions: Mission[]): Drop[] {
   return [...by.values()];
 }
 
+/**
+ * A stop of a mission or delivery route: kind mission, hand_in or trade, or one that lists the
+ * missions it serves. Another plan's stops (exobiology, say) are not about these missions.
+ */
+const isMissionStop = (s: Plan["stops"][number]) =>
+  s.kind === "mission" || s.kind === "hand_in" || s.kind === "trade" || Array.isArray(s.missions);
+
 /** Mission IDs the plan's stops still to do serve; null when the plan does not say. */
 function planned(plan: Plan | null): Set<number> | null {
   if (!plan) return null;
@@ -87,10 +94,7 @@ export function passengerPanel(input: {
   // In the plan's order when it has these stops, else the soonest expiry first.
   const order = new Map<string, number>();
   for (const [i, s] of (input.plan?.stops ?? []).entries()) {
-    // Only a mission route's stops: an exobiology or trade plan left as the activity's plan is
-    // not about these missions.
-    const forMissions = s.kind === "mission" || s.kind === "hand_in" || Array.isArray(s.missions);
-    if (s.status !== "todo" || !forMissions) continue;
+    if (s.status !== "todo" || !isMissionStop(s)) continue;
     const k = placeKey(s.system, s.station ?? null);
     if (!order.has(k)) order.set(k, i);
   }
@@ -140,10 +144,7 @@ export function passengerPanel(input: {
         tone: "warn",
       });
     }
-  } else if (
-    all.length > 1 &&
-    !input.plan?.stops.some((s) => s.kind === "mission" || s.kind === "hand_in")
-  ) {
+  } else if (all.length > 1 && !input.plan?.stops.some(isMissionStop)) {
     // A plan with mission stops is a route, even when its stops do not list their missions (one
     // planned by hand), so it cannot say whether the route is stale.
     rows.push({ text: "No mission route: ask Claude to plan one", tone: "dim" });

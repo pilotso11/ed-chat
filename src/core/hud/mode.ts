@@ -155,7 +155,11 @@ export function journalMode(
         set("exobiology");
         break;
       case "LeaveBody":
-        if (mode === "exobiology") set("exploration");
+        // Leaving the body ends exobiology: exploration when it is on, else nothing.
+        if (mode === "exobiology") {
+          if (on("exploration")) set("exploration");
+          else mode = null;
+        }
         break;
     }
   }
