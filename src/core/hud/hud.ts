@@ -11,7 +11,7 @@ import {
 import type { HudModeId, Settings } from "../settings.js";
 import type { KnownBody } from "./known.js";
 import { carrierState, miningPanel, miningState, minedWaiting } from "./mining.js";
-import { isRun, passengerPanel } from "./passenger.js";
+import { drops, passengerPanel } from "./passenger.js";
 import type { SellLookup, SellQuery } from "./sell.js";
 import { bookmarkRows } from "./bookmarks.js";
 import { journalMode, noteMode, pickMode, type Choice } from "./mode.js";
@@ -98,13 +98,17 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
     j && input.settings.modes.mining
       ? minedWaiting(j.cargo, j.events, input.now, input.settings.mining)
       : false;
-  const runActive = j ? j.missions.some(isRun) : false;
+  // A run the panel can show: with the mode off, or nothing to place, taking one changes nothing.
+  const runActive = j && input.settings.modes.passenger ? drops(j.missions).length > 0 : false;
   const fromJournal = j
     ? journalMode(j.events, groups.length > 0, minedAboard, input.settings.modes.mining, runActive)
     : null;
   const m = noteMode(input.activity?.kind);
+  // A missions or hauling note with no run to show would leave the panel empty.
   const fromNote =
-    m && input.activity ? { mode: m, at: Date.parse(input.activity.updated_at) } : null;
+    m && input.activity && !(m === "passenger" && !runActive)
+      ? { mode: m, at: Date.parse(input.activity.updated_at) }
+      : null;
   const chosen = pickMode(fromJournal, fromNote, input.hotkey)?.mode ?? null;
   if (chosen && chosen !== "off" && !input.settings.modes[chosen]) return null;
   return chosen;

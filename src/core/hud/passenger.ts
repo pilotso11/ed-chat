@@ -99,7 +99,9 @@ export function passengerPanel(input: {
         .filter((t) => !Number.isNaN(t)),
       Infinity,
     );
-  const rank = (d: Drop) => order.get(placeKey(d.system, d.station)) ?? Infinity;
+  // A stop with no station stands for every station in its system.
+  const rank = (d: Drop) =>
+    order.get(placeKey(d.system, d.station)) ?? order.get(placeKey(d.system, null)) ?? Infinity;
   all.sort((a, b) => rank(a) - rank(b) || expiry(a) - expiry(b));
 
   const rows: HudRow[] = all.map((d) => {
@@ -150,7 +152,10 @@ export function passengerPanel(input: {
   const ready = input.missions.filter((m) => isRun(m) && m.status === "complete").length;
   return {
     mode: "passenger",
-    title: pax ? "PASSENGERS" : "DELIVERIES",
+    // Passengers still to hand in make it a passenger run too.
+    title: all.some((d) => d.missions.some((m) => m.passengers != null))
+      ? "PASSENGERS"
+      : "DELIVERIES",
     right: [
       pax || cabins ? `${pax}${cabins ? `/${cabins}` : ""} berths` : null,
       reward ? credits(reward) : null,

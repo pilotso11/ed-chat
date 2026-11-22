@@ -118,9 +118,9 @@ describe("passengerPanel", () => {
 
   it("follows the plan's order and says when new missions are not in it", () => {
     const route = plan([
-      { system: "Wolf 397", station: "Brooks Estate", missions: [3] } as never,
-      { system: "Ngalinn", station: "Haber Hub", missions: [2] } as never,
-      { system: "Ochosi", station: "Perez Market", missions: [], status: "done" } as never,
+      { system: "Wolf 397", station: "Brooks Estate", missions: [3] },
+      { system: "Ngalinn", station: "Haber Hub", missions: [2] },
+      { system: "Ochosi", station: "Perez Market", missions: [], status: "done" },
     ]);
     const p = passengerPanel({ missions, events: [], plan: route, now: NOW })!;
     expect(p.rows.map((r) => r.text).slice(0, 2)).toEqual([
@@ -132,7 +132,7 @@ describe("passengerPanel", () => {
       tone: "warn",
     });
     // A plan that covers every mission says nothing.
-    const full = plan([{ system: "Ochosi", missions: [1, 2, 3] } as never]);
+    const full = plan([{ system: "Ochosi", missions: [1, 2, 3] }]);
     const ok = passengerPanel({ missions, events: [], plan: full, now: NOW })!;
     expect(ok.rows.some((r) => r.text.startsWith("Route stale"))).toBe(false);
     // A plan read without the missions each stop serves is still a route.
@@ -151,6 +151,20 @@ describe("passengerPanel", () => {
     expect(p.title).toBe("DELIVERIES");
     expect(p.right).toBe("1.0M");
     expect(passengerPanel({ missions: [], events: [], plan: null, now: NOW })).toBeNull();
+    // Passengers left only to hand in still make it a passenger run.
+    const done = passengerPanel({
+      missions: [mission(1, { passengers: 4, status: "complete" })],
+      events: [],
+      plan: null,
+      now: NOW,
+    })!;
+    expect(done.title).toBe("PASSENGERS");
+  });
+
+  it("orders by a plan stop that names only the system", () => {
+    const route = plan([{ system: "Wolf 397" }, { system: "Ochosi" }]);
+    const p = passengerPanel({ missions, events: [], plan: route, now: NOW })!;
+    expect(p.rows[0]!.text).toBe("Wolf 397 · Brooks Estate");
   });
 });
 
@@ -219,5 +233,27 @@ describe("passenger mode", () => {
     };
     expect(currentMode(input)).toBe("passenger");
     expect(buildHud(input, null).panel?.title).toBe("PASSENGERS");
+
+    // With the mode off, a run taken after a scan leaves the exploration panel showing.
+    const scanned = {
+      ...input,
+      journal: { ...input.journal!, events: [ev("FSSDiscoveryScan"), ...events] },
+    };
+    const off = {
+      ...scanned,
+      settings: {
+        ...DEFAULT_SETTINGS.hud,
+        modes: { ...DEFAULT_SETTINGS.hud.modes, passenger: false },
+      },
+    };
+    expect(currentMode(off)).toBe("exploration");
+
+    // A missions note with no run to show is not followed.
+    const note = {
+      ...scanned,
+      journal: { ...scanned.journal, missions: [] },
+      activity: { kind: "missions", updated_at: new Date(NOW).toISOString() } as never,
+    };
+    expect(currentMode(note)).toBe("exploration");
   });
 });
