@@ -4,7 +4,9 @@
 //
 // Usage: npx tsx scripts/hud-scenes.ts docs/images/hud-scenes.json out/hud-scenes.json [journalDir]
 // Then: npm run build && npx electron --force-device-scale-factor=2 scripts/hud-screenshots.cjs out/hud-scenes.json docs/images
+import { createReadStream } from "node:fs";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createInterface } from "node:readline";
 import os from "node:os";
 import path from "node:path";
 import { openStores, type PlanStopInput } from "ed-mcp/journal";
@@ -38,15 +40,27 @@ export interface Scene {
   history?: number;
 }
 
-const FIELDS = ["timestamp", "Expiry"];
+// Times the panel reads against now: moved with the rest.
+const FIELDS = ["timestamp", "Expiry", "DepartureTime"];
 const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d+Z$/, "Z");
+
+/** A file's first line, without reading the rest. */
+async function firstLine(file: string): Promise<string> {
+  const lines = createInterface({ input: createReadStream(file, "utf8"), crlfDelay: Infinity });
+  try {
+    for await (const line of lines) return line;
+    return "";
+  } finally {
+    lines.close();
+  }
+}
 
 /** Journal files, oldest first by their first event, so both name formats sort together. */
 async function journals(dir: string): Promise<{ file: string; start: number }[]> {
   const names = (await readdir(dir)).filter((f) => /^Journal\.\d.*\.log$/.test(f));
   const list = await Promise.all(
     names.map(async (file) => {
-      const first = (await readFile(path.join(dir, file), "utf8")).split("\n", 1)[0] ?? "";
+      const first = await firstLine(path.join(dir, file));
       try {
         return { file, start: Date.parse((JSON.parse(first) as { timestamp: string }).timestamp) };
       } catch {

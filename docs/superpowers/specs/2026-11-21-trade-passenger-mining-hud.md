@@ -162,12 +162,11 @@ Platinum 31.4% · High                                   MINE
   Gallite 5.0%
 Hotspots: Platinum ×2 · Painite
 Hold 256/256 t                        0 t free · 10 limpets
-Sell Platinum 246 t                           244k · 12 ly
-  Haber Hub, Ngalinn
-  or nearer                                   230k · 4 ly
-  Brooks Estate, Wolf 397
-Refined: Platinum 74 t · Osmium 12 t                 ~21.8M
-Session: 23 prospected · 4 worth mining · 1 motherlode
+Sell Platinum 246 t                          59.9M · 12 ly
+  Haber Hub, Ngalinn · 244k/t
+  or nearer                                  56.6M · 4.0 ly
+  Brooks Estate, Wolf 397 · 230k/t
+Session: 23 prospected · 4 worth mining · 86 t refined · 59.9M to sell
 ```
 
 - The newest `ProspectedAsteroid` since arriving in the system: the material that best clears its
@@ -187,13 +186,15 @@ Session: 23 prospected · 4 worth mining · 1 motherlode
   - The pick is the best price at a station with a pad for the ship (from the ship type) that
     takes the whole load, else the best price. A nearer station that pays at least 90% of it is
     shown below. A station whose demand is less than the load says so.
-  - The value of what was refined this session uses the picked prices.
+  - Each sell row shows what the load sells for there (what the buyer takes, when its demand is
+    less), and the buyer line its price a ton. The session line ends with the tons refined this
+    session and the total to sell: the cargo to sell at the picked prices. It is a floor (16.6M+)
+    when some of it has no price yet, a buyer takes less than the load, or more commodities are
+    aboard than have sell rows.
   - When the hold fills while still mining in the ring, the best buyer's system is copied for the
     galaxy map, with a note in the chat strip, once per trip (until the next sale or move to the
     carrier), whichever buyer is best. Not after leaving, where the route
     copies the next stop, and not while the panel is hidden.
-  - Refined commodities no longer aboard get their own search, so the session's value counts
-    them. A value with a commodity not priced yet shows as a floor (~200k+).
   - Known limit: ed-mcp keeps the cargo's localised name only, so on a non-English game client the
     hold's mined commodities are not recognised. Fixing it needs ed-mcp to keep the cargo's
     journal name.

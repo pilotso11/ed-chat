@@ -870,6 +870,18 @@ describe("mining after leaving, selling and relogging (1)", () => {
     });
     expect(p.rows.find((r) => r.text === "Sell Platinum 10 t")?.right).toMatch(/^400k · /);
     expect(p.footer[0]?.endsWith(" · 400k+ to sell")).toBe(true);
+    // More commodities aboard than sell rows: the ones without a row have no price.
+    p = panel(events, {
+      cargo: ["platinum", "osmium", "painite", "gold"].map((name, i) => ({
+        name,
+        count: 10 - i,
+        stolen: false,
+        mission_id: null,
+      })),
+      sell: () => [hit({ price: 100_000 })],
+    });
+    expect(p.rows.filter((r) => r.text.startsWith("Sell"))).toHaveLength(3);
+    expect(p.footer[0]?.endsWith(" · 2.7M+ to sell")).toBe(true);
     // No price at all: no total.
     p = panel(events, { cargo: hold(5), sell: () => "pending" });
     expect(p.footer[0]).not.toMatch(/to sell/);
