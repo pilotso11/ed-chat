@@ -21,6 +21,8 @@ import {
   tradePanel,
   tradeTodo,
   tradeTotals,
+  tradeJournal,
+  NO_MISSIONS,
 } from "../src/core/hud/trade.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
 
@@ -175,6 +177,47 @@ describe("trade profit", () => {
     expect(tradeTotals(events, NOW).profit).toBe(2);
   });
 
+  it("leaves buys for a mission or a depot out of the cost, and cargo that leaves without a sale", () => {
+    const source = at(50, "MissionAccepted", { MissionID: 1, Commodity: "$Gold_Name;", Count: 5 });
+    // Bought for the mission: no trade, no cost, no clock.
+    const forMission = tradeTotals([source, buy(40, "Gold", 5, 100)], NOW, NO_MISSIONS);
+    expect(forMission).toMatchObject({ trades: 0, active: 0 });
+    const tons = (events: JournalEvent[]) => tradeJournal(events).tons.get("gold") ?? 0;
+    const bought = [buy(40, "Gold", 10, 100)];
+    expect(tons(bought)).toBe(10);
+    expect(
+      tons([
+        ...bought,
+        at(35, "ColonisationContribution", {
+          Contributions: [{ Name: "$gold_name;", Name_Localised: "Gold", Amount: 2 }],
+        }),
+        at(34, "CargoTransfer", {
+          Transfers: [
+            { Type: "gold", Count: 3, Direction: "tocarrier" },
+            { Type: "gold", Count: 1, Direction: "toship" },
+          ],
+        }),
+        at(33, "EjectCargo", { Type: "gold", Count: 1 }),
+        at(32, "EjectCargo", { Type: "gold", Count: 1, MissionID: 4 }),
+        // A source mission handed in takes its goods; a delivery's goods were its own.
+        at(31, "MissionCompleted", { MissionID: 2, Commodity: "$Gold_Name;", Count: 1 }),
+        at(30, "MissionCompleted", {
+          MissionID: 3,
+          Commodity: "$Gold_Name;",
+          Count: 1,
+          DestinationSystem: "X",
+        }),
+      ]),
+    ).toBe(3);
+    // Sold after some left: only the tons left carry a cost.
+    const left = [
+      ...bought,
+      at(35, "EjectCargo", { Type: "gold", Count: 5 }),
+      sell(30, "Gold", 10, 200),
+    ];
+    expect(tradeTotals(left, NOW).profit).toBe(500);
+  });
+
   it("has no rate before five minutes", () => {
     const t = tradeTotals([buy(3, "Gold", 1, 1), sell(2, "Gold", 1, 3)], NOW);
     expect(t.profit).toBe(2);
@@ -249,6 +292,41 @@ describe("the trade plan", () => {
     expect(stopCargo(route(loop().stops), 0)).toHaveLength(2);
   });
 
+  it("keeps the visit over a relog while docked, so trades before it count", () => {
+    const station = { StarSystem: "Kremainn", StationName: "Wohler Terminal", MarketID: 7 };
+    const events = [
+      docked(30, "Kremainn", "Wohler Terminal", 7),
+      sell(25, "Gold", 720, 30_000, {}, 7),
+      at(20, "Shutdown"),
+      at(10, "Location", { ...station, Docked: true }),
+    ];
+    expect(dockedAt(events, where("Kremainn", "Wohler Terminal"))?.index).toBe(0);
+    const plan = route([
+      stop("Kremainn", "Wohler Terminal", [{ commodity: "Gold", action: "sell", amount: 720 }]),
+    ]);
+    const input = {
+      plan,
+      events,
+      cargo: [],
+      capacity: 720,
+      location: where("Kremainn", "Wohler Terminal"),
+    };
+    expect(tradeAdvance(input)?.index).toBe(0);
+    // Undocked between: a new visit.
+    const again = [
+      ...events.slice(0, 2),
+      at(22, "Undocked"),
+      at(10, "Location", { ...station, Docked: true }),
+    ];
+    expect(dockedAt(again, where("Kremainn", "Wohler Terminal"))?.index).toBe(3);
+    // Another station before it: a new visit.
+    const moved = [
+      docked(30, "Kremainn", "Other", 8),
+      at(10, "Location", { ...station, Docked: true }),
+    ];
+    expect(dockedAt(moved, where("Kremainn", "Wohler Terminal"))?.index).toBe(1);
+  });
+
   it("knows the ship is docked after the game restarts there", () => {
     const restart = at(5, "Location", {
       StarSystem: "Kremainn",
@@ -298,6 +376,12 @@ describe("buys that are trade", () => {
       ...o,
     });
   const tea = (m: number) => buy(m, "Tea", 5, 1);
+  const agriBuy = (m: number) =>
+    at(m, "MarketBuy", {
+      Type: "agriculturalmedicines",
+      Type_Localised: "Agri-Medicines",
+      Count: 5,
+    });
   const trade = (events: JournalEvent[], now = none) => [...tradeBuys(events, now)];
 
   it("counts a buy made with no mission cargo aboard, and not limpets", () => {
@@ -306,40 +390,52 @@ describe("buys that are trade", () => {
     expect(trade([bought, limpets])).toEqual([bought]);
   });
 
-  it("leaves out a buy while a delivery's cargo is aboard, until it ends or expires", () => {
+  it("leaves out a buy of a delivery's goods while aboard, until it ends or expires", () => {
     const d = accepted(30, 1, { DestinationSystem: "X" });
-    expect(trade([d, tea(20)])).toEqual([]);
+    // Other goods bought meanwhile are trade.
+    expect(trade([d, tea(20)])).toHaveLength(1);
+    expect(trade([d, agriBuy(20)])).toEqual([]);
     const done = at(25, "MissionCompleted", { MissionID: 1 });
-    expect(trade([d, done, tea(20)])).toHaveLength(1);
+    expect(trade([d, done, agriBuy(20)])).toHaveLength(1);
     // Expired with the game off: no event ends it.
     const expired = accepted(120, 2, {
       DestinationSystem: "X",
       Expiry: new Date(NOW - 60 * MIN).toISOString(),
     });
-    expect(trade([expired, tea(20)])).toHaveLength(1);
+    expect(trade([expired, agriBuy(20)])).toHaveLength(1);
     // Cargo aboard now of a mission taken before the journal's window was aboard all along.
-    expect(trade([tea(20)], { ...none, missionCargo: [9] })).toEqual([]);
+    expect(
+      trade([agriBuy(20)], { ...none, missionCargo: [{ id: 9, commodity: "Agri-Medicines" }] }),
+    ).toEqual([]);
   });
 
   it("counts a depot or wing delivery's cargo aboard only once collected, until delivered", () => {
     const wing = accepted(30, 3, { Name: "Mission_Delivery_Wing", DestinationSystem: "X" });
-    expect(trade([wing, tea(25)])).toHaveLength(1);
+    expect(trade([wing, agriBuy(25)])).toHaveLength(1);
     const collect = at(24, "CargoDepot", { MissionID: 3, UpdateType: "Collect", Count: 5 });
-    expect(trade([wing, collect, tea(20)])).toEqual([]);
+    expect(trade([wing, collect, agriBuy(20)])).toEqual([]);
     const delivered = at(22, "CargoDepot", {
       MissionID: 3,
       UpdateType: "Deliver",
       ItemsDelivered: 5,
       TotalItemsToDeliver: 5,
     });
-    expect(trade([wing, collect, delivered, tea(20)])).toHaveLength(1);
+    expect(trade([wing, collect, delivered, agriBuy(20)])).toHaveLength(1);
     // A depot mission not named wing is known by its CargoDepot events.
     const depot = accepted(30, 4, { DestinationSystem: "X" });
     const collected = at(10, "CargoDepot", { MissionID: 4, UpdateType: "Collect", Count: 5 });
-    expect(trade([depot, tea(20), collected])).toHaveLength(1);
+    expect(trade([depot, agriBuy(20), collected])).toHaveLength(1);
     // A collect for a mission taken before the window.
     expect(
-      trade([at(24, "CargoDepot", { MissionID: 77, UpdateType: "Collect" }), tea(20)]),
+      trade([
+        at(24, "CargoDepot", {
+          MissionID: 77,
+          UpdateType: "Collect",
+          CargoType: "AgriculturalMedicines",
+          CargoType_Localised: "Agri-Medicines",
+        }),
+        agriBuy(20),
+      ]),
     ).toEqual([]);
   });
 
@@ -535,6 +631,24 @@ describe("trade auto-advance", () => {
     ).toBeNull();
   });
 
+  it("judges only when the plan's current stop is a trade stop", () => {
+    const fuel = {
+      system: "Kremainn",
+      station: "Wohler Terminal",
+      purpose: "fuel",
+      kind: "fuel" as const,
+      status: "todo" as const,
+    };
+    const gold = stop("Kremainn", "Wohler Terminal", [
+      { commodity: "Gold", action: "buy", amount: 720 },
+    ]);
+    const plan = route([fuel, gold]);
+    expect(tradeAdvance(input({ plan }))).toBeNull();
+    // Once the fuel stop is done, the trade stop is current.
+    const fueled = route([{ ...fuel, status: "done" }, gold]);
+    expect(tradeAdvance(input({ plan: fueled }))?.index).toBe(1);
+  });
+
   it("marks a stop with nothing to buy or sell done on docking, and copies the next system", () => {
     const plan = route([stop("A", "a", []), stop("B", "b", [])]);
     const step = tradeAdvance({
@@ -682,14 +796,15 @@ describe("the trade panel", () => {
   it("shows the hold with no plan, and the session's profit an hour", () => {
     const events = [
       at(60, "LoadGame"),
-      buy(40, "Gold", 100, 10_000),
+      buy(40, "Gold", 200, 10_000),
       sell(20, "Gold", 100, 20_000),
     ];
     const p = tradePanel({
       ...base,
       plan: null,
       events,
-      cargo: [...hold({ Gold: 100, drones: 4 }), ...hold({ Tea: 3 }, 55)],
+      // Platinum aboard was mined, not bought: it is not trade cargo.
+      cargo: [...hold({ Gold: 100, drones: 4, Platinum: 9 }), ...hold({ Tea: 3 }, 55)],
     })!;
     expect(p.subtitle).toBeUndefined();
     expect(p.rows).toEqual([
@@ -701,7 +816,12 @@ describe("the trade panel", () => {
     expect(p.footer).toEqual(["Session: 1.0M profit · 20m · 3.0M/h"]);
     // A new session with no trade yet has no session line.
     expect(
-      tradePanel({ ...base, plan: null, cargo: hold({ Gold: 1 }), events: [] })!.footer,
+      tradePanel({
+        ...base,
+        plan: null,
+        cargo: hold({ Gold: 1 }),
+        events: [buy(90, "Gold", 1, 1), at(60, "LoadGame")],
+      })!.footer,
     ).toEqual([]);
     // Under a minute.
     expect(tradePanel({ ...base, events: [buy(0, "Gold", 1, 1)], now: NOW })!.footer[0]).toBe(
@@ -717,7 +837,8 @@ describe("the trade panel", () => {
 
   it("says when the route is done, and shows nothing with no route and an empty hold", () => {
     const plan = route([stop("A", "a", [], "done")]);
-    expect(tradePanel({ ...base, plan, cargo: hold({ Gold: 5 }) })!.rows.at(-1)).toEqual({
+    const events = [buy(5, "Gold", 5, 1)];
+    expect(tradePanel({ ...base, plan, events, cargo: hold({ Gold: 5 }) })!.rows.at(-1)).toEqual({
       text: "Trade route done",
       tone: "dim",
     });
@@ -764,7 +885,10 @@ describe("trade mode", () => {
       at: NOW - 5 * MIN,
     });
     expect(
-      journalMode(events, false, false, ALL, false, { ...active, missionCargo: [9] })?.mode,
+      journalMode(events, false, false, ALL, false, {
+        ...active,
+        missionCargo: [{ id: 9, commodity: "Gold" }],
+      })?.mode,
     ).toBe("exploration");
     // Off, or with nothing to show, a buy changes nothing.
     expect(journalMode(events, false, false, (m) => m !== "trade", false, active)?.mode).toBe(
@@ -799,8 +923,8 @@ describe("trade mode", () => {
     // A sale, or a buy with mission cargo aboard, counts as a trade.
     const sold = [...bought, ...jumps(3), sell(10, "Gold", 1, 2), ...jumps(3)];
     expect(journalMode(sold, false, false, ALL, false, active)?.mode).toBe("trade");
-    const mission = { ...active, missionCargo: [9] };
-    const rebought = [...bought, ...jumps(3), buy(10, "Tea", 1, 1), ...jumps(3)];
+    const mission = { ...active, missionCargo: [{ id: 9, commodity: "Gold" }] };
+    const rebought = [...bought, ...jumps(3), buy(10, "Gold", 1, 1), ...jumps(3)];
     // With mission cargo the first buy did not start trade either.
     expect(journalMode(rebought, false, false, ALL, false, mission)).toBeNull();
     const started = [...bought, ...jumps(3)];
@@ -850,18 +974,21 @@ describe("trade mode", () => {
     // a trade, though the hold has no mission cargo now.
     const handedIn = [
       delivery(30, 1),
-      buy(20, "Tea", 5, 1),
+      buy(20, "Gold", 5, 1),
       at(10, "MissionCompleted", { MissionID: 1 }),
     ];
     expect(journalMode(handedIn, false, false, ALL, false, active)).toBeNull();
     // A buy before taking the delivery now aboard was a trade.
-    const before = [buy(20, "Tea", 5, 1), delivery(10, 2)];
+    const before = [buy(20, "Gold", 5, 1), delivery(10, 2)];
     expect(
-      journalMode(before, false, false, ALL, false, { ...active, missionCargo: [2] })?.mode,
+      journalMode(before, false, false, ALL, false, {
+        ...active,
+        missionCargo: [{ id: 2, commodity: "Gold" }],
+      })?.mode,
     ).toBe("trade");
     // Abandoned or failed, the cargo is gone, and a buy after is a trade.
     for (const end of ["MissionAbandoned", "MissionFailed"]) {
-      const ended = [delivery(30, 3), at(25, end, { MissionID: 3 }), buy(20, "Tea", 5, 1)];
+      const ended = [delivery(30, 3), at(25, end, { MissionID: 3 }), buy(20, "Gold", 5, 1)];
       expect(journalMode(ended, false, false, ALL, false, active)?.mode).toBe("trade");
     }
     // Passengers put no cargo in the hold.
@@ -870,6 +997,30 @@ describe("trade mode", () => {
       buy(20, "Tea", 5, 1),
     ];
     expect(journalMode(pax, false, false, ALL, false, active)?.mode).toBe("trade");
+  });
+
+  it("counts only trade buys and sales of traded cargo as trades for the jump count", () => {
+    const jumps = (n: number) => Array.from({ length: n }, (_, i) => jump(20 - i));
+    const bought = [buy(30, "Gold", 1, 1)];
+    // Selling mined ore, or buying limpets, does not keep trade on.
+    const mined = sell(15, "Platinum", 5, 1);
+    const limpets = at(14, "MarketBuy", { Type: "drones", Count: 4 });
+    expect(
+      journalMode(
+        [...bought, ...jumps(3), mined, limpets, ...jumps(2)],
+        false,
+        false,
+        ALL,
+        false,
+        active,
+      ),
+    ).toBeNull();
+    // Selling the traded gold does.
+    const sold = sell(15, "Gold", 1, 2);
+    expect(
+      journalMode([...bought, ...jumps(3), sold, ...jumps(2)], false, false, ALL, false, active)
+        ?.mode,
+    ).toBe("trade");
   });
 
   it("does not lapse on a long haul with cargo while a trade stop is still to do", () => {

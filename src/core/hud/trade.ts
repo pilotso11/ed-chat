@@ -10,6 +10,7 @@ import { commodityKey } from "./mining.js";
 import { isRun } from "./passenger.js";
 import {
   credits,
+  currentStop,
   hourly,
   rateText,
   timeLeft,
@@ -36,6 +37,9 @@ export const TRADE_EVENTS = [
   "Undocked",
   "FSDJump",
   "CarrierJump",
+  // Traded cargo that leaves without a sale.
+  "CargoTransfer",
+  "EjectCargo",
   "LoadGame",
   "Shutdown",
   "Died",
@@ -97,53 +101,190 @@ export function parseMarket(text: string): Market | null {
   }
 }
 
-// ---------- Profit ----------
+// ---------- The journal's trades ----------
 
-export interface TradeTotals {
-  /** This game session's profit: each sale less what its tons cost. */
-  profit: number;
-  /** Market buys and sales this game session. */
-  trades: number;
-  /** Time counted on the session's clock, from its first trade. */
-  active: number;
-  rate: Rates;
+/** What the hold and the missions are now, for judging the journal's older market buys. */
+export interface MissionsNow {
+  /** Mission cargo in the hold now: its mission and commodity. */
+  missionCargo: { id: number; commodity: string }[];
+  /** Open missions asking for goods (source and collect missions): their ID and commodity. */
+  wanted: { id: number; commodity: string }[];
+}
+
+export const NO_MISSIONS: MissionsNow = { missionCargo: [], wanted: [] };
+
+/** MissionsNow from ed-mcp's journal state. */
+export function missionsNow(j: Pick<JournalState, "cargo" | "missions">): MissionsNow {
+  return {
+    missionCargo: j.cargo.flatMap((c) =>
+      c.mission_id !== null ? [{ id: c.mission_id, commodity: c.name }] : [],
+    ),
+    // Source and collect missions: goods to bring back, so buying them is not a trade.
+    wanted: j.missions.flatMap((m) =>
+      m.commodity && m.destination_system === null && m.kill_count === null
+        ? [{ id: m.id, commodity: m.commodity }]
+        : [],
+    ),
+  };
 }
 
 const commodityOf = (e: JournalEvent) => keyOf(e.Type, e.Type_Localised);
 
+/** Every key a commodity goes by in an event: its internal and its game name. */
+const keysOf = (...names: unknown[]) =>
+  names.filter((x): x is string => typeof x === "string" && x !== "").map(commodityKey);
+
+/** Docking: a Docked event, or a game restarted while docked. */
+export const isDocking = (e: JournalEvent) =>
+  e.event === "Docked" || (e.event === "Location" && e.Docked === true);
+
+/** A colonisation depot supplied this recently makes a market buy a delivery to it. */
+const COLONY_MS = 2 * 3_600_000;
+
+const isMassacreAccepted = (e: JournalEvent) => typeof e.KillCount === "number";
+
+/** A market buy of something to trade: not limpets. */
+export const tradeBuy = (e: JournalEvent) => e.event === "MarketBuy" && commodityOf(e) !== "drones";
+
 /**
- * This game session's trade profit, and its credits an hour. A sale's tons cost the average paid
- * for that commodity in the MarketBuys before it (kept over a relog, since the cargo is); tons
- * bought before the journal's window cost the sale's AvgPricePaid. Tons with no cost, such as
- * mined cargo or a mission's reward, are not trade and count nothing. The clock runs from the
- * session's first trade, as the exploration rate's does from its first scan.
+ * The market buys in events that are trade: not limpets, not of goods a mission has aboard or
+ * asks for, and not while supplying a colonisation depot.
+ *
+ * A delivery's goods are aboard from its acceptance, or for a depot or wing delivery (whose goods
+ * come from a depot) from its CargoDepot Collect, until the mission ends, its goods are all
+ * delivered, or it expires (a mission that expired with the game off never ends in the journal).
+ * A source or collect mission asks for its goods from its acceptance. Missions taken before the
+ * journal's window count all along, from the hold and the missions now.
  */
-export function tradeTotals(events: JournalEvent[], now: number): TradeTotals {
-  // The replay is kept for the same events: the panel renders more often than the journal grows.
-  let r = replays.get(events);
-  if (!r || r.length !== events.length) {
-    r = { length: events.length, ...replay(events) };
-    replays.set(events, r);
+export function tradeBuys(events: JournalEvent[], now: MissionsNow): Set<JournalEvent> {
+  const id = (e: JournalEvent) => num(e.MissionID);
+  const accepted = new Set(events.filter((e) => e.event === "MissionAccepted").map(id));
+  const fromDepot = new Set(events.filter((e) => e.event === "CargoDepot").map(id));
+  // The goods each mission has aboard or asks for, until it expires: a buy of them is for it.
+  type Goods = { keys: string[]; expires: number };
+  const blocked = new Map<number, Goods>();
+  for (const m of [...now.missionCargo, ...now.wanted]) {
+    if (accepted.has(m.id)) continue;
+    const keys = blocked.get(m.id)?.keys ?? [];
+    blocked.set(m.id, { keys: [...keys, commodityKey(m.commodity)], expires: Infinity });
   }
-  return {
-    profit: r.earned.reduce((n, x) => n + x.credits, 0),
-    trades: r.trades,
-    active: r.clock.total(now),
-    rate: rates(r.clock, r.earned, now),
-  };
+  // Depot and wing deliveries, whose goods are not aboard until collected.
+  const pending = new Map<number, Goods>();
+  let colony = -Infinity;
+  const out = new Set<JournalEvent>();
+  let last = 0;
+  for (const e of events) {
+    last = Date.parse(e.timestamp) || last;
+    const m = id(e);
+    switch (e.event) {
+      case "MissionAccepted": {
+        if (m === null || typeof e.Commodity !== "string" || isMassacreAccepted(e)) break;
+        if (typeof e.PassengerCount === "number") break;
+        const goods = {
+          keys: keysOf(e.Commodity, e.Commodity_Localised),
+          expires: Date.parse(String(e.Expiry)) || Infinity,
+        };
+        const depot =
+          typeof e.DestinationSystem === "string" &&
+          (fromDepot.has(m) || /wing/i.test(String(e.Name ?? "")));
+        (depot ? pending : blocked).set(m, goods);
+        break;
+      }
+      case "CargoDepot":
+        if (m === null) break;
+        if (e.UpdateType === "Collect") {
+          const goods = pending.get(m) ?? {
+            keys: keysOf(e.CargoType, e.CargoType_Localised),
+            expires: Infinity,
+          };
+          blocked.set(m, goods);
+        }
+        if (
+          e.UpdateType === "Deliver" &&
+          typeof e.TotalItemsToDeliver === "number" &&
+          num(e.ItemsDelivered)! >= e.TotalItemsToDeliver
+        )
+          blocked.delete(m);
+        break;
+      case "MissionCompleted":
+      case "MissionFailed":
+      case "MissionAbandoned":
+        if (m === null) break;
+        blocked.delete(m);
+        pending.delete(m);
+        break;
+      case "ColonisationContribution":
+      case "ColonisationConstructionDepot":
+        colony =
+          e.ConstructionComplete === true || e.ConstructionFailed === true ? -Infinity : last;
+        break;
+      case "MarketBuy": {
+        if (!tradeBuy(e)) break;
+        const keys = keysOf(e.Type, e.Type_Localised);
+        const forMission = [...blocked.values()].some(
+          (b) => b.expires > last && b.keys.some((k) => keys.includes(k)),
+        );
+        if (!forMission && last - colony > COLONY_MS) out.add(e);
+        break;
+      }
+    }
+  }
+  return out;
 }
 
-interface Replay {
+/** The journal's trading, replayed once for each read of the journal. */
+export interface TradeJournal {
+  /** The market buys that are trade (tradeBuys()). */
+  buys: Set<JournalEvent>;
+  /** The sales of traded cargo: of tons with a known cost. */
+  sales: Set<JournalEvent>;
+  /** Tons bought as trade and not yet sold or gone, by commodity key. */
+  tons: Map<string, number>;
   clock: ActiveClock;
   earned: { at: number; credits: number }[];
+  /** Trade buys and sales this game session. */
   trades: number;
 }
 
-const replays = new WeakMap<JournalEvent[], Replay & { length: number }>();
+const journals = new WeakMap<
+  JournalEvent[],
+  { length: number; now: string; journal: TradeJournal }
+>();
 
-function replay(events: JournalEvent[]): Replay {
+/**
+ * The trading in events, kept for the same events and missions: the panel and its mode ask on
+ * every render, more often than the journal grows.
+ */
+export function tradeJournal(events: JournalEvent[], now: MissionsNow = NO_MISSIONS): TradeJournal {
+  const key = JSON.stringify(now);
+  const kept = journals.get(events);
+  if (kept && kept.length === events.length && kept.now === key) return kept.journal;
+  const journal = replay(events, tradeBuys(events, now));
+  journals.set(events, { length: events.length, now: key, journal });
+  return journal;
+}
+
+/**
+ * The cost of traded cargo and the session's profit. A sale's tons cost the average paid for that
+ * commodity in the trade buys before it (kept over a relog, since the cargo is); tons bought before
+ * the journal's window cost the sale's AvgPricePaid. Tons with no cost, such as mined cargo or a
+ * mission's reward, are not trade and count nothing. Tons that leave without a sale (given to a
+ * depot or a mission, moved to the carrier, ejected) leave the cost too. The clock runs from the
+ * session's first trade, as the exploration rate's does from its first scan.
+ */
+function replay(events: JournalEvent[], buys: Set<JournalEvent>): TradeJournal {
   // Tons bought and what they cost, by commodity.
   const basis = new Map<string, { tons: number; cost: number }>();
+  const take = (key: string, count: number) => {
+    const b = basis.get(key);
+    const n = Math.min(count, b?.tons ?? 0);
+    if (!b || n <= 0) return { n: 0, cost: 0 };
+    const cost = (b.cost / b.tons) * n;
+    b.tons -= n;
+    b.cost -= cost;
+    return { n, cost };
+  };
+  const sales = new Set<JournalEvent>();
   let clock = new ActiveClock();
   let earned: { at: number; credits: number }[] = [];
   let trades = 0;
@@ -164,8 +305,7 @@ function replay(events: JournalEvent[]): Replay {
         break;
       case "MarketBuy": {
         const count = num(e.Count) ?? 0;
-        // Limpets are not trade.
-        if (count <= 0 || !tradeBuy(e)) break;
+        if (count <= 0 || !buys.has(e)) break;
         const key = commodityOf(e);
         const b = basis.get(key) ?? { tons: 0, cost: 0 };
         b.tons += count;
@@ -178,26 +318,18 @@ function replay(events: JournalEvent[]): Replay {
       case "MarketSell": {
         const count = num(e.Count) ?? 0;
         if (count <= 0) break;
-        const key = commodityOf(e);
         const price = (num(e.TotalSale) ?? count * (num(e.SellPrice) ?? 0)) / count;
-        const b = basis.get(key);
-        const known = Math.min(count, b?.tons ?? 0);
-        let profit = 0;
-        let costed = 0;
-        if (b && known > 0) {
-          const cost = (b.cost / b.tons) * known;
-          profit += price * known - cost;
-          b.tons -= known;
-          b.cost -= cost;
-          costed += known;
-        }
+        const known = take(commodityOf(e), count);
+        let profit = price * known.n - known.cost;
+        let costed = known.n;
         const paid = num(e.AvgPricePaid) ?? 0;
-        if (count > known && paid > 0) {
-          profit += (price - paid) * (count - known);
-          costed += count - known;
+        if (count > known.n && paid > 0) {
+          profit += (price - paid) * (count - known.n);
+          costed += count - known.n;
         }
         // Only a sale of cargo that was bought is a trade.
         if (!costed) break;
+        sales.add(e);
         trades++;
         if (!Number.isNaN(at)) {
           clock.start(at);
@@ -205,113 +337,55 @@ function replay(events: JournalEvent[]): Replay {
         }
         break;
       }
-    }
-  }
-  return { clock, earned, trades };
-}
-
-// ---------- Buys that are trade ----------
-
-/** Docking: a Docked event, or a game restarted while docked. */
-export const isDocking = (e: JournalEvent) =>
-  e.event === "Docked" || (e.event === "Location" && e.Docked === true);
-
-/** A colonisation depot supplied this recently makes a market buy a delivery to it. */
-const COLONY_MS = 2 * 3_600_000;
-
-/** What the hold and the missions are now, for judging the journal's older market buys. */
-export interface MissionsNow {
-  /** The missions whose cargo is in the hold now. */
-  missionCargo: number[];
-  /** Open missions asking for goods (source and collect missions): their ID and commodity. */
-  wanted: { id: number; commodity: string }[];
-}
-
-const isMassacreAccepted = (e: JournalEvent) => typeof e.KillCount === "number";
-
-/**
- * The market buys in events that are trade: not limpets, and not made while mission cargo was
- * aboard, for a mission asking for those goods, or while supplying a colonisation depot.
- *
- * Mission cargo is aboard from a delivery's acceptance, or for a depot or wing delivery (whose
- * goods come from a depot) from its CargoDepot Collect, until the mission ends, its goods are all
- * delivered, or it expires (a mission that expired with the game off never ends in the journal).
- * Cargo aboard now of a mission taken before the journal's window was aboard all along.
- */
-export function tradeBuys(events: JournalEvent[], now: MissionsNow): Set<JournalEvent> {
-  const id = (e: JournalEvent) => num(e.MissionID);
-  const accepted = new Set(events.filter((e) => e.event === "MissionAccepted").map(id));
-  const fromDepot = new Set(events.filter((e) => e.event === "CargoDepot").map(id));
-  // Mission cargo aboard, and what each open mission asks for, with when it expires.
-  const aboard = new Map<number, number>();
-  for (const m of now.missionCargo) if (!accepted.has(m)) aboard.set(m, Infinity);
-  const wants = new Map<number, { keys: string[]; expires: number }>();
-  for (const w of now.wanted) {
-    if (!accepted.has(w.id))
-      wants.set(w.id, { keys: [commodityKey(w.commodity)], expires: Infinity });
-  }
-  const expiry = new Map<number, number>();
-  let colony = -Infinity;
-  const out = new Set<JournalEvent>();
-  let last = 0;
-  for (const e of events) {
-    last = Date.parse(e.timestamp) || last;
-    const m = id(e);
-    switch (e.event) {
-      case "MissionAccepted": {
-        if (m === null || typeof e.Commodity !== "string" || isMassacreAccepted(e)) break;
-        const expires = Date.parse(String(e.Expiry)) || Infinity;
-        expiry.set(m, expires);
-        if (typeof e.PassengerCount === "number") break;
-        if (typeof e.DestinationSystem === "string") {
-          // A depot or wing delivery's goods come aboard when collected.
-          const depot = fromDepot.has(m) || /wing/i.test(String(e.Name ?? ""));
-          if (!depot) aboard.set(m, expires);
-        } else {
-          const keys = [e.Commodity, e.Commodity_Localised]
-            .filter((x) => typeof x === "string")
-            .map((x) => commodityKey(x));
-          wants.set(m, { keys, expires });
-        }
-        break;
-      }
-      case "CargoDepot":
-        if (m === null) break;
-        if (e.UpdateType === "Collect") aboard.set(m, expiry.get(m) ?? Infinity);
-        if (
-          e.UpdateType === "Deliver" &&
-          typeof e.TotalItemsToDeliver === "number" &&
-          num(e.ItemsDelivered)! >= e.TotalItemsToDeliver
-        )
-          aboard.delete(m);
+      // Cargo that leaves without a sale.
+      case "ColonisationContribution":
+        for (const c of objs(e.Contributions))
+          take(keyOf(c.Name, c.Name_Localised), num(c.Amount) ?? 0);
         break;
       case "MissionCompleted":
-      case "MissionFailed":
-      case "MissionAbandoned":
-        if (m === null) break;
-        aboard.delete(m);
-        wants.delete(m);
+        // A source or collect mission takes its goods; a delivery's were the mission's own.
+        if (typeof e.DestinationSystem !== "string")
+          take(keyOf(e.Commodity, e.Commodity_Localised), num(e.Count) ?? 0);
         break;
-      case "ColonisationContribution":
-      case "ColonisationConstructionDepot":
-        colony =
-          e.ConstructionComplete === true || e.ConstructionFailed === true ? -Infinity : last;
+      case "CargoTransfer":
+        for (const t of objs(e.Transfers)) {
+          if (t.Direction !== "toship") take(keyOf(t.Type, t.Type_Localised), num(t.Count) ?? 0);
+        }
         break;
-      case "MarketBuy": {
-        if (!tradeBuy(e)) break;
-        const keys = [e.Type, e.Type_Localised]
-          .filter((x) => typeof x === "string")
-          .map((x) => commodityKey(x));
-        const cargo = [...aboard.values()].some((t) => t > last);
-        const wanted = [...wants.values()].some(
-          (w) => w.expires > last && w.keys.some((k) => keys.includes(k)),
-        );
-        if (!cargo && !wanted && last - colony > COLONY_MS) out.add(e);
+      case "EjectCargo":
+        if (num(e.MissionID) === null) take(commodityOf(e), num(e.Count) ?? 0);
         break;
-      }
     }
   }
-  return out;
+  const tons = new Map([...basis].filter(([, b]) => b.tons > 0).map(([k, b]) => [k, b.tons]));
+  return { buys, sales, tons, clock, earned, trades };
+}
+
+// ---------- Profit ----------
+
+export interface TradeTotals {
+  /** This game session's profit: each sale less what its tons cost. */
+  profit: number;
+  /** Market buys and sales this game session. */
+  trades: number;
+  /** Time counted on the session's clock, from its first trade. */
+  active: number;
+  rate: Rates;
+}
+
+/** This game session's trade profit, and its credits an hour (see replay()). */
+export function tradeTotals(
+  events: JournalEvent[],
+  now: number,
+  missions: MissionsNow = NO_MISSIONS,
+): TradeTotals {
+  const j = tradeJournal(events, missions);
+  return {
+    profit: j.earned.reduce((n, x) => n + x.credits, 0),
+    trades: j.trades,
+    active: j.clock.total(now),
+    rate: rates(j.clock, j.earned, now),
+  };
 }
 
 // ---------- The plan ----------
@@ -358,7 +432,19 @@ export interface Dock {
 
 export function dockedAt(events: JournalEvent[], location: JournalState["location"]): Dock | null {
   if (!location.docked || !location.station) return null;
-  const index = events.findLastIndex(isDocking);
+  let index = events.findLastIndex(isDocking);
+  // A relog while docked writes Location, Docked true: the same visit as the docking before it
+  // at that station, with no undocking between, so trades made before the relog still count.
+  while (events[index]?.event === "Location") {
+    const at = index;
+    const before = events.findLastIndex(
+      (x, k) => k < at && (isDocking(x) || x.event === "Undocked"),
+    );
+    const b = events[before];
+    if (!b || b.event === "Undocked" || !same(str(b.StationName), str(events[at]!.StationName)))
+      break;
+    index = before;
+  }
   const e = events[index];
   if (!e || !same(str(e.StationName), location.station)) return null;
   return {
@@ -377,9 +463,6 @@ const atStop = (s: Stop, dock: Dock | null) =>
 const tradable = (c: JournalState["cargo"][number]) =>
   c.count > 0 && c.mission_id === null && !c.stolen && commodityKey(c.name) !== "drones";
 
-/** A market buy of something to trade: not limpets. */
-export const tradeBuy = (e: JournalEvent) => e.event === "MarketBuy" && commodityOf(e) !== "drones";
-
 /** Tons of a commodity aboard that the ship may trade. */
 function held(cargo: JournalState["cargo"], commodity: string): number {
   const key = commodityKey(commodity);
@@ -388,9 +471,13 @@ function held(cargo: JournalState["cargo"], commodity: string): number {
     .reduce((n, c) => n + c.count, 0);
 }
 
-/** Whether the hold has cargo the ship could trade. */
-export function tradeCargo(cargo: JournalState["cargo"]): boolean {
-  return cargo.some(tradable);
+/** Cargo aboard that was bought as trade (the replay's tons): not mined ore or salvage. */
+const traded = (c: JournalState["cargo"][number], journal: TradeJournal) =>
+  tradable(c) && (journal.tons.get(commodityKey(c.name)) ?? 0) > 0;
+
+/** Whether the hold has cargo bought as trade and not yet sold or gone. */
+export function tradeCargo(cargo: JournalState["cargo"], journal: TradeJournal): boolean {
+  return cargo.some((c) => traded(c, journal));
 }
 
 interface Hold {
@@ -420,7 +507,7 @@ function actionDone(c: Cargo, hold: Hold, events: JournalEvent[], dock: Dock): b
 }
 
 /**
- * The trade stop to mark done now, if any: the current trade stop, docked there, with every
+ * The trade stop to mark done now, if any: the plan's current stop, a trade stop, docked there, with every
  * action done (a stop with nothing to buy or sell is done on docking). `key` names this stop,
  * lap and docking, so it is marked once. Undocking first leaves the stop open: it is only judged
  * while docked.
@@ -433,8 +520,9 @@ export function tradeAdvance(input: {
   location: JournalState["location"];
 }): { index: number; key: string } | null {
   const plan = input.plan;
-  const index = tradeTodo(plan)[0];
-  if (!plan || index === undefined) return null;
+  // The plan's current stop, as the route rows and keys have it, when it is a trade stop.
+  const index = plan ? currentStop(plan) : null;
+  if (!plan || index === null || plan.stops[index]!.kind !== "trade") return null;
   const dock = dockedAt(input.events, input.location);
   if (!dock || !atStop(plan.stops[index]!, dock)) return null;
   const hold = { cargo: input.cargo, capacity: input.capacity };
@@ -444,9 +532,8 @@ export function tradeAdvance(input: {
 
 /** After a stop is marked done: the next stop's system to copy, when it is in another system. */
 export function tradeNextCopy(plan: Plan, here: string | null): string | null {
-  const order = visitOrder(plan);
-  const i = order.find((j) => plan.stops[j]!.status === "todo");
-  const system = i === undefined ? null : plan.stops[i]!.system;
+  const i = currentStop(plan);
+  const system = i === null ? null : plan.stops[i]!.system;
   return system && !same(system, here) ? system : null;
 }
 
@@ -507,11 +594,14 @@ export function tradePanel(input: {
   market: Market | null;
   missions: Mission[];
   now: number;
+  /** The hold's mission cargo and the goods missions ask for: see tradeBuys(). */
+  missionsNow?: MissionsNow;
 }): PanelView | null {
   const plan = input.plan?.stops.some((s) => s.kind === "trade") ? input.plan : null;
   const todo = tradeTodo(plan);
   const hold = { cargo: input.cargo, capacity: input.capacity };
-  if (!todo.length && !tradeCargo(input.cargo)) return null;
+  const journal = tradeJournal(input.events, input.missionsNow);
+  if (!todo.length && !tradeCargo(input.cargo, journal)) return null;
   const dock = dockedAt(input.events, input.location);
   const rows: HudRow[] = [];
   if (plan && todo.length) {
@@ -545,7 +635,7 @@ export function tradePanel(input: {
   } else {
     // Bought with no plan, or the plan is done: what is aboard.
     for (const c of input.cargo) {
-      if (!tradable(c)) continue;
+      if (!traded(c, journal)) continue;
       rows.push({ text: c.name, right: `${c.count} t` });
     }
     rows.push({
@@ -554,7 +644,7 @@ export function tradePanel(input: {
     });
   }
 
-  const totals = tradeTotals(input.events, input.now);
+  const totals = tradeTotals(input.events, input.now, input.missionsNow);
   const footer: string[] = [];
   if (totals.trades) {
     footer.push(

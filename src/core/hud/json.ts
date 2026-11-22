@@ -6,6 +6,6 @@ export const str = (v: unknown): string | null => (typeof v === "string" && v !=
 export const objs = (v: unknown): Obj[] =>
   Array.isArray(v) ? v.filter((x): x is Obj => typeof x === "object" && x !== null) : [];
 
-/** Two names of one thing (a system, a station, a label), whatever their case. */
+/** Two names of one thing (a system, a station, a label), whatever their case; a missing name is no match. */
 export const same = (a: string | null | undefined, b: string | null | undefined) =>
-  (a ?? "").toLowerCase() === (b ?? "").toLowerCase();
+  !!a && !!b && a.toLowerCase() === b.toLowerCase();

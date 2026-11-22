@@ -234,6 +234,8 @@ describe("events the panel asks the reader to keep", () => {
         }),
       ),
       ev("CargoDepot", { MissionID: 1, UpdateType: "Collect", Count: 1 }),
+      ev("EjectCargo", { Type: "gold", Count: 1, Abandoned: true }),
+      ev("CargoTransfer", { Transfers: [{ Type: "gold", Count: 1, Direction: "tocarrier" }] }),
       ev("ColonisationConstructionDepot", { MarketID: 9, ConstructionComplete: false }),
       ev("ColonisationContribution", { MarketID: 9, Contributions: [] }),
       ev("Location", { StarSystem: SYSTEM, StationName: "Port", Docked: true, MarketID: 7 }),

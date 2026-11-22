@@ -14,7 +14,15 @@ import { carrierState, miningPanel, miningState, minedWaiting } from "./mining.j
 import { drops, passengerPanel } from "./passenger.js";
 import type { SellLookup, SellQuery } from "./sell.js";
 import { bookmarkRows } from "./bookmarks.js";
-import { tradeCargo, tradePanel, tradeTodo, type Market } from "./trade.js";
+import {
+  missionsNow,
+  NO_MISSIONS,
+  tradeCargo,
+  tradeJournal,
+  tradePanel,
+  tradeTodo,
+  type Market,
+} from "./trade.js";
 import { journalMode, noteMode, pickMode, type Choice } from "./mode.js";
 import {
   exobiologyPanel,
@@ -107,19 +115,14 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
   const runActive = j && input.settings.modes.passenger ? drops(j.missions).length > 0 : false;
   // The same for trade: a trade stop to do, or cargo to trade aboard.
   const tradeStops = input.settings.modes.trade ? tradeTodo(input.plan) : [];
-  const aboard = !!j && input.settings.modes.trade && tradeCargo(j.cargo);
+  const missions = j ? missionsNow(j) : NO_MISSIONS;
+  // Replayed only with trade on; kept for the same journal, so journalMode() reuses it.
+  const aboard =
+    !!j && input.settings.modes.trade && tradeCargo(j.cargo, tradeJournal(j.events, missions));
   const trade = {
     active: tradeStops.length > 0 || aboard,
     aboard,
-    missionCargo: j ? j.cargo.flatMap((c) => (c.mission_id !== null ? [c.mission_id] : [])) : [],
-    // Source and collect missions: goods to bring back, so buying them is not a trade.
-    wanted: j
-      ? j.missions.flatMap((m) =>
-          m.commodity && m.destination_system === null && m.kill_count === null
-            ? [{ id: m.id, commodity: m.commodity }]
-            : [],
-        )
-      : [],
+    ...missions,
     stops: tradeStops.map((i) => input.plan!.stops[i]!),
   };
   const fromJournal = j
@@ -180,6 +183,7 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
       market: input.market ?? null,
       missions: j.missions,
       now: input.now,
+      missionsNow: missionsNow(j),
     });
   }
   const system = j.location.system;

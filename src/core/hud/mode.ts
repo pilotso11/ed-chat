@@ -1,7 +1,7 @@
 import type { JournalEvent } from "ed-mcp/journal";
 import type { HudModeId } from "../settings.js";
 import { num, objs, type Obj } from "./json.js";
-import { isDocking, stopAt, tradeBuy, tradeBuys, type MissionsNow } from "./trade.js";
+import { isDocking, stopAt, tradeJournal, type MissionsNow } from "./trade.js";
 
 /** Journal events the mode rules and panels read, besides the ones ed-mcp keeps. */
 export const HUD_EVENTS = [
@@ -50,6 +50,7 @@ export const HUD_EVENTS = [
   "MissionCompleted",
   "MissionFailed",
   "MissionAbandoned",
+  "EjectCargo",
   "CargoDepot",
   "ColonisationContribution",
   "ColonisationConstructionDepot",
@@ -147,7 +148,8 @@ export function journalMode(
   };
   const tradeStop = (e: JournalEvent) =>
     trade.stops.some((s) => stopAt(s, String(e.StarSystem ?? ""), String(e.StationName ?? "")));
-  const trades = tradeBuys(events, trade);
+  // Replayed only with trade on, and kept for the same journal (tradeJournal()).
+  const traded = on("trade") ? tradeJournal(events, trade) : null;
   // Jumps since the last exploration event or market trade: a trip home ends exploration or
   // trade mode.
   let jumps = 0;
@@ -170,12 +172,12 @@ export function journalMode(
         // Selling ends mining once nothing mined is left. A relog does not: miners relog to reset
         // the asteroids.
         if (mode === "mining") leftMining = true;
-        if (mode === "trade") jumps = 0;
+        // Only a sale of traded cargo is a trade: not mined ore.
+        if (mode === "trade" && traded?.sales.has(e)) jumps = 0;
         break;
       case "MarketBuy":
         // Limpets are not trade, and buying for a mission or a depot is not a trade run.
-        if (trades.has(e)) set("trade");
-        else if (mode === "trade" && tradeBuy(e)) jumps = 0;
+        if (traded?.buys.has(e)) set("trade");
         break;
       case "Docked":
       case "Location":

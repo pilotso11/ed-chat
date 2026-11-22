@@ -21,6 +21,7 @@ import {
   shortBody,
   timeLeft,
 } from "../src/core/hud/panels.js";
+import { same } from "../src/core/hud/json.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
 
 let t = 0;
@@ -835,6 +836,11 @@ describe("helpers", () => {
     // A loss, and one too small to show.
     expect(credits(-2_140_000)).toBe("-2.1M");
     expect(credits(-0.4)).toBe("0");
+    // A missing name matches nothing.
+    expect(same("Sol", "sol")).toBe(true);
+    expect(same(null, null)).toBe(false);
+    expect(same("", "")).toBe(false);
+    expect(same("Sol", undefined)).toBe(false);
     expect(timeLeft(-1)).toBe("expired");
     expect(timeLeft(3 * 3600_000 + 20 * 60_000)).toBe("3h 20m");
   });
