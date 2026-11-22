@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HudFeed } from "../src/core/hud/feed.js";
 import { buildHud, type HudView } from "../src/core/hud/hud.js";
 import { HUD_EVENTS } from "../src/core/hud/mode.js";
+import { EXPLORATION_EVENTS } from "../src/core/hud/panels.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
 
 // These tests run the bundled ed-mcp for real. A journal file in a temporary folder is read by
@@ -142,6 +143,19 @@ function game() {
           PlanetRadius: RADIUS,
         }),
       ),
+    /** The events the reader kept, after writing what was added. */
+    async events() {
+      await appendFile(
+        journal,
+        pending
+          .splice(0)
+          .map((e) => JSON.stringify(e) + "\n")
+          .join(""),
+      );
+      const state = await stores.journal.state();
+      expect((state as { warnings?: string[] }).warnings).toEqual([]);
+      return state.events;
+    },
     async hud(settings = DEFAULT_SETTINGS.hud): Promise<HudView> {
       // Appended, as the game writes it.
       await appendFile(
@@ -166,6 +180,39 @@ function game() {
 
 // Metres north on the test planet, in degrees of latitude.
 const north = (m: number) => (m / RADIUS) * (180 / Math.PI);
+
+describe("events the panel asks the reader to keep", () => {
+  it("keeps every event the exploration totals and rate read", async () => {
+    // A reader that stopped keeping one would quietly drop credits or time from the rates.
+    const g = game();
+    const body = { BodyName: `${SYSTEM} 3`, BodyID: 3, SystemAddress: ADDRESS, StarSystem: SYSTEM };
+    const sample = { ...body, Body: `${SYSTEM} 3` };
+    // arrive() writes Fileheader, Commander, LoadGame and FSDJump.
+    g.add(
+      ...arrive(),
+      planet(3),
+      ev("SAAScanComplete", body),
+      ev("ApproachBody", sample),
+      ev("Touchdown", { ...sample, Latitude: 1, Longitude: 2, PlayerControlled: true }),
+      stratum(3, "Analyse"),
+      ev("LeaveBody", sample),
+      ev("Location", { StarSystem: SYSTEM, SystemAddress: ADDRESS, StarPos: [100, 0, 100] }),
+      ev("CarrierJump", { StarSystem: SYSTEM, SystemAddress: ADDRESS, StarPos: [100, 0, 100] }),
+      ev("SellExplorationData", { Systems: [SYSTEM], BaseValue: 1, Bonus: 0, TotalEarnings: 1 }),
+      ev("MultiSellExplorationData", {
+        Discovered: [{ SystemName: SYSTEM, NumBodies: 1 }],
+        BaseValue: 1,
+        Bonus: 0,
+        TotalEarnings: 1,
+      }),
+      ev("SellOrganicData", { MarketID: 1, BioData: [] }),
+      ev("Died"),
+      ev("Shutdown"),
+    );
+    const kept = new Set((await g.events()).map((e) => e.event));
+    expect(EXPLORATION_EVENTS.filter((e) => !kept.has(e))).toEqual([]);
+  });
+});
 
 describe("panel from the real ed-mcp journal reader", () => {
   it("shows the species being sampled, its value and the colony distance", async () => {
@@ -224,7 +271,11 @@ describe("panel from the real ed-mcp journal reader", () => {
           right: "500 ls  ~11.8M ×5",
         },
       ],
-      footer: ["Unsold: 500 cartographic", "Session: 1 jumps · 1 scanned · 0 mapped · 0 ★"],
+      // The rate joins the Session line after 5 minutes, which a slow run can reach.
+      footer: [
+        "Unsold: 500 cartographic",
+        expect.stringMatching(/^Session: 1 jumps · 1 scanned · 0 mapped · 0 ★( · .+\/h)?$/),
+      ],
     });
   });
 

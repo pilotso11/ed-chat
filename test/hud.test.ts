@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { JournalEvent, Plan } from "ed-mcp/journal";
+import { exploration, type JournalEvent, type Plan } from "ed-mcp/journal";
 import { syncDirOf } from "../src/core/edMcp.js";
 import { HudFeed } from "../src/core/hud/feed.js";
 import { buildHud, currentMode, parseShipStatus, type HudInput } from "../src/core/hud/hud.js";
@@ -10,6 +10,8 @@ import {
   nextStopAfter,
   previousStop,
   explorationTotals,
+  exobiologyPanel,
+  explorationPanel,
   jumpsLeft,
   massacrePanel,
   parseNavRoute,
@@ -315,6 +317,254 @@ describe("exploration totals", () => {
     expect(explorationTotals([later, ev("LoadGame")]).session.firstDiscoveries).toBe(0);
     expect(explorationTotals([later, sell, ev("LoadGame")]).session.firstDiscoveries).toBe(0);
     expect(explorationTotals([later, map]).unsoldCartographic).toBeGreaterThan(known);
+  });
+
+  it("works out credits an hour for the session, the last half hour and each planet", () => {
+    const T = Date.UTC(2026, 10, 15, 10);
+    const at = (min: number) => new Date(T + min * 60_000).toISOString();
+    const timed = (min: number, e: JournalEvent) => ({ ...e, timestamp: at(min) });
+    const analyse = (min: number, body: number) =>
+      timed(
+        min,
+        ev("ScanOrganic", {
+          ScanType: "Analyse",
+          Species: "$Codex_Ent_Stratum_07_Name;",
+          SystemAddress: 1,
+          Body: body,
+        }),
+      );
+    const value = explorationTotals([analyse(0, 3)]).unsoldBio;
+    expect(value).toBeGreaterThan(0);
+    const jump = (min: number) => timed(min, ev("FSDJump", { SystemAddress: 1 }));
+    const body = (event: string, min: number, id: number) =>
+      timed(min, ev(event, { SystemAddress: 1, BodyID: id }));
+    const events = [
+      timed(0, ev("LoadGame")),
+      jump(0),
+      body("ApproachBody", 5, 3),
+      analyse(10, 3),
+      body("LeaveBody", 12, 3),
+      jump(20),
+      body("ApproachBody", 25, 3),
+      analyse(30, 3),
+      jump(38),
+      analyse(40, 4),
+    ];
+    const min = (n: number) => T + n * 60_000;
+    // Too soon after the session starts to say.
+    expect(explorationTotals(events.slice(0, 2), min(1)).rate).toEqual({
+      session: null,
+      recent: null,
+    });
+    const t = explorationTotals(events, min(45));
+    // Three species over 45 minutes.
+    expect(t.rate.session).toBeCloseTo((3 * value * 60) / 45);
+    // The last half hour has two of them.
+    expect(t.rate.recent).toBeCloseTo(value * 4);
+    // Body 3: 7 minutes on the first visit and 20 on the second, with both species; coming back
+    // keeps the first visit. Body 4 from its first sample, 5 minutes ago.
+    expect(t.planetRate.get("1|3")).toBeCloseTo((2 * value * 60) / 27);
+    expect(t.planetRate.get("1|4")).toBeCloseTo(value * 12);
+    // Time away counts only 10 minutes: two hours docked after 10 minutes of work is 20.
+    const idle = explorationTotals(
+      events.slice(0, 4).filter((e) => e.event !== "ApproachBody"),
+      min(125),
+    );
+    expect(idle.rate.session).toBeCloseTo((value * 60) / 20);
+
+    // A rescan adds nothing; mapping adds what the map is worth. Ten minutes in each case.
+    const elwWorth = explorationTotals([elw("A", 1)]).unsoldCartographic;
+    const scans = [timed(0, ev("LoadGame")), timed(0, elw("A", 1)), timed(5, elw("A", 1))];
+    const once = explorationTotals(scans, min(10)).rate.session!;
+    expect(once).toBeCloseTo(elwWorth * 6);
+    // A session under half an hour has no last-half-hour rate: it would repeat the session's.
+    expect(explorationTotals(scans, min(10)).rate.recent).toBeNull();
+    const map = body("SAAScanComplete", 6, 1);
+    const mappedWorth = explorationTotals([elw("A", 1), map]).unsoldCartographic;
+    expect(explorationTotals([...scans, map], min(10)).rate.session!).toBeCloseTo(mappedWorth * 6);
+    // A map made after the system's data was sold still earns what the map adds.
+    const soldFirst = [
+      ...scans,
+      timed(5, ev("SellExplorationData", { Systems: ["A"] })),
+      timed(6, ev("SAAScanComplete", { SystemAddress: 1, BodyID: 1 })),
+    ];
+    expect(explorationTotals(soldFirst, min(10)).rate.session!).toBeCloseTo(mappedWorth * 6);
+    // After dying, a map with no new scan earns nothing: the scan was lost with the data.
+    const diedThenMap = [
+      timed(0, ev("LoadGame")),
+      timed(0, elw("A", 1)),
+      timed(1, ev("Died")),
+      timed(2, ev("SAAScanComplete", { SystemAddress: 1, BodyID: 1 })),
+    ];
+    expect(explorationTotals(diedThenMap, min(10)).rate.session!).toBeCloseTo(elwWorth * 6);
+    // A sale does not take back what was earned.
+    const sold = [...scans, timed(7, ev("SellExplorationData", { Systems: ["A"] }))];
+    expect(explorationTotals(sold, min(10)).rate.session!).toBeCloseTo(once);
+    // Dying loses the data, so scanning the body again earns again.
+    const died = [
+      timed(0, ev("LoadGame")),
+      timed(0, elw("A", 1)),
+      timed(1, ev("Died")),
+      timed(2, elw("A", 1)),
+    ];
+    expect(explorationTotals(died, min(10)).rate.session!).toBeCloseTo(elwWorth * 2 * 6);
+  });
+
+  it("keeps a planet's time and worth over a relog, a map and time away", () => {
+    const T = Date.UTC(2026, 10, 15, 10);
+    const min = (n: number) => T + n * 60_000;
+    const timed = (n: number, e: JournalEvent) => ({
+      ...e,
+      timestamp: new Date(min(n)).toISOString(),
+    });
+    const body = (event: string, n: number, extra: Record<string, unknown> = {}) =>
+      timed(n, ev(event, { SystemAddress: 1, BodyID: 3, ...extra }));
+    const analyse = (n: number) =>
+      timed(
+        n,
+        ev("ScanOrganic", {
+          ScanType: "Analyse",
+          Species: "$Codex_Ent_Stratum_07_Name;",
+          SystemAddress: 1,
+          Body: 3,
+        }),
+      );
+    const species = explorationTotals([analyse(0)]).unsoldBio;
+    const planet = ev("Scan", {
+      ScanType: "Detailed",
+      StarSystem: "A",
+      SystemAddress: 1,
+      BodyID: 3,
+      PlanetClass: "Water world",
+      TerraformState: "Terraformable",
+      MassEM: 1,
+      WasDiscovered: true,
+      WasMapped: true,
+    });
+    const scanned = explorationTotals([planet]).unsoldCartographic;
+    const mapped = explorationTotals([planet, body("SAAScanComplete", 0)]).unsoldCartographic;
+    const events = [
+      timed(0, ev("LoadGame")),
+      timed(0, planet),
+      // Mapping starts the planet's clock, and the map's worth counts toward it.
+      body("SAAScanComplete", 5),
+      analyse(10),
+      // A relog on the planet keeps its time and worth; the next sample starts its clock again.
+      timed(12, ev("LoadGame")),
+      analyse(20),
+    ];
+    const t = explorationTotals(events, min(25));
+    // 5 to 10, the last event before the relog, and 20 to 25: 10 minutes, with the map and two
+    // species.
+    expect(t.planetRate.get("1|3")).toBeCloseTo(((mapped - scanned + 2 * species) * 60) / 10);
+    // The new session: from the sample at 20, five minutes.
+    expect(t.rate.session).toBeCloseTo(species * 12);
+    // Quitting, or a relog after a long break with no Shutdown (a crash), adds nothing to the
+    // planet's time when sampling starts again an hour later: 7 minutes, to the Shutdown, or 5,
+    // to the last event before the relog.
+    const before = events.slice(0, 4);
+    for (const quit of [[timed(12, ev("Shutdown"))], []]) {
+      const relog = explorationTotals(
+        [
+          ...before,
+          ...quit,
+          // A new game's journal starts with these.
+          timed(72, ev("Fileheader")),
+          timed(72, ev("Commander")),
+          timed(72, ev("LoadGame")),
+          analyse(80),
+        ],
+        min(80),
+      );
+      expect(relog.planetRate.get("1|3")).toBeCloseTo(
+        ((mapped - scanned + 2 * species) * 60) / (quit.length ? 7 : 5),
+      );
+    }
+    // A journal that fills rolls over to its next part with a Fileheader mid-game: the planet's
+    // clock keeps running, 5 to 12.
+    const rolled = explorationTotals(
+      [...before, timed(12, ev("Fileheader", { part: 2 })), analyse(12)],
+      min(12),
+    );
+    expect(rolled.planetRate.get("1|3")).toBeCloseTo(((mapped - scanned + 2 * species) * 60) / 7);
+    // The last half hour leaves out time away that ended before it: 40 minutes of jumps, then
+    // an hour away, has no time in the window, so no rate rather than 0/h.
+    const jumps = [timed(0, ev("LoadGame"))];
+    for (let n = 0; n <= 40; n += 5) jumps.push(timed(n, ev("FSDJump", { SystemAddress: 1 })));
+    expect(explorationTotals(jumps, min(100)).rate.recent).toBeNull();
+    // Coming back closes the gap with a jump at 100: the window still has none of the time away,
+    // only the 5 minutes of work after it.
+    const back = [...jumps, timed(100, ev("FSDJump", { SystemAddress: 1 })), analyse(105)];
+    expect(explorationTotals(back, min(105)).rate.recent).toBeCloseTo(species * 12);
+    // Dying stops the planet's clock: an hour later it still has its 7 minutes.
+    const died = explorationTotals([...events.slice(0, 4), timed(12, ev("Died"))], min(72));
+    expect(died.planetRate.get("1|3")).toBeCloseTo(((mapped - scanned + species) * 60) / 7);
+    // Time away counts at most 10 minutes in the last half hour too: after 50 minutes of work
+    // and 25 away, it is the 5 minutes of work in it and 10 of the time away.
+    const work = [timed(0, ev("LoadGame")), timed(0, ev("FSDJump", { SystemAddress: 1 }))];
+    for (let n = 5; n <= 50; n += 5) work.push(timed(n, ev("FSDJump", { SystemAddress: 1 })));
+    work.push(analyse(50));
+    const away = explorationTotals(work, min(75));
+    expect(away.rate.recent).toBeCloseTo((species * 60) / 15);
+  });
+
+  it("shows the rate on the exploration panel's Session line, even with no jumps or scans", () => {
+    const totals = {
+      unsoldCartographic: 0,
+      unsoldBio: 0,
+      unsoldBioCount: 0,
+      session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+      rate: { session: 52_000_000, recent: null },
+      planetRate: new Map(),
+    };
+    const p = explorationPanel({
+      system: "Sys",
+      exploration: exploration([], 1),
+      bio: [],
+      totals,
+      valuableMin: 0,
+    });
+    expect(p.footer).toEqual(["Session: 0 jumps · 0 scanned · 0 mapped · 0 ★ · 52.0M/h"]);
+  });
+
+  it("shows the session rate once on the exobiology panel", () => {
+    const totals = {
+      unsoldCartographic: 0,
+      unsoldBio: 0,
+      unsoldBioCount: 0,
+      session: { systems: 3, scanned: 2, mapped: 0, firstDiscoveries: 0 },
+      rate: { session: 52_000_000, recent: 80_000_000 },
+      planetRate: new Map([["7|3", 30_000_000]]),
+    };
+    const input = {
+      system: "Sys",
+      address: 7,
+      body: {
+        body: "Sys 3",
+        body_id: 3,
+        species: [],
+        not_started: [],
+        genera: [],
+      } as unknown as Parameters<typeof exobiologyPanel>[0]["body"],
+      samples: new Map(),
+      here: null,
+      totals,
+    };
+    const p = exobiologyPanel(input);
+    // Nothing unsold: the Session line stays, without the rate the Rate line has.
+    expect(p.footer).toEqual([
+      "Session: 3 jumps · 2 scanned · 0 mapped · 0 ★",
+      "Rate: this planet 30.0M/h · session 52.0M/h (30m 80.0M/h)",
+    ]);
+    // With unsold data, that line and the rate line; no Session line.
+    const unsold = exobiologyPanel({
+      ...input,
+      totals: { ...totals, unsoldBio: 19_000_000, unsoldBioCount: 2 },
+    });
+    expect(unsold.footer).toEqual([
+      "Unsold: 2 bio (19.0M)",
+      "Rate: this planet 30.0M/h · session 52.0M/h (30m 80.0M/h)",
+    ]);
   });
 
   it("keeps only systems within 20 ly of the station after a sale", () => {

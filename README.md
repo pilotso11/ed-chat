@@ -188,12 +188,18 @@ front.
   bonuses if nobody has handed in its data. After the scan, the game says which
   bonuses apply. A system Spansh does not know gets ★ as a hint, since not
   everyone uploads their scans.
+  The Session line ends with credits an hour, and the last half hour's rate in
+  brackets. They count what each scan, map and analysed species is worth when you
+  make it, with its bonuses, sold or not. A gap of more than 10 minutes with no
+  journal events (docked, or away) counts as 10, and a rate shows after 5 minutes.
 - **Exobiology:** on a body with biological signals, each species with its
   samples (2/3) and value, the genera not started yet, and, while you sample, the
   distance from your last sample against the minimum distance for that genus.
   Genera not started show their likely species. The system's Earth-like,
   water and ammonia worlds, terraformables and other bio planets stay listed
-  below.
+  below. The last line compares this planet's credits an hour with the session's
+  and the last half hour's: when the planet falls behind, it may be time to move
+  on.
 - **Mining:** turns on when you launch a prospector, prospect, refine or crack
   a rock. It shows the last prospected rock against `hud.mining.targets` (MINE or
   skip, and any motherlode), the ring's hotspots, the hold, limpets left, tons

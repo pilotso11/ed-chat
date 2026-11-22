@@ -5,6 +5,8 @@ import { num, objs, type Obj } from "./json.js";
 /** Journal events the mode rules and panels read, besides the ones ed-mcp keeps. */
 export const HUD_EVENTS = [
   "ApproachBody",
+  // Quitting stops the exploration rate's clocks (explorationTotals).
+  "Shutdown",
   "Touchdown",
   "LeaveBody",
   "SellExplorationData",
