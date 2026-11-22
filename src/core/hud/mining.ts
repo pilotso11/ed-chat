@@ -911,7 +911,10 @@ export function miningPanel(input: {
   let copy: PanelView["copy"];
   for (const t of toSell) {
     const found = input.sell?.(t.query);
-    if (!found) continue;
+    if (!found) {
+      unpriced = true;
+      continue;
+    }
     unpriced ||= !Array.isArray(found);
     if (found === "pending" || found === "failed") {
       rows.push({
@@ -936,7 +939,10 @@ export function miningPanel(input: {
       });
       continue;
     }
-    worth += pick.best.price * t.tons;
+    // A buyer that takes less than the load: what it takes, and the rest has no price.
+    const takes = (h: SellHit) => (h.demand !== null ? Math.min(h.demand, t.tons) : t.tons);
+    worth += pick.best.price * takes(pick.best);
+    unpriced ||= takes(pick.best) < t.tons;
     // The load's value on the row; the price a ton with the buyer.
     const place = (h: SellHit) =>
       [
@@ -948,7 +954,7 @@ export function miningPanel(input: {
         .filter(Boolean)
         .join(" · ");
     const right = (h: SellHit) =>
-      `${credits(h.price * t.tons)} · ${ly(h.distanceLy)}${from(t.query.near)}`;
+      `${credits(h.price * takes(h))} · ${ly(h.distanceLy)}${from(t.query.near)}`;
     rows.push({
       text: `Sell ${t.name} ${t.tons} t`,
       right: right(pick.best),

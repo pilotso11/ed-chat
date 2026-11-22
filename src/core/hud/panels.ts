@@ -62,8 +62,9 @@ function keepVisited(prev: Obj | undefined, e: Obj): Obj {
 }
 
 export function credits(n: number): string {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  // Each unit from where the one below would round to a thousand: 999,999 is 1.0M, not 1000k.
+  if (n >= 999_950_000) return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 999_500) return `${(n / 1e6).toFixed(1)}M`;
   if (n >= 1e3) return `${Math.round(n / 1e3)}k`;
   return String(Math.round(n));
 }
@@ -101,13 +102,17 @@ export function massacrePanel(
     const perKill = g.kills_left
       ? open.reduce((n, m) => n + (m.reward ?? 0), 0) / g.kills_left
       : null;
-    const low = perKill !== null && perKill < settings.minPerKill;
+    // A reward missing from the journal makes the figure a floor: no ⚠ on a floor. Judged as
+    // shown, to the thousand, so 999,999 is not marked under 1.0M.
+    const floor = open.some((m) => m.reward === null);
+    const low =
+      perKill !== null && !floor && Math.round(perKill / 1000) * 1000 < settings.minPerKill;
     // ⚠ when it pays too little: time to take more missions.
     rows.push({
       text: g.target_faction,
       right: [
         `${g.kills_left} left`,
-        perKill !== null ? `${low ? "⚠ " : ""}${credits(perKill)}/kill` : null,
+        perKill !== null ? `${low ? "⚠ " : ""}${credits(perKill)}${floor ? "+" : ""}/kill` : null,
       ]
         .filter(Boolean)
         .join(" · "),

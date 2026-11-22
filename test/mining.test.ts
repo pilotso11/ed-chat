@@ -690,7 +690,7 @@ describe("mining edge cases", () => {
     expect(p.footer[0]).toBe(
       "Session: 1 prospected · 0 worth mining · 1 motherlode · 1 cracked · 10 t refined",
     );
-    expect(p.rows.find((r) => r.text.startsWith("Refined"))?.right).toBeUndefined();
+    expect(p.footer[0]).not.toMatch(/to sell/);
   });
 
   it("says when the carrier is unknown, jumping, or the lookup failed", () => {
@@ -863,6 +863,13 @@ describe("mining after leaving, selling and relogging (1)", () => {
     expect(p.footer[0]?.endsWith(" · 1.0M+ to sell")).toBe(true);
     p = panel(events, { cargo: hold(5), sell: prices([hit({ price: 200_000 })]) });
     expect(p.footer[0]?.endsWith(" · 2.0M to sell")).toBe(true);
+    // A buyer that takes less than the load: what it takes, and the rest has no price.
+    p = panel(events, {
+      cargo: cargo(10),
+      sell: () => [hit({ price: 100_000, demand: 4, station: "Small Hub" })],
+    });
+    expect(p.rows.find((r) => r.text === "Sell Platinum 10 t")?.right).toMatch(/^400k · /);
+    expect(p.footer[0]?.endsWith(" · 400k+ to sell")).toBe(true);
     // No price at all: no total.
     p = panel(events, { cargo: hold(5), sell: () => "pending" });
     expect(p.footer[0]).not.toMatch(/to sell/);

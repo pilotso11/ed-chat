@@ -13,7 +13,7 @@ import { buildHud, type HudView } from "../src/core/hud/hud.js";
 import { KnownBodies, fetchSpansh } from "../src/core/hud/known.js";
 import { HUD_EVENTS } from "../src/core/hud/mode.js";
 import { SellPrices, postSpansh } from "../src/core/hud/sell.js";
-import { DEFAULT_SETTINGS, type HudModeId, type Settings } from "../src/core/settings.js";
+import { SettingsSchema, type HudModeId } from "../src/core/settings.js";
 
 export interface Scene {
   /** The PNG's name, without .png. */
@@ -24,8 +24,8 @@ export interface Scene {
   until: string;
   /** The mode chosen with the hotkey; else the panel picks it as the app does. */
   mode?: HudModeId;
-  /** Changes to the panel settings. */
-  settings?: Partial<Settings["hud"]>;
+  /** Changes to the panel settings, as in settings.json. */
+  settings?: Record<string, unknown>;
   /** Status.json: where the ship is on a body. */
   status?: Record<string, unknown>;
   /** Cargo.json: the hold, by journal name and tons. Older journals' Cargo events have no list. */
@@ -119,7 +119,8 @@ async function scene(s: Scene, journalDir: string, all: { file: string; start: n
       known: new KnownBodies(fetchSpansh, { onError: (m) => errors.push(`spansh: ${m}`) }),
     });
     const sell = new SellPrices(postSpansh, { onError: (m) => errors.push(`prices: ${m}`) });
-    const settings = { ...DEFAULT_SETTINGS.hud, ...s.settings };
+    // Read as settings.json is, so a scene can change one field of a group.
+    const settings = SettingsSchema.parse({ hud: s.settings ?? {} }).hud;
     const build = async (): Promise<HudView> => {
       const data = await feed.poll();
       return buildHud(
@@ -140,8 +141,11 @@ async function scene(s: Scene, journalDir: string, all: { file: string; start: n
     if (errors.length) console.error(s.name, errors);
     return view;
   } finally {
-    await rm(dir, { recursive: true, force: true });
-    await rm(sync, { recursive: true, force: true });
+    // A file still open on Windows can stop this: the temp folders are left, not the run.
+    for (const d of [dir, sync])
+      await rm(d, { recursive: true, force: true }).catch((err: unknown) =>
+        console.error(`could not remove ${d}: ${String(err)}`),
+      );
   }
 }
 

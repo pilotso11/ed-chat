@@ -236,8 +236,13 @@ describe("massacrePanel", () => {
     expect(low.rows[1]!.text).toBe("Lugh");
     const ok = massacrePanel(groups(25_000_000), 0, { minPerKill: 2_000_000 })!;
     expect(ok.rows[0]).toMatchObject({ right: "10 left · 2.5M/kill", tone: "accent" });
-    // A reward missing from the journal: the stack value is a floor.
-    expect(massacrePanel(groups(null), 0)!.footer[0]).toBe("Stack 0+");
+    // A reward missing from the journal: the values are floors, and a floor is not marked.
+    const missing = massacrePanel(groups(null), 0, { minPerKill: 2_000_000 })!;
+    expect(missing.footer[0]).toBe("Stack 0+");
+    expect(missing.rows[0]!.right).toBe("10 left · 0+/kill");
+    // Judged as shown: 999,999 a kill reads 1.0M, so it is not under 1.0M.
+    const edge = massacrePanel(groups(9_999_990), 0, { minPerKill: 1_000_000 })!;
+    expect(edge.rows[0]!.right).toBe("10 left · 1.0M/kill");
   });
 
   it("is null with no missions", () => {
@@ -471,6 +476,10 @@ describe("helpers", () => {
   it("formats credits and times", () => {
     expect(credits(2_140_000)).toBe("2.1M");
     expect(credits(840_400)).toBe("840k");
+    // Not 1000k or 1000.0M at the edge of the next unit.
+    expect(credits(999_999)).toBe("1.0M");
+    expect(credits(999_499)).toBe("999k");
+    expect(credits(999_999_999)).toBe("1.0B");
     expect(timeLeft(-1)).toBe("expired");
     expect(timeLeft(3 * 3600_000 + 20 * 60_000)).toBe("3h 20m");
   });
