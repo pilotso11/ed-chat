@@ -294,6 +294,30 @@ describe("passengers from the real ed-mcp journal reader", () => {
     expect(v.panel!.right).toMatch(/^4\/\d+ berths/);
     expect(v.panel!.rows[0]!.text).toBe("Ochosi · Perez Market");
   });
+
+  it("names a delivery's goods as the game does, not by their journal symbol", async () => {
+    const g = game();
+    g.add(
+      ...arrive(),
+      ev("MissionAccepted", {
+        Faction: "Giver One",
+        Name: "Mission_Delivery",
+        LocalisedName: "Deliver gold",
+        Commodity: "$Gold_Name;",
+        Commodity_Localised: "Gold",
+        Count: 10,
+        DestinationSystem: "Wolf 397",
+        DestinationStation: "Brooks Estate",
+        Expiry: new Date(Date.now() + 86_400_000).toISOString().replace(/\.\d+Z$/, "Z"),
+        Reward: 500_000,
+        MissionID: 202,
+      }),
+    );
+    const v = await g.hud();
+    expect(v.panel).toMatchObject({ mode: "passenger", title: "DELIVERIES" });
+    expect(v.panel!.rows[0]).toMatchObject({ text: "Wolf 397 · Brooks Estate" });
+    expect(v.panel!.rows[0]!.right).toMatch(/^10 t Gold/);
+  });
 });
 
 describe("mining from the real ed-mcp journal reader", () => {

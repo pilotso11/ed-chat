@@ -154,7 +154,10 @@ export function passengerPanel(input: {
     rows.push({ text: "No mission route: ask Claude to plan one", tone: "dim" });
   }
 
-  const pax = active.reduce((n, m) => n + (m.passengers ?? 0), 0);
+  // Passengers on a mission ready to hand in are still aboard: they fill berths until then.
+  const pax = input.missions
+    .filter((m) => isRun(m) && (m.status === "active" || m.status === "complete"))
+    .reduce((n, m) => n + (m.passengers ?? 0), 0);
   const reward = input.missions.filter(isRun).reduce((n, m) => n + (m.reward ?? 0), 0);
   const cabins = berths(input.events);
   const ready = input.missions.filter((m) => isRun(m) && m.status === "complete").length;
