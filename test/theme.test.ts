@@ -109,6 +109,13 @@ describe("parseHudMatrix", () => {
     ]);
   });
 
+  it("accepts every named theme's matrix, so each is readable", () => {
+    for (const m of Object.values(THEME_MATRICES)) {
+      const xml = override(m[0].join(", "), m[1].join(", "), m[2].join(", "));
+      expect(parseHudMatrix(xml)).toEqual(m);
+    }
+  });
+
   it("reads fractions", () => {
     expect(parseHudMatrix(override("0, 0.27, 1", "0.5,1,0", "1, 0, 0"))).toEqual([
       [0, 0.27, 1],

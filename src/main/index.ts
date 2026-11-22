@@ -278,10 +278,14 @@ async function main(): Promise<void> {
   // a blue or green overlay does not draw orange first; it is read again when the player
   // changes it. null when the game has none.
   const colourXml = graphicsOverrideFile(process.env.LOCALAPPDATA, os.homedir());
+  // The read in progress, so a folder that hangs gets one read, not one more each tick.
+  let colourRead: Promise<string | null | undefined> | null = null;
   const readColourXml = () => {
-    const read = readFile(colourXml, "utf8").catch((err: NodeJS.ErrnoException) =>
-      err.code === "ENOENT" ? undefined : null,
-    );
+    const read = (colourRead ??= readFile(colourXml, "utf8")
+      .catch((err: NodeJS.ErrnoException) => (err.code === "ENOENT" ? undefined : null))
+      .finally(() => {
+        colourRead = null;
+      }));
     // A folder that stalls must not hold anything back, neither the overlay's start nor the
     // timer below: the read is given up after a moment, which keeps the colour already shown.
     let timer: NodeJS.Timeout | undefined;
