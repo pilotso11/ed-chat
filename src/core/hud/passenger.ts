@@ -154,10 +154,9 @@ export function passengerPanel(input: {
     rows.push({ text: "No mission route: ask Claude to plan one", tone: "dim" });
   }
 
-  // Passengers on a mission ready to hand in are still aboard: they fill berths until then.
-  const pax = input.missions
-    .filter((m) => isRun(m) && (m.status === "active" || m.status === "complete"))
-    .reduce((n, m) => n + (m.passengers ?? 0), 0);
+  // Berths used: passengers on active missions. A passenger mission completes on arrival, when
+  // the passengers leave, so one listed as complete has none aboard.
+  const pax = active.reduce((n, m) => n + (m.passengers ?? 0), 0);
   const reward = input.missions.filter(isRun).reduce((n, m) => n + (m.reward ?? 0), 0);
   const cabins = berths(input.events);
   const ready = input.missions.filter((m) => isRun(m) && m.status === "complete").length;

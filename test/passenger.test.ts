@@ -107,8 +107,7 @@ describe("passengerPanel", () => {
   it("lists each destination with passengers, flags and expiry, soonest first", () => {
     const p = passengerPanel({ missions, events: [loadout], plan: null, now: NOW })!;
     expect(p.title).toBe("PASSENGERS");
-    // The 2 passengers ready to hand in are still aboard.
-    expect(p.right).toBe("12/22 berths · 4.0M");
+    expect(p.right).toBe("10/22 berths · 4.0M");
     expect(p.rows.slice(0, 4)).toEqual([
       { text: "Ochosi · Perez Market", right: "6 pax (6 VIP)  1h 0m", tone: "warn" },
       { text: "Ngalinn · Haber Hub", right: "4 pax (4 wanted)  1d 0h", tone: undefined },
