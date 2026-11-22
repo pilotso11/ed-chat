@@ -177,7 +177,8 @@ Session: 23 prospected · 4 worth mining · 1 motherlode
     shown below. A station whose demand is less than the load says so.
   - The value of what was refined this session uses the picked prices.
   - When the hold fills while still mining in the ring, the best buyer's system is copied for the
-    galaxy map, with a note in the chat strip, once per buyer. Not after leaving, where the route
+    galaxy map, with a note in the chat strip, once per trip (until the next sale or move to the
+    carrier), whichever buyer is best. Not after leaving, where the route
     copies the next stop, and not while the panel is hidden.
   - Refined commodities no longer aboard get their own search, so the session's value counts
     them. A value with a commodity not priced yet shows as a floor (~200k+).

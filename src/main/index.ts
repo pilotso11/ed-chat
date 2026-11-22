@@ -107,7 +107,14 @@ import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import { SellPrices, postSpansh, type SellQuery } from "../core/hud/sell.js";
 import { buildHud, type HudView } from "../core/hud/hud.js";
-import { hudCanShow, hudInput, hudVisible, moveHint, nextHudMode } from "../core/hud/panelState.js";
+import {
+  hudCanShow,
+  hudInput,
+  hudVisible,
+  moveHint,
+  nextHudMode,
+  panelCopy,
+} from "../core/hud/panelState.js";
 import { arrivalCopy, currentSystem, routeStep } from "../core/hud/routeSteps.js";
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS } from "../core/hud/mode.js";
@@ -534,15 +541,12 @@ async function main(): Promise<void> {
     };
     const view = buildHud(input, hudMoving ? moveHint(settings.hotkeys) : null);
     lastHudView = view;
-    const copy = visible ? (view.panel?.copy ?? null) : null;
-    const copyId = copy ? copy.key : null;
-    if (copy && copyId !== hudCopied) {
-      clipboard.writeText(copy.text);
-      flash("copy", `📋 ${copy.note}`, 6_000);
+    const next = panelCopy(view, visible, hudCopied);
+    hudCopied = next.copied;
+    if (next.copy) {
+      clipboard.writeText(next.copy.text);
+      flash("copy", `📋 ${next.copy.note}`, 6_000);
     }
-    // Kept through gaps (a hidden panel, a hold no longer full, a search in progress), so the same
-    // buyer is copied once.
-    if (copyId) hudCopied = copyId;
     const mode = String(view.mode ?? null);
     if (mode !== hudMode) {
       hudMode = mode;

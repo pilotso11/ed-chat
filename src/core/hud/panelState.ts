@@ -83,3 +83,18 @@ export function nextHudMode(
         : { ...rest, hudHidden: false, hudMode: { mode: next, at: now.toISOString() } },
   };
 }
+
+/**
+ * The galaxy-map copy the panel asks for, if it is new: copied only while the panel can be seen,
+ * and once per key. `copied` is the key copied last; it is kept through gaps (a hidden panel, a
+ * hold no longer full, a search in progress), so the same trip is not copied again.
+ */
+export function panelCopy(
+  view: HudView,
+  canShow: boolean,
+  copied: string | null,
+): { copy: { text: string; note: string } | null; copied: string | null } {
+  const c = canShow ? (view.panel?.copy ?? null) : null;
+  if (!c) return { copy: null, copied };
+  return { copy: c.key === copied ? null : { text: c.text, note: c.note }, copied: c.key };
+}

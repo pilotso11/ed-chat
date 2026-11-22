@@ -8,6 +8,7 @@ import {
   hudVisible,
   moveHint,
   nextHudMode,
+  panelCopy,
 } from "../src/core/hud/panelState.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
 
@@ -143,5 +144,34 @@ describe("mode hotkey", () => {
       hudHidden: false,
       hudMode: { mode: "massacre", at: now.toISOString() },
     });
+  });
+});
+
+describe("galaxy-map copy", () => {
+  const withCopy = (key: string, text = "Ngalinn") =>
+    ({
+      panel: {
+        mode: "mining",
+        title: "MINING",
+        rows: [],
+        footer: [],
+        copy: { key, text, note: "n" },
+      },
+      route: null,
+    }) as unknown as HudView;
+  const none = { panel: null, route: null } as unknown as HudView;
+
+  it("copies a new key once, only while the panel can be seen", () => {
+    const first = panelCopy(withCopy("hold-full|"), true, null);
+    expect(first.copy).toEqual({ text: "Ngalinn", note: "n" });
+    expect(panelCopy(withCopy("hold-full|"), true, first.copied).copy).toBeNull();
+    expect(panelCopy(withCopy("hold-full|"), false, null)).toEqual({ copy: null, copied: null });
+  });
+
+  it("keeps the last key through a gap, and copies the next trip", () => {
+    const gap = panelCopy(none, true, "hold-full|");
+    expect(gap).toEqual({ copy: null, copied: "hold-full|" });
+    expect(panelCopy(withCopy("hold-full|"), true, gap.copied).copy).toBeNull();
+    expect(panelCopy(withCopy("hold-full|2026"), true, gap.copied).copy).not.toBeNull();
   });
 });
