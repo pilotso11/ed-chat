@@ -1031,7 +1031,7 @@ describe("builds from the real ed-mcp journal reader", () => {
       {
         text: "  Roll FSD Increased Range to G5",
         right: "G3 100% → G5 · ~5 rolls",
-        detail: "short 1 Datamined Wake Exceptions (have 0/1)",
+        detail: "short 1 Datamined Wake Exceptions",
       },
       { text: "▸ Shinrarta Dezhra · Jameson Memorial", tone: "dim" },
     ]);

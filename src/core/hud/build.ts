@@ -150,7 +150,10 @@ export function parseOutfitting(text: string): Outfitting | null {
 
 // ---------- Where the ship is ----------
 
-/** Landed on a body: the newest Touchdown, or Disembark on a planet, not yet left. */
+/**
+ * Landed on a body, not yet left: index is the Touchdown that began the landing, or the Disembark
+ * on a planet for one reached without landing the ship.
+ */
 export interface Landed {
   system: string;
   body: string;
@@ -160,16 +163,23 @@ export interface Landed {
 const LEAVE_BODY = new Set(["Liftoff", "LeaveBody", "FSDJump", "CarrierJump", "Docked", "Died"]);
 
 export function landedAt(events: JournalEvent[]): Landed | null {
+  let found: Landed | null = null;
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!;
-    if (LEAVE_BODY.has(e.event) || e.event === "LoadGame") return null;
+    // The ship sent away while the commander is in the SRV or on foot is not leaving the body.
+    if (e.event === "Liftoff" && e.PlayerControlled === false) continue;
+    if (LEAVE_BODY.has(e.event) || e.event === "LoadGame") return found;
     if (e.event === "Touchdown" || (e.event === "Disembark" && e.OnPlanet === true)) {
       const system = str(e.StarSystem);
       const body = str(e.Body);
-      return system && body ? { system, body, index: i } : null;
+      if (!system || !body) return found;
+      if (found && !(same(found.body, body) && same(found.system, system))) return found;
+      // The landing is its Touchdown: a Disembark after it is the same landing.
+      found = { system, body, index: i };
+      if (e.event === "Touchdown") return found;
     }
   }
-  return null;
+  return found;
 }
 
 /** A gather stop's body, against the journal's full body name: "C 3 b" is "HIP 36601 C 3 b". */
@@ -497,9 +507,9 @@ function need(
     if (a.kind === "trade_material") out.detail = `have ${have}/${m.count} ${m.name}`;
     else {
       const from = sourceOf(plan, c.judged, m.name, "symbol" in m ? m.symbol : undefined);
-      out.detail = [`short ${m.count - have} ${m.name} (have ${have}/${m.count})`, from]
-        .filter(Boolean)
-        .join(" · ");
+      // "(have 0/1)" only repeats the count short.
+      const held = have > 0 ? ` (have ${have}/${m.count})` : "";
+      out.detail = [`short ${m.count - have} ${m.name}${held}`, from].filter(Boolean).join(" · ");
     }
     break;
   }

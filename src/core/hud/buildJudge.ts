@@ -410,8 +410,11 @@ type Journal = Pick<JournalState, "materials" | "engineers"> & {
 };
 
 const cache = new WeakMap<
-  JournalEvent[],
-  Map<string, { length: number; last: JournalEvent | undefined; result: BuildJudgement }>
+  Journal,
+  Map<
+    string,
+    { key: string; length: number; last: JournalEvent | undefined; result: BuildJudgement }
+  >
 >();
 
 /**
@@ -436,21 +439,18 @@ const planKey = (plan: Plan) =>
  * poll. The plan is keyed by its content, so the same plan read again is not judged again.
  */
 export function judgeBuild(plan: Plan, journal: Journal): BuildJudgement {
+  // The journal state is read once a poll, so its object stands for its inventory and ship.
   const events = journal.events;
-  const key = JSON.stringify([
-    planKey(plan),
-    journal.materials,
-    journal.engineers,
-    journal.ship?.id ?? null,
-    journal.ship?.type ?? null,
-  ]);
-  let m = cache.get(events);
-  const kept = m?.get(key);
+  const key = planKey(plan);
+  let m = cache.get(journal);
+  const kept = m?.get(plan.id);
   const last = events.at(-1);
-  if (kept && kept.length === events.length && kept.last === last) return kept.result;
+  if (kept && kept.key === key && kept.length === events.length && kept.last === last)
+    return kept.result;
   const result = judge(plan, journal);
-  if (!m) cache.set(events, (m = new Map()));
-  m.set(key, { length: events.length, last, result });
+  if (!m) cache.set(journal, (m = new Map()));
+  // One judgement kept for each plan: the newest.
+  m.set(plan.id, { key, length: events.length, last, result });
   return result;
 }
 
@@ -709,6 +709,9 @@ function notFitted(
   const all = [...fitted.values()];
   switch (a.kind) {
     case "buy_module":
+      // With no slot it may have been bought into storage (ModuleBuyAndStore): not fitted at all.
+      if (!slot || entry.claims.some((c) => c.event === "ModuleBuyAndStore")) return false;
+      return fitted.get(slot)?.item !== mod(a.module);
     case "retrieve_module": {
       const m = mod(a.module);
       const here = slot ? fitted.get(slot) : null;

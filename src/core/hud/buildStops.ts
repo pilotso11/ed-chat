@@ -163,14 +163,38 @@ export class BuildFinisher {
     // so a stop done while ED Chat was off waits for a route key.
     const open = openStops(now);
     const before = this.open.get(now.id);
-    this.open.set(now.id, open);
-    for (const i of visitOrder(now)) {
+    const toMark = visitOrder(now).filter((i) => {
       const s = now.stops[i]!;
       const id = stopId(now, i);
       const changed = before?.has(id) || (wrote.has(id) && openBefore.has(id));
-      if (!changed || open.has(id)) continue;
-      if (s.status !== "todo" || !s.actions?.length) continue;
+      return changed && !open.has(id) && s.status === "todo" && !!s.actions?.length;
+    });
+    // The record is updated only once the stops are marked: a stop whose write fails stays in it
+    // as open, so the next poll sees the change again and tries once more.
+    const marked = new Set<number>();
+    try {
+      await this.markStops(plans, now, toMark, marked, journal, current);
+    } catch (err) {
+      const left = toMark.filter((i) => !marked.has(i)).map((i) => stopId(now, i));
+      this.open.set(now.id, new Set([...open, ...left]));
+      throw err;
+    }
+    this.open.set(now.id, open);
+  }
+
+  private async markStops(
+    plans: NonNullable<ReturnType<BuildStopDeps["plans"]>>,
+    plan: Plan,
+    stops: number[],
+    marked: Set<number>,
+    journal: Journal,
+    current: number | null,
+  ): Promise<void> {
+    let now = plan;
+    for (const i of stops) {
+      const s = now.stops[i]!;
       const updated = await plans.updateStop(now.id, { index: i }, { status: "done" });
+      marked.add(i);
       const name = s.label ?? (s.station ? `${s.system} · ${s.station}` : s.system);
       if (i === current) {
         const next = tradeNextCopy(updated, journal.location.system);
@@ -191,20 +215,27 @@ export class BuildFinisher {
   ): Promise<void> {
     const ship = journal.ship.id;
     const was = this.ship;
-    this.ship = ship;
-    if (was === undefined || ship === null || ship === was) return;
+    if (ship === null || ship === was) return;
+    // The ship is noted as seen only once the note is written, or there is nothing to write: a
+    // swap whose note could not be written yet is tried again on the next poll.
+    const seen = () => {
+      this.ship = ship;
+    };
+    if (was === undefined) return seen();
     const note = input.note;
-    if (!isBuildPlan(note) || !input.activity) return;
+    if (!isBuildPlan(note)) return seen();
     const noteShip = judgeBuild(note, journal).shipId;
-    if (noteShip === null || noteShip === ship) return;
+    if (noteShip === null || noteShip === ship) return seen();
     const mine = input.plans.find(
       (p) => p.id !== note.id && isBuildPlan(p) && judgeBuild(p, journal).shipId === ship,
     );
+    if (!mine) return seen();
     const store = this.deps.activity();
-    if (!mine || !store) return;
+    if (!store || !input.activity) return;
     const activity = await store.get();
-    if (!activity || activity.plan_id !== note.id) return;
+    if (!activity || activity.plan_id !== note.id) return seen();
     await store.set({ kind: activity.kind, summary: activity.summary, plan_id: mine.id });
+    seen();
     this.deps.notice(`📋 ${mine.name}: now the activity note's plan`);
   }
 }

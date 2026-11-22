@@ -145,34 +145,35 @@ export class HudFeed {
       : landed
         ? `land|${journal!.events[landed.index]!.timestamp}`
         : null;
-    const out: Plan[] = [];
     const keep = new Set<string>();
-    for (const p of list) {
-      if (!p.actions) continue;
-      const open = p.actions > (p.actions_done ?? 0);
-      const kept = this.builds.get(p.id);
-      if (!open && !(kept && place !== null && kept.openAt === place)) continue;
-      keep.add(p.id);
-      if (kept && kept.updated === p.updated_at) {
-        if (open) kept.openAt = place;
-        out.push(kept.plan);
-        continue;
-      }
-      const plan = await this.stores.plans.get(p.id).catch((err: unknown) => {
-        // Deleted since the list: not an error.
-        if (!isPlanNotFound(err)) this.error("build plan", err);
-        return null;
-      });
-      if (!plan) continue;
-      this.builds.set(p.id, {
-        updated: plan.updated_at,
-        plan,
-        openAt: open ? place : (kept?.openAt ?? null),
-      });
-      out.push(plan);
-    }
+    // Changed plans are read together.
+    const plans = await Promise.all(
+      list.map(async (p): Promise<Plan | null> => {
+        if (!p.actions) return null;
+        const open = p.actions > (p.actions_done ?? 0);
+        const kept = this.builds.get(p.id);
+        if (!open && !(kept && place !== null && kept.openAt === place)) return null;
+        keep.add(p.id);
+        if (kept && kept.updated === p.updated_at) {
+          if (open) kept.openAt = place;
+          return kept.plan;
+        }
+        const plan = await this.stores.plans.get(p.id).catch((err: unknown) => {
+          // Deleted since the list: not an error.
+          if (!isPlanNotFound(err)) this.error("build plan", err);
+          return null;
+        });
+        if (!plan) return null;
+        this.builds.set(p.id, {
+          updated: plan.updated_at,
+          plan,
+          openAt: open ? place : (kept?.openAt ?? null),
+        });
+        return plan;
+      }),
+    );
     for (const id of this.builds.keys()) if (!keep.has(id)) this.builds.delete(id);
-    return out;
+    return plans.filter((p): p is Plan => p !== null);
   }
 
   private parseOutfitting(text: string): Outfitting | null {

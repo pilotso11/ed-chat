@@ -247,7 +247,7 @@ describe("the build panel", () => {
       {
         text: "  Roll FSD Increased Range to G5",
         right: "G3 100% → G5 · ~5 rolls",
-        detail: "short 1 Datamined Wake Exceptions (have 0/1) · trade at stop 1",
+        detail: "short 1 Datamined Wake Exceptions · trade at stop 1",
       },
       { text: "▸ Arque · Abel Laboratory", right: "roll 1", tone: "dim" },
     ]);
@@ -486,6 +486,17 @@ describe("the build panel", () => {
       write: { status: "done", key: "krait|c1" },
     });
     expect(landedAt([land, ev(6, "Liftoff")])).toBeNull();
+    // The ship sent away while in the SRV is not leaving; disembarking is the same landing.
+    const srv = { StarSystem: "HIP 36601", Body: "HIP 36601 C 3 b", OnPlanet: true };
+    expect(
+      landedAt([
+        land,
+        ev(6, "Disembark", { ...srv, SRV: true }),
+        ev(7, "Liftoff", { ...srv, PlayerControlled: false }),
+      ]),
+    ).toEqual({ system: "HIP 36601", body: "HIP 36601 C 3 b", index: 0 });
+    // A Disembark with no Touchdown before it (reached from orbit) is the landing itself.
+    expect(landedAt([ev(6, "Disembark", srv)])?.index).toBe(0);
   });
 
   it("puts an experimental after its blueprint at the same stop", () => {
@@ -908,6 +919,51 @@ describe("judging ship actions", () => {
       right: "not fitted now",
       tone: "warn",
     });
+  });
+
+  it("does not call a module bought into storage not fitted", () => {
+    const plan = shop(buys(1));
+    const stored = journal([
+      ev(1, "ModuleBuyAndStore", { BuyItem: BOOSTER, Ship: "krait_mkii", ShipID: KRAIT }),
+      loadout(2, "krait_mkii", KRAIT, []),
+    ]);
+    const x = judgeBuild(plan, stored).actions[0]!;
+    expect([x.done, x.notFitted]).toEqual([true, false]);
+    // With a slot, a buy the newest Loadout does not show is not fitted now.
+    const slotted = shop([
+      act({
+        id: "b",
+        kind: "buy_module",
+        label: "Buy",
+        module: "hpt_shieldbooster_size0_class5",
+        slot: "TinyHardpoint1",
+      }),
+    ]);
+    const sold = judgeBuild(slotted, journal([buy(1), loadout(2, "krait_mkii", KRAIT, [])]))
+      .actions[0]!;
+    expect(sold.notFitted).toBe(true);
+  });
+
+  it("shows the count held beside the count short when some is held", () => {
+    const j = atFarseer();
+    const one = {
+      ...j,
+      materials: {
+        ...j.materials,
+        encoded: [
+          ...j.materials.encoded,
+          ...mats([["dataminedwake", "Datamined Wake Exceptions", 1]]),
+        ],
+        raw: mats([["manganese", "Manganese", 9]]),
+      },
+    };
+    expect(panelOf(upgrade(), one).rows[2]!.detail).toBe("short 1 Arsenic");
+    const plan = upgrade();
+    const few = {
+      ...one,
+      materials: { ...one.materials, raw: mats([["manganese", "Manganese", 2]]) },
+    };
+    expect(panelOf(plan, few).rows[2]!.detail).toBe("short 2 Manganese (have 2/4)");
   });
 
   it("is a build plan only with stop actions for a ship", () => {

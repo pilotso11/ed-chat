@@ -100,6 +100,7 @@ function setup(start = plan(), o: { activity?: Activity | null; fail?: boolean }
     notes: [] as unknown[],
   };
   const store = new Map<string, Plan>([[start.id, start]]);
+  let stopFails = false;
   const touch = (p: Plan): Plan => ({ ...p, updated_at: iso(1000 + log.writes.length) });
   const plans = {
     get: async (id: string) => {
@@ -125,6 +126,7 @@ function setup(start = plan(), o: { activity?: Activity | null; fail?: boolean }
       ref: { index?: number },
       patch: { status?: Plan["stops"][number]["status"] },
     ) => {
+      if (stopFails) throw new Error("stop locked");
       log.writes.push(`${id}:stop ${ref.index}:${patch.status}`);
       const p = structuredClone(store.get(id)!);
       Object.assign(p.stops[ref.index!]!, patch);
@@ -140,6 +142,7 @@ function setup(start = plan(), o: { activity?: Activity | null; fail?: boolean }
     },
   };
   let note: Activity | null = o.activity ?? null;
+  let notesClosed = false;
   const activity = {
     get: async () => note,
     set: async (input: { kind: Activity["kind"]; summary: string; plan_id?: string }) => {
@@ -150,7 +153,7 @@ function setup(start = plan(), o: { activity?: Activity | null; fail?: boolean }
   };
   const finisher = new BuildFinisher({
     plans: () => plans as never,
-    activity: () => activity as never,
+    activity: () => (notesClosed ? null : (activity as never)),
     copy: (system, n) => log.copies.push(`${system}: ${n}`),
     notice: (t) => log.notices.push(t),
     warn: (m) => log.warnings.push(m),
@@ -162,7 +165,15 @@ function setup(start = plan(), o: { activity?: Activity | null; fail?: boolean }
       journal: j,
       activity: note,
     });
-  return { log, store, poll, finisher, add: (p: Plan) => store.set(p.id, p) };
+  return {
+    log,
+    store,
+    poll,
+    finisher,
+    add: (p: Plan) => store.set(p.id, p),
+    failStop: (on: boolean) => (stopFails = on),
+    closeNotes: (on: boolean) => (notesClosed = on),
+  };
 }
 
 describe("BuildFinisher", () => {
@@ -211,6 +222,46 @@ describe("BuildFinisher", () => {
     expect(t.log.writes.filter((w) => w.includes(":b2:"))).toHaveLength(1);
     expect(t.log.writes.filter((w) => w.includes("stop 0"))).toHaveLength(1);
     expect(t.log.copies).toHaveLength(1);
+  });
+
+  it("tries a stop again when marking it failed", async () => {
+    const t = setup();
+    await t.poll(journal([buy(5)]));
+    t.failStop(true);
+    await t.poll(journal([buy(5), buy(6)]));
+    expect(t.log.writes.filter((w) => w.includes("stop"))).toEqual([]);
+    expect(t.log.warnings).toEqual(["stop locked"]);
+    t.failStop(false);
+    await t.poll(journal([buy(5), buy(6)]));
+    expect(t.log.writes.filter((w) => w.includes("stop"))).toEqual(["krait:stop 0:done"]);
+  });
+
+  it("writes the swap's note on a later poll when the note's store was not open", async () => {
+    const python = plan({
+      id: "py",
+      name: "Python build",
+      build: { target: "ship", scope: "full", ship_id: PYTHON },
+    });
+    const activity: Activity = {
+      kind: "engineering",
+      summary: "Krait",
+      plan_id: "krait",
+      updated_at: iso(0),
+    };
+    const t = setup(plan(), { activity });
+    t.add(python);
+    await t.poll(journal([]), [python]);
+    t.closeNotes(true);
+    const swapped = journal(
+      [ev(9, "ShipyardSwap", { ShipType: "python_nx", ShipID: PYTHON })],
+      PYTHON,
+      "python_nx",
+    );
+    await t.poll(swapped, [python]);
+    expect(t.log.notes).toEqual([]);
+    t.closeNotes(false);
+    await t.poll(swapped, [python]);
+    expect(t.log.notes).toEqual([{ kind: "engineering", summary: "Krait", plan_id: "py" }]);
   });
 
   it("goes on with the other plans when one fails", async () => {
