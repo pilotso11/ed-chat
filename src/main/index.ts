@@ -156,6 +156,7 @@ import { displaySetting, hudWindowSize, onNextDisplay, overlaySize } from "../co
 import { PlayerOnlyGuard } from "../core/playerOnlyGuard.js";
 import { PLAYER_ONLY_PATHS_V0_5 } from "../core/settingsDictionary.js";
 import { buildView, pickNotice, shortTool } from "../core/view.js";
+import { gameMatrixFrom, graphicsOverrideFile, lookVars, type Matrix } from "../core/theme.js";
 import { fetchLatestEdMcp, freshLatest, versionText, type Versions } from "../core/version.js";
 import { IPC } from "../shared/ipc.js";
 import {
@@ -273,6 +274,28 @@ async function main(): Promise<void> {
   if (!history.fileName) history.newSession();
   state = { ...state, agent: agentId, history: resumedTurns, resumedTurns: resumedTurns.length };
 
+  // The game's HUD colour, for style.theme "game". It is read before either window is made, so
+  // a blue or green overlay does not draw orange first; it is read again when the player
+  // changes it. null when the game has none.
+  const colourXml = graphicsOverrideFile(process.env.LOCALAPPDATA, os.homedir());
+  // The read in progress, so a folder that hangs gets one read, not one more each tick.
+  let colourRead: Promise<string | null | undefined> | null = null;
+  const readColourXml = () => {
+    const read = (colourRead ??= readFile(colourXml, "utf8")
+      .catch((err: NodeJS.ErrnoException) => (err.code === "ENOENT" ? undefined : null))
+      .finally(() => {
+        colourRead = null;
+      }));
+    // A folder that stalls must not hold anything back, neither the overlay's start nor the
+    // timer below: the read is given up after a moment, which keeps the colour already shown.
+    let timer: NodeJS.Timeout | undefined;
+    const stalled = new Promise<null>((resolve) => {
+      timer = setTimeout(resolve, 1_500, null);
+    });
+    return Promise.race([read, stalled]).finally(() => clearTimeout(timer));
+  };
+  let gameMatrix: Matrix | null = gameMatrixFrom(await readColourXml(), null);
+
   const win: BrowserWindow = createOverlayWindow(
     path.join(import.meta.dirname, "../preload/index.cjs"),
     process.env.ELECTRON_RENDERER_URL,
@@ -303,7 +326,7 @@ async function main(): Promise<void> {
     const props = windowProps(state);
     applyWindow(win, props, prevProps);
     prevProps = props;
-    const view = buildView(state, viewSettings());
+    const view = buildView(state, viewSettings(), gameMatrix);
     const t = (c: Chip[]) => withTargets(c, chipStops);
     win.webContents.send(IPC.view, {
       ...view,
@@ -553,6 +576,7 @@ async function main(): Promise<void> {
     const visible = hudCanShow(settings.hud, saved, focus?.current ?? null);
     const input = {
       ...hudInput(hudData, saved, settings.hud, Date.now()),
+      look: lookVars(settings.style, gameMatrix),
       sell: settings.hud.spansh && visible ? (q: SellQuery) => sellPrices.get(q) : undefined,
     };
     const view = buildHud(input, hudMoving ? moveHint(settings.hotkeys) : null);
@@ -1441,6 +1465,29 @@ async function main(): Promise<void> {
   );
   status.start();
 
+  // One read at a time: a slow folder must not stack reads that finish out of order.
+  let colourReading = false;
+  const readGameMatrix = async () => {
+    if (colourReading) return;
+    colourReading = true;
+    try {
+      const next = gameMatrixFrom(await readColourXml(), gameMatrix);
+      if (JSON.stringify(next) === JSON.stringify(gameMatrix)) return;
+      gameMatrix = next;
+      if (settings.style.theme === "game") {
+        render();
+        renderHud();
+      }
+    } catch (err) {
+      log.log("warn", `colour: could not redraw: ${message(err)}`);
+    } finally {
+      colourReading = false;
+    }
+  };
+  // A timer, not a file watch: a read that failed for now, as with the file locked at start, is
+  // tried again even though the file has not changed.
+  const colourTimer = setInterval(() => void readGameMatrix(), 5_000);
+
   await openHudFeed().catch((err) => log.log("warn", `panel: ${message(err)}`));
   const hudTimer = setInterval(() => void pollHud(), 1_000);
   void pollHud();
@@ -1664,6 +1711,7 @@ async function main(): Promise<void> {
     focus?.stop();
     status.stop();
     clearInterval(hudTimer);
+    clearInterval(colourTimer);
     settingsStore.unwatch();
     session?.stop();
     void approval.stop();

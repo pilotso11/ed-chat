@@ -1,3 +1,5 @@
+@import "./fonts.css";
+
 html,
 body {
   margin: 0;
@@ -16,6 +18,8 @@ body {
 .overlay {
   display: flex;
   gap: 4px;
+  font-family: var(--font-ui, "Segoe UI", system-ui, sans-serif);
+  color: var(--ink, #f2e6d0);
   font-size: var(--font, 14px);
   line-height: 1.43;
 }
@@ -24,7 +28,7 @@ body {
 .chat,
 .approval {
   background: rgba(10, 12, 16, var(--bg-alpha, 0.78));
-  border: 1px solid rgba(255, 140, 0, 0.45);
+  border: 1px solid rgba(var(--strong-rgb, 255, 140, 0), 0.45);
   border-radius: 4px;
   padding: 4px 8px;
 }
@@ -43,9 +47,9 @@ body {
   font-size: 0.7em;
   letter-spacing: 0.05em;
   padding: 0 4px;
-  border: 1px solid rgba(255, 140, 0, 0.6);
+  border: 1px solid rgba(var(--strong-rgb, 255, 140, 0), 0.6);
   border-radius: 3px;
-  color: #ffb347;
+  color: var(--accent, #ffb347);
 }
 .notices {
   display: flex;
@@ -53,7 +57,7 @@ body {
   min-width: 0;
 }
 .notice {
-  color: #ffb347;
+  color: var(--accent, #ffb347);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -61,14 +65,14 @@ body {
   cursor: pointer;
 }
 .notice code {
-  font-family: Consolas, monospace;
+  font-family: var(--font-mono, Consolas, monospace);
   font-size: 0.9em;
   text-decoration: underline dotted;
 }
 .more-notices,
 .more {
   font: inherit;
-  color: #ffb347;
+  color: var(--accent, #ffb347);
   background: none;
   border: none;
   padding: 0;
@@ -102,33 +106,33 @@ body {
 .chip {
   font: inherit;
   color: inherit;
-  background: rgba(255, 140, 0, 0.18);
-  border: 1px solid rgba(255, 140, 0, 0.5);
+  background: rgba(var(--strong-rgb, 255, 140, 0), 0.18);
+  border: 1px solid rgba(var(--strong-rgb, 255, 140, 0), 0.5);
   border-radius: 3px;
   padding: 0 6px 0 2px;
   cursor: pointer;
 }
 .chip-detail {
-  color: #ffd27a;
+  color: var(--light, #ffd08a);
 }
 .keycap {
   display: inline-block;
   min-width: 1.1em;
   padding: 0 3px;
   border-radius: 3px;
-  background: rgba(255, 140, 0, 0.45);
+  background: rgba(var(--strong-rgb, 255, 140, 0), 0.45);
   text-align: center;
   font-weight: 600;
 }
 .keys-card {
   background: rgba(10, 12, 16, var(--bg-alpha, 0.78));
-  border: 1px solid rgba(255, 140, 0, 0.45);
+  border: 1px solid rgba(var(--strong-rgb, 255, 140, 0), 0.45);
   border-radius: 4px;
   padding: 4px 8px;
   cursor: pointer;
 }
 .keys-card .title {
-  color: #ff8c00;
+  color: var(--strong, #ff8c00);
   font-weight: 600;
 }
 .keys-card td {
@@ -156,17 +160,20 @@ body {
   font: inherit;
   color: inherit;
   background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 140, 0, 0.5);
+  border: 1px solid rgba(var(--strong-rgb, 255, 140, 0), 0.5);
   resize: none;
 }
-.warn,
 .approval .keys {
+  color: var(--accent, #ffb347);
+}
+/* A warning stays amber in every theme: in green or white it would not stand apart. */
+.warn {
   color: #ffb347;
 }
 /* Up to three lines, so the player can read what they allow. */
 .approval .summary {
   opacity: 0.85;
-  font-family: Consolas, monospace;
+  font-family: var(--font-mono, Consolas, monospace);
   font-size: 0.9em;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -189,8 +196,8 @@ body {
   align-items: center;
   justify-content: center;
   background: rgba(10, 12, 16, var(--bg-alpha, 0.78));
-  border: 1px solid rgba(255, 140, 0, 0.6);
-  color: #ff8c00;
+  border: 1px solid rgba(var(--strong-rgb, 255, 140, 0), 0.6);
+  color: var(--strong, #ff8c00);
   font-size: 1.07em;
 }
 .icon.danger {
@@ -203,7 +210,7 @@ body {
   width: 0.5em;
   height: 0.5em;
   border-radius: 50%;
-  background: #ffb347;
+  background: var(--accent, #ffb347);
 }
 /* The open chat takes the whole window; elsewhere only a hovered chip or icon takes a click.
    So only the open chat makes the status line a drag handle. */
@@ -216,8 +223,8 @@ body {
 }
 @keyframes pulse {
   50% {
-    border-color: #ff8c00;
-    box-shadow: 0 0 10px rgba(255, 140, 0, 0.8);
+    border-color: var(--strong, #ff8c00);
+    box-shadow: 0 0 10px rgba(var(--strong-rgb, 255, 140, 0), 0.8);
   }
 }
 .approval .head {
@@ -237,8 +244,8 @@ body {
   font: inherit;
   font-size: 0.9em;
   color: inherit;
-  background: rgba(255, 140, 0, 0.18);
-  border: 1px solid rgba(255, 140, 0, 0.5);
+  background: rgba(var(--strong-rgb, 255, 140, 0), 0.18);
+  border: 1px solid rgba(var(--strong-rgb, 255, 140, 0), 0.5);
   border-radius: 3px;
   padding: 0 6px;
   cursor: pointer;
@@ -253,7 +260,7 @@ body {
 }
 .countdown > div {
   height: 100%;
-  background: #ffb347;
+  background: var(--accent, #ffb347);
   transition: width 1s linear;
 }
 .approval .hint {

@@ -31,6 +31,7 @@ next to each item.
 - [ ] In icon mode, a reply expands the overlay and it stays expanded.
 - [ ] With the chat open, dragging the status line moves the overlay, and it snaps to the nearest edge or corner.
 - [ ] `style.backgroundOpacity` changes apply live, and text stays readable over a bright star.
+- [ ] `style.theme` (the default `game`, `blue`, `green`) and `style.font` (`compact`) apply live to the overlay and the activity panel; with `game`, editing the matrix in `GraphicsConfigurationOverride.xml` recolours within a few seconds.
 - [ ] Enter gives focus back to the game.
 - [ ] A copied chip pastes into the galaxy map search with Ctrl+V.
 - [ ] Clicking a chip in the card copies it, clicking the icon expands it, and neither takes focus from the game.

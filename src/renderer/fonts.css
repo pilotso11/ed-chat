@@ -1,0 +1,7 @@
+/* Roboto Condensed, for style.font "compact". Latin only; other characters use the system font. */
+@font-face {
+  font-family: "Roboto Condensed";
+  font-style: normal;
+  font-weight: 400 700;
+  src: url("./fonts/RobotoCondensed-latin.woff2") format("woff2");
+}

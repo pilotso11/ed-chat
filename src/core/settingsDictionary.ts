@@ -97,6 +97,17 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "style.backgroundOpacity": {
     text: "Background opacity, from 0 (none) to 1 (solid). Text stays opaque.",
   },
+  "style.font": {
+    text:
+      "standard: Segoe UI with Cascadia Mono for code. compact: Roboto Condensed with Consolas, " +
+      "about 10% narrower. The activity panel uses the same fonts.",
+  },
+  "style.theme": {
+    text:
+      "The overlay's colour. game follows the HUD colour in the game's own settings " +
+      "(GraphicsConfigurationOverride.xml), and is orange when there is none. Or choose orange, " +
+      "blue, green, cyan or white. The activity panel uses the same colour.",
+  },
 
   ...position("the overlay", "position"),
 

@@ -55,6 +55,8 @@ export interface HudView {
   fontSize: number;
   backgroundOpacity: number;
   width: number;
+  /** CSS variables for the colours and fonts; none uses the defaults. */
+  look?: Record<string, string>;
 }
 
 export interface ShipStatus {
@@ -99,6 +101,8 @@ export interface HudInput {
   sell?: (q: SellQuery) => SellLookup;
   /** The surface bookmarks plan, read each poll; null when there is none. */
   bookmarks?: Plan | null;
+  /** CSS variables for the colours and fonts: the overlay's look. */
+  look?: Record<string, string>;
   /** Market.json: the market of the last commodity screen opened, for the trade panel. */
   market?: Market | null;
 }
@@ -278,6 +282,7 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
     fontSize: s.fontSize,
     backgroundOpacity: s.backgroundOpacity,
     width: s.width,
+    look: input.look ?? {},
   };
   const mode = currentMode(input);
   if (mode === "off") return { ...base, mode, panel: null, route: null };
