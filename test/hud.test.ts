@@ -208,16 +208,52 @@ describe("massacrePanel", () => {
         },
       ],
       Date.UTC(2026, 10, 15, 12),
+      { minPerKill: 0 },
     )!;
     expect(p.right).toBe("12 left");
-    expect(p.rows[0]).toMatchObject({ text: "Kumo Crew", tone: "accent" });
+    // The unfinished mission's 1.0M over the 12 kills left.
+    expect(p.rows[0]).toMatchObject({
+      text: "Kumo Crew",
+      right: "12 left · 83k/kill",
+      tone: "accent",
+    });
     expect(p.rows[1]).toMatchObject({ text: "Lugh", right: "18/30", bar: 0.6 });
     expect(p.rows[2]).toMatchObject({ text: "Eravate", tone: "good" });
-    expect(p.footer).toEqual(["1 ready to hand in · next expires 1d 4h"]);
+    expect(p.footer).toEqual(["Stack 2.0M · 1 ready to hand in 1.0M", "next expires 1d 4h"]);
+  });
+
+  it("marks a target that pays too little a kill left", () => {
+    const groups = (reward: number | null) => [
+      {
+        target_faction: "Kumo Crew",
+        kills_left: 10,
+        factions: [
+          { faction: "Lugh", kills_left: 10, missions: [{ ...mission(1, 10, 0, null), reward }] },
+        ],
+      },
+    ];
+    const low = massacrePanel(groups(15_000_000), 0, { minPerKill: 2_000_000 })!;
+    expect(low.rows[0]).toMatchObject({ right: "10 left · ⚠ 1.5M/kill", tone: "accent" });
+    expect(low.rows[1]!.text).toBe("Lugh");
+    const ok = massacrePanel(groups(25_000_000), 0, { minPerKill: 2_000_000 })!;
+    expect(ok.rows[0]).toMatchObject({ right: "10 left · 2.5M/kill", tone: "accent" });
+    // A reward missing from the journal: the values are floors, and a floor is not marked.
+    const missing = massacrePanel(groups(null), 0, { minPerKill: 2_000_000 })!;
+    expect(missing.footer[0]).toBe("Stack 0+");
+    expect(missing.rows[0]!.right).toBe("10 left · 0+/kill");
+    // Judged as shown: 999,999 a kill reads 1.0M, so it is not under 1.0M.
+    const edge = massacrePanel(groups(9_999_990), 0, { minPerKill: 1_000_000 })!;
+    expect(edge.rows[0]!.right).toBe("10 left · 1.0M/kill");
+    expect(massacrePanel(groups(14_600_000), 0, { minPerKill: 1_500_000 })!.rows[0]!.right).toBe(
+      "10 left · 1.5M/kill",
+    );
+    expect(massacrePanel(groups(14_400_000), 0, { minPerKill: 1_500_000 })!.rows[0]!.right).toBe(
+      "10 left · ⚠ 1.4M/kill",
+    );
   });
 
   it("is null with no missions", () => {
-    expect(massacrePanel([], 0)).toBeNull();
+    expect(massacrePanel([], 0, { minPerKill: 0 })).toBeNull();
   });
 });
 
@@ -447,6 +483,10 @@ describe("helpers", () => {
   it("formats credits and times", () => {
     expect(credits(2_140_000)).toBe("2.1M");
     expect(credits(840_400)).toBe("840k");
+    // Not 1000k or 1000.0M at the edge of the next unit.
+    expect(credits(999_999)).toBe("1.0M");
+    expect(credits(999_499)).toBe("999k");
+    expect(credits(999_999_999)).toBe("1.0B");
     expect(timeLeft(-1)).toBe("expired");
     expect(timeLeft(3 * 3600_000 + 20 * 60_000)).toBe("3h 20m");
   });

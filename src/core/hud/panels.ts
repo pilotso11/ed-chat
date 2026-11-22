@@ -12,6 +12,7 @@ import {
   type Exploration,
   type JournalEvent,
   type MassacreGroup,
+  type MassacreMission,
   type Plan,
 } from "ed-mcp/journal";
 import type { HudModeId } from "../settings.js";
@@ -61,8 +62,9 @@ function keepVisited(prev: Obj | undefined, e: Obj): Obj {
 }
 
 export function credits(n: number): string {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  // Each unit from where the one below would round to a thousand: 999,999 is 1.0M, not 1000k.
+  if (n >= 999_950_000) return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 999_500) return `${(n / 1e6).toFixed(1)}M`;
   if (n >= 1e3) return `${Math.round(n / 1e3)}k`;
   return String(Math.round(n));
 }
@@ -80,12 +82,49 @@ export function timeLeft(ms: number): string {
 
 // ---------- Massacre ----------
 
-export function massacrePanel(groups: MassacreGroup[], now: number): PanelView | null {
+/** The missions' rewards, and whether some have none in the journal, which makes it a floor. */
+function rewards(missions: MassacreMission[]): { sum: number; floor: boolean } {
+  return {
+    sum: missions.reduce((n, m) => n + (m.reward ?? 0), 0),
+    floor: missions.some((m) => m.reward === null),
+  };
+}
+
+const rewardText = (r: { sum: number; floor: boolean }) => `${credits(r.sum)}${r.floor ? "+" : ""}`;
+
+const UNITS: Record<string, number> = { B: 1e9, M: 1e6, k: 1e3, "": 1 };
+
+/** n as credits() shows it, read back as a number. */
+function shown(n: number): number {
+  const m = /^([\d.]+)([BMk]?)$/.exec(credits(n));
+  return m ? Number(m[1]) * UNITS[m[2]!]! : n;
+}
+
+export function massacrePanel(
+  groups: MassacreGroup[],
+  now: number,
+  settings: { minPerKill: number },
+): PanelView | null {
   if (!groups.length) return null;
   const rows: HudRow[] = [];
   const missions = groups.flatMap((g) => g.factions.flatMap((f) => f.missions));
   for (const g of groups) {
-    rows.push({ text: g.target_faction, right: `${g.kills_left} left`, tone: "accent" });
+    // What the stack still pays for each kill left: one kill counts for every giver at once.
+    const open = rewards(g.factions.flatMap((f) => f.missions).filter((m) => !m.done));
+    const perKill = g.kills_left ? open.sum / g.kills_left : null;
+    // No ⚠ on a floor. Judged as shown, so a figure that reads 1.0M is not under 1.0M.
+    const low = perKill !== null && !open.floor && shown(perKill) < settings.minPerKill;
+    // ⚠ when it pays too little: time to take more missions.
+    rows.push({
+      text: g.target_faction,
+      right: [
+        `${g.kills_left} left`,
+        perKill !== null ? `${low ? "⚠ " : ""}${rewardText({ ...open, sum: perKill })}/kill` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      tone: "accent",
+    });
     for (const f of g.factions) {
       const need = f.missions.reduce((n, m) => n + m.kills_required, 0);
       const got = f.missions.reduce((n, m) => n + Math.min(m.kills_counted, m.kills_required), 0);
@@ -97,19 +136,21 @@ export function massacrePanel(groups: MassacreGroup[], now: number): PanelView |
       });
     }
   }
-  const ready = missions.filter((m) => m.done).length;
+  const done = missions.filter((m) => m.done);
+  const ready = done.length;
   const expiries = missions
     .filter((m) => !m.done && m.expires)
     .map((m) => Date.parse(m.expires!))
     .filter((t) => !Number.isNaN(t));
   const footer = [
     [
-      ready ? `${ready} ready to hand in` : null,
-      expiries.length ? `next expires ${timeLeft(Math.min(...expiries) - now)}` : null,
+      `Stack ${rewardText(rewards(missions))}`,
+      ready ? `${ready} ready to hand in ${rewardText(rewards(done))}` : null,
     ]
       .filter(Boolean)
       .join(" · "),
-  ].filter(Boolean);
+    expiries.length ? `next expires ${timeLeft(Math.min(...expiries) - now)}` : null,
+  ].filter((f) => f !== null);
   const total = groups.reduce((n, g) => n + g.kills_left, 0);
   return { mode: "massacre", title: "MASSACRE", right: `${total} left`, rows, footer };
 }

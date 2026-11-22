@@ -252,12 +252,13 @@ describe("panel from the real ed-mcp journal reader", () => {
       mode: "massacre",
       title: "MASSACRE",
       right: "7 left",
+      // 5.0M over the 7 kills left is under the default 1.0M a kill.
       rows: [
-        { text: "Bad Guys", right: "7 left", tone: "accent" },
+        { text: "Bad Guys", right: "7 left · ⚠ 714k/kill", tone: "accent" },
         { text: "Giver One", right: "3/10", bar: 0.3 },
       ],
       // Read against the real clock, so a slow run can take a minute off.
-      footer: [expect.stringMatching(/^next expires 23h 5\dm$/)],
+      footer: ["Stack 5.0M", expect.stringMatching(/^next expires 23h 5\dm$/)],
     });
   });
 });
@@ -402,7 +403,7 @@ describe("mining from the real ed-mcp journal reader", () => {
       text: "Hold 11 t",
       right: expect.stringContaining("10 limpets"),
     });
-    expect(v.panel!.rows.some((r) => r.text === "Refined: Platinum 1 t")).toBe(true);
+    expect(v.panel!.footer.at(-1)).toMatch(/· 1 t refined$/);
 
     // Docking at a carrier beside the ring keeps the ring (Docked must be kept).
     g.add(

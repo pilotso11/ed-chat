@@ -163,7 +163,10 @@ front.
 
 - **Massacre:** each target faction, the kills still needed for the stack, a bar
   for each faction that gave you missions, missions ready to hand in, and the
-  next expiry.
+  next expiry. The footer shows what the whole stack pays and what is ready to
+  hand in. Each target shows what its unfinished missions still pay for each kill
+  left; below `hud.massacre.minPerKill` (1M) it is marked ⚠, a sign to take more
+  missions.
 - **Exploration:** the discovery scan progress and the bodies worth the time:
   Earth-like, water and ammonia worlds, terraformable planets, bodies with
   biological signals, and other bodies worth `hud.valuableMin` when mapped. Each
@@ -194,10 +197,11 @@ front.
 - **Mining:** turns on when you launch a prospector, prospect, refine or crack
   a rock. It shows the last prospected rock against `hud.mining.targets` (MINE or
   skip, and any motherlode), the ring's hotspots, the hold, limpets left, tons
-  refined per hour, and what you refined this session with its likely value. It
-  also suggests where to sell what is in the hold: the best price on
+  refined per hour, and the tons refined this session. It
+  also suggests where to sell what is in the hold, with what each load sells for: the best price on
   [Spansh](https://spansh.co.uk) that has a pad for your ship and takes the whole
-  load, and a nearer station that pays at least 90% of that. When the hold fills,
+  load, and a nearer station that pays at least 90% of that. The session line ends
+  with what the cargo sells for in all. When the hold fills,
   the best buyer's system is copied for the galaxy map. With
   `hud.mining.useCarrier`, the search is around your fleet carrier and includes
   what you moved to it in the last 12 hours. After a jump, the panel stays on while mined
@@ -215,15 +219,18 @@ front.
   stop, and how many stops follow. It shows under the other panels too. When you arrive in
   a stop's system, the next stop's system is copied for the galaxy map.
 
-These are mock-ups with made-up systems and values, drawn in the panel's own
-style.
+These are real panels: ED Chat's own panel code, run on moments from a
+commander's journals, with Spansh's data where the panel uses it.
 
 | | |
 | --- | --- |
-| ![Exploration panel on arrival: worlds and bio planets from Spansh, grey, with value ranges](docs/images/hud-explore-arrival.png) | **On arrival.** Spansh lists the worlds and bio planets before you honk. They show grey, with value ranges, and the route shows under the panel. |
-| ![Exploration panel after scanning: scanned worlds green with their values](docs/images/hud-explore-scanned.png) | **After scanning.** Scanned worlds turn green with the game's value. Bio planets stay plain until every species is analysed. ★ marks a first discovery, ×5 a first footfall. |
-| ![Exploration panel for a system Spansh does not know](docs/images/hud-explore-unknown.png) | **A system Spansh does not know.** It may be undiscovered. |
-| ![Exobiology panel while sampling](docs/images/hud-exobiology.png) | **Sampling.** Each species with its samples and value, the distance from the last sample, the likely species of genera not started, and other worlds in the system. |
+| ![Exploration panel after scanning: a terraformable HMC and a water world in green, bio planets with their likely species](docs/images/hud-explore-scanned.png) | **Exploration.** Every body found. Scanned worlds worth mapping turn green with the game's value. Bio planets list their likely species until you land. ×5 marks a first footfall. |
+| ![Exobiology panel while sampling, with a bookmark back to the ship](docs/images/hud-exobiology.png) | **Exobiology.** Three species analysed, the fourth at 2/3, the genus not started with its likely species, the other bio planets in the system, and a bookmark back to the ship. |
+| ![Massacre panel partway through a stack](docs/images/hud-massacre.png) | **Massacre.** Partway through a stack: each giver's progress, what the stack still pays a kill (⚠ under the threshold), and what is ready to hand in. |
+| ![Mining panel on a rich platinum rock, with buyers for the hold](docs/images/hud-mining.png) | **Mining.** A 59.5% platinum rock, the ring's hotspots, the hold, and the best buyers for each load, with a nearer one for the gold. |
+| ![Passenger panel after taking six missions, with the route below](docs/images/hud-passenger.png) | **Passengers.** Six missions taken: each stop's passengers and soonest expiry, amber under two hours, berths used, and the planned route below. |
+
+To make them again, see `scripts/hud-scenes.ts`.
 
 The mode changes by itself. Accepting a massacre mission turns on massacre mode
 until the stack is handed in. A discovery scan or a detailed scan turns on

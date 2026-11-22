@@ -125,7 +125,8 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
 function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
   const j = input.journal;
   if (!j || mode === "route") return null;
-  if (mode === "massacre") return massacrePanel(massacre(j.missions, j.events).groups, input.now);
+  if (mode === "massacre")
+    return massacrePanel(massacre(j.missions, j.events).groups, input.now, input.settings.massacre);
   if (mode === "passenger") {
     return passengerPanel({
       missions: j.missions,

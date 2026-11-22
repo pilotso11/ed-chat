@@ -1,31 +1,67 @@
-// Renders each .scene of docs/images/hud-mock.html to a PNG at 2x, for the README.
-// Usage: npx electron --force-device-scale-factor=2 scripts/hud-screenshots.cjs docs/images/hud-mock.html docs/images hud-explore-arrival,hud-explore-unknown,hud-explore-scanned,hud-exobiology
+// Renders each panel in a scenes file (from scripts/hud-scenes.ts) in the app's own panel page,
+// over a dark space background, to a PNG at 2x for the README.
+// Usage: npm run build && npx electron --force-device-scale-factor=2 scripts/hud-screenshots.cjs out/hud-scenes.json docs/images
 const { app, BrowserWindow } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const [html, out, names] = process.argv.slice(-3).map((a, i) => (i < 2 ? path.resolve(a) : a));
-app.whenReady().then(async () => {
-  const win = new BrowserWindow({
-    width: 900,
-    height: 1400,
-    show: false,
-    webPreferences: { zoomFactor: 1, offscreen: false },
-  });
-  await win.loadFile(html);
-  await win.webContents.insertCSS(
-    ".cap{display:none} .scene{display:inline-block; padding:24px 28px; border-radius:0} body{margin:0}",
-  );
-  await new Promise((r) => setTimeout(r, 300));
-  const rects = await win.webContents.executeJavaScript(
-    `[...document.querySelectorAll('.scene')].map(e=>{const r=e.getBoundingClientRect();return {x:Math.floor(r.x),y:Math.floor(r.y),width:Math.ceil(r.width),height:Math.ceil(r.height)}})`,
-  );
-  const list = names.split(",");
-  fs.mkdirSync(out, { recursive: true });
-  for (let i = 0; i < rects.length && i < list.length; i++) {
-    const img = await win.webContents.capturePage(rects[i]);
-    fs.writeFileSync(path.join(out, `${list[i]}.png`), img.toPNG());
-    console.log(list[i], img.getSize());
+const [scenesFile, outDir] = process.argv.slice(-2).map((a) => path.resolve(a));
+const root = path.join(__dirname, "..", "out");
+const PAD = 24;
+const BACKGROUND = `
+  html, body {
+    background:
+      radial-gradient(circle at 80% 30%, rgba(255, 190, 120, 0.35), transparent 30%),
+      radial-gradient(circle at 15% 80%, rgba(90, 120, 200, 0.25), transparent 40%),
+      #05060a !important;
   }
-  app.quit();
-});
+  #root { display: inline-block; padding: ${PAD}px; }
+`;
+
+app
+  .whenReady()
+  .then(async () => {
+    const scenes = JSON.parse(fs.readFileSync(scenesFile, "utf8"));
+    const win = new BrowserWindow({
+      width: 1200,
+      height: 1600,
+      show: false,
+      webPreferences: {
+        preload: path.join(root, "preload", "index.cjs"),
+        contextIsolation: true,
+        sandbox: true,
+      },
+    });
+    await win.loadFile(path.join(root, "renderer", "hud.html"));
+    await win.webContents.insertCSS(BACKGROUND);
+    // The panel listens for views from an effect, after the page loads: a view sent before then
+    // is lost and the picture is empty.
+    await new Promise((r) => setTimeout(r, 1000));
+    fs.mkdirSync(outDir, { recursive: true });
+    for (const { name, view } of scenes) {
+      win.webContents.send("hud:view", view);
+      // Rendered and laid out, then measured: the panel's own size report comes only on a change.
+      await new Promise((r) => setTimeout(r, 500));
+      // The padded root, where it is: the panel and the background around it.
+      const r = await win.webContents.executeJavaScript(
+        `(() => { const r = document.getElementById("root").getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; })()`,
+      );
+      const [winW, winH] = win.getContentSize();
+      if (r.x + r.width > winW || r.y + r.height > winH)
+        throw new Error(`${name}: the panel (${r.width}x${r.height}) does not fit the window`);
+      const img = await win.webContents.capturePage({
+        x: Math.floor(r.x),
+        y: Math.floor(r.y),
+        width: Math.ceil(r.width),
+        height: Math.ceil(r.height),
+      });
+      fs.writeFileSync(path.join(outDir, `${name}.png`), img.toPNG());
+      console.log(name, img.getSize());
+    }
+    app.quit();
+  })
+  .catch((err) => {
+    // Without this an error leaves Electron running with no window.
+    console.error(err);
+    app.exit(1);
+  });

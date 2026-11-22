@@ -185,6 +185,12 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
       "exploration panel. Before the species are known, a planet is judged by the least its " +
       "genera can be worth.",
   },
+  "hud.massacre": { text: "The massacre panel." },
+  "hud.massacre.minPerKill": {
+    text:
+      "Credits a kill. A target whose unfinished missions pay less than this for each kill " +
+      "left is marked ⚠, as a sign to take more missions. 0 turns it off.",
+  },
   "hud.mining": { text: "The mining panel." },
   "hud.mining.targets": {
     text:
