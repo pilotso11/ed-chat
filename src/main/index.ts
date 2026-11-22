@@ -1442,7 +1442,9 @@ async function main(): Promise<void> {
       renderHud();
     }
   };
-  watchFile(colourXml, { interval: 5_000 }, () => void readGameMatrix());
+  // A timer, not a file watch: a read that failed for now, as with the file locked at start, is
+  // tried again even though the file has not changed.
+  const colourTimer = setInterval(() => void readGameMatrix(), 5_000);
 
   await openHudFeed().catch((err) => log.log("warn", `panel: ${message(err)}`));
   const hudTimer = setInterval(() => void pollHud(), 1_000);
@@ -1667,7 +1669,7 @@ async function main(): Promise<void> {
     focus?.stop();
     status.stop();
     clearInterval(hudTimer);
-    unwatchFile(colourXml);
+    clearInterval(colourTimer);
     unwatchFile(displayXml);
     settingsStore.unwatch();
     session?.stop();
