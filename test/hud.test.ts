@@ -853,7 +853,14 @@ describe("helpers", () => {
   it("reads the ship's position from Status.json", () => {
     expect(
       parseShipStatus('{"BodyName":"X 1","Latitude":1.5,"Longitude":-2,"PlanetRadius":3e6}'),
-    ).toEqual({ body: "X 1", latitude: 1.5, longitude: -2, radius: 3e6, heading: null });
+    ).toEqual({
+      body: "X 1",
+      latitude: 1.5,
+      longitude: -2,
+      radius: 3e6,
+      balance: null,
+      heading: null,
+    });
     expect(parseShipStatus("{")).toBeNull();
   });
 
@@ -881,7 +888,7 @@ describe("HudFeed sample positions", () => {
     const stores = {
       journal: { state: async () => ({ events, missions: [], location: { system: "S" } }) },
       activity: { get: async () => null },
-      plans: { get: async () => null },
+      plans: { get: async () => null, list: async () => [] },
     };
     const feed = new HudFeed(stores as never, "J", {
       read: async (f) => (f.endsWith("Status.json") ? status : "{}"),
@@ -913,7 +920,7 @@ describe("HudFeed bookmarks and a fresh Status.json", () => {
   const stores = (get: () => Promise<unknown>) => ({
     journal: { state: async () => ({ events: [], missions: [], location: { system: "S" } }) },
     activity: { get: async () => null },
-    plans: { get },
+    plans: { get, list: async () => [] },
   });
 
   it("reads Status.json again when it is caught mid-write", async () => {

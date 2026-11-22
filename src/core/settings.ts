@@ -72,6 +72,7 @@ export const HUD_MODES = [
   "mining",
   "passenger",
   "trade",
+  "build",
   "route",
 ] as const;
 export type HudModeId = (typeof HUD_MODES)[number];
@@ -90,6 +91,7 @@ const HudSchema = z.strictObject({
       mining: z.boolean().default(true),
       passenger: z.boolean().default(true),
       trade: z.boolean().default(true),
+      build: z.boolean().default(true),
       route: z.boolean().default(true),
     })
     .prefault({}),
@@ -127,6 +129,14 @@ const HudSchema = z.strictObject({
       carrierRadiusLy: z.number().positive().max(1000).default(500),
       // Buyers whose Spansh market data is older than this are left out.
       maxPriceAgeDays: z.number().positive().max(90).default(7),
+    })
+    .prefault({}),
+  build: z
+    .strictObject({
+      // Done actions listed at the current stop before they fold into one "✓ N done" row.
+      doneShown: z.number().int().min(0).max(20).default(3),
+      // The no-plan outfitting visit view (a later release): what was done this visit while docked.
+      outfittingVisit: z.boolean().default(true),
     })
     .prefault({}),
   // The ed-mcp sync folder, for the activity note and plans. null: read it from the ed-mcp

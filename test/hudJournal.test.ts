@@ -4,6 +4,8 @@ import path from "node:path";
 import { openStores } from "ed-mcp/journal";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HudFeed } from "../src/core/hud/feed.js";
+import { BUILD_EVENTS } from "../src/core/hud/build.js";
+import { BuildFinisher } from "../src/core/hud/buildStops.js";
 import { buildHud, type HudView } from "../src/core/hud/hud.js";
 import { HUD_EVENTS } from "../src/core/hud/mode.js";
 import { footerText, footerTone } from "../src/core/hud/footer.js";
@@ -792,5 +794,293 @@ describe("trade from the real ed-mcp journal reader", () => {
       text: "  SELL 10 t Silver",
       right: "hold 10/10 · plan 4,000",
     });
+  });
+});
+
+describe("builds from the real ed-mcp journal reader", () => {
+  it("keeps every event the build panel, its mode and auto-advance read", async () => {
+    // A reader that stopped keeping one would never tick an action off.
+    const g = game();
+    const ship = { Ship: "anaconda", ShipID: 1 };
+    const rack = "$int_cargorack_size2_class1_name;";
+    const body = { StarSystem: SYSTEM, Body: `${SYSTEM} 3`, BodyID: 3 };
+    g.add(
+      ...arrive(),
+      ev("Loadout", { ...ship, Modules: [] }),
+      ev("Materials", { Raw: [], Manufactured: [], Encoded: [] }),
+      ev("EngineerProgress", { Engineers: [] }),
+      ev("Docked", { StationName: "Port", StarSystem: SYSTEM, MarketID: 7 }),
+      ev("StoredModules", { MarketID: 7, StationName: "Port", StarSystem: SYSTEM, Items: [] }),
+      ev("ModuleBuy", { Slot: "Slot01_Size2", BuyItem: rack, BuyPrice: 1, MarketID: 7, ...ship }),
+      ev("ModuleSell", {
+        Slot: "Slot01_Size2",
+        SellItem: rack,
+        SellPrice: 1,
+        MarketID: 7,
+        ...ship,
+      }),
+      ev("ModuleSellRemote", { StorageSlot: 3, SellItem: rack, ServerId: 1, SellPrice: 1 }),
+      ev("ModuleSwap", {
+        FromSlot: "Slot01_Size2",
+        ToSlot: "Slot02_Size2",
+        FromItem: rack,
+        ToItem: "Null",
+        MarketID: 7,
+        ...ship,
+      }),
+      ev("ModuleStore", {
+        Slot: "Slot01_Size2",
+        StoredItem: rack,
+        MarketID: 7,
+        Hot: false,
+        ...ship,
+      }),
+      ev("MassModuleStore", {
+        MarketID: 7,
+        Items: [{ Slot: "Slot02_Size2", Name: rack, Hot: false }],
+        ...ship,
+      }),
+      ev("ModuleBuyAndStore", { BuyItem: rack, BuyPrice: 1, MarketID: 7, ...ship }),
+      ev("ModuleRetrieve", { Slot: "Slot01_Size2", RetrievedItem: rack, MarketID: 7, ...ship }),
+      ev("FetchRemoteModule", {
+        StorageSlot: 4,
+        StoredItem: rack,
+        ServerId: 1,
+        TransferCost: 1,
+        TransferTime: 60,
+        ShipID: 1,
+      }),
+      ev("ShipyardBuy", {
+        ShipType: "adder",
+        ShipPrice: 1,
+        StoreOldShip: "Anaconda",
+        StoreShipID: 1,
+        MarketID: 7,
+      }),
+      ev("ShipyardNew", { ShipType: "adder", NewShipID: 2 }),
+      ev("ShipyardSwap", {
+        ShipType: "anaconda",
+        ShipID: 1,
+        StoreOldShip: "Adder",
+        StoreShipID: 2,
+        MarketID: 7,
+      }),
+      ev("ShipyardRedeem", { ShipType: "adder", MarketID: 7 }),
+      ev("ShipyardTransfer", {
+        ShipType: "Adder",
+        ShipID: 2,
+        System: "X",
+        ShipMarketID: 9,
+        Distance: 1,
+        TransferPrice: 1,
+        TransferTime: 60,
+        MarketID: 7,
+      }),
+      ev("TechnologyBroker", {
+        BrokerType: "guardian",
+        MarketID: 7,
+        ItemsUnlocked: [{ Name: "Int_GuardianFSDBooster_Size1" }],
+      }),
+      ev("MaterialTrade", {
+        MarketID: 7,
+        TraderType: "encoded",
+        Paid: { Material: "wakesolutions", Category: "Encoded", Quantity: 6 },
+        Received: { Material: "hyperspacetrajectories", Category: "Encoded", Quantity: 1 },
+      }),
+      ev("Synthesis", { Name: "FSD Basic", Materials: [] }),
+      ev("Undocked", { StationName: "Port" }),
+      ev("Touchdown", { ...body, OnPlanet: true, PlayerControlled: true }),
+      ev("Disembark", { ...body, SRV: true, OnPlanet: true }),
+      ev("Liftoff", { ...body, OnPlanet: true, PlayerControlled: true }),
+      ev("LeaveBody", body),
+      ev("Location", { StarSystem: SYSTEM, SystemAddress: ADDRESS, StarPos: [100, 0, 100] }),
+      ev("EngineerCraft", {
+        Slot: "FrameShiftDrive",
+        Module: "int_hyperdrive_size5_class5",
+        BlueprintName: "FSD_LongRange",
+        Level: 1,
+        Quality: 1,
+        Ingredients: [],
+      }),
+    );
+    const kept = new Set((await g.events()).map((e) => e.event));
+    expect(BUILD_EVENTS.filter((e) => !kept.has(e))).toEqual([]);
+  });
+
+  it("follows a saved build plan: docked at the engineer, rolls to G5, and marks it done", async () => {
+    const stores = openStores({ ED_JOURNAL_DIR: dir, ED_MCP_SYNC_DIR: syncDir });
+    // As Claude writes it with plan_upsert: the ship from journal state, the FSD's materials per
+    // roll from ed-mcp's catalog (FSD_LongRange).
+    await stores.plans.upsert({
+      id: "fsd",
+      name: "Anaconda FSD",
+      build: {
+        target: "ship",
+        scope: "upgrade",
+        ship: "anaconda",
+        ship_id: 1,
+        started_at: new Date(start - 60_000).toISOString(),
+        summary: "FSD G5",
+      },
+      stops: [
+        {
+          system: "Deciat",
+          station: "Farseer Inc",
+          purpose: "FSD to G5",
+          kind: "engineer",
+          actions: [
+            {
+              id: "fsd",
+              kind: "engineer",
+              label: "Roll FSD Increased Range to G5",
+              slot: "FrameShiftDrive",
+              blueprint: "FSD_LongRange",
+              grade: 5,
+              needs_by_grade: {
+                "4": {
+                  materials: [
+                    { name: "Chemical Distillery", symbol: "ChemicalDistillery", count: 1 },
+                    {
+                      name: "Eccentric Hyperspace Trajectories",
+                      symbol: "HyperspaceTrajectories",
+                      count: 1,
+                    },
+                    { name: "Manganese", symbol: "Manganese", count: 1 },
+                  ],
+                },
+                "5": {
+                  materials: [
+                    { name: "Arsenic", symbol: "Arsenic", count: 1 },
+                    { name: "Chemical Manipulators", symbol: "ChemicalManipulators", count: 1 },
+                    { name: "Datamined Wake Exceptions", symbol: "DataminedWake", count: 1 },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+        {
+          system: "Shinrarta Dezhra",
+          station: "Jameson Memorial",
+          purpose: "Outfit",
+          kind: "shop",
+        },
+      ],
+    });
+    const g = game();
+    g.add(
+      ...arrive(),
+      ev("Materials", {
+        Raw: [
+          { Name: "arsenic", Count: 3 },
+          { Name: "manganese", Count: 9 },
+        ],
+        Manufactured: [
+          { Name: "chemicaldistillery", Name_Localised: "Chemical Distillery", Count: 9 },
+          { Name: "chemicalmanipulators", Name_Localised: "Chemical Manipulators", Count: 2 },
+        ],
+        Encoded: [
+          {
+            Name: "hyperspacetrajectories",
+            Name_Localised: "Eccentric Hyperspace Trajectories",
+            Count: 9,
+          },
+        ],
+      }),
+      ev("Loadout", {
+        Ship: "anaconda",
+        ShipID: 1,
+        ShipName: "",
+        ShipIdent: "",
+        Modules: [
+          {
+            Slot: "FrameShiftDrive",
+            Item: "int_hyperdrive_size6_class5",
+            On: true,
+            Priority: 0,
+            Health: 1,
+            Engineering: {
+              Engineer: "Felicity Farseer",
+              EngineerID: 300100,
+              BlueprintID: 128673694,
+              BlueprintName: "FSD_LongRange",
+              Level: 3,
+              Quality: 1,
+              Modifiers: [],
+            },
+          },
+        ],
+      }),
+      ev("FSDJump", {
+        StarSystem: "Deciat",
+        SystemAddress: 6681123623626,
+        StarPos: [122, -1, -47],
+      }),
+      ev("Docked", { StationName: "Farseer Inc", StarSystem: "Deciat", MarketID: 3226643968 }),
+    );
+    // No activity note: docking at the plan's stop shows it.
+    let v = await g.hud();
+    expect(v.panel).toMatchObject({
+      mode: "build",
+      title: "UPGRADE",
+      subtitle: "Anaconda · stop 1/2",
+      right: "0/1 actions",
+    });
+    expect(v.panel!.rows).toEqual([
+      { text: "● Deciat · Farseer Inc", right: "engineer · docked" },
+      {
+        text: "  Roll FSD Increased Range to G5",
+        right: "G3 100% → G5 · ~5 rolls",
+        detail: "short 1 Datamined Wake Exceptions (have 0/1)",
+      },
+      { text: "▸ Shinrarta Dezhra · Jameson Memorial", tone: "dim" },
+    ]);
+    // A roll at G4 shows the grade reached; the G5 roll finishes it at any quality.
+    const roll = (level: number, quality: number) =>
+      ev("EngineerCraft", {
+        Slot: "FrameShiftDrive",
+        Module: "int_hyperdrive_size6_class5",
+        Ingredients: [{ Name: "manganese", Count: 1 }],
+        Engineer: "Felicity Farseer",
+        EngineerID: 300100,
+        BlueprintID: 128673695,
+        BlueprintName: "FSD_LongRange",
+        Level: level,
+        Quality: quality,
+        Modifiers: [],
+      });
+    g.add(roll(4, 0.5));
+    v = await g.hud();
+    expect(v.panel!.rows[1]!.right).toBe("G4 50% → G5 · ~3 rolls");
+
+    g.add(roll(4, 1), roll(5, 0.2));
+    v = await g.hud();
+    expect(v.panel).toMatchObject({ right: "Build complete", tone: "good" });
+    // What ED Chat's main process does after each poll: marks the action in the plan.
+    const fresh = openStores(
+      { ED_JOURNAL_DIR: dir, ED_MCP_SYNC_DIR: syncDir },
+      { keep: HUD_EVENTS },
+    );
+    const data = await new HudFeed(fresh, dir).poll();
+    const notices: string[] = [];
+    const finisher = new BuildFinisher({
+      plans: () => fresh.plans,
+      activity: () => fresh.activity,
+      copy: (_s, n) => notices.push(n),
+      notice: (n) => notices.push(n),
+      warn: (m) => notices.push(`warn ${m}`),
+    });
+    await finisher.finish({
+      note: null,
+      plans: data.buildPlans ?? [],
+      journal: data.journal,
+      activity: null,
+    });
+    const saved = await stores.plans.get("fsd");
+    expect(saved.stops[0]!.actions![0]).toMatchObject({
+      status: "done",
+      done_by: [{ event: "EngineerCraft", n: 0, role: "rolled" }],
+    });
+    expect(notices).toEqual([]);
   });
 });

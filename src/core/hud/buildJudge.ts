@@ -1,0 +1,744 @@
+import {
+  normaliseModule,
+  visitOrder,
+  type DoneBy,
+  type JournalEvent,
+  type JournalState,
+  type Plan,
+} from "ed-mcp/journal";
+import { num, objs, same, str, type Obj } from "./json.js";
+
+// Judging a build plan's actions from the journal: which events did which action, what is done,
+// and how far an engineer action has got. The panel (build.ts) shows it; BuildFinisher
+// (buildStops.ts) writes it to the plan.
+
+export type Stop = Plan["stops"][number];
+export type Action = NonNullable<Stop["actions"]>[number];
+
+/** The ship action kinds the panel judges. On-foot kinds wait for a later phase. */
+const BY_EVENT = new Set<Action["kind"]>([
+  "buy_module",
+  "retrieve_module",
+  "fetch_module",
+  "store_module",
+  "sell_module",
+  "move_module",
+  "buy_ship",
+  "transfer_ship",
+  "swap_ship",
+  "unlock_tech",
+  "engineer",
+  "experimental",
+  "synthesis",
+]);
+const BY_SUM = new Set<Action["kind"]>(["trade_material"]);
+const BY_STATE = new Set<Action["kind"]>(["collect_material", "unlock_engineer"]);
+
+/** Whether the panel judges an action of this kind from the journal. */
+export const judged = (a: Action) =>
+  BY_EVENT.has(a.kind) || BY_SUM.has(a.kind) || BY_STATE.has(a.kind);
+
+/** A plan with stop actions for a ship (not a suit loadout): the build panel follows it. */
+export const isBuildPlan = (plan: Plan | null | undefined): plan is Plan =>
+  !!plan &&
+  plan.build?.target !== "suit_loadout" &&
+  plan.stops.some((s) => (s.actions?.length ?? 0) > 0);
+
+/** A module symbol from any event or file in one form (normaliseModule()). */
+export const mod = (v: unknown) => (typeof v === "string" && v ? normaliseModule(v) : null);
+
+const lower = (v: unknown) => (typeof v === "string" && v ? v.toLowerCase() : null);
+
+/** An event's name in done_by: its time, its name and its place among those of that second. */
+export type EventRef = Pick<DoneBy, "at" | "event" | "n">;
+export const refKey = (r: EventRef) => `${r.at}|${r.event}|${r.n}`;
+
+/** The ship an event is for: its ShipID and type, as the journal gives them. */
+interface ShipOf {
+  id: number | null;
+  type: string | null;
+}
+
+/** What one event does, for one role: see "One event, one action per role" in the spec. */
+interface Role {
+  /** The done_by role, as "bought" or "stored.1" for a MassModuleStore item. */
+  name: string;
+  kind:
+    | "bought"
+    | "sold"
+    | "stored"
+    | "retrieved"
+    | "fetched"
+    | "moved"
+    | "new_ship"
+    | "swapped"
+    | "transferred"
+    | "rolled"
+    | "experimental"
+    | "received"
+    | "synthesised"
+    | "unlocked";
+  /** The module, material, ship type, recipe or technology, compared lower case. */
+  item: string | null;
+  /** The game's name for a material, beside its symbol. */
+  alt?: string | null;
+  slot?: string | null;
+  /** A ModuleBuyAndStore: the module went to storage, not to a slot. */
+  stored?: boolean;
+  shipId?: number | null;
+  storageSlot?: number | null;
+  blueprint?: string | null;
+  level?: number | null;
+  broker?: string | null;
+  /** 1, or a trade's quantity received. */
+  amount: number;
+  /** The ship the event is for; null for one that is not for a ship (materials, remote storage). */
+  ship: ShipOf | null;
+}
+
+function shipOf(e: JournalEvent): ShipOf {
+  return { id: num(e.ShipID), type: lower(e.Ship) };
+}
+
+/** The roles an event plays. `flying` is the ship flown at the time, for EngineerCraft. */
+function rolesOf(e: JournalEvent, flying: ShipOf): Role[] {
+  const one = (r: Omit<Role, "name" | "amount"> & { name?: string; amount?: number }): Role => ({
+    name: r.kind,
+    amount: 1,
+    ...r,
+  });
+  switch (e.event) {
+    case "ModuleBuy": {
+      const out = [
+        one({ kind: "bought", item: mod(e.BuyItem), slot: str(e.Slot), ship: shipOf(e) }),
+      ];
+      if (mod(e.SellItem)) out.push(one({ kind: "sold", item: mod(e.SellItem), ship: shipOf(e) }));
+      if (mod(e.StoredItem))
+        out.push(one({ kind: "stored", item: mod(e.StoredItem), ship: shipOf(e) }));
+      return out;
+    }
+    case "ModuleBuyAndStore":
+      return [one({ kind: "bought", item: mod(e.BuyItem), stored: true, ship: shipOf(e) })];
+    case "ModuleSell":
+      return [one({ kind: "sold", item: mod(e.SellItem), ship: shipOf(e) })];
+    case "ModuleSellRemote":
+      return [one({ kind: "sold", item: mod(e.SellItem), ship: null })];
+    case "ModuleStore":
+      return [one({ kind: "stored", item: mod(e.StoredItem), ship: shipOf(e) })];
+    case "MassModuleStore":
+      return objs(e.Items).map((x, i) =>
+        one({ kind: "stored", name: `stored.${i}`, item: mod(x.Name), ship: shipOf(e) }),
+      );
+    case "ModuleRetrieve": {
+      const out = [
+        one({
+          kind: "retrieved",
+          item: mod(e.RetrievedItem),
+          blueprint: str(e.EngineerModifications),
+          level: num(e.Level),
+          ship: shipOf(e),
+        }),
+      ];
+      if (mod(e.SwapOutItem))
+        out.push(one({ kind: "stored", item: mod(e.SwapOutItem), ship: shipOf(e) }));
+      return out;
+    }
+    case "FetchRemoteModule":
+      return [
+        one({
+          kind: "fetched",
+          item: mod(e.StoredItem),
+          storageSlot: num(e.StorageSlot),
+          ship: null,
+        }),
+      ];
+    case "ModuleSwap": {
+      const out: Role[] = [];
+      const from = mod(e.FromItem);
+      const to = mod(e.ToItem);
+      // FromItem goes to ToSlot, ToItem (Null for an empty slot) to FromSlot.
+      if (from && from !== "null")
+        out.push(
+          one({
+            kind: "moved",
+            name: "moved.from",
+            item: from,
+            slot: str(e.ToSlot),
+            ship: shipOf(e),
+          }),
+        );
+      if (to && to !== "null")
+        out.push(
+          one({
+            kind: "moved",
+            name: "moved.to",
+            item: to,
+            slot: str(e.FromSlot),
+            ship: shipOf(e),
+          }),
+        );
+      return out;
+    }
+    case "ShipyardBuy":
+    case "ShipyardRedeem":
+      return [one({ kind: "new_ship", item: lower(e.ShipType), ship: null })];
+    case "ShipyardSwap":
+      return [one({ kind: "swapped", item: lower(e.ShipType), shipId: num(e.ShipID), ship: null })];
+    case "ShipyardNew":
+      return [
+        one({ kind: "swapped", item: lower(e.ShipType), shipId: num(e.NewShipID), ship: null }),
+      ];
+    case "ShipyardTransfer":
+      return [
+        one({ kind: "transferred", item: lower(e.ShipType), shipId: num(e.ShipID), ship: null }),
+      ];
+    case "EngineerCraft": {
+      const out = [
+        one({
+          kind: "rolled",
+          item: mod(e.Module),
+          slot: str(e.Slot),
+          blueprint: str(e.BlueprintName),
+          level: num(e.Level),
+          ship: flying,
+        }),
+      ];
+      const x = str(e.ApplyExperimentalEffect) ?? str(e.ExperimentalEffect);
+      if (x)
+        out.push(
+          one({ kind: "experimental", item: x.toLowerCase(), slot: str(e.Slot), ship: flying }),
+        );
+      return out;
+    }
+    case "MaterialTrade": {
+      const r = (e.Received ?? {}) as Obj;
+      const q = num(r.Quantity) ?? 0;
+      if (q <= 0) return [];
+      return [
+        one({
+          kind: "received",
+          item: lower(r.Material),
+          alt: lower(r.Material_Localised),
+          amount: q,
+          ship: null,
+        }),
+      ];
+    }
+    case "Synthesis":
+      return [one({ kind: "synthesised", item: lower(e.Name), ship: null })];
+    case "TechnologyBroker":
+      return objs(e.ItemsUnlocked).map((x, i) =>
+        one({
+          kind: "unlocked",
+          name: `unlocked.${i}`,
+          item: lower(x.Name),
+          broker: str(e.BrokerType),
+          ship: null,
+        }),
+      );
+    default:
+      return [];
+  }
+}
+
+/** Events that set the ship flown: EngineerCraft names none, so it is for this one. */
+function flown(e: JournalEvent): ShipOf | null {
+  switch (e.event) {
+    case "Loadout":
+    case "LoadGame":
+      return num(e.ShipID) !== null ? { id: num(e.ShipID), type: lower(e.Ship) } : null;
+    case "ShipyardSwap":
+      return { id: num(e.ShipID), type: lower(e.ShipType) };
+    case "ShipyardNew":
+      return { id: num(e.NewShipID), type: lower(e.ShipType) };
+    default:
+      return null;
+  }
+}
+
+/** A module fitted in a slot, from the newest Loadout and the crafts after it. */
+export interface Fitted {
+  item: string | null;
+  blueprint: string | null;
+  level: number | null;
+  quality: number | null;
+  experimental: string | null;
+}
+
+function fittedOf(m: Obj): Fitted {
+  const eng = (m.Engineering ?? null) as Obj | null;
+  return {
+    item: mod(m.Item),
+    blueprint: eng ? str(eng.BlueprintName) : null,
+    level: eng ? num(eng.Level) : null,
+    quality: eng ? num(eng.Quality) : null,
+    experimental: eng ? lower(eng.ExperimentalEffect) : null,
+  };
+}
+
+/** Whether an event of a kind finishes an action, for the plan's ship. */
+function matches(a: Action, r: Role, plan: Plan, boundId: number | null): boolean {
+  const sameMod = () => !!a.module && mod(a.module) === r.item;
+  switch (a.kind) {
+    case "buy_module":
+      if (r.kind !== "bought" || !sameMod()) return false;
+      // Bought straight into storage counts only for a buy that names no slot.
+      return r.stored ? !a.slot : !a.slot || same(a.slot, r.slot);
+    case "retrieve_module":
+      return (
+        r.kind === "retrieved" &&
+        sameMod() &&
+        (!a.blueprint || same(a.blueprint, r.blueprint)) &&
+        (a.grade === undefined || (r.level ?? 0) >= a.grade)
+      );
+    case "fetch_module":
+      return (
+        r.kind === "fetched" &&
+        (sameMod() || (a.storage_slot !== undefined && a.storage_slot === r.storageSlot))
+      );
+    case "store_module":
+      return r.kind === "stored" && sameMod();
+    case "sell_module":
+      return r.kind === "sold" && sameMod();
+    case "move_module":
+      return r.kind === "moved" && sameMod() && same(a.slot, r.slot);
+    case "buy_ship":
+      return r.kind === "new_ship" && r.item === lower(a.ship ?? plan.build?.ship);
+    case "swap_ship": {
+      const id = a.ship_id ?? boundId;
+      return r.kind === "swapped" && id !== null && r.shipId === id;
+    }
+    case "transfer_ship": {
+      const id = a.ship_id ?? boundId;
+      return r.kind === "transferred" && id !== null && r.shipId === id;
+    }
+    case "unlock_tech":
+      return (
+        r.kind === "unlocked" && r.item === lower(a.item) && (!a.broker || same(a.broker, r.broker))
+      );
+    case "engineer":
+      return (
+        r.kind === "rolled" &&
+        same(a.slot, r.slot) &&
+        same(a.blueprint, r.blueprint) &&
+        (r.level ?? 0) >= (a.grade ?? 1) &&
+        (!a.module || mod(a.module) === r.item)
+      );
+    case "experimental":
+      return r.kind === "experimental" && same(a.slot, r.slot) && r.item === lower(a.experimental);
+    case "trade_material": {
+      const m = lower(a.received?.material);
+      return r.kind === "received" && !!m && (r.item === m || r.alt === m);
+    }
+    case "synthesis":
+      return r.kind === "synthesised" && r.item === lower(a.recipe);
+    default:
+      return false;
+  }
+}
+
+/** How much of an action's role it takes to be done: a trade's count, else one event. */
+const needOf = (a: Action) => (BY_SUM.has(a.kind) ? Math.max(1, a.received?.count ?? 1) : 1);
+
+/** What the journal says about one action. */
+export interface ActionJudgement {
+  stop: number;
+  action: Action;
+  /** Done in the plan, or judged done now. */
+  done: boolean;
+  /** Judged done now, not yet in the plan: the panel writes it (BuildFinisher). */
+  write: { status?: "done"; done_by?: DoneBy[]; key: string } | null;
+  /** The events it claims, with the role and amount. */
+  claims: DoneBy[];
+  /** Index in events of its newest claim, or -1. */
+  lastClaim: number;
+  /** For a trade: the amount received so far. */
+  taken: number;
+  /** For an engineer action, the module in the slot now (newest Loadout and later crafts). */
+  fitted: Fitted | null;
+  /** A done buy, retrieve, engineer or experimental the newest Loadout no longer shows. */
+  notFitted: boolean;
+}
+
+export interface BuildJudgement {
+  plan: Plan;
+  /** In plan order: stops in visit order, then actions in stop order. */
+  actions: ActionJudgement[];
+  /** The ship's ShipID found from the journal for a plan with none: written once. */
+  boundId: number | null;
+  /** The ship the plan is bound to (ship_id, or found), or null. */
+  shipId: number | null;
+  /** The events that matched an action, for the mode. */
+  matched: Set<JournalEvent>;
+  /** Index in events of the newest matched event, or -1. */
+  lastMatch: number;
+  /** Time of the newest event any action used (epoch ms), or 0: for choosing between plans. */
+  actedAt: number;
+}
+
+/** When the plan's actions count from: build.started_at, else when the plan was made. */
+const startOf = (plan: Plan) => Date.parse(plan.build?.started_at ?? plan.created_at) || 0;
+
+/** The material count in the inventory, by symbol or name, whatever the case. */
+export function materialCount(
+  materials: JournalState["materials"],
+  name: string | undefined,
+  symbol?: string,
+): number {
+  const keys = [lower(name), lower(symbol)].filter((x): x is string => !!x);
+  // "Arsenic" and "arsenic", "Chemical Manipulators" and "chemicalmanipulators".
+  const squash = (s: string) => s.replace(/[^a-z0-9]/g, "");
+  const want = new Set(keys.flatMap((k) => [k, squash(k)]));
+  let n = 0;
+  for (const list of Object.values(materials)) {
+    for (const m of list) {
+      const s = m.symbol.toLowerCase();
+      const nm = m.name.toLowerCase();
+      if (want.has(s) || want.has(nm) || want.has(squash(nm))) n += m.count;
+    }
+  }
+  return n;
+}
+
+const UNLOCKED = (journal: Pick<JournalState, "engineers">, name: string | undefined) =>
+  journal.engineers.some((e) => same(e.name, name) && e.progress === "Unlocked");
+
+type Journal = Pick<JournalState, "materials" | "engineers"> & { events: JournalEvent[] };
+
+const cache = new WeakMap<
+  JournalEvent[],
+  Map<
+    string,
+    { plan: Plan; length: number; last: JournalEvent | undefined; result: BuildJudgement }
+  >
+>();
+
+/**
+ * Judges a build plan's actions from the journal (see "Actions" in the build panel spec). Kept
+ * for the same journal, plan and inventory: the panel, its mode and BuildFinisher all ask on every
+ * poll. A plan read again is a new object, and judged again.
+ */
+export function judgeBuild(plan: Plan, journal: Journal): BuildJudgement {
+  const events = journal.events;
+  const key = JSON.stringify([plan.id, journal.materials, journal.engineers]);
+  let m = cache.get(events);
+  const kept = m?.get(key);
+  const last = events.at(-1);
+  if (kept && kept.plan === plan && kept.length === events.length && kept.last === last)
+    return kept.result;
+  const result = judge(plan, journal);
+  if (!m) cache.set(events, (m = new Map()));
+  m.set(key, { plan, length: events.length, last, result });
+  return result;
+}
+
+function judge(plan: Plan, journal: Journal): BuildJudgement {
+  const events = journal.events;
+  const started = startOf(plan);
+  const updated = Date.parse(plan.updated_at) || Infinity;
+  const hasBuyShip = plan.stops.some((s) => s.actions?.some((a) => a.kind === "buy_ship"));
+  // The plan's ship: its ship_id; else none until a bought hull is delivered (a buy_ship plan);
+  // else the first ship of its type (or of any type, when it names none) an action is done on.
+  let boundId: number | null = plan.build?.ship_id ?? null;
+  const fromPlan = boundId !== null;
+  const shipType = lower(plan.build?.ship);
+  let armed = false;
+  const shipOk = (ship: ShipOf | null) => {
+    if (!ship) return true;
+    if (boundId !== null) return ship.id === boundId;
+    if (hasBuyShip) return false;
+    return !shipType || ship.type === shipType;
+  };
+
+  const list: (ActionJudgement & { mode: "reserved" | "adopt" | "open" | "skip" })[] = [];
+  for (const si of visitOrder(plan)) {
+    for (const a of plan.stops[si]!.actions ?? []) {
+      const mode =
+        a.status === "skipped" || !judged(a)
+          ? "skip"
+          : a.status === "done"
+            ? a.done_by
+              ? "reserved"
+              : BY_STATE.has(a.kind)
+                ? "skip"
+                : "adopt"
+            : "open";
+      list.push({
+        stop: si,
+        action: a,
+        done: a.status !== "todo",
+        write: null,
+        claims: [],
+        lastClaim: -1,
+        taken: 0,
+        fitted: null,
+        notFitted: false,
+        mode,
+      });
+    }
+  }
+  // done_by claims already in the plan, by event and role: what they took.
+  const reserved = new Map<string, { entry: (typeof list)[number]; amount: number }[]>();
+  for (const entry of list) {
+    if (entry.mode !== "reserved") continue;
+    for (const c of entry.action.done_by ?? []) {
+      const k = `${refKey(c)}|${c.role}`;
+      reserved.set(k, [...(reserved.get(k) ?? []), { entry, amount: c.amount ?? 1 }]);
+    }
+  }
+
+  const matched = new Set<JournalEvent>();
+  let lastMatch = -1;
+  let actedAt = 0;
+  const count = new Map<string, number>();
+  let flying: ShipOf = { id: null, type: null };
+  // The modules fitted, by ShipID and slot; and the index of each ship's newest Loadout.
+  const fittedBy = new Map<number, Map<string, Fitted>>();
+  const loadoutAt = new Map<number, number>();
+  const mark = (i: number, e: JournalEvent) => {
+    matched.add(e);
+    lastMatch = Math.max(lastMatch, i);
+  };
+
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i]!;
+    const ck = `${e.timestamp}|${e.event}`;
+    const n = count.get(ck) ?? 0;
+    count.set(ck, n + 1);
+    const ref: EventRef = { at: e.timestamp, event: e.event, n };
+    const t = Date.parse(e.timestamp);
+    const f = flown(e);
+    if (f) flying = f;
+    if (e.event === "Loadout" && f?.id != null) {
+      const slots = new Map<string, Fitted>();
+      for (const m of objs(e.Modules)) {
+        const slot = lower(m.Slot);
+        if (slot) slots.set(slot, fittedOf(m));
+      }
+      fittedBy.set(f.id, slots);
+      loadoutAt.set(f.id, i);
+    }
+    if (e.event === "EngineerCraft" && flying.id !== null) {
+      const slots = fittedBy.get(flying.id) ?? new Map<string, Fitted>();
+      const slot = lower(e.Slot);
+      if (slot) {
+        const was = slots.get(slot);
+        slots.set(slot, {
+          item: mod(e.Module) ?? was?.item ?? null,
+          blueprint: str(e.BlueprintName),
+          level: num(e.Level),
+          quality: num(e.Quality),
+          experimental:
+            lower(e.ApplyExperimentalEffect) ??
+            lower(e.ExperimentalEffect) ??
+            was?.experimental ??
+            null,
+        });
+      }
+      fittedBy.set(flying.id, slots);
+    }
+    // A bought hull is the plan's ship once delivered.
+    if (e.event === "ShipyardNew" && armed && boundId === null) {
+      boundId = num(e.NewShipID);
+      armed = false;
+    }
+    // A single engineer's progress unlocking an engineer the plan asks for turns the mode on.
+    if (
+      e.event === "EngineerProgress" &&
+      !Array.isArray(e.Engineers) &&
+      e.Progress === "Unlocked" &&
+      t >= started &&
+      list.some(
+        (x) => x.action.kind === "unlock_engineer" && same(x.action.engineer, str(e.Engineer)),
+      )
+    )
+      mark(i, e);
+
+    for (const r of rolesOf(e, flying)) {
+      let left = r.amount;
+      for (const res of reserved.get(`${refKey(ref)}|${r.name}`) ?? []) {
+        left -= res.amount;
+        res.entry.claims.push({
+          ...ref,
+          role: r.name,
+          ...(BY_SUM.has(res.entry.action.kind) ? { amount: res.amount } : {}),
+        });
+        res.entry.lastClaim = i;
+        res.entry.taken += res.amount;
+        if (boundId === null && !hasBuyShip && r.ship?.id != null && shipOk(r.ship))
+          boundId = r.ship.id;
+        if (res.entry.action.kind === "buy_ship" && boundId === null) armed = true;
+        mark(i, e);
+        if (!Number.isNaN(t)) actedAt = Math.max(actedAt, t);
+      }
+      if (left <= 0 || Number.isNaN(t) || t < started || !shipOk(r.ship)) continue;
+      // Actions marked done by hand take the events before they were marked first; then the
+      // open actions, in plan order.
+      const order = [
+        ...(t <= updated ? list.filter((x) => x.mode === "adopt") : []),
+        ...list.filter((x) => x.mode === "open"),
+      ];
+      for (const entry of order) {
+        const need = needOf(entry.action);
+        if (entry.taken >= need || !matches(entry.action, r, plan, boundId)) continue;
+        const take = Math.min(left, need - entry.taken);
+        entry.taken += take;
+        entry.claims.push({
+          ...ref,
+          role: r.name,
+          ...(BY_SUM.has(entry.action.kind) ? { amount: take } : {}),
+        });
+        entry.lastClaim = i;
+        left -= take;
+        mark(i, e);
+        actedAt = Math.max(actedAt, t);
+        if (boundId === null && !hasBuyShip && r.ship?.id != null) boundId = r.ship.id;
+        if (entry.action.kind === "buy_ship" && entry.taken >= need && boundId === null)
+          armed = true;
+        if (left <= 0 || !BY_SUM.has(entry.action.kind)) break;
+      }
+    }
+    // A craft at a lower grade than an open engineer action asks for: its progress, for the mode.
+    if (e.event === "EngineerCraft" && !matched.has(e) && t >= started && shipOk(flying)) {
+      const slot = str(e.Slot);
+      const bp = str(e.BlueprintName);
+      if (
+        list.some(
+          (x) =>
+            x.mode === "open" &&
+            x.action.kind === "engineer" &&
+            same(x.action.slot, slot) &&
+            same(x.action.blueprint, bp),
+        )
+      )
+        mark(i, e);
+    }
+  }
+
+  const fittedNow = boundId !== null ? fittedBy.get(boundId) : undefined;
+  for (const entry of list) {
+    const a = entry.action;
+    const slot = lower(a.slot);
+    if (a.kind === "engineer" || a.kind === "experimental")
+      entry.fitted = slot ? (fittedNow?.get(slot) ?? null) : null;
+    if (entry.mode === "open") {
+      let doneNow = false;
+      if (BY_STATE.has(a.kind)) {
+        doneNow =
+          a.kind === "collect_material"
+            ? materialCount(journal.materials, a.material) >= (a.count ?? 1)
+            : UNLOCKED(journal, a.engineer);
+        if (doneNow) entry.write = { status: "done", key: `${plan.id}|${a.id}` };
+      } else if (entry.taken >= needOf(a)) {
+        doneNow = true;
+        const lastRef = entry.claims.at(-1)!;
+        entry.write = {
+          status: "done",
+          done_by: entry.claims,
+          key: `${plan.id}|${a.id}|${refKey(lastRef)}`,
+        };
+      }
+      entry.done = doneNow;
+    } else if (entry.mode === "adopt") {
+      // Written once, even empty, so the real event is not counted again for the next action.
+      entry.write = { done_by: entry.claims, key: `${plan.id}|${a.id}|adopt` };
+    }
+    if (entry.done && boundId !== null)
+      entry.notFitted = notFitted(entry, fittedNow, loadoutAt.get(boundId));
+  }
+  return {
+    plan,
+    actions: list.map(({ mode: _mode, ...x }) => x),
+    boundId: !fromPlan && boundId !== null ? boundId : null,
+    shipId: boundId,
+    matched,
+    lastMatch,
+    actedAt,
+  };
+}
+
+/**
+ * The Loadout as a cross-check: a done action whose module the ship's newest Loadout (written
+ * after the action) no longer shows. Not judged without such a Loadout.
+ */
+function notFitted(
+  entry: ActionJudgement,
+  fitted: Map<string, Fitted> | undefined,
+  loadout: number | undefined,
+): boolean {
+  const a = entry.action;
+  if (!fitted || loadout === undefined || loadout < entry.lastClaim) return false;
+  const slot = lower(a.slot);
+  const all = [...fitted.values()];
+  switch (a.kind) {
+    case "buy_module":
+    case "retrieve_module": {
+      const m = mod(a.module);
+      const here = slot ? fitted.get(slot) : null;
+      if (slot) return !here || here.item !== m;
+      return !all.some((x) => x.item === m);
+    }
+    case "engineer": {
+      const here = slot ? fitted.get(slot) : null;
+      return !here || !same(here.blueprint, a.blueprint) || (here.level ?? 0) < (a.grade ?? 1);
+    }
+    case "experimental": {
+      const here = slot ? fitted.get(slot) : null;
+      return !here || here.experimental !== lower(a.experimental);
+    }
+    default:
+      return false;
+  }
+}
+
+// ---------- Engineering: rolls left ----------
+
+/** Rolls for grades 1 to 5 when the plan gives none, as ed-mcp's materials_plan has it. */
+export const DEFAULT_ROLLS = [1, 2, 3, 4, 5];
+
+/**
+ * The rolls an engineer action still needs, by grade: to fill the grade reached (its rolls times
+ * the quality left, rounded up), each grade above up to the one below the target, and one roll of
+ * the target, which finishes the action at any quality. A module with no blueprint, or another,
+ * starts again at G1.
+ */
+export function rollsLeft(
+  a: Action,
+  fitted: Fitted | null,
+  rollsPerGrade: number[] = DEFAULT_ROLLS,
+): Map<number, number> {
+  const target = a.grade ?? 5;
+  const out = new Map<number, number>();
+  const per = (g: number) => rollsPerGrade[g - 1] ?? DEFAULT_ROLLS[g - 1]!;
+  const sameBp = !!fitted && same(fitted.blueprint, a.blueprint) && (fitted.level ?? 0) > 0;
+  const g = sameBp ? fitted!.level! : 0;
+  if (g >= target) return out;
+  if (g > 0) {
+    const fill = Math.ceil(per(g) * (1 - (fitted!.quality ?? 0)) - 1e-9);
+    if (fill > 0) out.set(g, fill);
+  }
+  for (let k = Math.max(1, g + 1); k < target; k++) if (per(k) > 0) out.set(k, per(k));
+  out.set(target, 1);
+  return out;
+}
+
+type NeedMaterial = NonNullable<NonNullable<Action["needs"]>["materials"]>[number];
+
+/** The materials an action still needs: an engineer action's rolls left times each grade's. */
+export function materialsLeft(
+  a: Action,
+  fitted: Fitted | null,
+  rollsPerGrade?: number[],
+): NeedMaterial[] {
+  if (a.kind !== "engineer" || !a.needs_by_grade) return a.needs?.materials ?? [];
+  const total = new Map<string, NeedMaterial>();
+  for (const [g, rolls] of rollsLeft(a, fitted, rollsPerGrade)) {
+    const per = a.needs_by_grade[String(g)] ?? a.needs_by_grade[`G${g}`];
+    for (const m of per?.materials ?? []) {
+      const k = (m.symbol ?? m.name).toLowerCase();
+      const was = total.get(k);
+      total.set(k, { ...m, count: (was?.count ?? 0) + m.count * rolls });
+    }
+  }
+  return [...total.values()];
+}

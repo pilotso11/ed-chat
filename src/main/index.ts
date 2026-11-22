@@ -129,6 +129,7 @@ import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.j
 import { HUD_EVENTS } from "../core/hud/mode.js";
 import { todoStops } from "../core/hud/panels.js";
 import { TradeStopFinisher } from "../core/hud/tradeStops.js";
+import { BuildFinisher } from "../core/hud/buildStops.js";
 import {
   ABOUT_URL,
   noticeMenuItems,
@@ -607,6 +608,7 @@ async function main(): Promise<void> {
     onError: (m) => log.log("warn", `panel spansh: ${m}`),
   });
   let hudPlans: ReturnType<typeof openStores>["plans"] | null = null;
+  let hudActivity: ReturnType<typeof openStores>["activity"] | null = null;
   async function openHudFeed(): Promise<void> {
     let syncDir = settings.hud.edMcpDataDir;
     if (!syncDir) syncDir = syncDirOf(agentConfigs, agentId, workspace);
@@ -619,6 +621,7 @@ async function main(): Promise<void> {
       known: settings.hud.spansh ? knownBodies : undefined,
     });
     hudPlans = stores.plans;
+    hudActivity = stores.activity;
     log.log("info", `panel data: ${syncDir ? "ed-mcp sync folder" : "ed-mcp config folder"}`);
   }
 
@@ -651,6 +654,9 @@ async function main(): Promise<void> {
       void finishTradeStop(hudData).catch((err: unknown) =>
         log.log("warn", `panel trade stop: ${message(err)}`),
       );
+      void finishBuild(hudData).catch((err: unknown) =>
+        log.log("warn", `panel build: ${message(err)}`),
+      );
       lastSystem = system;
       renderHud();
     } catch (err) {
@@ -662,7 +668,7 @@ async function main(): Promise<void> {
 
   // Arriving in the current stop's system copies the next stop's system for the galaxy map.
   function onArrival(system: string): void {
-    const next = arrivalCopy(hudData?.plan, system);
+    const next = arrivalCopy(followedPlan(), system);
     if (!next) return;
     clipboard.writeText(next);
     flash("copy", `📋 next stop copied: ${next}`, 4_000);
@@ -670,8 +676,10 @@ async function main(): Promise<void> {
 
   async function stepRoute(dir: 1 | -1): Promise<void> {
     const plans = hudPlans;
-    const plan = plans ? hudData?.plan : null;
-    const change = routeStep(plan, dir);
+    const plan = plans ? followedPlan() : null;
+    // The stop the build panel shows as current, when it is not the plan's first stop to do.
+    const follow = lastHudView?.follow;
+    const change = routeStep(plan, dir, follow?.planId === plan?.id ? follow?.stop : undefined);
     if ("notice" in change) return flash("route", change.notice, 3_000);
     // routeStep gives an update only for a plan, and there is a plan only with its store.
     if (!plans || !plan) return;
@@ -748,6 +756,37 @@ async function main(): Promise<void> {
   function finishTradeStop(data: FeedData): Promise<void> {
     if (!settings.hud.modes.trade) return Promise.resolve();
     return tradeStops.finish(data.plan, data.journal);
+  }
+
+  // Build actions the journal shows done are marked done once each, a stop when its last action is,
+  // and on a ship swap the note follows the new ship's build plan.
+  const buildStops = new BuildFinisher({
+    plans: () => hudPlans,
+    activity: () => hudActivity,
+    copy: (system, note) => {
+      clipboard.writeText(system);
+      flash("copy", `📋 ${note}`, 6_000);
+    },
+    notice: (text) => flash("route", text, 4_000),
+    warn: (m) => log.log("warn", `panel build: ${m}`),
+  });
+  function finishBuild(data: FeedData): Promise<void> {
+    if (!settings.hud.modes.build) return Promise.resolve();
+    return buildStops.finish({
+      note: data.plan,
+      plans: data.buildPlans ?? [],
+      journal: data.journal,
+      activity: data.activity,
+    });
+  }
+
+  // The plan the route keys and the arrival copy follow: the build plan the panel shows, when it
+  // is not the note's, else the note's.
+  function followedPlan(): Plan | null {
+    const id = lastHudView?.follow?.planId;
+    if (!id || !hudData) return hudData?.plan ?? null;
+    if (hudData.plan?.id === id) return hudData.plan;
+    return hudData.buildPlans?.find((p) => p.id === id) ?? hudData.plan;
   }
 
   // Bio bookmarks whose species are all analysed are marked done, once each.
