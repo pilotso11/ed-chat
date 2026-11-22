@@ -114,12 +114,20 @@ describe("mode hotkey", () => {
   it("goes from automatic through each enabled mode to off and back", () => {
     let saved = {};
     const seen: string[] = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 7; i++) {
       const next = nextHudMode(saved, hud, now);
       seen.push(next.mode);
       saved = next.saved;
     }
-    expect(seen).toEqual(["massacre", "exploration", "exobiology", "route", "off", "auto"]);
+    expect(seen).toEqual([
+      "massacre",
+      "exploration",
+      "exobiology",
+      "mining",
+      "route",
+      "off",
+      "auto",
+    ]);
     expect(saved).toEqual({ hudHidden: false });
   });
 
