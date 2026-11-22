@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { menuLabel, noticeMenuItems, trayItems, type TrayItem } from "../src/core/menus.js";
+import {
+  ABOUT_URL,
+  menuLabel,
+  noticeMenuItems,
+  trayItems,
+  type TrayItem,
+} from "../src/core/menus.js";
 
 describe("menu labels", () => {
   it("doubles & so Windows does not read it as a mnemonic", () => {
@@ -55,6 +61,8 @@ describe("tray menu", () => {
       "---",
       "Quit",
     ]);
+    // The address the browser opens is fixed: ED Chat's own https home page.
+    expect(ABOUT_URL).toBe("https://github.com/pilotso11/ed-chat#readme");
     // About opens the home page, not another item's action.
     expect(trayItems(base).find((i) => "label" in i && i.label === "About ED Chat")).toMatchObject({
       action: { type: "about" },
