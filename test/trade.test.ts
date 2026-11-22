@@ -908,6 +908,27 @@ describe("the trade panel", () => {
     expect(
       tradePanel({ ...restarted, market: { ...old, at: NOW - 20 * MIN } })!.rows[1]!.text,
     ).toBe("  hold 300/720 · price 1 (plan 9,380)");
+    // Left before the restart (undocked, died, respawned docked here): only a file since then.
+    const left = {
+      ...restarted,
+      events: [at(30, "Undocked", { StationName: "Wohler Terminal" }), ...restarted.events],
+    };
+    expect(tradePanel({ ...left, market: { ...old, at: NOW - 40 * MIN } })!.rows[1]!.text).toBe(
+      "  hold 300/720 · plan 9,380",
+    );
+    expect(tradePanel({ ...left, market: { ...old, at: NOW - 20 * MIN } })!.rows[1]!.text).toBe(
+      "  hold 300/720 · price 1 (plan 9,380)",
+    );
+    // A jump, or a docking elsewhere, before it bounds it too.
+    for (const before of [
+      at(30, "FSDJump", { StarSystem: "Kremainn" }),
+      docked(30, "Kremainn", "Other", 8),
+    ]) {
+      const moved = { ...restarted, events: [before, ...restarted.events] };
+      expect(tradePanel({ ...moved, market: { ...old, at: NOW - 40 * MIN } })!.rows[1]!.text).toBe(
+        "  hold 300/720 · plan 9,380",
+      );
+    }
     // Still only this station's.
     expect(tradePanel({ ...restarted, market: { ...old, marketId: 8 } })!.rows[1]!.text).toBe(
       "  hold 300/720 · plan 9,380",

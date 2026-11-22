@@ -500,11 +500,16 @@ export interface Dock {
   index: number;
   at: string;
   /**
-   * The visit starts with a Location, Docked true, with no docking before it in the events: the
-   * game restarted while docked, so the visit began before the events show.
+   * The earliest time a Market.json of this visit can have: the docking's time; for a visit that
+   * starts with Location, Docked true (the game restarted while docked), the last time the
+   * events show the ship leaving before it (undocking, a jump, death), since the visit began
+   * before the events show; null when they show nothing before it.
    */
-  restart: boolean;
+  since: string | null;
 }
+
+/** Events that show the ship left where it was docked. */
+const LEAVING = new Set(["Undocked", "FSDJump", "CarrierJump", "Died"]);
 
 export function dockedAt(events: JournalEvent[], location: JournalState["location"]): Dock | null {
   if (!location.docked || !location.station) return null;
@@ -529,20 +534,25 @@ export function dockedAt(events: JournalEvent[], location: JournalState["locatio
     marketId: num(e.MarketID),
     index,
     at: e.timestamp,
-    restart: e.event === "Location",
+    since:
+      e.event === "Location"
+        ? (events.findLast((x, k) => k < index && (LEAVING.has(x.event) || isDocking(x)))
+            ?.timestamp ?? null)
+        : e.timestamp,
   };
 }
 
 /**
- * Whether Market.json is of this visit: the docked station's market, written at or after docking.
- * A file left from an earlier visit has old prices. When the visit began before the events show
- * (a restart while docked) or its time is unreadable, the station's file is taken as this visit's.
+ * Whether Market.json is of this visit: the docked station's market, written since the visit
+ * began (Dock.since). A file left from an earlier visit has old prices. When the events show
+ * nothing before the visit (a restart while docked) or its time is unreadable, the station's file
+ * is taken as this visit's.
  */
 const fromVisit = (m: Market, dock: Dock) => {
   if (m.marketId !== dock.marketId) return false;
-  const docked = Date.parse(dock.at);
-  if (dock.restart || Number.isNaN(docked)) return true;
-  return m.at !== null && m.at >= docked;
+  const since = dock.since === null ? NaN : Date.parse(dock.since);
+  if (Number.isNaN(since)) return true;
+  return m.at !== null && m.at >= since;
 };
 
 const atStop = (s: Stop, dock: Dock | null) =>
