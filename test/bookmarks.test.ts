@@ -18,6 +18,7 @@ import {
   bookmarkHere,
   bookmarkLabel,
   bookmarkRows,
+  bookmarkShown,
   bookmarksToClear,
   isKeyRepeat,
   keyClearStops,
@@ -650,10 +651,31 @@ describe("bio bookmark rows", () => {
     expect(rows([{ ...(done as object), bio_signals: null }])[0]!.text).toBe(
       "📍 Bio: all found sampled, more may be here",
     );
-    // A second bookmark's " (2)" stays, so the two rows still differ.
-    expect(rows([now], [{ ...mark, label: `${mark.label} (2)` }])[0]!.text).toBe(
-      "📍 Bio: Bacterium, Concha (2)",
-    );
+    // Two bookmarks that redraw the same: the later one in the plan gets " (2)".
+    const two = rows([now], [mark, { ...mark, label: "Bio: Concha" }]).map((r) => r.text);
+    expect(two).toEqual(["📍 Bio: Bacterium, Concha", "📍 Bio: Bacterium, Concha (2)"]);
+  });
+
+  it("names a bookmark in a note as its row does", () => {
+    const e = (event: string, o: object) =>
+      ({ timestamp: "2026-11-22T10:00:00Z", event, ...o }) as unknown as JournalEvent;
+    const journal = {
+      location: { system: SYSTEM },
+      events: [
+        e("FSDJump", { StarSystem: SYSTEM, SystemAddress: 7 }),
+        e("SAASignalsFound", {
+          SystemAddress: 7,
+          BodyID: 6,
+          BodyName: BODY,
+          Signals: [{ Type: "$SAA_SignalType_Biological;", Count: 1 }],
+          Genuses: [{ Genus: "$Codex_Ent_Conchas_Genus_Name;", Genus_Localised: "Concha" }],
+        }),
+      ],
+    } as unknown as JournalState & { events: JournalEvent[] };
+    const stop = plan([mark]).stops[0]!;
+    expect(bookmarkShown(stop, journal, null)).toBe("Bio: Concha");
+    expect(bookmarkShown(stop, null, null)).toBe(mark.label);
+    expect(bookmarkShown({ ...stop, notes: undefined }, journal, null)).toBe(mark.label);
   });
 
   it("keeps a label the player or Claude chose, and the saved one without the journal", () => {

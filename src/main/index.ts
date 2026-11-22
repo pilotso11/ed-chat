@@ -108,6 +108,7 @@ import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import {
   BOOKMARKS_PLAN,
   bookmarkHere,
+  bookmarkShown,
   bookmarksToClear,
   isKeyRepeat,
   keyClearStops,
@@ -880,7 +881,7 @@ async function main(): Promise<void> {
     flash(
       "bookmark",
       cleared.length === 1
-        ? `📍 cleared ${one.label ?? one.purpose} on ${shortBody(one.body ?? one.system, one.system)}`
+        ? `📍 cleared ${bookmarkShown(one, hudData?.journal ?? null, hudData?.known ?? null)} on ${shortBody(one.body ?? one.system, one.system)}`
         : `📍 cleared ${cleared.length} bookmarks`,
       4_000,
     );
@@ -923,7 +924,11 @@ async function main(): Promise<void> {
           const ref = still ? bookmarkRef(now, stop) : null;
           if (!ref) return;
           const plan = await plans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
-          flash("bookmark", `📍 done: ${stop.label ?? stop.purpose}`, 4_000);
+          flash(
+            "bookmark",
+            `📍 done: ${bookmarkShown(stop, hudData?.journal ?? null, hudData?.known ?? null)}`,
+            4_000,
+          );
           // Shown at once, as for a new or cleared bookmark.
           savedBookmarks = { plan, afterPoll: pollsStarted };
           if (hudData) hudData = { ...hudData, bookmarks: plan };

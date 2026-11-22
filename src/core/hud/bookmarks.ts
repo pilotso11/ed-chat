@@ -104,8 +104,6 @@ function bookmarkText(
   if (!body) return label;
   const count = knownSignals(known, body.body_id);
   const left = bioLeft(body, count);
-  // The " (2)" that kept the label unique stays, so two bookmarks on a body still differ.
-  const n = / \(\d+\)$/.exec(label)?.[0] ?? "";
   // "All sampled" when the journal says the body is done. On Spansh's count alone, the row says
   // so, as the header does, but auto-done waits for the journal's (it can be out of date).
   const what = left.length
@@ -115,7 +113,24 @@ function bookmarkText(
       : bioProgress(body, count).done
         ? "Bio: all sampled by Spansh's count"
         : "Bio: all found sampled, more may be here";
-  return `${what}${n}`;
+  return what;
+}
+
+/**
+ * What the row for a bookmark says, for a note about it: the redrawn bio list when the key made
+ * it, else its label. Reads the system's exobiology from the journal.
+ */
+export function bookmarkShown(
+  s: Stop,
+  journal: (JournalState & { events: JournalEvent[] }) | null,
+  known: KnownBody[] | null,
+): string {
+  const label = s.label ?? s.purpose;
+  if (s.kind !== "exobiology" || s.notes !== BIO_NOTE || !journal) return label;
+  const address = systemAddress(journal.events, s.system);
+  if (address === null) return label;
+  const bio = exobiology(journal.events, address, { system: s.system }).bodies;
+  return bookmarkText(s, bio, known, s.system);
 }
 
 /** A bookmark as a plan stop. */
@@ -193,6 +208,17 @@ export function bookmarkRows(input: {
   const heading = status?.heading ?? null;
   const near: (HudRow & { d: number })[] = [];
   const elsewhere = new Map<string, { name: string; n: number }>();
+  // Redrawn bio labels can come out the same for two bookmarks on a body: the later ones in the
+  // plan get " (2)" and so on, so the rows still differ and keep their numbers as you move.
+  const texts = new Map<Stop, string>();
+  const used = new Map<string, number>();
+  for (const s of here) {
+    if (bodyKey(s.body!, system) !== onBody) continue;
+    const base = bookmarkText(s, input.bio ?? null, input.known ?? null, system);
+    const n = (used.get(base.toLowerCase()) ?? 0) + 1;
+    used.set(base.toLowerCase(), n);
+    texts.set(s, n > 1 ? `${base} (${n})` : base);
+  }
   for (const s of here) {
     if (bodyKey(s.body!, system) !== onBody) {
       // Counted ignoring case, as the body is matched; named as first written.
@@ -201,7 +227,7 @@ export function bookmarkRows(input: {
       elsewhere.set(key, { name: seen?.name ?? shortBody(s.body!, system), n: (seen?.n ?? 0) + 1 });
       continue;
     }
-    const text = `📍 ${bookmarkText(s, input.bio ?? null, input.known ?? null, system)}`;
+    const text = `📍 ${texts.get(s)!}`;
     const pos = stopPosition(s);
     if (!pos || !at || radius === null) {
       // On the body, but where it is or where we are is not known.
