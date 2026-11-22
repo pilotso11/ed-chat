@@ -82,11 +82,10 @@ to quit.
 
 ## Documentation
 
-- [Using ED Chat](docs/using.md): every key and command, setting up ed-mcp, permissions,
+- [Using ED Chat](docs/using.md): the overlay's keys and commands, setting up ed-mcp, permissions,
   other model providers and troubleshooting.
-- [The activity panel](docs/activity-panel.md): what each mode shows, and how.
+- [The activity panel](docs/activity-panel.md): what each mode shows, how, and its keys.
 - [Settings](docs/settings.md): every setting in `settings.json`.
-- [Privacy](PRIVACY.md).
 
 ## Contributing
 

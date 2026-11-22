@@ -1,7 +1,10 @@
 # Activity panel in detail
 
-What each mode of the activity panel shows, and how it works it out. The
-[README](../README.md#pictures) has pictures of each mode. The keys are in
+What each mode of the activity panel shows, and how it works it out. The panel
+reads the game journal directly and never calls the assistant, so it costs no
+tokens. It shows only while the game is in front: switch to another window and it
+hides until you come back. The [README](../README.md#pictures) has pictures of each
+mode. The keys are in
 [the Keys section](#keys) below, and the panel's settings, all under
 `hud`, in [Settings](settings.md).
 
@@ -108,8 +111,9 @@ the next stop's system is copied for the galaxy map.
 
 Ctrl+Alt+B saves where you are on a planet. On that body, the panel shows each
 bookmark with its distance, its bearing and which way to turn: under the
-exploration and exobiology panels, and on its own in route mode, or when no mode is
-on. Massacre, mining and passenger mode leave them out. A
+exploration and exobiology panels, and on their own when the exploration or
+exobiology panel has nothing to list, in route mode, or when no mode is on. Massacre,
+mining and passenger mode leave them out. A
 bookmark at a bio site is marked done once every species there is analysed.
 Bookmarks are an ed-mcp plan, so Claude can see and change them. `hud.bookmarks`
 turns them off.
@@ -119,9 +123,11 @@ turns them off.
 The mode changes by itself. Accepting a massacre mission turns on massacre mode
 until the stack is handed in. A discovery scan or a detailed scan turns on
 exploration, and five jumps with no scan turn it off again. Approaching a body with
-biological signals, or taking a sample, turns on exobiology. Prospecting, refining
-or cracking a rock turns on mining, and taking a passenger or delivery mission turns
-on passenger mode. A jump alone starts nothing.
+biological signals, landing on one, or taking a sample, turns on exobiology, and
+leaving the body goes back to exploration, when that mode is on. Launching a
+prospector limpet, prospecting, refining or cracking a rock turns on mining, and
+taking a passenger or delivery mission turns on passenger mode. A jump alone starts
+nothing.
 
 Telling Claude what you are doing ("I'm doing massacres") sets the ed-mcp activity
 note, which the panel follows. Ctrl+Alt+Shift+P chooses a mode yourself: automatic,

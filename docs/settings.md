@@ -30,7 +30,7 @@ next start.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `hotkeys.*` | see [the keys](using.md#keys-and-commands) | An Electron accelerator string, or a list of them for more than one key. `copyChip` must contain `{n}` |
+| `hotkeys.*` | see [the overlay's keys](using.md#keys-and-commands) and [the panel's](activity-panel.md#keys) | An Electron accelerator string, or a list of them for more than one key. `copyChip` must contain `{n}` |
 | `hotkeys.copyChipNumpad` | `false` | Also copy chips with Ctrl+numpad 1…9. Windows changes Shift+numpad keys, so these use Ctrl only |
 | `hotkeys.scope` | `game` | `game`: only while the game or overlay is in front. `always`: everywhere, except keys without a modifier, such as a bare backquote |
 | `startup.showKeys` | `true` | Show the hotkeys at startup |
