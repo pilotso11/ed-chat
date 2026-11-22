@@ -7,7 +7,15 @@ import type { Settings } from "./settings.js";
 // Decisions main makes about the assistant and the game files, apart from running them.
 
 /** ED Chat's own commands, typed in the chat; they never reach the assistant. */
-export const LOCAL_COMMANDS = ["/new", "/version", "/claude", "/codex"] as const;
+export const LOCAL_COMMANDS = [
+  "/new",
+  "/version",
+  "/claude",
+  "/codex",
+  // Quit ED Chat, as the tray menu's Quit does.
+  "/quit",
+  "/exit",
+] as const;
 export type LocalCommand = (typeof LOCAL_COMMANDS)[number];
 
 export function localCommand(text: string): LocalCommand | null {

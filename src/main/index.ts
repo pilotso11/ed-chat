@@ -1080,8 +1080,8 @@ async function main(): Promise<void> {
     return true;
   }
 
-  /** False when the command could not run; the chat then stays open. */
-  async function runLocal(command: LocalCommand): Promise<boolean> {
+  /** False when the command could not run; the chat then stays open. "quit" quits after it. */
+  async function runLocal(command: LocalCommand): Promise<boolean | "quit"> {
     switch (command) {
       case "/new":
         newConversation();
@@ -1091,6 +1091,9 @@ async function main(): Promise<void> {
       case "/claude":
       case "/codex":
         return chooseAgent(command === "/claude" ? "claude" : "codex");
+      case "/quit":
+      case "/exit":
+        return "quit";
       default:
         // A command added to LOCAL_COMMANDS must be handled here.
         return command satisfies never;
@@ -1103,9 +1106,16 @@ async function main(): Promise<void> {
     // ED Chat's own commands. They do not reach the assistant.
     const command = localCommand(t);
     if (command) {
-      if (!(await runLocal(command))) return false;
+      const done = await runLocal(command);
+      if (!done) return false;
       const ok = await giveFocusBack();
       dispatch({ type: "closeChat" });
+      if (done === "quit") {
+        // Focus settles on the game before the windows go, so quitting does not leave it behind.
+        if (ok) await settleFocus();
+        app.quit();
+        return true;
+      }
       if (ok) void settleFocus();
       return true;
     }
@@ -1397,7 +1407,7 @@ async function main(): Promise<void> {
     applySettings();
   }
 
-  // Tray: the only way to quit, since the overlay has no window frame.
+  // Tray: one way to quit, with /quit in the chat, since the overlay has no window frame.
   const openPath = (p: string) =>
     void shell.openPath(p).then((err) => {
       if (err) log.log("warn", `open ${path.basename(p)}: ${err}`);
