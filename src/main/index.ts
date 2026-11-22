@@ -91,7 +91,7 @@ import {
   type SavedState,
 } from "../core/stores.js";
 import { resumeId } from "../core/resume.js";
-import { openStores } from "ed-mcp/journal";
+import { openStores, type Plan } from "ed-mcp/journal";
 import {
   configProblems,
   hasOwnEdMcp,
@@ -105,6 +105,15 @@ import {
 } from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
+import {
+  BOOKMARKS_PLAN,
+  bookmarkHere,
+  finishedBioBookmarks,
+  isPlanNotFound,
+  bookmarkRef,
+  keepSavedBookmarks,
+  type SavedBookmarks,
+} from "../core/hud/bookmarks.js";
 import { SellPrices, postSpansh, type SellQuery } from "../core/hud/sell.js";
 import { buildHud, type HudView } from "../core/hud/hud.js";
 import {
@@ -584,11 +593,19 @@ async function main(): Promise<void> {
 
   let hudPolling = false;
   let lastSystem: string | null = null;
+  // The bookmarks plan a key press saved; a poll that started before it read the plan without it.
+  let savedBookmarks: SavedBookmarks | null = null;
+  // Polls started so far, which dates a save against the polls around it.
+  let pollsStarted = 0;
   async function pollHud(): Promise<void> {
     if (hudPolling || !hudFeed || !settings.hud.enabled) return;
     hudPolling = true;
+    const poll = ++pollsStarted;
     try {
-      hudData = await hudFeed.poll();
+      const read = await hudFeed.poll();
+      const kept = keepSavedBookmarks(read, savedBookmarks, poll);
+      savedBookmarks = kept.saved;
+      hudData = kept.data;
       hudFreshAt = Date.now();
       const stops = todoStops(hudData.plan);
       if (JSON.stringify(stops) !== JSON.stringify(chipStops)) {
@@ -597,6 +614,9 @@ async function main(): Promise<void> {
       }
       const system = hudData.journal?.location.system ?? null;
       if (system && lastSystem && system !== lastSystem) onArrival(system);
+      void finishBioBookmarks(hudData).catch((err: unknown) =>
+        log.log("warn", `panel bookmarks: ${message(err)}`),
+      );
       lastSystem = system;
       renderHud();
     } catch (err) {
@@ -631,6 +651,77 @@ async function main(): Promise<void> {
     if (system) {
       clipboard.writeText(system);
       flash("copy", `📋 copied ${system}`, 3_000);
+    }
+  }
+
+  // Saves where the ship or commander is on a planet to the bookmarks plan.
+  // Bookmark key presses run one at a time, so two quick presses do not both read the same plan.
+  let bookmarking: Promise<void> = Promise.resolve();
+  function addBookmark(): Promise<void> {
+    bookmarking = bookmarking.then(saveBookmark, saveBookmark);
+    return bookmarking;
+  }
+
+  // Saves where the ship or commander is now (Status.json read fresh) to the bookmarks plan.
+  async function saveBookmark(): Promise<void> {
+    // PlanStore.addStop adds the stop in one locked write, so an edit Claude makes to the bookmarks
+    // meanwhile is not lost.
+    const plans = hudPlans;
+    if (!settings.hud.enabled) {
+      return flash("bookmark", "ⓘ the activity panel is off: turn it on to bookmark", 3_000);
+    }
+    if (!plans || !hudFeed) {
+      return flash("bookmark", "ⓘ the activity panel could not open the journal or ed-mcp", 3_000);
+    }
+    if (!settings.hud.bookmarks) {
+      return flash("bookmark", "ⓘ bookmarks are off: turn on hud.bookmarks", 3_000);
+    }
+    if (!hudData?.journal) {
+      return flash("bookmark", "ⓘ the panel has not read the journal yet: try again", 3_000);
+    }
+    let old: Plan | null = null;
+    try {
+      old = await plans.get(BOOKMARKS_PLAN);
+    } catch (err) {
+      if (!isPlanNotFound(err)) throw err;
+    }
+    const status = await hudFeed.readStatus();
+    const made = bookmarkHere(
+      hudData.journal,
+      status,
+      (old?.stops ?? []).map((s) => s.label ?? s.purpose),
+    );
+    if ("reason" in made) return flash("bookmark", `ⓘ ${made.reason}`, 3_000);
+    const saved = await plans.addStop(BOOKMARKS_PLAN, "Bookmarks", made.stop);
+    flash("bookmark", `📍 bookmarked ${made.stop.purpose} on ${made.stop.body}`, 4_000);
+    // Shown at once, not after the next poll, which may have read the plan before the save.
+    savedBookmarks = { plan: saved, afterPoll: pollsStarted };
+    if (hudData) hudData = { ...hudData, bookmarks: saved };
+    renderHud();
+  }
+
+  // Bio bookmarks whose species are all analysed are marked done, once each.
+  const bookmarksDone = new Set<string>();
+  async function finishBioBookmarks(data: FeedData): Promise<void> {
+    if (!hudPlans || !settings.hud.bookmarks) return;
+    for (const i of finishedBioBookmarks(data.bookmarks ?? null, data.journal)) {
+      const stop = data.bookmarks!.stops[i]!;
+      // What and where it is: a new bookmark with the same label in another spot is another one.
+      const id = JSON.stringify([stop.system, stop.body, stop.label, stop.purpose, stop.position]);
+      if (bookmarksDone.has(id)) continue;
+      bookmarksDone.add(id);
+      try {
+        // Found again in the plan as it is now: an edit since the poll can move it.
+        const now = await hudPlans.get(BOOKMARKS_PLAN);
+        const ref = bookmarkRef(now, stop);
+        if (!ref) continue;
+        await hudPlans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
+        flash("bookmark", `📍 done: ${stop.label ?? stop.purpose}`, 4_000);
+      } catch (err) {
+        // Tried again on the next poll; the other bookmarks are still marked.
+        bookmarksDone.delete(id);
+        log.log("warn", `panel bookmarks: ${message(err)}`);
+      }
     }
   }
 
@@ -1224,6 +1315,10 @@ async function main(): Promise<void> {
         return setHudMoving(!hudMoving);
       case "route":
         return stepRoute(a.dir);
+      case "bookmark":
+        return void addBookmark().catch((err: unknown) =>
+          flash("bookmark", `⚠ bookmark not saved: ${message(err)}`, 4_000),
+        );
     }
   }
 

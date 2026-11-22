@@ -456,7 +456,7 @@ describe("helpers", () => {
   it("reads the ship's position from Status.json", () => {
     expect(
       parseShipStatus('{"BodyName":"X 1","Latitude":1.5,"Longitude":-2,"PlanetRadius":3e6}'),
-    ).toEqual({ body: "X 1", latitude: 1.5, longitude: -2, radius: 3e6 });
+    ).toEqual({ body: "X 1", latitude: 1.5, longitude: -2, radius: 3e6, heading: null });
     expect(parseShipStatus("{")).toBeNull();
   });
 
@@ -509,5 +509,33 @@ describe("HudFeed sample positions", () => {
     events.push(s("Analyse"));
     await feed.poll();
     expect(feed.samples.has(sampleKey(7, 3, "Bact"))).toBe(false);
+  });
+});
+
+describe("HudFeed bookmarks and a fresh Status.json", () => {
+  const stores = (get: () => Promise<unknown>) => ({
+    journal: { state: async () => ({ events: [], missions: [], location: { system: "S" } }) },
+    activity: { get: async () => null },
+    plans: { get },
+  });
+
+  it("reads Status.json again when it is caught mid-write", async () => {
+    let reads = 0;
+    const feed = new HudFeed(stores(async () => null) as never, "J", {
+      read: async () => (++reads === 1 ? '{"Latitude":1' : '{"Latitude":1,"Longitude":2}'),
+    });
+    expect((await feed.readStatus())?.latitude).toBe(1);
+    expect(reads).toBe(2);
+  });
+
+  it("takes no bookmarks plan as none, not as an error", async () => {
+    const errors: string[] = [];
+    const feed = new HudFeed(
+      stores(async () => Promise.reject(new Error('Plan "bookmarks" not found'))) as never,
+      "J",
+      { read: async () => "{}", onError: (what) => errors.push(what) },
+    );
+    expect((await feed.poll()).bookmarks).toBeNull();
+    expect(errors).toEqual([]);
   });
 });
