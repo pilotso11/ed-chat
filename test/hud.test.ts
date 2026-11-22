@@ -942,6 +942,11 @@ describe("HudFeed bookmarks and a fresh Status.json", () => {
     expect(reads).toBe(2);
   });
 
+  it("reads the system from the journal as it is now", async () => {
+    const feed = new HudFeed(stores(async () => null) as never, "J", { read: async () => "{}" });
+    expect(await feed.readSystem()).toBe("S");
+  });
+
   it("parses Market.json again only when it changes", async () => {
     let text = JSON.stringify({ MarketID: 7, StationName: "Port", Items: [] });
     const feed = new HudFeed(stores(async () => null) as never, "J", {

@@ -768,9 +768,10 @@ async function main(): Promise<void> {
     if (r.response === 0) await queueBookmarks(() => unmarkBookmarks("all", true, asked));
   }
 
-  // Away from a bookmarked body, the clear key clears the whole system only on a second press.
+  // Away from a bookmarked body, the clear key clears the whole system only on a second press,
+  // and only the bookmarks the first press named, in the same system.
   const CLEAR_AGAIN_MS = 4_000;
-  let clearSystemUntil = 0;
+  let clearSystem: { until: number; system: string | null; stops: Stop[] } | null = null;
 
   async function unmarkBookmarks(
     scope: "here" | "all",
@@ -789,17 +790,27 @@ async function main(): Promise<void> {
       if (isPlanNotFound(err)) return flash("bookmark", "ⓘ no bookmarks", 3_000);
       throw err;
     }
-    const system = hudData?.journal?.location.system ?? null;
     let picked: number[];
     if (scope === "all") {
       picked = todoBookmarks(plan).filter((i) =>
         asked.some((a) => sameBookmark(a, plan.stops[i]!)),
       );
     } else {
-      const pick = bookmarksToClear({ plan, system, status: await hudFeed.readStatus() });
+      // The system and position read now: the last poll may be from before a jump.
+      const [system, status] = await Promise.all([hudFeed.readSystem(), hudFeed.readStatus()]);
+      const pick = bookmarksToClear({ plan, system, status });
       picked = pick.stops;
-      if (pick.whole && !confirmed && Date.now() > clearSystemUntil) {
-        clearSystemUntil = Date.now() + CLEAR_AGAIN_MS;
+      const stops = picked.map((i) => plan.stops[i]!);
+      const armed = clearSystem;
+      clearSystem = null;
+      const again =
+        !!armed &&
+        Date.now() <= armed.until &&
+        armed.system === system &&
+        armed.stops.length === stops.length &&
+        stops.every((s) => armed.stops.some((a) => sameBookmark(a, s)));
+      if (pick.whole && !confirmed && !again) {
+        clearSystem = { until: Date.now() + CLEAR_AGAIN_MS, system, stops };
         const n = picked.length;
         return flash(
           "bookmark",
@@ -807,7 +818,6 @@ async function main(): Promise<void> {
           CLEAR_AGAIN_MS,
         );
       }
-      clearSystemUntil = 0;
     }
     if (!picked.length) {
       return flash("bookmark", scope === "all" ? "ⓘ no bookmarks" : "ⓘ no bookmarks here", 3_000);
@@ -1773,8 +1783,8 @@ async function main(): Promise<void> {
               here: bookmarksToClear({
                 plan: hudData?.bookmarks ?? null,
                 system: hudData?.journal?.location.system ?? null,
-                status: null,
-              }).stops.length,
+                status: hudData?.status ?? null,
+              }),
               all: todoBookmarks(hudData?.bookmarks ?? null).length,
             }
           : undefined,

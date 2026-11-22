@@ -85,26 +85,37 @@ describe("tray menu", () => {
   });
 
   it("offers to clear bookmarks when there are any", () => {
-    expect(labels(trayItems({ ...base, bookmarks: { here: 0, all: 0 } }))).not.toContain(
-      "Bookmarks",
-    );
+    expect(
+      labels(trayItems({ ...base, bookmarks: { here: { stops: [], whole: false }, all: 0 } })),
+    ).not.toContain("Bookmarks");
     // None in this system: only Clear all.
-    const away = trayItems({ ...base, bookmarks: { here: 0, all: 3 } }).find(
-      (i) => "label" in i && i.label === "Bookmarks",
-    );
+    const away = trayItems({
+      ...base,
+      bookmarks: { here: { stops: [], whole: false }, all: 3 },
+    }).find((i) => "label" in i && i.label === "Bookmarks");
     expect(away).toEqual({
       label: "Bookmarks",
       submenu: [
         { label: "Clear all bookmarks (3)…", action: { type: "clearBookmarks", all: true } },
       ],
     });
-    const menu = trayItems({ ...base, bookmarks: { here: 1, all: 3 } }).find(
-      (i) => "label" in i && i.label === "Bookmarks",
-    );
+    // Away from a bookmarked body, the item says it clears the whole system.
+    const system = trayItems({
+      ...base,
+      bookmarks: { here: { stops: [0, 2], whole: true }, all: 3 },
+    });
+    expect(JSON.stringify(system)).toContain("Clear 2 bookmarks in this system");
+    const menu = trayItems({
+      ...base,
+      bookmarks: { here: { stops: [1], whole: false }, all: 3 },
+    }).find((i) => "label" in i && i.label === "Bookmarks");
     expect(menu).toEqual({
       label: "Bookmarks",
       submenu: [
-        { label: "Clear bookmarks here", action: { type: "clearBookmarks", all: false } },
+        {
+          label: "Clear the nearest bookmark here",
+          action: { type: "clearBookmarks", all: false },
+        },
         { label: "Clear all bookmarks (3)…", action: { type: "clearBookmarks", all: true } },
       ],
     });
