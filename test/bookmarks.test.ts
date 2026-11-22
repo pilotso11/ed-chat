@@ -257,9 +257,12 @@ describe("bookmark review fixes", () => {
   it("knows ed-mcp's own error for a missing plan", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "bookmarks-"));
     const store = new PlanStore(path.join(dir, "plans.json"));
-    const err = await store.get(BOOKMARKS_PLAN).catch((e: unknown) => e);
-    expect(isPlanNotFound(err)).toBe(true);
-    await rm(dir, { recursive: true, force: true });
+    try {
+      const err = await store.get(BOOKMARKS_PLAN).catch((e: unknown) => e);
+      expect(isPlanNotFound(err)).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("tells a missing plan from a failed read", () => {

@@ -715,7 +715,11 @@ async function main(): Promise<void> {
         // another stop under the index; Claude can give two stops one label, and then the index.
         const label = now.stops[index]!.label;
         const ref =
-          label && now.stops.filter((s) => s.label === label).length === 1 ? { label } : { index };
+          label &&
+          // ed-mcp matches labels ignoring case.
+          now.stops.filter((s) => s.label?.toLowerCase() === label.toLowerCase()).length === 1
+            ? { label }
+            : { index };
         await hudPlans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
         flash("bookmark", `📍 done: ${stop.label ?? stop.purpose}`, 4_000);
       } catch (err) {
