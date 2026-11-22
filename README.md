@@ -5,7 +5,7 @@
 A small AI chat window on top of Elite Dangerous, for Claude Code or OpenAI's
 Codex. Press a hotkey, ask a question, press Enter, and keep flying. The reply shows in a corner of the
 screen. Star system and station names in the reply become numbered chips;
-Ctrl+Shift+1…9 or a click copies one, ready to paste into the galaxy map search.
+Ctrl+Alt+1…9 or a click copies one, ready to paste into the galaxy map search.
 
 Windows 10 and 11 only. The overlay is a desktop window, so it does not show in
 VR.
@@ -69,12 +69,12 @@ installer is not code signed, so Windows SmartScreen warns on first run. Select
 | --- | --- |
 | Ctrl+` | Step: the last reply, then the whole reply, then the chat; a press in the chat closes it |
 | Ctrl+Alt+Enter | Open the chat directly. Enter sends and returns to the game. Esc closes. |
-| Ctrl+Shift+1…9 | Copy chip 1…9 (top-row digits). A click on a chip also copies it. |
+| Ctrl+Alt+1…9 | Copy chip 1…9 (top-row digits). A click on a chip also copies it. |
 | Ctrl+Alt+Y / N | Allow / deny a tool that the assistant asks to run |
 | Ctrl+Alt+A | Allow the tool, and allow it without asking until `/new` |
 | Ctrl+Alt+X | Stop the current reply |
-| Ctrl+Shift+H | Show or hide this session's history |
-| Ctrl+Shift+Enter | Switch between the full overlay and a small icon |
+| Ctrl+Alt+H | Show or hide this session's history |
+| Ctrl+Alt+Shift+Enter | Switch between the full overlay and a small icon |
 | Ctrl+Alt+Arrows | Move the overlay around the screen edge |
 | Ctrl+Alt+M | Move the overlay to the next monitor |
 
@@ -88,7 +88,7 @@ Each assistant keeps its own conversation. Switching back within 12 hours resume
 With Codex chosen, your messages and tool results go to OpenAI instead of Anthropic.
 
 When ED Chat starts within 12 hours of your last reply, it resumes that
-conversation, and the history (Ctrl+Shift+H) shows its turns. With an ed-mcp that has
+conversation, and the history (Ctrl+Alt+H) shows its turns. With an ed-mcp that has
 the activity tools, the assistant also keeps a short note of what you are doing, for example
 scanning bios on a planet or running a massacre stack, and the route that
 you are flying. It reads the note when a conversation starts, so it knows
@@ -125,7 +125,7 @@ Ctrl+` steps through what is on screen, one press at a time:
 
 The step follows what is on screen: after the card fades, the next press starts
 again at step 1. With no reply yet, the first press opens the chat. With the
-history open (Ctrl+Shift+H), the next press adds the input to it.
+history open (Ctrl+Alt+H), the next press adds the input to it.
 
 The status line shows **● sending** until the reply starts, then
 **● receiving**.
@@ -139,9 +139,12 @@ While you type in the chat, the overlay leaves typing keys to the chat input,
 including AltGr letters. Ctrl+Alt hotkeys such as Ctrl+Alt+X still work there:
 use the left Ctrl and Alt keys, because AltGr types the letter.
 
-Outside the chat, Windows sends AltGr as Ctrl+Alt, so AltGr+Y, N or A answers a
-waiting tool request. If that gets in your way, set `hotkeys.approve`, `deny`
-and `alwaysAllow` to other keys.
+Outside the chat, Windows sends AltGr as Ctrl+Alt, so in the game's own chat
+AltGr+Y, N or A answers a waiting tool request, AltGr+H shows the history and
+AltGr+1…9 copies a chip instead of typing a character: € on a UK keyboard, and
+@, #, {, [, ] or \ on German, French, Spanish, Nordic and other layouts. With
+`hotkeys.scope` set to `"always"` this happens in every app. If that gets in your
+way, set those keys in `settings.json`, for example `"copyChip": "Ctrl+Shift+{n}"`.
 
 If the overlay shows `⚠ 2 hotkeys not working`, another app already uses those
 keys, or `settings.json` sets the same key for two actions. The tray menu item
