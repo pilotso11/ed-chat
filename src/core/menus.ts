@@ -61,7 +61,7 @@ export function trayItems(s: {
   const n = here.stops.length;
   // What the item clears: the nearest bookmark on this body, or every one in the system.
   const hereLabel = here.whole
-    ? `Clear ${n} bookmark${n === 1 ? "" : "s"} in this system`
+    ? `Clear ${n} bookmark${n === 1 ? "" : "s"} in this system…`
     : "Clear the nearest bookmark here";
   return [
     ...s.chips.map((c): TrayItem => ({

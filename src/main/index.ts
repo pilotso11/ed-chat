@@ -727,8 +727,13 @@ async function main(): Promise<void> {
       if (trayHereWhole) return askClearListed(named, "in this system");
       return queueBookmarks(() => unmarkBookmarks("listed", named));
     }
-    // Timed at the press, not when the queue gets to it, for the second press's window.
+    // Timed at the press, not when the queue gets to it, for the second press's window. A held
+    // key repeats every few tens of milliseconds: a press that soon after the last is ignored,
+    // so only letting go and pressing again counts as a second press.
     const at = Date.now();
+    const repeat = at - lastClearPress < CLEAR_REPEAT_MS;
+    lastClearPress = at;
+    if (repeat) return Promise.resolve();
     return queueBookmarks(() => unmarkBookmarks("here", [], at));
   }
 
@@ -800,7 +805,10 @@ async function main(): Promise<void> {
   // Away from a bookmarked body, the clear key clears the whole system only on a second press,
   // and only the bookmarks the first press named, in the same system.
   const CLEAR_AGAIN_MS = 4_000;
-  let clearSystem: { until: number; system: string | null; stops: Stop[] } | null = null;
+  // A held key repeats: a press this soon after the last one is the same press.
+  const CLEAR_REPEAT_MS = 400;
+  let lastClearPress = 0;
+  let clearSystem: { at: number; system: string | null; stops: Stop[] } | null = null;
 
   // Clears the bookmark here (the key), or the listed ones that are still to do (the tray, after
   // naming or asking about them).
@@ -838,12 +846,12 @@ async function main(): Promise<void> {
       clearSystem = null;
       const again =
         !!armed &&
-        pressed <= armed.until &&
+        pressed - armed.at <= CLEAR_AGAIN_MS &&
         armed.system === system &&
         armed.stops.length === stops.length &&
         stops.every((s) => armed.stops.some((a) => sameStop(a, s)));
       if (pick.whole && !again) {
-        clearSystem = { until: pressed + CLEAR_AGAIN_MS, system, stops };
+        clearSystem = { at: pressed, system, stops };
         const n = picked.length;
         return flash(
           "bookmark",
