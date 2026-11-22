@@ -76,12 +76,17 @@ export function drops(missions: Mission[]): Drop[] {
 const isMissionStop = (s: Plan["stops"][number]) =>
   s.kind === "mission" || s.kind === "hand_in" || s.kind === "trade" || Array.isArray(s.missions);
 
-/** Mission IDs the plan's stops still to do serve; null when the plan does not say. */
+/**
+ * Mission IDs the plan's stops serve, done stops too; null when the plan does not say. A mission
+ * outside it was taken after the route: new.
+ */
 function planned(plan: Plan | null): Set<number> | null {
   if (!plan) return null;
   const stops = plan.stops;
   if (!stops.some((s) => Array.isArray(s.missions))) return null;
-  return new Set(stops.filter((s) => s.status === "todo").flatMap((s) => s.missions ?? []));
+  // Every stop, done ones too: the route key marks a stop done while its mission is still open,
+  // and that mission is in the route, not new.
+  return new Set(stops.flatMap((s) => s.missions ?? []));
 }
 
 /**

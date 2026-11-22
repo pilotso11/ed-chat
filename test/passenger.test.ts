@@ -139,6 +139,14 @@ describe("passengerPanel", () => {
       text: "Route stale: 1 new mission. Ask Claude to re-route",
       tone: "warn",
     });
+    // A stop marked done with the route key, its mission still open, is still the route.
+    const stepped = plan([
+      { system: "Wolf 397", station: "Brooks Estate", missions: [3] },
+      { system: "Ngalinn", station: "Haber Hub", missions: [2] },
+      { system: "Ochosi", station: "Perez Market", missions: [1], status: "done" },
+    ]);
+    const on = passengerPanel({ missions, events: [], plan: stepped, now: NOW })!;
+    expect(on.rows.some((r) => r.text.startsWith("Route stale"))).toBe(false);
     // A plan that covers every mission says nothing.
     const full = plan([{ system: "Ochosi", missions: [1, 2, 3] }]);
     const ok = passengerPanel({ missions, events: [], plan: full, now: NOW })!;
