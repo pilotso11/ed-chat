@@ -5,7 +5,7 @@ import {
   type Mission,
   type Plan,
 } from "ed-mcp/journal";
-import { num, objs, str } from "./json.js";
+import { num, objs, same, str } from "./json.js";
 import { commodityKey } from "./mining.js";
 import { isRun } from "./passenger.js";
 import {
@@ -39,12 +39,29 @@ export const TRADE_EVENTS = [
   "LoadGame",
   "Shutdown",
   "Died",
-  // Mission cargo aboard, which makes a market buy not a trade.
+  // A game restarted while docked starts with Location, Docked true.
+  "Location",
+  // Mission cargo aboard, goods a mission asks for, and colonisation: a market buy for one of
+  // them is not a trade (tradeBuys()).
   "MissionAccepted",
   "MissionCompleted",
   "MissionFailed",
   "MissionAbandoned",
+  "CargoDepot",
+  "ColonisationContribution",
+  "ColonisationConstructionDepot",
 ] as const;
+
+/**
+ * A commodity's key for matching the plan, the hold, the market and the journal. The plan has
+ * the English names Spansh gives; ed-mcp's cargo, MarketBuy's Type_Localised and Market.json's
+ * Name_Localised have the game's names, which on an English client are the same: "Agri-Medicines",
+ * where the internal name is "agriculturalmedicines". So the game's name is used when the journal
+ * gives one, else the internal name, which for most goods is the English name in lower case. On a
+ * non-English client the game's names do not match the plan's: a known limit, as for mining.
+ */
+const keyOf = (internal: unknown, localised: unknown) =>
+  commodityKey(str(localised) ?? str(internal) ?? "");
 
 // ---------- The market ----------
 
@@ -70,9 +87,9 @@ export function parseMarket(text: string): Market | null {
     if (marketId === null || station === null) return null;
     const items = new Map<string, MarketItem>();
     for (const i of objs(j.Items)) {
-      const name = str(i.Name) ?? str(i.Name_Localised);
-      if (!name) continue;
-      items.set(commodityKey(name), { buy: num(i.BuyPrice) ?? 0, sell: num(i.SellPrice) ?? 0 });
+      const key = keyOf(i.Name, i.Name_Localised);
+      if (!key) continue;
+      items.set(key, { buy: num(i.BuyPrice) ?? 0, sell: num(i.SellPrice) ?? 0 });
     }
     return { marketId, station, items };
   } catch {
@@ -92,7 +109,7 @@ export interface TradeTotals {
   rate: Rates;
 }
 
-const commodityOf = (e: JournalEvent) => commodityKey(str(e.Type) ?? str(e.Type_Localised) ?? "");
+const commodityOf = (e: JournalEvent) => keyOf(e.Type, e.Type_Localised);
 
 /**
  * This game session's trade profit, and its credits an hour. A sale's tons cost the average paid
@@ -193,11 +210,111 @@ function replay(events: JournalEvent[]): Replay {
   return { clock, earned, trades };
 }
 
-// ---------- The plan ----------
+// ---------- Buys that are trade ----------
 
-/** Names of one place, whatever their case. */
-export const same = (a: string | null | undefined, b: string | null | undefined) =>
-  (a ?? "").toLowerCase() === (b ?? "").toLowerCase();
+/** Docking: a Docked event, or a game restarted while docked. */
+export const isDocking = (e: JournalEvent) =>
+  e.event === "Docked" || (e.event === "Location" && e.Docked === true);
+
+/** A colonisation depot supplied this recently makes a market buy a delivery to it. */
+const COLONY_MS = 2 * 3_600_000;
+
+/** What the hold and the missions are now, for judging the journal's older market buys. */
+export interface MissionsNow {
+  /** The missions whose cargo is in the hold now. */
+  missionCargo: number[];
+  /** Open missions asking for goods (source and collect missions): their ID and commodity. */
+  wanted: { id: number; commodity: string }[];
+}
+
+const isMassacreAccepted = (e: JournalEvent) => typeof e.KillCount === "number";
+
+/**
+ * The market buys in events that are trade: not limpets, and not made while mission cargo was
+ * aboard, for a mission asking for those goods, or while supplying a colonisation depot.
+ *
+ * Mission cargo is aboard from a delivery's acceptance, or for a depot or wing delivery (whose
+ * goods come from a depot) from its CargoDepot Collect, until the mission ends, its goods are all
+ * delivered, or it expires (a mission that expired with the game off never ends in the journal).
+ * Cargo aboard now of a mission taken before the journal's window was aboard all along.
+ */
+export function tradeBuys(events: JournalEvent[], now: MissionsNow): Set<JournalEvent> {
+  const id = (e: JournalEvent) => num(e.MissionID);
+  const accepted = new Set(events.filter((e) => e.event === "MissionAccepted").map(id));
+  const fromDepot = new Set(events.filter((e) => e.event === "CargoDepot").map(id));
+  // Mission cargo aboard, and what each open mission asks for, with when it expires.
+  const aboard = new Map<number, number>();
+  for (const m of now.missionCargo) if (!accepted.has(m)) aboard.set(m, Infinity);
+  const wants = new Map<number, { keys: string[]; expires: number }>();
+  for (const w of now.wanted) {
+    if (!accepted.has(w.id))
+      wants.set(w.id, { keys: [commodityKey(w.commodity)], expires: Infinity });
+  }
+  const expiry = new Map<number, number>();
+  let colony = -Infinity;
+  const out = new Set<JournalEvent>();
+  let last = 0;
+  for (const e of events) {
+    last = Date.parse(e.timestamp) || last;
+    const m = id(e);
+    switch (e.event) {
+      case "MissionAccepted": {
+        if (m === null || typeof e.Commodity !== "string" || isMassacreAccepted(e)) break;
+        const expires = Date.parse(String(e.Expiry)) || Infinity;
+        expiry.set(m, expires);
+        if (typeof e.PassengerCount === "number") break;
+        if (typeof e.DestinationSystem === "string") {
+          // A depot or wing delivery's goods come aboard when collected.
+          const depot = fromDepot.has(m) || /wing/i.test(String(e.Name ?? ""));
+          if (!depot) aboard.set(m, expires);
+        } else {
+          const keys = [e.Commodity, e.Commodity_Localised]
+            .filter((x) => typeof x === "string")
+            .map((x) => commodityKey(x));
+          wants.set(m, { keys, expires });
+        }
+        break;
+      }
+      case "CargoDepot":
+        if (m === null) break;
+        if (e.UpdateType === "Collect") aboard.set(m, expiry.get(m) ?? Infinity);
+        if (
+          e.UpdateType === "Deliver" &&
+          typeof e.TotalItemsToDeliver === "number" &&
+          num(e.ItemsDelivered)! >= e.TotalItemsToDeliver
+        )
+          aboard.delete(m);
+        break;
+      case "MissionCompleted":
+      case "MissionFailed":
+      case "MissionAbandoned":
+        if (m === null) break;
+        aboard.delete(m);
+        wants.delete(m);
+        break;
+      case "ColonisationContribution":
+      case "ColonisationConstructionDepot":
+        colony =
+          e.ConstructionComplete === true || e.ConstructionFailed === true ? -Infinity : last;
+        break;
+      case "MarketBuy": {
+        if (!tradeBuy(e)) break;
+        const keys = [e.Type, e.Type_Localised]
+          .filter((x) => typeof x === "string")
+          .map((x) => commodityKey(x));
+        const cargo = [...aboard.values()].some((t) => t > last);
+        const wanted = [...wants.values()].some(
+          (w) => w.expires > last && w.keys.some((k) => keys.includes(k)),
+        );
+        if (!cargo && !wanted && last - colony > COLONY_MS) out.add(e);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+// ---------- The plan ----------
 
 /**
  * Whether docking at a station is at this stop. A stop with no station (one made by hand) stands
@@ -226,19 +343,22 @@ export function stopCargo(plan: Plan, index: number): Cargo[] {
   return cargo;
 }
 
-/** Where the ship is docked now, from the newest Docked event; null when it is not docked. */
+/**
+ * Where the ship is docked now, from the newest Docked event, or the Location a game restarted
+ * while docked starts with; null when it is not docked.
+ */
 export interface Dock {
   system: string;
   station: string;
   marketId: number | null;
-  /** The Docked event's index in events, and its time. */
+  /** The Docked (or Location) event's index in events, and its time. */
   index: number;
   at: string;
 }
 
 export function dockedAt(events: JournalEvent[], location: JournalState["location"]): Dock | null {
   if (!location.docked || !location.station) return null;
-  const index = events.findLastIndex((e) => e.event === "Docked");
+  const index = events.findLastIndex(isDocking);
   const e = events[index];
   if (!e || !same(str(e.StationName), location.station)) return null;
   return {

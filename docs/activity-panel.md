@@ -102,8 +102,10 @@ stale.
 
 ## Trade
 
-Turns on when you buy at a market (limpets aside) with no mission cargo aboard, or
-dock at a stop of the trade plan. A stop with no station stands for any station in
+Turns on when you buy at a market, or dock at a stop of the trade plan. Some buys
+are not trade: limpets, goods bought while mission cargo is aboard, goods an open
+mission asks for, and anything bought within two hours of supplying a colonisation
+depot. A stop with no station stands for any station in
 its system. Ask Claude for a trade loop or route (ed-mcp's `trade_loops` or
 `trade_route` with `save_to_plan`) to make the plan.
 
@@ -118,9 +120,15 @@ The header and the Session line show profit an hour: each sale less what its ton
 cost, counted as for exploration, with the last half hour in brackets. When a stop's
 buys are bought there and in the hold, and its sales are sold there, the stop is marked done and the next
 stop's system is copied for the galaxy map. Undocking first leaves the stop open;
-the route keys still work. Passengers taken on a trade run show on a footer line.
-Trade ends when the hold is empty with no trade stop left. With no trade stop to do,
-five jumps with no trade end it too; a long haul to a trade stop does not.
+the route keys still work. Passengers taken on a trade run show on a footer line;
+a passenger or delivery mission taken after your last trade shows the passenger
+panel until you trade again. Trade ends when the hold is empty with no trade stop
+left, or after five jumps with no trade, unless trade cargo is aboard on the way to
+a trade stop.
+
+Known limit: goods are matched by the names the game gives them, which match the
+plan's English names only on an English game client. On another language, auto-advance
+and the market's price do not work, as for mining.
 
 ## Route
 

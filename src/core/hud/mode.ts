@@ -1,7 +1,7 @@
 import type { JournalEvent } from "ed-mcp/journal";
 import type { HudModeId } from "../settings.js";
 import { num, objs, type Obj } from "./json.js";
-import { stopAt, tradeBuy } from "./trade.js";
+import { isDocking, stopAt, tradeBuy, tradeBuys, type MissionsNow } from "./trade.js";
 
 /** Journal events the mode rules and panels read, besides the ones ed-mcp keeps. */
 export const HUD_EVENTS = [
@@ -45,26 +45,33 @@ export const HUD_EVENTS = [
   // Read by the passenger panel: cabins for the berths, and the run's acceptance.
   "Loadout",
   "MissionAccepted",
-  // Read by the trade rules, for mission cargo aboard.
+  // Read by the trade rules (tradeBuys()): mission cargo aboard, goods missions ask for, and
+  // colonisation.
   "MissionCompleted",
   "MissionFailed",
   "MissionAbandoned",
+  "CargoDepot",
+  "ColonisationContribution",
+  "ColonisationConstructionDepot",
 ] as const;
 
 /** What the trade rules need to know now: see journalMode(). */
-export interface TradeNow {
+export interface TradeNow extends MissionsNow {
   /** The trade panel has something to show: a trade stop to do, or cargo to trade aboard. */
   active: boolean;
-  /**
-   * The missions whose cargo is in the hold now. A market buy made while mission cargo was aboard
-   * may be for the mission, not a trade; journalMode() works out what was aboard at each buy.
-   */
-  missionCargo: number[];
+  /** Cargo to trade is aboard. */
+  aboard: boolean;
   /** The trade plan's stops still to do: docking at one is following the plan. */
   stops: { system: string; station?: string }[];
 }
 
-const NO_TRADE: TradeNow = { active: false, missionCargo: [], stops: [] };
+const NO_TRADE: TradeNow = {
+  active: false,
+  aboard: false,
+  missionCargo: [],
+  wanted: [],
+  stops: [],
+};
 
 export interface Choice {
   mode: HudModeId | "off";
@@ -80,9 +87,6 @@ const isRun = (e: JournalEvent) =>
     typeof e.Count === "number" &&
     typeof e.DestinationSystem === "string" &&
     !isMassacre(e));
-
-/** A delivery: a mission that puts its goods in the hold when it is taken. */
-const isDelivery = (e: JournalEvent) => typeof e.PassengerCount !== "number" && isRun(e);
 
 const isMassacre = (e: JournalEvent) =>
   typeof e.Name === "string" && /massacre/i.test(e.Name) && typeof e.KillCount === "number";
@@ -108,11 +112,12 @@ export const LAPSE_JUMPS = 5;
  * `runActive` is whether the passenger panel has a run to show now (the mode on, and a passenger
  * or delivery mission open that it can place): taking one then turns on the passenger mode,
  * which lasts until a newer activity or the last such mission is done.
- * `trade` is the trade run now (TradeNow): a market buy (not of limpets) while the hold had no
- * mission cargo, or docking at a stop of the trade plan, turns on trade mode, which lasts while
- * the panel has something to show (a trade stop to do, or cargo aboard). With no trade stop to do,
- * LAPSE_JUMPS jumps with no market trade end it. Passengers taken on a trade run show on the
- * trade panel.
+ * `trade` is the trade run now (TradeNow): a market buy that is trade (tradeBuys(): not limpets,
+ * not for a mission or a colonisation depot), or docking at a stop of the trade plan, turns on
+ * trade mode, which lasts while the panel has something to show (a trade stop to do, or cargo
+ * aboard) and until a newer activity. LAPSE_JUMPS jumps with no market trade end it, unless trade
+ * cargo is aboard on the way to a trade stop. A passenger or delivery mission taken after the
+ * last trade shows the passenger panel; taken before, it shows on the trade panel's footer.
  */
 export function journalMode(
   events: JournalEvent[],
@@ -142,11 +147,7 @@ export function journalMode(
   };
   const tradeStop = (e: JournalEvent) =>
     trade.stops.some((s) => stopAt(s, String(e.StarSystem ?? ""), String(e.StationName ?? "")));
-  // Mission cargo aboard as the events are replayed: deliveries taken and not yet ended, and the
-  // cargo aboard now of missions taken before the journal's window, aboard all along.
-  const id = (e: JournalEvent) => num(e.MissionID);
-  const taken = new Set(events.filter(isDelivery).map(id));
-  const missionCargo = new Set(trade.missionCargo.filter((m) => !taken.has(m)));
+  const trades = tradeBuys(events, trade);
   // Jumps since the last exploration event or market trade: a trip home ends exploration or
   // trade mode.
   let jumps = 0;
@@ -160,8 +161,9 @@ export function journalMode(
       case "CarrierJump":
         if (e.event === "FSDJump") jumps++;
         if (mode === "exploration" && jumps >= LAPSE_JUMPS) mode = null;
-        // A long haul to a trade stop is still a trade run.
-        if (mode === "trade" && jumps >= LAPSE_JUMPS && !trade.stops.length) mode = null;
+        // A long haul with cargo to a trade stop is still a trade run.
+        if (mode === "trade" && jumps >= LAPSE_JUMPS && !(trade.stops.length && trade.aboard))
+          mode = null;
         if (mode === "mining") leftMining = true;
         break;
       case "MarketSell":
@@ -171,18 +173,13 @@ export function journalMode(
         if (mode === "trade") jumps = 0;
         break;
       case "MarketBuy":
-        // Limpets are not trade, and buying for a mission is not a trade run.
-        if (!tradeBuy(e)) break;
-        if (!missionCargo.size) set("trade");
-        else if (mode === "trade") jumps = 0;
-        break;
-      case "MissionCompleted":
-      case "MissionFailed":
-      case "MissionAbandoned":
-        missionCargo.delete(id(e)!);
+        // Limpets are not trade, and buying for a mission or a depot is not a trade run.
+        if (trades.has(e)) set("trade");
+        else if (mode === "trade" && tradeBuy(e)) jumps = 0;
         break;
       case "Docked":
-        if (tradeStop(e)) set("trade");
+      case "Location":
+        if (isDocking(e) && tradeStop(e)) set("trade");
         break;
       case "ProspectedAsteroid":
       case "MiningRefined":
@@ -196,7 +193,6 @@ export function journalMode(
         // An acceptance with no readable time still counts, dated by the newest readable event.
         if (isMassacre(e)) massacreAt = last;
         else if (isRun(e)) runAt = last;
-        if (isDelivery(e) && id(e) !== null) missionCargo.add(id(e)!);
         break;
       case "FSSDiscoveryScan":
         set("exploration");
@@ -229,9 +225,9 @@ export function journalMode(
   if (mode === "mining" && leftMining && !minedAboard) mode = null;
   // Trade ends once the hold is empty with no trade stop to do: an empty panel never wins.
   if (mode === "trade" && !trade.active) mode = null;
-  // Passengers and deliveries show from when they were taken until another activity is newer.
-  // On a trade run they show on the trade panel.
-  if (mode !== "trade" && runActive && runAt !== null && (mode === null || runAt >= at)) {
+  // Passengers and deliveries show from when they were taken until another activity is newer,
+  // trade too: taken before the run's last trade, they show on the trade panel.
+  if (runActive && runAt !== null && (mode === null || runAt >= at)) {
     return { mode: "passenger", at: runAt };
   }
   return mode ? { mode, at } : null;

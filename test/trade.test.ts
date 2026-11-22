@@ -14,6 +14,8 @@ import {
   planTitle,
   stopCargo,
   tradeAdvance,
+  tradeBuys,
+  type MissionsNow,
   TRADE_EVENTS,
   tradeNextCopy,
   tradePanel,
@@ -247,6 +249,21 @@ describe("the trade plan", () => {
     expect(stopCargo(route(loop().stops), 0)).toHaveLength(2);
   });
 
+  it("knows the ship is docked after the game restarts there", () => {
+    const restart = at(5, "Location", {
+      StarSystem: "Kremainn",
+      StationName: "Wohler Terminal",
+      Docked: true,
+      MarketID: 7,
+    });
+    expect(dockedAt([restart], where("Kremainn", "Wohler Terminal"))).toMatchObject({
+      marketId: 7,
+      index: 0,
+    });
+    const flying = at(5, "Location", { StarSystem: "Kremainn", StationName: "Wohler Terminal" });
+    expect(dockedAt([flying], where("Kremainn", "Wohler Terminal"))).toBeNull();
+  });
+
   it("knows where the ship is docked", () => {
     const events = [docked(5, "Kremainn", "Wohler Terminal", 7)];
     expect(dockedAt(events, where("Kremainn", "Wohler Terminal"))).toMatchObject({
@@ -265,6 +282,153 @@ describe("the trade plan", () => {
         where("K", "Wohler Terminal"),
       ),
     ).toMatchObject({ system: "K", marketId: null });
+  });
+});
+
+describe("buys that are trade", () => {
+  const none: MissionsNow = { missionCargo: [], wanted: [] };
+  const accepted = (m: number, id: number, o: Record<string, unknown>) =>
+    at(m, "MissionAccepted", {
+      MissionID: id,
+      Name: "Mission_Delivery",
+      Commodity: "$AgriculturalMedicines_Name;",
+      Commodity_Localised: "Agri-Medicines",
+      Count: 5,
+      Expiry: new Date(NOW + 3_600_000).toISOString(),
+      ...o,
+    });
+  const tea = (m: number) => buy(m, "Tea", 5, 1);
+  const trade = (events: JournalEvent[], now = none) => [...tradeBuys(events, now)];
+
+  it("counts a buy made with no mission cargo aboard, and not limpets", () => {
+    const limpets = at(5, "MarketBuy", { Type: "drones", Type_Localised: "Limpet", Count: 4 });
+    const bought = tea(5);
+    expect(trade([bought, limpets])).toEqual([bought]);
+  });
+
+  it("leaves out a buy while a delivery's cargo is aboard, until it ends or expires", () => {
+    const d = accepted(30, 1, { DestinationSystem: "X" });
+    expect(trade([d, tea(20)])).toEqual([]);
+    const done = at(25, "MissionCompleted", { MissionID: 1 });
+    expect(trade([d, done, tea(20)])).toHaveLength(1);
+    // Expired with the game off: no event ends it.
+    const expired = accepted(120, 2, {
+      DestinationSystem: "X",
+      Expiry: new Date(NOW - 60 * MIN).toISOString(),
+    });
+    expect(trade([expired, tea(20)])).toHaveLength(1);
+    // Cargo aboard now of a mission taken before the journal's window was aboard all along.
+    expect(trade([tea(20)], { ...none, missionCargo: [9] })).toEqual([]);
+  });
+
+  it("counts a depot or wing delivery's cargo aboard only once collected, until delivered", () => {
+    const wing = accepted(30, 3, { Name: "Mission_Delivery_Wing", DestinationSystem: "X" });
+    expect(trade([wing, tea(25)])).toHaveLength(1);
+    const collect = at(24, "CargoDepot", { MissionID: 3, UpdateType: "Collect", Count: 5 });
+    expect(trade([wing, collect, tea(20)])).toEqual([]);
+    const delivered = at(22, "CargoDepot", {
+      MissionID: 3,
+      UpdateType: "Deliver",
+      ItemsDelivered: 5,
+      TotalItemsToDeliver: 5,
+    });
+    expect(trade([wing, collect, delivered, tea(20)])).toHaveLength(1);
+    // A depot mission not named wing is known by its CargoDepot events.
+    const depot = accepted(30, 4, { DestinationSystem: "X" });
+    const collected = at(10, "CargoDepot", { MissionID: 4, UpdateType: "Collect", Count: 5 });
+    expect(trade([depot, tea(20), collected])).toHaveLength(1);
+    // A collect for a mission taken before the window.
+    expect(
+      trade([at(24, "CargoDepot", { MissionID: 77, UpdateType: "Collect" }), tea(20)]),
+    ).toEqual([]);
+  });
+
+  it("leaves out a buy of goods an open mission asks for", () => {
+    const source = accepted(30, 5, {});
+    const agri = at(20, "MarketBuy", {
+      Type: "agriculturalmedicines",
+      Type_Localised: "Agri-Medicines",
+      Count: 5,
+    });
+    expect(trade([source, agri])).toEqual([]);
+    // Other goods are trade.
+    expect(trade([source, tea(20)])).toHaveLength(1);
+    // Abandoned, the buy is trade again.
+    expect(trade([source, at(25, "MissionAbandoned", { MissionID: 5 }), agri])).toHaveLength(1);
+    // A mission open now, taken before the journal's window.
+    expect(trade([agri], { ...none, wanted: [{ id: 8, commodity: "Agri-Medicines" }] })).toEqual(
+      [],
+    );
+    // Passengers and massacres ask for no goods.
+    expect(trade([accepted(30, 6, { PassengerCount: 2 }), agri])).toHaveLength(1);
+    expect(trade([accepted(30, 7, { KillCount: 20 }), agri])).toHaveLength(1);
+  });
+
+  it("leaves out buys while supplying a colonisation depot", () => {
+    const depot = at(60, "ColonisationConstructionDepot", { ConstructionComplete: false });
+    expect(trade([depot, tea(20)])).toEqual([]);
+    expect(trade([at(60, "ColonisationContribution", {}), tea(20)])).toEqual([]);
+    // Long ago, or finished.
+    expect(trade([at(200, "ColonisationContribution", {}), tea(20)])).toHaveLength(1);
+    const built = at(30, "ColonisationConstructionDepot", { ConstructionComplete: true });
+    expect(trade([depot, built, tea(20)])).toHaveLength(1);
+  });
+});
+
+describe("commodity names", () => {
+  // The journal's internal names are not always the English ones the plan has.
+  const agri = (m: number, event: string, o: Record<string, unknown>) =>
+    at(m, event, { Type: "agriculturalmedicines", Type_Localised: "Agri-Medicines", ...o });
+  const plan = route([
+    stop("Kremainn", "Wohler Terminal", [
+      { commodity: "Agri-Medicines", action: "buy", amount: 10, price: 1_000 },
+    ]),
+  ]);
+
+  it("matches the market, the hold and the journal by the game's names", () => {
+    const market = parseMarket(
+      JSON.stringify({
+        MarketID: 7,
+        StationName: "Wohler Terminal",
+        Items: [
+          {
+            Name: "$agriculturalmedicines_name;",
+            Name_Localised: "Agri-Medicines",
+            BuyPrice: 1_100,
+            SellPrice: 900,
+          },
+        ],
+      }),
+    );
+    // ed-mcp names cargo by its Name_Localised.
+    const cargo = hold({ "Agri-Medicines": 10 });
+    const events = [
+      docked(10, "Kremainn", "Wohler Terminal", 7),
+      agri(5, "MarketBuy", { MarketID: 7, Count: 10, BuyPrice: 1_100, TotalCost: 11_000 }),
+    ];
+    const location = where("Kremainn", "Wohler Terminal");
+    expect(tradeAdvance({ plan, events, cargo, capacity: 100, location })?.index).toBe(0);
+    const p = tradePanel({
+      plan,
+      events,
+      cargo,
+      capacity: 100,
+      location,
+      market,
+      missions: [],
+      now: NOW,
+    });
+    expect(p!.rows[1]!.text).toBe("  hold 10/10 · price 1,100 (plan 1,000)");
+    // The cost of the tons bought carries to their sale.
+    const sold = agri(1, "MarketSell", { Count: 10, SellPrice: 2_000, TotalSale: 20_000 });
+    expect(tradeTotals([...events, sold], NOW).profit).toBe(9_000);
+  });
+
+  it("falls back to the internal name when the journal gives no other", () => {
+    const m = parseMarket(
+      JSON.stringify({ MarketID: 1, StationName: "X", Items: [{ Name: "gold" }] }),
+    );
+    expect([...m!.items.keys()]).toEqual(["gold"]);
   });
 });
 
@@ -586,7 +750,7 @@ describe("the trade panel", () => {
 
 describe("trade mode", () => {
   const ALL = () => true;
-  const active: TradeNow = { active: true, missionCargo: [], stops: [] };
+  const active: TradeNow = { active: true, aboard: true, missionCargo: [], wanted: [], stops: [] };
   const jump = (m: number) => at(m, "FSDJump", { StarSystem: `S${m}` });
 
   it("asks the reader to keep the events it reads", () => {
@@ -644,12 +808,17 @@ describe("trade mode", () => {
   });
 
   it("keeps a run's passengers on the trade panel, and yields to a newer activity", () => {
-    const events = [buy(10, "Gold", 1, 1), at(5, "MissionAccepted", { PassengerCount: 2 })];
+    const pax = (m: number) =>
+      at(m, "MissionAccepted", { MissionID: 50, PassengerCount: 2, DestinationSystem: "X" });
+    const events = [pax(10), buy(5, "Gold", 1, 1)];
     expect(journalMode(events, false, false, ALL, true, active)?.mode).toBe("trade");
     // Passengers taken before trading show once trade ends.
     expect(journalMode(events, false, false, ALL, true, { ...active, active: false })?.mode).toBe(
       "passenger",
     );
+    // Taken after the last trade, as when leaving a half-done loop for a passenger run, they win.
+    const left = [buy(10, "Gold", 1, 1), pax(5)];
+    expect(journalMode(left, false, false, ALL, true, active)?.mode).toBe("passenger");
     expect(
       journalMode([...events, at(1, "ProspectedAsteroid")], false, false, ALL, true, active)?.mode,
     ).toBe("mining");
@@ -703,12 +872,25 @@ describe("trade mode", () => {
     expect(journalMode(pax, false, false, ALL, false, active)?.mode).toBe("trade");
   });
 
-  it("does not lapse on a long haul while a trade stop is still to do", () => {
+  it("does not lapse on a long haul with cargo while a trade stop is still to do", () => {
     const jumps = Array.from({ length: LAPSE_JUMPS + 2 }, (_, i) => jump(20 - i));
     const trade = { ...active, stops: [{ system: "Far", station: "Away" }] };
-    expect(
-      journalMode([buy(30, "Gold", 1, 1), ...jumps], false, false, ALL, false, trade)?.mode,
-    ).toBe("trade");
+    const run = [buy(30, "Gold", 1, 1), ...jumps];
+    expect(journalMode(run, false, false, ALL, false, trade)?.mode).toBe("trade");
+    // A half-done loop left with an empty hold lapses.
+    expect(journalMode(run, false, false, ALL, false, { ...trade, aboard: false })).toBeNull();
+  });
+
+  it("turns on when the game restarts docked at a stop of the trade plan", () => {
+    const trade = { ...active, stops: [{ system: "Kremainn", station: "Wohler Terminal" }] };
+    const restart = at(5, "Location", {
+      StarSystem: "Kremainn",
+      StationName: "Wohler Terminal",
+      Docked: true,
+    });
+    expect(journalMode([restart], false, false, ALL, false, trade)?.mode).toBe("trade");
+    const flying = at(5, "Location", { StarSystem: "Kremainn", StationName: "Wohler Terminal" });
+    expect(journalMode([flying], false, false, ALL, false, trade)).toBeNull();
   });
 
   it("matches a trade stop with no station to any station in its system", () => {

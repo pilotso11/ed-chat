@@ -735,7 +735,8 @@ async function main(): Promise<void> {
       tradeDone.add(key);
       // Judged again on the plan as it is now: Claude or a route key can change it after the poll.
       const now = await plans.get(data.plan.id);
-      if (judge(now)?.key !== step.key) return;
+      // Changed: judged again on the next poll.
+      if (judge(now)?.key !== step.key) return void tradeDone.delete(step.key);
       const stop = now.stops[step.index]!;
       const updated = await plans.updateStop(now.id, { index: step.index }, { status: "done" });
       const next = tradeNextCopy(updated, j.location.system);
@@ -744,6 +745,7 @@ async function main(): Promise<void> {
         clipboard.writeText(next);
         flash("copy", `📋 ${done}: done. Next stop copied: ${next}`, 6_000);
       } else flash("route", `✓ ${done}: done`, 4_000);
+      tradeError = null;
     } catch (err) {
       // Tried again on the next poll.
       if (key) tradeDone.delete(key);

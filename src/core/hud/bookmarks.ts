@@ -9,6 +9,7 @@ import {
   type Stop,
 } from "ed-mcp/journal";
 import type { ShipStatus } from "./hud.js";
+import { same } from "./json.js";
 import { shortBody, type HudRow } from "./panels.js";
 
 /** The plan that holds surface bookmarks, in ed-mcp's plan store so Claude sees them too. */
@@ -122,9 +123,7 @@ export function bookmarkRows(input: {
 }): HudRow[] {
   const { plan, system, status } = input;
   if (!plan || !system) return [];
-  const here = plan.stops.filter(
-    (s) => s.status === "todo" && s.body && s.system.toLowerCase() === system.toLowerCase(),
-  );
+  const here = plan.stops.filter((s) => s.status === "todo" && s.body && same(s.system, system));
   if (!here.length) return [];
   const onBody = status?.body ? bodyKey(status.body, system) : null;
   const at =
@@ -235,12 +234,7 @@ export function finishedBioBookmarks(
   const system = journal?.location.system ?? null;
   if (!plan || !journal || !system) return [];
   const todo = plan.stops.flatMap((s, i) =>
-    s.status === "todo" &&
-    s.kind === "exobiology" &&
-    s.body &&
-    s.system.toLowerCase() === system.toLowerCase()
-      ? [i]
-      : [],
+    s.status === "todo" && s.kind === "exobiology" && s.body && same(s.system, system) ? [i] : [],
   );
   // Most polls have no bio bookmark here: the journal is not read for them.
   if (!todo.length) return [];

@@ -107,9 +107,19 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
   const runActive = j && input.settings.modes.passenger ? drops(j.missions).length > 0 : false;
   // The same for trade: a trade stop to do, or cargo to trade aboard.
   const tradeStops = input.settings.modes.trade ? tradeTodo(input.plan) : [];
+  const aboard = !!j && input.settings.modes.trade && tradeCargo(j.cargo);
   const trade = {
-    active: tradeStops.length > 0 || (!!j && input.settings.modes.trade && tradeCargo(j.cargo)),
+    active: tradeStops.length > 0 || aboard,
+    aboard,
     missionCargo: j ? j.cargo.flatMap((c) => (c.mission_id !== null ? [c.mission_id] : [])) : [],
+    // Source and collect missions: goods to bring back, so buying them is not a trade.
+    wanted: j
+      ? j.missions.flatMap((m) =>
+          m.commodity && m.destination_system === null && m.kill_count === null
+            ? [{ id: m.id, commodity: m.commodity }]
+            : [],
+        )
+      : [],
     stops: tradeStops.map((i) => input.plan!.stops[i]!),
   };
   const fromJournal = j
