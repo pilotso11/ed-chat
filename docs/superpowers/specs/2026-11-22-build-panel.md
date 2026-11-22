@@ -145,6 +145,20 @@ Module symbols differ by event. `Loadout` and `EngineerCraft` give `int_engine_s
 - **The user's decisions.** An engineering action is done at the target grade, whatever the
   roll's quality. On a ship swap the panel may point the activity note at that ship's plan. A
   done action whose module is no longer fitted shows amber, and the plan is left alone.
+- **Collecting is a stop.** Materials that no trade covers are collected at a stop of their
+  own, at the nearest known site, so the route has a step for every action. There are no
+  actions without a place.
+- **No plan, no tracking.** With no build plan for the ship, the panel shows only what was done
+  this visit while docked, with a line inviting a plan.
+- **Two plans open.** With an on-foot plan and a ship plan both open, the panel shows the plan
+  that has work to do where the player is: docked at a stop of either plan (of any kind), that
+  plan; otherwise the plan whose action was done most recently; else the plan the activity note
+  names. Being on foot or in the ship does not choose: on-foot steps such as the bartender's
+  material exchange can be done from the ship too, so an action is judged done from its journal
+  event either way (`TradeMicroResources` and `BuyMicroResources` count on foot or in the ship).
+- **On-foot costs come from Claude.** Claude writes each upgrade's and modification's needs
+  into the action. ed-mcp gets no table of on-foot costs; the player corrects a wrong figure by
+  telling Claude.
 - **Ship builds first; on foot in a later phase.** The current suit and weapon grades and
   modifications are in the journal (`SuitLoadout`, the source Inara uses), and the costs go
   into each action as data, so on foot is not blocked on a data source. It is later work only to
@@ -196,10 +210,12 @@ module at G3, the panel counts only the needs of G4 and G5.
 | `collect_material` | Collect 12 Arsenic | `material`, `count` (to hold) | The inventory (`materials` in journal state) holds the count. Collection is spread over many events, so the count held decides |
 | `synthesis` | Synthesise FSD Injection (premium) | `recipe` | A `Synthesis` with that `Name` |
 
-A stop of kind `trader` holds trades. Collecting has no station: `build_plan` puts collect
-actions at a stop of kind `gather` when it knows a place (a system with a known site, or a
-mining or surface site in `notes`), and otherwise in the plan's `anywhere` list, which the panel
-shows under the current stop ("Also: collect 12 Arsenic, 7/12"). An action at a later stop done
+A stop of kind `trader` holds trades. Collect actions always have a stop of their own, of kind
+`gather`, at the nearest known site for the material: a system and body, with the site (a
+crystalline shard field, a mining hotspot, a settlement type to raid) in the stop's `notes`.
+`build_plan` (or Claude) chooses the site and puts the stop before the stops whose actions need
+the material. An engineer or trade action short of a material that a collect stop provides
+names that stop ("collect at stop 2"). An action at a later stop done
 early still counts: the journal shows it, and the stop has one less thing to do.
 
 ### On foot (later phase)
@@ -234,36 +250,36 @@ now", and the plan is left as it is. The panel never reopens an action.
 ### Ship build
 
 ```
-BUILD · Python Mk II · stop 2/6                      7/19 actions
+BUILD · Python Mk II · stop 3/7                      7/20 actions
 ● Deciat · Farseer Inc                                 engineer
   ✓ Unlock Felicity Farseer
   ✓ Roll Power Distributor Charge Enhanced to G5
   Roll FSD Increased Range to G5                G3 → G5 · ~7 rolls
-    short 3 Datamined Wake Exceptions (have 1/4)
+    short 5 Arsenic (have 7/12) · collect at stop 2
   Apply Mass Manager to FSD                     ready
-  Also: collect 12 Arsenic                      7/12
 ▸ Shinrarta Dezhra · Jameson Memorial       buy 2 · retrieve 1
-4 stops after · 33.4M to spend · 1.2B held
+1 stop open before · 4 after · 33.4M to spend · 1.2B held
 Target: FSD G5 · PD G5 · shields Reinforced G5 · 8 boosters HD G5
 ```
 
 - **Header:** BUILD, the ship (type, then its `ShipName` when the panel is wide enough), the
   current stop's place in the route, and the actions done out of all.
-- **The current stop (●):** the plan's current stop in visit order, as the route rows have it,
-  with its kind on the right and the jumps left on the plotted route when away from it. Then its
-  actions in order:
+- **The current stop (●):** the plan stop the ship is docked at (or landed at, for a collect
+  stop) while it has actions to do; otherwise the plan's current stop in visit order, as the
+  route rows have it. Its kind is on the right, with the jumps left on the plotted route when away
+  from it. Then its actions in order:
   - Done ones with ✓, dim. More than three done ones fold into "✓ 3 done".
   - Ones to do, with their key need on the right or on a dim line below: the grade reached and
     rolls left for an engineer action ("G3 → G5 · ~7 rolls"), the price for a purchase, the
-    first material short against the inventory ("short 3 Datamined Wake Exceptions (have 1/4)"),
-    the credits short in amber, or "ready" when everything is in hand.
+    first material short against the inventory, with the stop that collects or trades for it
+    ("short 5 Arsenic (have 7/12) · collect at stop 2"), the credits short in amber, or "ready"
+    when everything is in hand.
   - An action blocked by another one at the same stop (an experimental before its blueprint is
     rolled) shows after it, with no need line.
   - Amber "not fitted now" for a done action the `Loadout` no longer shows.
-  - The plan's `anywhere` actions not yet done, as "Also:" lines, at most two.
 - **The next stop (▸):** its place and a count of its actions by kind ("buy 2 · retrieve 1").
-- **Footer:** the stops after it, the credits still to spend on open purchases against the
-  credits held (amber when short), and at most one line of the target from the plan
+- **Footer:** the stops still open before it (when the player came here early) and after it,
+  the credits still to spend on open purchases against the credits held (amber when short), and at most one line of the target from the plan
   (`build.summary`, written by `build_plan`). Nothing else from the target is shown.
 - **The route rows** are not repeated below: the panel is the route. The galaxy map copy works as
   it does for every plan.
@@ -300,6 +316,21 @@ BUILD · Python Mk II · stop 1/6                      0/19 actions
 ▸ Deciat · Farseer Inc                   unlock 1 · roll 2 · apply 1
 5 stops after
 ```
+
+### At a collect stop
+
+```
+BUILD · Python Mk II · stop 2/7                      7/20 actions
+● HIP 36601 · C 3 b                                     collect
+  Collect 12 Arsenic                                      7/12
+    Outcrop field near 12.4, -60.1 · mine with SRV
+▸ Deciat · Farseer Inc                         roll 1 · apply 1
+5 stops after
+```
+
+- The count held against the count to hold, from journal state `materials` (the ship locker on
+  foot). The stop's `notes` say where on the body and how.
+- The stop is done when every collect action holds its count, wherever the material came from.
 
 ### Upgrade of the current ship
 
@@ -341,25 +372,31 @@ panel cannot say what is left, so it says only what was done.
 ### On foot (later phase)
 
 ```
-BUILD · Dominator loadout · stop 1/2                  2/6 actions
+BUILD · Dominator loadout · stop 1/3                  2/6 actions
 ● Kuwemaki · Mitchell Ring · Pioneer Supplies           docked
   ✓ Upgrade Dominator to G3
   Upgrade Dominator to G4                             2.25M
-    short 1 Health Monitor (have 1/2)
+    short 1 Health Monitor (have 1/2) · trade at stop 2
   Upgrade Karma AR-50 to G4                           ready
-▸ Shinrarta Dezhra · Domino Green               apply 2
-  Also: collect 3 Weapon Schematic                    0/3
+▸ Kuwemaki · Mitchell Ring · bartender      trade 1
 Target: Dominator G5 · Karma AR-50 G5 · Extra Ammo · Faster Handling
 ```
 
 - A plan for one suit loadout (`build.loadout_id`): its suit and weapons.
 - The needs (credits and resources for each grade step, each modification's recipe) are written
   into each action by Claude, which can take them from Inara or from what the player tells it.
-  The panel compares them with the ship locker and the backpack.
+  The panel compares them with the ship locker and the backpack. ed-mcp has no table of on-foot
+  costs to check them against; a wrong figure is corrected by telling Claude.
 - Bartender trades are at the station's offer, not fixed rates, so the panel shows only what is
   short.
-- On foot (`Status.json` on-foot flag, or after `Disembark`) the panel shows the on-foot plan;
-  in the ship, the ship plan. The newer event wins when both have work.
+- With a ship plan open too, the panel shows the plan of the stop the ship is docked at, else the
+  plan with the newest done action, else the note's plan (see Decisions). Whether the player is
+  on foot or in the ship does not matter, to the choice or to judging an action.
+- In the journals read for this spec (2021 to November 2026), every `TradeMicroResources` (71),
+  `BuyMicroResources` (50), `SellMicroResources` (79), `BuySuit`, `BuyWeapon`, `UpgradeSuit` and
+  `UpgradeWeapon` came after a `Disembark`, so on foot; `TransferMicroResources` came both on
+  foot and in the ship. None of these events records where the player was, so the judges must
+  not look at it: an exchange done from the ship menus is the same event.
 
 ## When the mode turns on and ends
 
@@ -458,7 +495,7 @@ As `TradeStopFinisher` does, after each poll (`BuildFinisher`, in `src/core/hud/
   ```
 
   `StopKind` gains `gather` and, for on foot, `pioneer` (Pioneer Supplies) and `bartender`.
-- `PlanInputSchema` gains `build` and `anywhere`:
+- `PlanInputSchema` gains `build`:
 
   ```ts
   build: z.object({
@@ -470,7 +507,6 @@ As `TradeStopFinisher` does, after each poll (`BuildFinisher`, in `src/core/hud/
     started_at: z.string().optional(),       // actions count from journal events after this
     summary: z.string().optional(),          // one line of the target
   }).optional(),
-  anywhere: z.array(ActionSchema).optional(), // collect actions with no place
   ```
 
 - `PlanStore.updateAction(planId, { stop, action }, patch)` and `setBuildShip(planId, shipId)`,
@@ -493,8 +529,8 @@ ship for an upgrade) and the ship now (the journal `Loadout`, or CAPI), it write
    price from Spansh.
 3. **Trades and collecting:** what the actions need beyond the inventory, as `materials_plan`
    works it out: trades at the nearest trader of each type (`trade_material` actions at a
-   `trader` stop), and what no trade covers as `collect_material` actions (at a `gather` stop
-   when a place is known, else in `anywhere`).
+   `trader` stop), and what no trade covers as `collect_material` actions at a `gather` stop of
+   their own, at the nearest known site, placed before the stops that need the material.
 4. **Engineers:** for each blueprint, the engineer from `catalog_engineers`, preferring one
    unlocked with the rank; an `unlock_engineer` action first when none is.
 5. **Order:** trades before the engineers that need them, purchases before the engineering of
@@ -560,7 +596,7 @@ for on foot. ED Chat pins each.
 
 ## Order of work
 
-1. **ed-mcp: schema and store.** Stop `actions`, plan `build` and `anywhere`, `updateAction`,
+1. **ed-mcp: schema and store.** Stop `actions`, plan `build`, `updateAction`,
    `setBuildShip`, `plan_update_stop` for actions, the kept events and `stored_modules`,
    `normaliseModule` and `planTrades` exports. Release.
 2. **ED Chat: build panel for ship plans.** Pins the release. Mode rules, the panel, the judge,
@@ -571,7 +607,7 @@ for on foot. ED Chat pins each.
 4. **ED Chat: the no-plan outfitting visit.** Needs no ed-mcp change; can go at any point.
 5. **ed-mcp: on foot.** The on-foot action kinds' journal state (`suits`, `locker`), kept
    events, `build_plan` for a suit loadout with needs given by Claude. Release.
-6. **ED Chat: on-foot actions.** Their judges, the on-foot or ship choice, "equip to check".
+6. **ED Chat: on-foot actions.** Their judges, the choice between two open plans, "equip to check".
 
 Each is its own PR.
 
@@ -587,17 +623,3 @@ Each is its own PR.
   the plan, so only an action done while ED Chat was not running and more than 14 days ago is
   missed; `routeNext` or Claude can mark it.
 - On-foot needs are as good as what Claude writes: ed-mcp has no table to check them against.
-
-## Open questions
-
-1. **On or in the ship.** With an on-foot plan and a ship plan both open, proposed: the on-foot
-   plan while on foot, the ship plan in the ship. Or only the plan the note names?
-2. **Collect actions with no place.** Proposed: they go in the plan's `anywhere` list and show as
-   "Also:" lines under every stop, and an engineer action short of them shows the shortfall. Or
-   should `build_plan` always give them a stop (the nearest known site), so the route has a step
-   for them?
-3. **The no-plan visit view.** Proposed: show what was done this visit while docked, with a line
-   inviting a plan. Or nothing at all without a plan?
-4. **On-foot costs.** Claude writes each upgrade's and modification's needs, so on foot is not
-   blocked. Should ed-mcp later get a small table of these costs to check them, or is Claude's
-   figure, corrected by the player, enough?
