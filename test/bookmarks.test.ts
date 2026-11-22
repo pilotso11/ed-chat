@@ -213,7 +213,8 @@ describe("bookmark rows", () => {
     // Nor on their own in massacre mode with no stack to show, or passenger mode with no run.
     expect(buildHud({ ...input, hotkey: { mode: "massacre", at } }, null).panel).toBeNull();
     expect(buildHud({ ...input, hotkey: { mode: "passenger", at } }, null).panel).toBeNull();
-    // On their own in route mode, and in exploration mode before the system is known.
+    // On their own in route mode, and in exploration mode with no jump into this system in the
+    // events, so no exploration panel.
     expect(buildHud({ ...input, hotkey: { mode: "route", at } }, null).panel?.title).toBe(
       "BOOKMARKS",
     );

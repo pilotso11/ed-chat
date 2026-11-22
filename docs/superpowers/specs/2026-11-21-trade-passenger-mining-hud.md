@@ -59,7 +59,7 @@ panel shows what to do at each stop. The route rows then give the next hop and t
   stop goes back to todo and a lap count goes up.
 - The activity note needs no new kinds: it already has `missions`, `hauling`, `trading` and
   `mining`. ED Chat shows `missions` and `hauling` notes as the passenger panel, and `mining`
-  notes as the mining panel. `trading` notes show no panel until the trade panel exists.
+  notes as the mining panel. `trading` notes set no mode until the trade panel exists.
 - The journal library exports the mission list (`JournalState.missions` is already typed).
 - This is a minor version (new optional fields and exports). ED Chat pins the new version.
 
