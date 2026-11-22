@@ -111,7 +111,6 @@ import {
   finishedBioBookmarks,
   isPlanNotFound,
   sameBookmark,
-  type BookmarkStore,
 } from "../core/hud/bookmarks.js";
 import { SellPrices, postSpansh, type SellQuery } from "../core/hud/sell.js";
 import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
@@ -655,13 +654,12 @@ async function main(): Promise<void> {
 
   // Saves where the ship or commander is now (Status.json read fresh) to the bookmarks plan.
   async function saveBookmark(): Promise<void> {
-    // PlanStore.addStop (ed-mcp 0.9) adds the stop in one locked write, so an edit Claude makes to
-    // the bookmarks meanwhile is not lost.
-    const plans = hudPlans as (typeof hudPlans & Partial<BookmarkStore>) | null;
+    // PlanStore.addStop adds the stop in one locked write, so an edit Claude makes to the bookmarks
+    // meanwhile is not lost.
+    const plans = hudPlans;
     if (!plans || !hudFeed || !settings.hud.enabled) {
       return flash("bookmark", "ⓘ the activity panel is off: turn it on to bookmark", 3_000);
     }
-    if (!plans.addStop) return flash("bookmark", "ⓘ bookmarks need ed-mcp 0.9", 3_000);
     if (!hudData?.journal) {
       return flash("bookmark", "ⓘ the panel has not read the journal yet: try again", 3_000);
     }

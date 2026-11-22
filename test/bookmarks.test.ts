@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { JournalEvent, JournalState, Plan } from "ed-mcp/journal";
+import type { JournalEvent, JournalState, Plan, Stop } from "ed-mcp/journal";
 import {
   bearing,
   bookmarkHere,
@@ -19,10 +19,7 @@ const RADIUS = 1_556_918;
 const SYSTEM = "Wredguia MN-J d9-9";
 const BODY = `${SYSTEM} 6 k`;
 
-// position: until ED Chat bundles ed-mcp 0.9, whose stop type has it.
-type TestStop = Partial<Plan["stops"][number]> & {
-  position?: { latitude: number; longitude: number };
-};
+type TestStop = Partial<Stop>;
 const plan = (stops: TestStop[]): Plan =>
   ({
     id: "bookmarks",

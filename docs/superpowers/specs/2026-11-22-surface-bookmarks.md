@@ -1,7 +1,7 @@
 # Activity HUD: surface bookmarks
 
 Date: 2026-11-22
-Status: built. Needs ed-mcp 0.9, which adds `position` to plan stops (ed-mcp #99).
+Status: built, on ed-mcp 0.9.0, which adds `position` to plan stops and `PlanStore.addStop` (ed-mcp #99).
 
 ## Purpose
 

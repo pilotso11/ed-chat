@@ -6,6 +6,7 @@ import {
   type JournalEvent,
   type JournalState,
   type Plan,
+  type Stop,
 } from "ed-mcp/journal";
 import type { ShipStatus } from "./hud.js";
 import { shortBody, type HudRow } from "./panels.js";
@@ -18,11 +19,9 @@ export interface Position {
   longitude: number;
 }
 
-type PlanStop = Plan["stops"][number];
-
-/** A stop's surface position, from the `position` field ed-mcp 0.9 added to plan stops. */
-export function stopPosition(s: PlanStop): Position | null {
-  const p = (s as PlanStop & { position?: Position }).position;
+/** A stop's surface position, when it has one. */
+export function stopPosition(s: Stop): Position | null {
+  const p = s.position;
   return p && Number.isFinite(p.latitude) && Number.isFinite(p.longitude) ? p : null;
 }
 
@@ -65,7 +64,7 @@ export function newBookmark(input: {
   here: Position;
   label: string;
   bio: boolean;
-}): PlanStop & { position: Position } {
+}): Stop & { position: Position } {
   return {
     system: input.system,
     body: input.body,
@@ -253,13 +252,8 @@ export function finishedBioBookmarks(
   return todo.filter((i) => done.has(plan.stops[i]!.body!.toLowerCase()));
 }
 
-/** The part of ed-mcp 0.9's PlanStore that saves a bookmark in one locked write. */
-export interface BookmarkStore {
-  addStop(planId: string, name: string, stop: PlanStop): Promise<Plan>;
-}
-
 /** The same bookmark: what it is, not where it sits in the plan, which changes with edits. */
-export const sameBookmark = (a: PlanStop, b: PlanStop) =>
+export const sameBookmark = (a: Stop, b: Stop) =>
   a.system === b.system &&
   a.body === b.body &&
   a.purpose === b.purpose &&
