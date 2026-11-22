@@ -69,7 +69,10 @@ export function bioLeft(bio: ExobiologyBody, knownCount?: number | null): string
     ...bio.not_started,
   ];
   // Spansh's count stands in when the journal has none (null, or 0 from a later scan).
-  const unknown = Math.max(0, (bio.bio_signals || knownCount || 0) - bio.genera.length);
+  // Every started species accounts for a signal: one genus can grow two species on a body.
+  const started = bio.species.filter((s) => !s.abandoned).length;
+  const accounted = Math.max(bio.genera.length, started);
+  const unknown = Math.max(0, (bio.bio_signals || knownCount || 0) - accounted);
   return unknown ? [...left, `${unknown} signal${unknown === 1 ? "" : "s"}`] : left;
 }
 
@@ -308,6 +311,19 @@ export function bookmarksToClear(input: {
   };
   // The first of the nearest: a stable sort keeps the plan's order among equals.
   return { stops: [[...body].sort((a, b) => far(a) - far(b))[0]!], whole: false };
+}
+
+/**
+ * What the clear key may clear: the one bookmark on the body you are on, never a whole system.
+ * A held key repeats, so no second press can be told from holding it; the tray asks instead.
+ */
+export function keyClearStops(pick: {
+  stops: number[];
+  whole: boolean;
+}): { stops: number[] } | { reason: string } {
+  return pick.whole
+    ? { reason: "not on a bookmarked body: clear this system's bookmarks from the tray menu" }
+    : { stops: pick.stops };
 }
 
 /** Whether an ed-mcp plan store error says the plan does not exist. */

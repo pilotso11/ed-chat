@@ -109,6 +109,7 @@ import {
   BOOKMARKS_PLAN,
   bookmarkHere,
   bookmarksToClear,
+  keyClearStops,
   sameBookmark,
   sameStop,
   todoBookmarks,
@@ -714,9 +715,10 @@ async function main(): Promise<void> {
     renderHud();
   }
 
-  // Clears bookmarks: those here (the key, which asks for a second press before it clears a whole
-  // system, or the tray, a deliberate choice), or all of them after asking. The writes run in turn
-  // with the bookmark key, so the two do not race; the question does not hold up that queue.
+  // Clears bookmarks: those here (the key clears one bookmark on the body you are on and refuses
+  // a whole system; the tray clears the nearest one in one click and asks before a whole system),
+  // or all of them after asking. The writes run in turn with the bookmark key, so the two do not
+  // race; the question does not hold up that queue.
   function clearBookmarks(scope: "here" | "all", from: "key" | "tray"): Promise<void> {
     if (scope === "all") return confirmClearAll();
     // The tray clears the bookmarks its item named when the menu opened, not what a fresh read
@@ -820,17 +822,10 @@ async function main(): Promise<void> {
       const [system, status] = await Promise.all([hudFeed.readSystem(), hudFeed.readStatus()]);
       // Not knowing where the player is is not the same as being away from the body.
       if (!status) return flash("bookmark", "ⓘ could not read where you are: try again", 3_000);
-      const pick = bookmarksToClear({ plan, system, status });
-      picked = pick.stops;
-      // The key clears one bookmark, on the body you are on. A whole system is the tray's, which
-      // asks first: a held key repeats, so a second press cannot be told from holding it.
-      if (pick.whole) {
-        return flash(
-          "bookmark",
-          "ⓘ not on a bookmarked body: clear this system's bookmarks from the tray menu",
-          4_000,
-        );
-      }
+      // The key clears one bookmark, on the body you are on; a whole system is the tray's.
+      const allowed = keyClearStops(bookmarksToClear({ plan, system, status }));
+      if ("reason" in allowed) return flash("bookmark", `ⓘ ${allowed.reason}`, 4_000);
+      picked = allowed.stops;
     }
     if (!picked.length) {
       return flash(

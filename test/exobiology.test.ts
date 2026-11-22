@@ -153,6 +153,15 @@ describe("exobiology panel", () => {
       knownSignals: 3,
     });
     expect(header.right).toBe("3/3 genera ✓");
+    // Two species of one genus with no count: 2/2, not 2/1.
+    expect(
+      bioProgress({
+        ...done,
+        bio_signals: null,
+        genera: ["Bacterium"],
+        species: [done.species[0]!, done.species[1]!],
+      }),
+    ).toMatchObject({ analysed: 2, signals: 2 });
     // More genera found than signals counted: the genera are the total.
     expect(bioProgress({ ...done, bio_signals: 2 })).toEqual({
       analysed: 3,

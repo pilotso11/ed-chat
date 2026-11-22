@@ -19,6 +19,7 @@ import {
   bookmarkLabel,
   bookmarkRows,
   bookmarksToClear,
+  keyClearStops,
   finishedBioBookmarks,
   isPlanNotFound,
   keepSavedBookmarks,
@@ -518,6 +519,13 @@ describe("clearing bookmarks", () => {
     expect(bookmarksToClear({ plan: p, system: SYSTEM, status: null })).toEqual(whole);
   });
 
+  it("lets the key clear one bookmark on the body, never a whole system", () => {
+    expect(keyClearStops({ stops: [2], whole: false })).toEqual({ stops: [2] });
+    const whole = keyClearStops({ stops: [0, 1], whole: true });
+    expect(whole).not.toHaveProperty("stops");
+    expect(whole).toEqual({ reason: expect.stringContaining("tray menu") });
+  });
+
   it("clears nothing in a system without bookmarks", () => {
     const none = { stops: [], whole: false };
     expect(bookmarksToClear({ plan: plan([far]), system: "Sol", status: status() })).toEqual(none);
@@ -571,6 +579,17 @@ describe("bio bookmark rows", () => {
       bio_signals: 1,
     });
     expect(rows([done])[0]!.text).toBe("📍 Bio: all sampled");
+    // One genus with two species: both analysed account for both signals.
+    const twoOfOne = bio({
+      species: [
+        { species: "Bacterium Cerbrus", analysed: true },
+        { species: "Bacterium Aurasus", analysed: true },
+      ],
+      genera: ["Bacterium"],
+      bio_signals: 2,
+    });
+    expect(bioLeft(twoOfOne)).toEqual([]);
+    expect(rows([twoOfOne])[0]!.text).toBe("📍 Bio: all sampled");
     // Spansh's count shows the signals still unknown.
     expect(
       bookmarkRows({

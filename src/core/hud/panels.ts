@@ -955,7 +955,8 @@ export function bioProgress(
   const analysed = kept.filter((s) => s.analysed).length;
   // 0 from a later scan is no count, as null is: Spansh's count stands in for either.
   const count = b.bio_signals || spanshCount || null;
-  const signals = Math.max(count ?? 0, b.genera.length);
+  // Every started species accounts for a signal, as bioLeft counts: one genus can grow two.
+  const signals = Math.max(count ?? 0, b.genera.length, kept.length);
   const done = !!count && analysed >= signals && analysed === kept.length && !b.not_started.length;
   return { analysed, signals, done };
 }
