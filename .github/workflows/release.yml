@@ -20,7 +20,7 @@ jobs:
           APP_KEY: ${{ secrets.RELEASE_APP_KEY }}
         run: |
           if [ -z "$APP_KEY" ]; then
-            echo "::error::Set the RELEASE_APP_KEY secret; see Releases in README.md"
+            echo "::error::Set the RELEASE_APP_KEY secret; see Releases in CONTRIBUTING.md"
             exit 1
           fi
       # Release-please acts as a GitHub App: its release PR runs CI like any other PR,
