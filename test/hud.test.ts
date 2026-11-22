@@ -319,6 +319,11 @@ describe("massacrePanel", () => {
     expect(p.rows.map((r) => r.text)).toEqual(["Kumo Crew", "Lugh"]);
     // The lapsed target is not shown, so its mission is not counted as expired either.
     expect(p.footer).toEqual(["Stack 1.0M"]);
+    // Nor in the header's kills left, even if a lapsed target reported some.
+    const lapsed = { ...target("Pirates", true), kills_left: 7 };
+    expect(massacrePanel([target("Kumo Crew", false), lapsed], 0, { minPerKill: 0 })!.right).toBe(
+      "10 left",
+    );
     // Every mission expired: the stack has lapsed, and there is no panel.
     expect(massacrePanel([target("Pirates", true)], 0, { minPerKill: 0 })).toBeNull();
     expect(liveMassacre([target("Pirates", true)])).toEqual([]);

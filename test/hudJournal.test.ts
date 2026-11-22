@@ -279,6 +279,39 @@ describe("panel from the real ed-mcp journal reader", () => {
     });
   });
 
+  it("leaves an expired mission out beside a live one, as ed-mcp reports them", async () => {
+    const g = game();
+    const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d+Z$/, "Z");
+    const take = (id: number, giver: string, expiry: number, reward: number) =>
+      ev("MissionAccepted", {
+        Faction: giver,
+        Name: "Mission_MassacreWing",
+        LocalisedName: "Kill Pirates",
+        TargetFaction: "Bad Guys",
+        KillCount: 10,
+        Expiry: iso(expiry),
+        Reward: reward,
+        MissionID: id,
+      });
+    g.add(...arrive());
+    g.add(
+      ev("Docked", { StationName: "Port", StarSystem: SYSTEM, SystemAddress: ADDRESS }),
+      // Expired a minute after it was taken; the other runs for a day.
+      take(103, "Giver One", start + 60_000, 30_000_000),
+      take(104, "Giver Two", Date.now() + 86_400_000, 5_000_000),
+      ev("Undocked", { StationName: "Port" }),
+    );
+    for (let i = 0; i < 2; i++)
+      g.add(ev("Bounty", { VictimFaction: "Bad Guys", TotalReward: 100_000, Target: "x" }));
+    const v = await g.hud();
+    expect(v.panel).toMatchObject({ mode: "massacre", right: "8 left" });
+    // Only the live mission: its 5.0M over its 8 kills left, and only its giver's bar.
+    expect(v.panel!.rows[0]).toMatchObject({ text: "Bad Guys", right: "8 left · ⚠ 625k/kill" });
+    expect(v.panel!.rows.slice(1).map((r) => r.text)).toEqual(["Giver Two"]);
+    expect(v.panel!.footer[0]).toBe("Stack 5.0M");
+    expect(v.panel!.footer[1]).toMatch(/· 1 expired$/);
+  });
+
   it("drops a massacre stack whose missions all expired, so massacre mode ends", async () => {
     const g = game();
     g.add(...arrive());

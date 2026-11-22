@@ -174,7 +174,8 @@ export function massacrePanel(
       .filter(Boolean)
       .join(" · ") || null,
   ].filter((f) => f !== null);
-  const total = groups.reduce((n, g) => n + g.kills_left, 0);
+  // The targets shown only: a lapsed target adds nothing to the header.
+  const total = targets.reduce((n, g) => n + g.kills_left, 0);
   return { mode: "massacre", title: "MASSACRE", right: `${total} left`, rows, footer };
 }
 
