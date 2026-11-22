@@ -253,6 +253,12 @@ describe("where to sell", () => {
     expect(padFor("cobramkiii")).toBe("S");
     expect(padFor("type8")).toBe("M");
     expect(padFor("anacondamkii")).toBe("L");
+    // Journal names that differ from the ship: the Type-10 is type9_military; typex is the
+    // Alliance Chieftain (and _2, _3 the Crusader and Challenger).
+    expect(padFor("type9_military")).toBe("L");
+    expect(padFor("typex")).toBe("M");
+    expect(padFor("typex_3")).toBe("M");
+    expect(padFor("empire_trader")).toBe("L");
     // A hull not listed yet is taken as large, the safe side.
     expect(padFor("somenewhull")).toBe("L");
     expect(padFor(null)).toBeNull();
@@ -376,7 +382,7 @@ describe("miningPanel", () => {
       right: "244k · 12 ly",
       detail: "Haber Hub, Ngalinn",
     });
-    expect(p.rows.find((r) => r.text === "  or nearer")?.detail).toBe("Brooks Estate, Wolf 397");
+    expect(p.rows.find((r) => r.text === "or nearer")?.detail).toBe("Brooks Estate, Wolf 397");
     expect(p.rows.find((r) => r.text.startsWith("Refined"))).toMatchObject({
       text: "Refined: Platinum 2 t",
       right: "~487k",
