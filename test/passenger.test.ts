@@ -255,5 +255,16 @@ describe("passenger mode", () => {
       activity: { kind: "missions", updated_at: new Date(NOW).toISOString() } as never,
     };
     expect(currentMode(note)).toBe("exploration");
+
+    // So is a note for a mode that is turned off.
+    const mining = {
+      ...note,
+      activity: { kind: "mining", updated_at: new Date(NOW).toISOString() } as never,
+      settings: {
+        ...DEFAULT_SETTINGS.hud,
+        modes: { ...DEFAULT_SETTINGS.hud.modes, mining: false },
+      },
+    };
+    expect(currentMode(mining)).toBe("exploration");
   });
 });

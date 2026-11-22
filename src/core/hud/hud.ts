@@ -104,12 +104,17 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
     ? journalMode(j.events, groups.length > 0, minedAboard, input.settings.modes.mining, runActive)
     : null;
   const m = noteMode(input.activity?.kind);
-  // A missions or hauling note with no run to show would leave the panel empty.
+  // A note for a mode that is off, or a missions or hauling note with no run to show, would leave
+  // the panel empty: the journal's mode shows instead.
   const fromNote =
-    m && input.activity && !(m === "passenger" && !runActive)
+    m && input.activity && input.settings.modes[m] && !(m === "passenger" && !runActive)
       ? { mode: m, at: Date.parse(input.activity.updated_at) }
       : null;
-  const chosen = pickMode(fromJournal, fromNote, input.hotkey)?.mode ?? null;
+  const journalOn =
+    fromJournal && (fromJournal.mode === "off" || input.settings.modes[fromJournal.mode])
+      ? fromJournal
+      : null;
+  const chosen = pickMode(journalOn, fromNote, input.hotkey)?.mode ?? null;
   if (chosen && chosen !== "off" && !input.settings.modes[chosen]) return null;
   return chosen;
 }

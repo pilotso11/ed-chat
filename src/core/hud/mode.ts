@@ -72,8 +72,9 @@ export const LAPSE_JUMPS = 5;
  * `massacreActive` is whether a massacre mission is still open now (from ed-mcp's massacre()).
  * `minedAboard` is whether mined cargo is waiting to be sold now (minedWaiting()).
  * `miningOn` is false when the mining mode is off: mining then changes no mode.
- * `runActive` is whether a passenger or delivery mission is open now: taking one turns on the
- * passenger mode, which lasts until a newer activity or the last such mission is done.
+ * `runActive` is whether the passenger panel has a run to show now (the mode on, and a passenger
+ * or delivery mission open that it can place): taking one then turns on the passenger mode,
+ * which lasts until a newer activity or the last such mission is done.
  */
 export function journalMode(
   events: JournalEvent[],
