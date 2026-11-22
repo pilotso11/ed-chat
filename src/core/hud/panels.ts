@@ -174,7 +174,8 @@ export function massacrePanel(
       .filter(Boolean)
       .join(" · ") || null,
   ].filter((f) => f !== null);
-  // The targets shown only: a lapsed target adds nothing to the header.
+  // The targets shown only. ed-mcp gives a lapsed target no kills left already; this keeps the
+  // header in step with the rows if that changes.
   const total = targets.reduce((n, g) => n + g.kills_left, 0);
   return { mode: "massacre", title: "MASSACRE", right: `${total} left`, rows, footer };
 }

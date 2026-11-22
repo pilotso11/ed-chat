@@ -296,8 +296,9 @@ describe("panel from the real ed-mcp journal reader", () => {
     g.add(...arrive());
     g.add(
       ev("Docked", { StationName: "Port", StarSystem: SYSTEM, SystemAddress: ADDRESS }),
-      // Expired a minute after it was taken; the other runs for a day.
-      take(103, "Giver One", start + 60_000, 30_000_000),
+      // Expires two seconds after it was taken, before the kills below, which it must not get;
+      // the other runs for a day.
+      take(103, "Giver One", start + 7_000, 30_000_000),
       take(104, "Giver Two", Date.now() + 86_400_000, 5_000_000),
       ev("Undocked", { StationName: "Port" }),
     );
