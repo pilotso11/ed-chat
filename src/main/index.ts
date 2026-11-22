@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
-import { existsSync, unwatchFile, watchFile } from "node:fs";
+import { existsSync, watchFile } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -278,17 +278,19 @@ async function main(): Promise<void> {
   // a blue or green overlay does not draw orange first; it is read again when the player
   // changes it. null when the game has none.
   const colourXml = graphicsOverrideFile(process.env.LOCALAPPDATA, os.homedir());
-  const readColourXml = () =>
-    readFile(colourXml, "utf8").catch((err: NodeJS.ErrnoException) =>
+  const readColourXml = () => {
+    const read = readFile(colourXml, "utf8").catch((err: NodeJS.ErrnoException) =>
       err.code === "ENOENT" ? undefined : null,
     );
-  // A folder that stalls must not hold the overlay back: after a moment it starts orange, and
-  // the timer below reads the file again.
-  const stalled = new Promise<null>((resolve) => setTimeout(resolve, 1_500, null).unref());
-  let gameMatrix: Matrix | null = gameMatrixFrom(
-    await Promise.race([readColourXml(), stalled]),
-    null,
-  );
+    // A folder that stalls must not hold anything back, neither the overlay's start nor the
+    // timer below: the read is given up after a moment, which keeps the colour already shown.
+    let timer: NodeJS.Timeout | undefined;
+    const stalled = new Promise<null>((resolve) => {
+      timer = setTimeout(resolve, 1_500, null);
+    });
+    return Promise.race([read, stalled]).finally(() => clearTimeout(timer));
+  };
+  let gameMatrix: Matrix | null = gameMatrixFrom(await readColourXml(), null);
 
   const win: BrowserWindow = createOverlayWindow(
     path.join(import.meta.dirname, "../preload/index.cjs"),
@@ -1473,7 +1475,7 @@ async function main(): Promise<void> {
         renderHud();
       }
     } catch (err) {
-      log.log("warn", `colour: ${message(err)}`);
+      log.log("warn", `colour: could not redraw: ${message(err)}`);
     } finally {
       colourReading = false;
     }
@@ -1706,7 +1708,6 @@ async function main(): Promise<void> {
     status.stop();
     clearInterval(hudTimer);
     clearInterval(colourTimer);
-    unwatchFile(displayXml);
     settingsStore.unwatch();
     session?.stop();
     void approval.stop();
