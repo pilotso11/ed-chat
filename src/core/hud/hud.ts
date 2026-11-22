@@ -28,6 +28,7 @@ import {
   type PanelView,
   type Point,
   wasFootfalled,
+  liveMassacre,
 } from "./panels.js";
 
 /** What the panel window shows. */
@@ -93,7 +94,8 @@ export interface HudInput {
 export function currentMode(input: HudInput): HudModeId | "off" | null {
   if (input.hotkey?.mode === "off") return "off";
   const j = input.journal;
-  const groups = j ? massacre(j.missions, j.events).groups : [];
+  // Expired on the panel's clock, and a stack whose missions all expired is not open.
+  const groups = j ? liveMassacre(massacre(j.missions, j.events, input.now).groups) : [];
   const minedAboard =
     j && input.settings.modes.mining
       ? minedWaiting(j.cargo, j.events, input.now, input.settings.mining)
@@ -110,10 +112,15 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
       )
     : null;
   const m = noteMode(input.activity?.kind);
-  // A note for a mode that is off, or a missions or hauling note with no run to show, would leave
-  // the panel empty: the journal's mode shows instead.
+  // A note for a mode that is off, a missions or hauling note with no run to show, or a massacre
+  // note with no live stack, would leave the panel empty: the journal's mode shows instead.
   const fromNote =
-    m && input.activity && input.settings.modes[m] && !(m === "passenger" && !runActive)
+    m &&
+    input.activity &&
+    input.settings.modes[m] &&
+    !(m === "passenger" && !runActive) &&
+    // With the journal read: before then there is no stack to judge by.
+    !(m === "massacre" && j && !groups.length)
       ? { mode: m, at: Date.parse(input.activity.updated_at) }
       : null;
   // journalMode skips modes that are off itself, so the run or an older mode still shows.
@@ -126,7 +133,11 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
   const j = input.journal;
   if (!j || mode === "route") return null;
   if (mode === "massacre")
-    return massacrePanel(massacre(j.missions, j.events).groups, input.now, input.settings.massacre);
+    return massacrePanel(
+      massacre(j.missions, j.events, input.now).groups,
+      input.now,
+      input.settings.massacre,
+    );
   if (mode === "passenger") {
     return passengerPanel({
       missions: j.missions,
