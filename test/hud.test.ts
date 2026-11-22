@@ -382,6 +382,13 @@ describe("exploration totals", () => {
     const map = body("SAAScanComplete", 6, 1);
     const mappedWorth = explorationTotals([elw("A", 1), map]).unsoldCartographic;
     expect(explorationTotals([...scans, map], min(10)).rate.session!).toBeCloseTo(mappedWorth * 6);
+    // A map made after the system's data was sold still earns what the map adds.
+    const soldFirst = [
+      ...scans,
+      timed(5, ev("SellExplorationData", { Systems: ["A"] })),
+      timed(6, ev("SAAScanComplete", { SystemAddress: 1, BodyID: 1 })),
+    ];
+    expect(explorationTotals(soldFirst, min(10)).rate.session!).toBeCloseTo(mappedWorth * 6);
     // A sale does not take back what was earned.
     const sold = [...scans, timed(7, ev("SellExplorationData", { Systems: ["A"] }))];
     expect(explorationTotals(sold, min(10)).rate.session!).toBeCloseTo(once);
@@ -521,7 +528,7 @@ describe("exploration totals", () => {
       rate: { session: 52_000_000, recent: 80_000_000 },
       planetRate: new Map([["7|3", 30_000_000]]),
     };
-    const p = exobiologyPanel({
+    const input = {
       system: "Sys",
       address: 7,
       body: {
@@ -534,10 +541,20 @@ describe("exploration totals", () => {
       samples: new Map(),
       here: null,
       totals,
-    });
+    };
+    const p = exobiologyPanel(input);
     // Nothing unsold: the Session line stays, without the rate the Rate line has.
     expect(p.footer).toEqual([
       "Session: 3 jumps · 2 scanned · 0 mapped · 0 ★",
+      "Rate: this planet 30.0M/h · session 52.0M/h (30m 80.0M/h)",
+    ]);
+    // With unsold data, that line and the rate line; no Session line.
+    const unsold = exobiologyPanel({
+      ...input,
+      totals: { ...totals, unsoldBio: 19_000_000, unsoldBioCount: 2 },
+    });
+    expect(unsold.footer).toEqual([
+      "Unsold: 2 bio (19.0M)",
       "Rate: this planet 30.0M/h · session 52.0M/h (30m 80.0M/h)",
     ]);
   });

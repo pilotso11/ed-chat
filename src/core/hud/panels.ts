@@ -318,6 +318,8 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
   // What each body is worth so far, so a rescan or a map adds only the difference. Kept over a
   // relog, so a rescan after one is not counted again.
   const worth = new Map<string, number>();
+  // Each body's newest scan, kept after a sale, so a map made after selling is still valued.
+  const scanned = new Map<string, Obj>();
   // This session's earnings, and its clock from its first exploring event.
   let session0 = new ActiveClock();
   const earned: { at: number; credits: number }[] = [];
@@ -413,6 +415,7 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
         });
         if (e.WasDiscovered === true) discovered.add(key);
         const cur = scans.get(key)!;
+        scanned.set(key, cur.scan);
         if (!Number.isNaN(at)) rework(key, at, cur.scan, cur.mapped);
         if (e.ScanType === "Detailed") {
           session.scanned++;
@@ -424,10 +427,12 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
         const s = scans.get(key);
         if (s) s.mapped = true;
         session.mapped++;
-        if (s && !Number.isNaN(at)) {
+        // The scan from before a sale, when this system's data was sold.
+        const scan = s?.scan ?? scanned.get(key);
+        if (scan && !Number.isNaN(at)) {
           // Mapping is time spent at the body: its clock starts, and the map counts toward it.
           visit(key, at);
-          rework(key, at, s.scan, true);
+          rework(key, at, scan, true);
         }
         break;
       }
