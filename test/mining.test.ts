@@ -468,6 +468,7 @@ describe("the HUD in mining mode", () => {
         },
         ship: {
           type: "type9",
+          id: null,
           name: null,
           ident: null,
           max_jump_range: null,
@@ -478,6 +479,7 @@ describe("the HUD in mining mode", () => {
         materials: { raw: [], manufactured: [], encoded: [] },
         missions: [],
         engineers: [],
+        stored_modules: null,
         as_of: null,
         events,
       },
