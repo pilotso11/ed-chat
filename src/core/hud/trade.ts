@@ -11,11 +11,11 @@ import { isRun } from "./passenger.js";
 import {
   credits,
   currentStop,
-  hourly,
   jumpsLeft,
   jumpsText,
   rateText,
   timeLeft,
+  type FooterLine,
   type HudRow,
   type NavRoute,
   type PanelView,
@@ -419,6 +419,8 @@ export interface TradeTotals {
   profit: number;
   /** Market buys and sales this game session. */
   trades: number;
+  /** Sales of traded cargo this game session. */
+  sold: number;
   /** Time counted on the session's clock, from its first trade. */
   active: number;
   rate: Rates;
@@ -434,6 +436,7 @@ export function tradeTotals(
   return {
     profit: j.earned.reduce((n, x) => n + x.credits, 0),
     trades: j.trades,
+    sold: j.earned.length,
     active: j.clock.total(now),
     rate: rates(j.clock, j.earned, now),
   };
@@ -647,6 +650,17 @@ const actionsText = (cargo: Cargo[]) =>
 
 /** A session rate under this share of the plan's shows in amber. */
 const PLAN_SHORT = 0.8;
+
+/**
+ * Whether the run is behind its planned rate: after a sale this session (before one, the first
+ * leg has earned nothing yet), the session's rate under PLAN_SHORT of the plan's, and the last
+ * half hour's too once it shows, so a slow start does not stay amber while the run is on plan.
+ */
+function behindPlan(t: TradeTotals, planned: number | null): boolean {
+  if (planned === null || !t.sold || t.rate.session === null) return false;
+  const short = (r: number | null) => r !== null && r < planned * PLAN_SHORT;
+  return short(t.rate.session) && (t.rate.recent === null || short(t.rate.recent));
+}
 /** A live price this much worse than the plan's shows in amber. */
 const PRICE_SLIP = 0.05;
 /** Older market data than this shows its age in the header. */
@@ -757,32 +771,19 @@ export function tradePanel(input: {
   }
 
   const totals = tradeTotals(input.events, input.now, input.missionsNow);
-  const footer: string[] = [];
-  const footerTones: (Tone | undefined)[] = [];
-  // The rate the plan was chosen for (ed-mcp's profit_per_hour): the session's against it, amber
-  // under PLAN_SHORT of it once a session rate shows.
-  const planned = plan?.profit_per_hour && plan.profit_per_hour > 0 ? plan.profit_per_hour : null;
-  if (totals.trades || planned) {
-    const session = totals.rate.session;
-    const recent = hourly(totals.rate.recent);
-    const rate =
-      planned === null
-        ? rateText(totals.rate)
-        : session === null
-          ? `${hourly(planned)} planned`
-          : `${hourly(session)} of ${hourly(planned)} planned${recent ? ` (30m ${recent})` : ""}`;
-    footer.push(
-      `Session: ${[
-        totals.trades ? `${credits(totals.profit)} profit` : null,
-        totals.trades ? (totals.active >= 60_000 ? timeLeft(totals.active) : "0m") : null,
-        rate,
-      ]
-        .filter(Boolean)
-        .join(" · ")}`,
-    );
-    footerTones.push(
-      planned !== null && session !== null && session < planned * PLAN_SHORT ? "warn" : undefined,
-    );
+  const footer: FooterLine[] = [];
+  // The rate the plan was chosen for (ed-mcp's profit_per_hour), while it has a stop to do.
+  const perHour = plan?.profit_per_hour ?? 0;
+  const planned = todo.length && perHour > 0 ? perHour : null;
+  if (totals.trades || planned !== null) {
+    const done = totals.trades
+      ? [
+          `${credits(totals.profit)} profit`,
+          totals.active >= 60_000 ? timeLeft(totals.active) : "0m",
+        ]
+      : [];
+    const text = `Session: ${[...done, rateText(totals.rate, planned)].filter(Boolean).join(" · ")}`;
+    footer.push(behindPlan(totals, planned) ? { text, tone: "warn" } : text);
   }
   // Passengers taken on a trade run show here, not as their own panel.
   const runs = input.missions.filter(isRun);
@@ -811,6 +812,5 @@ export function tradePanel(input: {
         .join(" · ") || undefined,
     rows,
     footer,
-    ...(footerTones.some(Boolean) ? { footerTones } : {}),
   };
 }

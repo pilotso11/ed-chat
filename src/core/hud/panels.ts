@@ -32,6 +32,12 @@ export interface HudRow {
   tone?: Tone;
 }
 
+/** A footer line: its text, or its text and a tone. */
+export type FooterLine = string | { text: string; tone?: Tone };
+
+/** A footer line's text. */
+export const footerText = (f: FooterLine) => (typeof f === "string" ? f : f.text);
+
 export interface PanelView {
   /** The panel's mode, or bookmarks for the panel that shows only bookmarks. */
   mode: HudModeId | "bookmarks";
@@ -39,9 +45,7 @@ export interface PanelView {
   subtitle?: string;
   right?: string;
   rows: HudRow[];
-  footer: string[];
-  /** A tone for some footer lines, by their place in footer. */
-  footerTones?: (Tone | undefined)[];
+  footer: FooterLine[];
   /** A system to copy for the galaxy map once, with a note for the chat strip: a new key copies again. */
   copy?: { key: string; text: string; note: string };
 }
@@ -498,12 +502,16 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
 /** "52M/h", or null with no rate yet. */
 export const hourly = (n: number | null | undefined) => (n != null ? `${credits(n)}/h` : null);
 
-/** The session and last half hour rates: "52M/h (30m 80M/h)". */
-export function rateText(rate: Rates): string | null {
+/**
+ * The session and last half hour rates: "52M/h (30m 80M/h)". With a planned rate, the session's
+ * against it, "52M/h of 60.0M/h planned (30m 80M/h)", or before a session rate the plan's alone.
+ */
+export function rateText(rate: Rates, planned: number | null = null): string | null {
+  const plan = planned !== null ? `${hourly(planned)} planned` : null;
   const session = hourly(rate.session);
-  if (!session) return null;
+  if (!session) return plan;
   const recent = hourly(rate.recent);
-  return recent ? `${session} (30m ${recent})` : session;
+  return `${plan ? `${session} of ${plan}` : session}${recent ? ` (30m ${recent})` : ""}`;
 }
 
 function totalsFooter(t: ExplorationTotals, withRate = true): string[] {

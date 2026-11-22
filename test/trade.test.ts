@@ -1061,13 +1061,18 @@ describe("the trade panel", () => {
     ]);
     // 1.0M over 20 minutes: 3.0M/h, under 80% of 60M/h, in amber.
     const run = [at(60, "LoadGame"), buy(40, "Gold", 200, 10_000), sell(20, "Gold", 100, 20_000)];
-    const short = planned(60_000_000, run);
-    expect(short.footer).toEqual(["Session: 1.0M profit · 20m · 3.0M/h of 60.0M/h planned"]);
-    expect(short.footerTones).toEqual(["warn"]);
+    expect(planned(60_000_000, run).footer).toEqual([
+      { text: "Session: 1.0M profit · 20m · 3.0M/h of 60.0M/h planned", tone: "warn" },
+    ]);
     // At 80% or more, plain.
-    const near = planned(3_500_000, run);
-    expect(near.footer).toEqual(["Session: 1.0M profit · 20m · 3.0M/h of 3.5M/h planned"]);
-    expect(near.footerTones).toBeUndefined();
+    expect(planned(3_500_000, run).footer).toEqual([
+      "Session: 1.0M profit · 20m · 3.0M/h of 3.5M/h planned",
+    ]);
+    // The first leg of a loop: bought, nothing sold yet, so nothing earned. Not behind.
+    const leg = [at(60, "LoadGame"), buy(20, "Gold", 200, 10_000)];
+    expect(planned(60_000_000, leg).footer).toEqual([
+      "Session: 0 profit · 10m · 0/h of 60.0M/h planned",
+    ]);
     // With the last half hour.
     const long = [
       buy(60, "Gold", 10, 1_000),
@@ -1077,6 +1082,19 @@ describe("the trade panel", () => {
     expect(planned(10_000, long).footer).toEqual([
       "Session: 10k profit · 1h 0m · 10k/h of 10k/h planned (30m 20k/h)",
     ]);
+    // Behind over the session, but the last half hour is on plan: a slow start, not amber.
+    expect(planned(20_000, long).footer).toEqual([
+      "Session: 10k profit · 1h 0m · 10k/h of 20k/h planned (30m 20k/h)",
+    ]);
+    // Both behind: amber.
+    expect(planned(40_000, long).footer).toEqual([
+      { text: "Session: 10k profit · 1h 0m · 10k/h of 40k/h planned (30m 20k/h)", tone: "warn" },
+    ]);
+    // A route finished: its planned rate no longer applies.
+    const finished = route([stop("A", "a", [], "done")], { profit_per_hour: 60_000_000 });
+    expect(
+      tradePanel({ ...base, plan: finished, events: run, cargo: hold({ Gold: 100 }) })!.footer,
+    ).toEqual(["Session: 1.0M profit · 20m · 3.0M/h"]);
     // No planned rate: as before.
     expect(tradePanel({ ...base, events: run })!.footer).toEqual([
       "Session: 1.0M profit · 20m · 3.0M/h",
