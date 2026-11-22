@@ -377,6 +377,8 @@ describe("exploration totals", () => {
     const scans = [timed(0, ev("LoadGame")), timed(0, elw("A", 1)), timed(5, elw("A", 1))];
     const once = explorationTotals(scans, min(10)).rate.session!;
     expect(once).toBeCloseTo(elwWorth * 6);
+    // A session under half an hour has no last-half-hour rate: it would repeat the session's.
+    expect(explorationTotals(scans, min(10)).rate.recent).toBeNull();
     const map = body("SAAScanComplete", 6, 1);
     const mappedWorth = explorationTotals([elw("A", 1), map]).unsoldCartographic;
     expect(explorationTotals([...scans, map], min(10)).rate.session!).toBeCloseTo(mappedWorth * 6);
