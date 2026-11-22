@@ -437,8 +437,10 @@ export function tradeTotals(
   const j = tradeJournal(events, missions);
   const rate = rates(j.clock, j.earned, now);
   // A half hour with no sale is a leg flown with the hold full (buying, then travelling): its
-  // rate of 0 says nothing about the run, so it is not shown.
-  const quiet = rate.recent !== null && !j.earned.some((x) => x.at > now - RECENT_MS);
+  // rate of 0 says nothing about the run, so it is not shown. Judged on the session's time
+  // and the sales alone: after a long silence the window's own time is too short for a rate,
+  // which must not end the quiet.
+  const quiet = j.clock.total(now) > RECENT_MS && !j.earned.some((x) => x.at > now - RECENT_MS);
   return {
     profit: j.earned.reduce((n, x) => n + x.credits, 0),
     trades: j.trades,

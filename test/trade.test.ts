@@ -1103,6 +1103,20 @@ describe("the trade panel", () => {
     expect(quiet).toHaveLength(1);
     expect(quiet[0]).toMatch(/^Session: 5k profit · 1h \d+m · [\d.]+k\/h of 100k\/h planned$/);
     expect(tradeTotals(leg2, NOW)).toMatchObject({ quiet: true, rate: { recent: null } });
+    // The same leg with no journal events at all for 45 minutes: the window has too little
+    // counted time for a rate, which must not end the quiet. Still plain.
+    const silent = [
+      at(80, "LoadGame"),
+      buy(75, "Gold", 10, 1_000),
+      at(70, "Music"),
+      at(65, "Music"),
+      at(60, "Music"),
+      at(55, "Music"),
+      sell(50, "Gold", 10, 1_500),
+      buy(45, "Gold", 10, 1_000),
+    ];
+    expect(tradeTotals(silent, NOW)).toMatchObject({ quiet: true });
+    expect(planned(100_000, silent).footer[0]).toMatch(/of 100k\/h planned$/);
     // A route finished: its planned rate no longer applies.
     const finished = route([stop("A", "a", [], "done")], { profit_per_hour: 60_000_000 });
     expect(
