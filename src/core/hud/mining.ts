@@ -566,7 +566,7 @@ function readCarrier(events: JournalEvent[], now: number): Carrier | null {
 
 // ---------- Where to sell ----------
 
-const LARGE = new Set([
+export const LARGE = new Set([
   "anaconda",
   "anacondamkii",
   "belugaliner",
@@ -580,7 +580,7 @@ const LARGE = new Set([
   "type9",
   "type9_military",
 ]);
-const SMALL = new Set([
+export const SMALL = new Set([
   "adder",
   "cobramkiii",
   "cobramkiv",
@@ -599,9 +599,8 @@ const SMALL = new Set([
   "vulture",
 ]);
 
-// Medium-pad ships by the journal's names. A ship on no list is taken as large: a large ship
-// sent to a medium pad cannot dock, while a medium ship taken as large only sees fewer stations.
-const MEDIUM = new Set([
+// Medium-pad ships by the journal's names.
+export const MEDIUM = new Set([
   "asp",
   "asp_scout",
   "corsair",
@@ -624,13 +623,18 @@ const MEDIUM = new Set([
   "typex_3",
 ]);
 
-/** The landing pad the ship needs; null when the ship type is unknown. */
+/**
+ * The landing pad the ship needs, from SMALL, MEDIUM and LARGE; null with no ship type. A hull on
+ * no list (a new one, say) is taken as large, the safe side: a large ship sent to a smaller pad
+ * cannot dock, while a small or medium ship taken as large only sees fewer stations (outposts
+ * and medium-only stations are left out). So the lists must name every small and medium hull.
+ */
 export function padFor(shipType: string | null): "L" | "M" | "S" | null {
   if (!shipType) return null;
   const t = shipType.toLowerCase();
+  if (LARGE.has(t)) return "L";
   if (SMALL.has(t)) return "S";
   if (MEDIUM.has(t)) return "M";
-  // LARGE, and any ship not listed yet, such as a new hull.
   return "L";
 }
 

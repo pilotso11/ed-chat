@@ -14,6 +14,9 @@ import {
   ownCarrierId,
   refinedKinds,
   padFor,
+  LARGE,
+  MEDIUM,
+  SMALL,
   pickSell,
   sellQueries,
 } from "../src/core/hud/mining.js";
@@ -1244,5 +1247,15 @@ describe("targets and logins elsewhere", () => {
       ev("Location", { StarSystem: "B" }),
     ];
     expect(miningState(events, T0 + t * 1000).system).toBeNull();
+  });
+});
+
+describe("pad lists", () => {
+  it("do not overlap, and each list gives its own pad", () => {
+    for (const ship of SMALL) expect([ship, padFor(ship)]).toEqual([ship, "S"]);
+    for (const ship of MEDIUM) expect([ship, padFor(ship)]).toEqual([ship, "M"]);
+    for (const ship of LARGE) expect([ship, padFor(ship)]).toEqual([ship, "L"]);
+    const all = [...SMALL, ...MEDIUM, ...LARGE];
+    expect(new Set(all).size).toBe(all.length);
   });
 });
