@@ -282,7 +282,13 @@ async function main(): Promise<void> {
     readFile(colourXml, "utf8").catch((err: NodeJS.ErrnoException) =>
       err.code === "ENOENT" ? undefined : null,
     );
-  let gameMatrix: Matrix | null = gameMatrixFrom(await readColourXml(), null);
+  // A folder that stalls must not hold the overlay back: after a moment it starts orange, and
+  // the timer below reads the file again.
+  const stalled = new Promise<null>((resolve) => setTimeout(resolve, 1_500, null).unref());
+  let gameMatrix: Matrix | null = gameMatrixFrom(
+    await Promise.race([readColourXml(), stalled]),
+    null,
+  );
 
   const win: BrowserWindow = createOverlayWindow(
     path.join(import.meta.dirname, "../preload/index.cjs"),
