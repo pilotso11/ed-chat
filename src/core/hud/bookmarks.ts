@@ -10,7 +10,7 @@ import {
 } from "ed-mcp/journal";
 import type { ShipStatus } from "./hud.js";
 import { same } from "./json.js";
-import { shortBody, type HudRow } from "./panels.js";
+import { bioProgress, shortBody, type HudRow } from "./panels.js";
 
 /** The plan that holds surface bookmarks, in ed-mcp's plan store so Claude sees them too. */
 export const BOOKMARKS_PLAN = "bookmarks";
@@ -87,7 +87,13 @@ function bookmarkText(s: Stop, bio: ExobiologyBody[] | null, system: string): st
   const left = bioLeft(body);
   // The " (2)" that kept the label unique stays, so two bookmarks on a body still differ.
   const n = / \(\d+\)$/.exec(label)?.[0] ?? "";
-  return `${left.length ? `Bio: ${left.join(", ")}` : "Bio: all sampled"}${n}`;
+  // "All sampled" only when the body is done; with no signal count it may hold more.
+  const what = left.length
+    ? `Bio: ${left.join(", ")}`
+    : bioProgress(body).done
+      ? "Bio: all sampled"
+      : "Bio: all found sampled, more may be here";
+  return `${what}${n}`;
 }
 
 /** A bookmark as a plan stop. */
@@ -305,21 +311,7 @@ export function finishedBioBookmarks(
   if (address === null) return [];
   const done = new Set(
     exobiology(journal.events, address, { system })
-      .bodies.filter((b) => {
-        // An abandoned species was left for another of its genus: it need not be analysed, but it
-        // is not one of the analysed species either, so the signal count still waits for one.
-        const kept = b.species.filter((s) => !s.abandoned);
-        return (
-          kept.length > 0 &&
-          kept.every((s) => s.analysed) &&
-          !b.not_started.length &&
-          // Every signal sampled, not just every genus seen so far. With no signal count (null, or
-          // 0 from a later scan with no biology listed) the body might hold more, so it is left
-          // for the player or Claude to mark done.
-          !!b.bio_signals &&
-          kept.length >= b.bio_signals
-        );
-      })
+      .bodies.filter((b) => bioProgress(b).done)
       .map((b) => bodyKey(b.body, system)),
   );
   return todo.filter((i) => done.has(bodyKey(plan.stops[i]!.body!, system)));

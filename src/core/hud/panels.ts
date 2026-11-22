@@ -729,9 +729,10 @@ export function bioRows(input: {
     const base = known_ ? sum((g) => g.likely) : null;
     const likely = base !== null ? base * bonus : null;
     if (likely !== null && likely < input.bioMin) continue;
-    const signals = j?.bio_signals ?? k?.bioSignals ?? genera.length;
+    const signals = j ? bioProgress(j).signals : (k?.bioSignals ?? genera.length);
     const analysed = j ? bioProgress(j).analysed : 0;
-    const done = signals > 0 && analysed >= signals;
+    // From the journal, the same rule as the exobiology header; Spansh alone has none analysed.
+    const done = j ? bioProgress(j).done : false;
     const name = x?.body ?? j?.body ?? k?.name ?? String(id);
     const ls = x?.distance_ls ?? k?.distance_ls ?? null;
     const labels = guesses.map((g, i) => g?.label ?? genera[i]!);
@@ -916,17 +917,22 @@ function bioRateLine(input: {
 /**
  * How far through a body's biology the player is: species analysed (an abandoned one is not)
  * out of the signals, or out of the genera found when there are more of those. Done once every
- * signal has a species analysed; with no signal count (null, or 0 from a later scan) the body
- * may hold more, so it is never done, as for bio bookmarks (finishedBioBookmarks).
+ * signal has a species analysed and nothing is still in progress or not started. With no signal
+ * count (null, or 0 from a later scan) the body may hold more, so it is never done. The one rule
+ * for the header, the In system rows and bio bookmarks (finishedBioBookmarks).
  */
 export function bioProgress(b: ExobiologyBody): {
   analysed: number;
   signals: number;
   done: boolean;
 } {
-  const analysed = b.species.filter((s) => s.analysed && !s.abandoned).length;
+  // An abandoned species was left for another of its genus: it is neither analysed nor waiting.
+  const kept = b.species.filter((s) => !s.abandoned);
+  const analysed = kept.filter((s) => s.analysed).length;
   const signals = Math.max(b.bio_signals ?? 0, b.genera.length);
-  return { analysed, signals, done: !!b.bio_signals && analysed >= signals };
+  const done =
+    !!b.bio_signals && analysed >= signals && analysed === kept.length && !b.not_started.length;
+  return { analysed, signals, done };
 }
 
 export function exobiologyPanel(input: {

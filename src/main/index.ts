@@ -724,15 +724,31 @@ async function main(): Promise<void> {
     return bookmarking;
   }
 
+  let askingClearAll = false;
   async function confirmClearAll(): Promise<void> {
+    // One question at a time: a second click while it is open does nothing.
+    if (askingClearAll) return;
+    const plans = hudPlans;
+    if (!settings.hud.enabled || !settings.hud.bookmarks || !plans) {
+      return flash("bookmark", "ⓘ bookmarks are off or the panel could not open ed-mcp", 3_000);
+    }
     // The count from the plan as it is now, not as the last poll read it.
     let n = 0;
     try {
-      n = hudPlans ? todoBookmarks(await hudPlans.get(BOOKMARKS_PLAN)).length : 0;
+      n = todoBookmarks(await plans.get(BOOKMARKS_PLAN)).length;
     } catch (err) {
       if (!isPlanNotFound(err)) throw err;
     }
     if (!n) return flash("bookmark", "ⓘ no bookmarks", 3_000);
+    askingClearAll = true;
+    try {
+      await askClearAll(n);
+    } finally {
+      askingClearAll = false;
+    }
+  }
+
+  async function askClearAll(n: number): Promise<void> {
     const r = await dialog.showMessageBox({
       type: "question",
       title: "ED Chat",
@@ -839,12 +855,15 @@ async function main(): Promise<void> {
       if (bookmarksDone.has(id)) continue;
       bookmarksDone.add(id);
       try {
-        // Found again in the plan as it is now: an edit since the poll can move it.
-        const now = await hudPlans.get(BOOKMARKS_PLAN);
-        const ref = bookmarkRef(now, stop);
-        if (!ref) continue;
-        await hudPlans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
-        flash("bookmark", `📍 done: ${stop.label ?? stop.purpose}`, 4_000);
+        // In turn with the bookmark key and clearing, so a bookmark cleared meanwhile is not
+        // marked done; found again in the plan as it is now (only while still to do).
+        const plans = hudPlans;
+        await queueBookmarks(async () => {
+          const ref = bookmarkRef(await plans.get(BOOKMARKS_PLAN), stop);
+          if (!ref) return;
+          await plans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
+          flash("bookmark", `📍 done: ${stop.label ?? stop.purpose}`, 4_000);
+        });
       } catch (err) {
         // Tried again on the next poll; the other bookmarks are still marked.
         bookmarksDone.delete(id);

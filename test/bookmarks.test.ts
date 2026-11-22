@@ -552,6 +552,10 @@ describe("bio bookmark rows", () => {
       bio_signals: 1,
     });
     expect(rows([done])[0]!.text).toBe("📍 Bio: all sampled");
+    // With no signal count the body may hold more.
+    expect(rows([{ ...(done as object), bio_signals: null }])[0]!.text).toBe(
+      "📍 Bio: all found sampled, more may be here",
+    );
     // A second bookmark's " (2)" stays, so the two rows still differ.
     expect(rows([now], [{ ...mark, label: `${mark.label} (2)` }])[0]!.text).toBe(
       "📍 Bio: Bacterium, Concha (2)",

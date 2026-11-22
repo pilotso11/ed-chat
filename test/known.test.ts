@@ -283,6 +283,7 @@ describe("bio rows", () => {
             body_id: 5,
             bio_signals: 2,
             genera: ["Clypeus", "Bacterium"],
+            not_started: [],
             species: [
               {
                 genus: "Clypeus",
