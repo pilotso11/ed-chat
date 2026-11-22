@@ -92,10 +92,12 @@ function rewards(missions: MassacreMission[]): { sum: number; floor: boolean } {
 
 const rewardText = (r: { sum: number; floor: boolean }) => `${credits(r.sum)}${r.floor ? "+" : ""}`;
 
-/** credits() as a number: n to the precision the panel shows it. */
+const UNITS: Record<string, number> = { B: 1e9, M: 1e6, k: 1e3, "": 1 };
+
+/** n as credits() shows it, read back as a number. */
 function shown(n: number): number {
-  if (n >= 999_500) return Math.round(n / 1e5) * 1e5;
-  return n >= 1e3 ? Math.round(n / 1e3) * 1e3 : Math.round(n);
+  const m = /^([\d.]+)([BMk]?)$/.exec(credits(n));
+  return m ? Number(m[1]) * UNITS[m[2]!]! : n;
 }
 
 export function massacrePanel(
@@ -105,13 +107,10 @@ export function massacrePanel(
 ): PanelView | null {
   if (!groups.length) return null;
   const rows: HudRow[] = [];
-  // A mission that expired before it was done pays nothing.
-  const live = (m: MassacreMission) => m.done || !m.expires || !(Date.parse(m.expires) <= now);
-  const all = groups.flatMap((g) => g.factions.flatMap((f) => f.missions));
-  const missions = all.filter(live);
+  const missions = groups.flatMap((g) => g.factions.flatMap((f) => f.missions));
   for (const g of groups) {
     // What the stack still pays for each kill left: one kill counts for every giver at once.
-    const open = rewards(g.factions.flatMap((f) => f.missions).filter((m) => !m.done && live(m)));
+    const open = rewards(g.factions.flatMap((f) => f.missions).filter((m) => !m.done));
     const perKill = g.kills_left ? open.sum / g.kills_left : null;
     // No ⚠ on a floor. Judged as shown, so a figure that reads 1.0M is not under 1.0M.
     const low = perKill !== null && !open.floor && shown(perKill) < settings.minPerKill;
@@ -139,8 +138,7 @@ export function massacrePanel(
   }
   const done = missions.filter((m) => m.done);
   const ready = done.length;
-  // Every mission not done, an expired one too: the line then says "expired".
-  const expiries = all
+  const expiries = missions
     .filter((m) => !m.done && m.expires)
     .map((m) => Date.parse(m.expires!))
     .filter((t) => !Number.isNaN(t));

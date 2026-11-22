@@ -252,32 +252,6 @@ describe("massacrePanel", () => {
     );
   });
 
-  it("leaves out a mission that expired before it was done", () => {
-    const at = (h: number) => new Date(Date.UTC(2026, 10, 15, h)).toISOString();
-    const p = massacrePanel(
-      [
-        {
-          target_faction: "Kumo Crew",
-          kills_left: 10,
-          factions: [
-            {
-              faction: "Lugh",
-              kills_left: 10,
-              missions: [
-                { ...mission(1, 10, 0, at(11)), reward: 30_000_000 },
-                { ...mission(2, 10, 0, at(13)), reward: 5_000_000 },
-              ],
-            },
-          ],
-        },
-      ],
-      Date.UTC(2026, 10, 15, 12),
-      { minPerKill: 1_000_000 },
-    )!;
-    expect(p.rows[0]!.right).toBe("10 left · ⚠ 500k/kill");
-    expect(p.footer).toEqual(["Stack 5.0M", "next expires expired"]);
-  });
-
   it("is null with no missions", () => {
     expect(massacrePanel([], 0, { minPerKill: 0 })).toBeNull();
   });
