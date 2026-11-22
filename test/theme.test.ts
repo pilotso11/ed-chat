@@ -127,6 +127,7 @@ describe("parseHudMatrix", () => {
     ["a negative weight", override("-1, 0, 0", "0, 1, 0", "0, 0, 1")],
     ["a weight far above 1", override("100, 0, 0", "0, 1, 0", "0, 0, 1")],
     ["a matrix of zeros, which would draw nothing", override("0, 0, 0", "0, 0, 0", "0, 0, 0")],
+    ["a matrix that leaves the borders black", override("0, 0, 1.5", "0, 0, 1.5", "0, 0, 1.5")],
     [
       "a missing row",
       "<GraphicsConfig><GUIColour><Default><MatrixRed>1,0,0</MatrixRed></Default></GUIColour></GraphicsConfig>",
@@ -167,7 +168,11 @@ describe("gameMatrixFrom", () => {
   });
 
   it("goes back to the game's orange when the file is gone", () => {
-    expect(gameMatrixFrom("", blue)).toBeNull();
+    expect(gameMatrixFrom(undefined, blue)).toBeNull();
+  });
+
+  it("keeps the colour shown when the file is empty, as the game starts to rewrite it", () => {
+    expect(gameMatrixFrom("", blue)).toBe(blue);
   });
 
   it("keeps the colour shown when the file cannot be read for now", () => {

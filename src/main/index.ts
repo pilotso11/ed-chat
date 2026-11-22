@@ -273,6 +273,16 @@ async function main(): Promise<void> {
   if (!history.fileName) history.newSession();
   state = { ...state, agent: agentId, history: resumedTurns, resumedTurns: resumedTurns.length };
 
+  // The game's HUD colour, for style.theme "game". It is read before either window is made, so
+  // a blue or green overlay does not draw orange first; it is read again when the player
+  // changes it. null when the game has none.
+  const colourXml = graphicsOverrideFile(process.env.LOCALAPPDATA, os.homedir());
+  const readColourXml = () =>
+    readFile(colourXml, "utf8").catch((err: NodeJS.ErrnoException) =>
+      err.code === "ENOENT" ? undefined : null,
+    );
+  let gameMatrix: Matrix | null = gameMatrixFrom(await readColourXml(), null);
+
   const win: BrowserWindow = createOverlayWindow(
     path.join(import.meta.dirname, "../preload/index.cjs"),
     process.env.ELECTRON_RENDERER_URL,
@@ -290,8 +300,6 @@ async function main(): Promise<void> {
   ({ position: hudPosition, saved } = effectiveHudPosition(settings.hud.position, saved));
 
   const viewSettings = (): Settings => ({ ...settings, position });
-  // The HUD colour in the game's settings; null until read, or when there is none.
-  let gameMatrix: Matrix | null = null;
 
   // When the approval on screen appeared; an answer key pressed just before that is ignored.
   let shownApproval: { id: string; at: number } | null = null;
@@ -1425,14 +1433,6 @@ async function main(): Promise<void> {
   );
   status.start();
 
-  // The game's HUD colour, for style.theme "game": read before the first draw, so a blue or
-  // green overlay does not start orange, and again when the player changes it.
-  const colourXml = graphicsOverrideFile(process.env.LOCALAPPDATA, os.homedir());
-  const readColourXml = () =>
-    readFile(colourXml, "utf8").catch((err: NodeJS.ErrnoException) =>
-      err.code === "ENOENT" ? "" : null,
-    );
-  gameMatrix = gameMatrixFrom(await readColourXml(), null);
   const readGameMatrix = async () => {
     const next = gameMatrixFrom(await readColourXml(), gameMatrix);
     if (JSON.stringify(next) === JSON.stringify(gameMatrix)) return;
