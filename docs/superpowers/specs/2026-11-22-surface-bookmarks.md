@@ -21,7 +21,8 @@ a species needed later for a colony range), a crashed ship, a good landing spot.
 - **Getting back.** Ask Claude to take you there: it makes `bookmarks` the activity note's plan,
   so the route rows show the next bookmark and arriving copies its system, as for any plan.
 - **On the body.** When the ship or commander is on or near a bookmarked body, the panel adds a row
-  per bookmark there, under any other panel (or on its own, titled BOOKMARKS): the label, the
+  per bookmark there, under the exploration or exobiology panel, or on its own (titled
+  BOOKMARKS) when no panel shows; not under massacre or mining. Each row has the label, the
   great-circle distance (from the planet radius), the bearing, and how far to turn from the
   current heading ("469 m · 7° · turn right 141°"). Green within 100 m. In the system but away
   from the body, one dim line counts the bookmarks on each body.

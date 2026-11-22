@@ -43,7 +43,7 @@ export class HudFeed {
       const text = await this.read("Status.json");
       const status = text ? parseShipStatus(text) : null;
       if (status) return status;
-      await new Promise((r) => setTimeout(r, 50));
+      if (tries < 2) await new Promise((r) => setTimeout(r, 50));
     }
     return null;
   }

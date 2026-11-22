@@ -591,11 +591,18 @@ async function main(): Promise<void> {
 
   let hudPolling = false;
   let lastSystem: string | null = null;
+  // The bookmarks plan a key press saved; a poll that started before it read the plan without it.
+  let savedBookmarks: { plan: Plan; at: number } | null = null;
   async function pollHud(): Promise<void> {
     if (hudPolling || !hudFeed || !settings.hud.enabled) return;
     hudPolling = true;
+    const started = Date.now();
     try {
-      hudData = await hudFeed.poll();
+      const data = await hudFeed.poll();
+      hudData =
+        savedBookmarks && savedBookmarks.at >= started
+          ? { ...data, bookmarks: savedBookmarks.plan }
+          : data;
       hudFreshAt = Date.now();
       const stops = todoStops(hudData.plan);
       if (JSON.stringify(stops) !== JSON.stringify(chipStops)) {
@@ -660,6 +667,9 @@ async function main(): Promise<void> {
     if (!plans || !hudFeed || !settings.hud.enabled) {
       return flash("bookmark", "ⓘ the activity panel is off: turn it on to bookmark", 3_000);
     }
+    if (!settings.hud.bookmarks) {
+      return flash("bookmark", "ⓘ bookmarks are off: turn on hud.bookmarks", 3_000);
+    }
     if (!hudData?.journal) {
       return flash("bookmark", "ⓘ the panel has not read the journal yet: try again", 3_000);
     }
@@ -679,6 +689,7 @@ async function main(): Promise<void> {
     const saved = await plans.addStop(BOOKMARKS_PLAN, "Bookmarks", made.stop);
     flash("bookmark", `📍 bookmarked ${made.stop.purpose} on ${made.stop.body}`, 4_000);
     // Shown at once, not after the next poll, which may have read the plan before the save.
+    savedBookmarks = { plan: saved, at: Date.now() };
     if (hudData) hudData = { ...hudData, bookmarks: saved };
     renderHud();
   }
@@ -697,7 +708,10 @@ async function main(): Promise<void> {
         const now = await hudPlans.get(BOOKMARKS_PLAN);
         const index = now.stops.findIndex((s) => s.status === "todo" && sameBookmark(s, stop));
         if (index < 0) continue;
-        await hudPlans.updateStop(BOOKMARKS_PLAN, { index }, { status: "done" });
+        // By label, which is unique among bookmarks, so an edit between the read and the write
+        // cannot move another stop under the index.
+        const ref = now.stops[index]!.label ? { label: now.stops[index]!.label! } : { index };
+        await hudPlans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
         flash("bookmark", `📍 done: ${stop.label ?? stop.purpose}`, 4_000);
       } catch (err) {
         // Tried again on the next poll.

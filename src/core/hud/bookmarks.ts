@@ -19,6 +19,12 @@ export interface Position {
   longitude: number;
 }
 
+/**
+ * A body name to compare by, in this system: "6 k" and "Wredguia MN-J d9-9 6 k" are the same
+ * body, since Claude may write a stop's body either way.
+ */
+const bodyKey = (body: string, system: string) => shortBody(body, system).toLowerCase();
+
 /** A stop's surface position, when it has one. */
 export function stopPosition(s: Stop): Position | null {
   const p = s.position;
@@ -120,7 +126,7 @@ export function bookmarkRows(input: {
     (s) => s.status === "todo" && s.body && s.system.toLowerCase() === system.toLowerCase(),
   );
   if (!here.length) return [];
-  const onBody = status?.body?.toLowerCase() ?? null;
+  const onBody = status?.body ? bodyKey(status.body, system) : null;
   const at =
     status && status.latitude !== null && status.longitude !== null
       ? { latitude: status.latitude, longitude: status.longitude }
@@ -130,8 +136,9 @@ export function bookmarkRows(input: {
   const near: (HudRow & { d: number })[] = [];
   const elsewhere = new Map<string, number>();
   for (const s of here) {
-    if (s.body!.toLowerCase() !== onBody) {
-      elsewhere.set(s.body!, (elsewhere.get(s.body!) ?? 0) + 1);
+    if (bodyKey(s.body!, system) !== onBody) {
+      const name = shortBody(s.body!, system);
+      elsewhere.set(name, (elsewhere.get(name) ?? 0) + 1);
       continue;
     }
     const text = `📍 ${s.label ?? s.purpose}`;
@@ -165,7 +172,7 @@ export function bookmarkRows(input: {
   }
   for (const [body, n] of elsewhere) {
     rows.push({
-      text: `📍 ${n} bookmark${n === 1 ? "" : "s"} on ${shortBody(body, system)}`,
+      text: `📍 ${n} bookmark${n === 1 ? "" : "s"} on ${body}`,
       tone: "dim",
     });
   }
@@ -192,11 +199,11 @@ export function bookmarkHere(
     return { reason: "no position: be on or near a planet" };
   }
   const address = systemAddress(journal.events, system);
-  const body = status.body.toLowerCase();
+  const body = bodyKey(status.body, system);
   const bio =
     address !== null
       ? (exobiology(journal.events, address, { system }).bodies.find(
-          (b) => b.body.toLowerCase() === body,
+          (b) => bodyKey(b.body, system) === body,
         ) ?? null)
       : null;
   const { label, bio: isBio } = bookmarkLabel(bio, taken);
@@ -247,9 +254,9 @@ export function finishedBioBookmarks(
           // Every signal sampled, not just every genus seen so far.
           b.species.length >= (b.bio_signals ?? 0),
       )
-      .map((b) => b.body.toLowerCase()),
+      .map((b) => bodyKey(b.body, system)),
   );
-  return todo.filter((i) => done.has(plan.stops[i]!.body!.toLowerCase()));
+  return todo.filter((i) => done.has(bodyKey(plan.stops[i]!.body!, system)));
 }
 
 /** The same bookmark: what it is, not where it sits in the plan, which changes with edits. */

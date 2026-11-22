@@ -196,7 +196,7 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
   const mode = currentMode(input);
   if (mode === "off") return { ...base, mode, panel: null, route: null };
   let panel = mode ? panelFor(mode, input) : null;
-  // Bookmarks in this system show under any panel, or on their own.
+  // Bookmarks in this system, from the bookmarks plan.
   const marks = !s.bookmarks
     ? []
     : bookmarkRows({

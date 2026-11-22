@@ -179,6 +179,22 @@ describe("bookmark rows", () => {
 });
 
 describe("bookmark review fixes", () => {
+  it("knows a body by its short name too, as Claude may write it", () => {
+    const rows = bookmarkRows({
+      plan: plan([
+        { body: "6 k", label: "Short", position: { latitude: 54.16, longitude: -51.74 } },
+        { body: "5", position: { latitude: 1, longitude: 1 } },
+        { body: `${SYSTEM} 5`, position: { latitude: 1, longitude: 1 } },
+      ]),
+      system: SYSTEM,
+      status: status(),
+    });
+    expect(rows).toEqual([
+      { text: "📍 Short", right: "469 m · 7° · turn right 141°", tone: "accent" },
+      { text: "📍 2 bookmarks on 5", tone: "dim" },
+    ]);
+  });
+
   it("shows bookmarks on this body without a distance when the radius is unknown", () => {
     const rows = bookmarkRows({
       plan: plan([{ body: BODY, label: "Spot", position: { latitude: 1, longitude: 1 } }]),
