@@ -152,6 +152,61 @@ Known limit: goods are matched by the names the game gives them, which match the
 plan's English names only on an English game client. On another language, auto-advance
 and the market's price do not work, as for mining.
 
+## Build
+
+Follows a ship build or upgrade plan: an ed-mcp plan whose stops have actions, such as buying
+a module, rolling a blueprint to a grade, a material trade or collecting a material. Ask Claude
+to plan the build; it saves the plan with the actions at each stop and what each needs. The
+panel makes no assistant calls: it ticks each action off from the journal.
+
+The header says BUILD (UPGRADE for an upgrade of the ship you fly), the ship, the stop
+(stop 2/3) and the actions done out of all. Then the current stop, with its actions in order:
+
+- Done ones with ✓, dim. More than `hud.build.doneShown` (3) fold into "✓ N done". One the
+  ship's newest loadout no longer shows is amber, "not fitted now"; the plan is left alone.
+- For a blueprint, the grade and quality reached and the rolls left: "G3 64% → G5 · ~7 rolls".
+  It is done at the target grade at any quality. The rolls are an estimate from the plan's rolls
+  per grade (1, 2, 3, 4, 5 when it gives none) and the quality reached; a module with another
+  blueprint starts again at G1.
+- The first material short against your inventory, with the stop that collects or trades for
+  it: "short 1 Arsenic (have 0/1) · collect at stop 2". "ready" when all is in hand.
+- For a purchase, its price, amber when your credits (from Status.json) are short. While you
+  are docked there with the outfitting screen opened on this visit, "not sold here" in amber for
+  a module the station does not list.
+- For a stored module, "here", the transfer time, or "in transit".
+- An experimental waits for its blueprint at the same stop: "after FSD G5".
+
+Then the next stop with a count of each kind of action left there ("buy 2 · retrieve 1"), and
+a footer with the stops still open before this one (when you came here early), the stops after
+it, the credits still to spend and the credits you hold, and the plan's target in one line.
+
+The current stop is the one you are docked at (or landed at, for a collect stop on a body)
+while it has work to do; else the plan's first stop to do. The route keys mark the stop the
+panel shows. When the last action of a stop is done, the stop is marked done and the next
+stop's system is copied for the galaxy map. When every action is done, the header says "Build
+complete" in green until you undock.
+
+**Which actions count.** Only journal events after the plan was started, and for the plan's
+ship: by its ShipID, or for a plan with none, the first ship of its type an action is done on
+(the panel writes that ShipID into the plan). A plan that buys its hull has no ship until the
+hull is delivered. Each event does at most one action for each thing it does: a module bought
+that sold the old one can finish a buy and a sale, but eight identical buys need eight
+purchases. The panel writes into each action the events it used, so the count is the same on
+every poll, and an action you or Claude mark done takes its event, so the next identical one
+stays open.
+
+**When it shows.** Docking at a stop of a build plan, landing at its collect stop, or an event
+that does one of its open actions turns it on, as does an activity note of kind engineering
+with a build plan. A synthesis or material trade the plan does not ask for changes nothing. A
+jump never ends it; a newer activity (a scan, a prospect, a trade) takes over, and the next
+build stop brings it back. With two build plans open, the one with a stop where you are docked
+shows (the note's, when both have one), else the one you acted on last. That plan then leads
+the route keys and the arrival copy, and Claude is told it differs from the note. Swapping to a
+ship with its own build plan points the note at that plan.
+
+Known limits: an action done while ED Chat was not running is ticked off on the next start,
+but its stop waits for a route key. Without a build plan for the ship, nothing shows yet.
+
 ## Route
 
 The current stop of the active ed-mcp plan (with its body or station, what it is
@@ -179,7 +234,8 @@ biological signals, landing on one, or taking a sample, turns on exobiology, and
 leaving the body goes back to exploration, when that mode is on. Launching a
 prospector limpet, prospecting, refining or cracking a rock turns on mining, and
 taking a passenger or delivery mission turns on passenger mode. Buying at a market
-(not limpets), or docking at a stop of the trade plan, turns on trade. A jump alone starts nothing.
+(not limpets), or docking at a stop of the trade plan, turns on trade. Docking at a stop of a
+build plan, or doing one of its actions, turns on build. A jump alone starts nothing.
 
 Telling Claude what you are doing ("I'm doing massacres") sets the ed-mcp activity
 note, which the panel follows. Ctrl+Alt+Shift+P chooses a mode yourself: automatic,

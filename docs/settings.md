@@ -66,7 +66,7 @@ next start.
 | `hud.position` | `top-right`, 24, 120 | Where the panel sits, like `position` |
 | `hud.width` | `380` | Least panel width in pixels at font size 15. The panel grows so long names fit |
 | `hud.fontSize` / `hud.backgroundOpacity` | `15` / `0.55` | Panel text size and background |
-| `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology`, `mining`, `passenger`, `trade` or `route` |
+| `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology`, `mining`, `passenger`, `trade`, `build` or `route` |
 | `hud.massacre.minPerKill` | `1000000` | Credits a kill. A target whose unfinished missions pay less than this for each kill left is marked ⚠. `0` turns it off |
 | `hud.valuableMin` | `500000` | Bodies worth less when mapped are left off the exploration panel. Those with geological signals are counted on one line |
 | `hud.bioMin` | `5000000` | Planets whose likely species are worth less than this in total are left off the exploration panel |
@@ -76,6 +76,8 @@ next start.
 | `hud.mining.carrierMarkets` | `false` | Include other players' fleet carriers as buyers |
 | `hud.mining.sellRadiusLy` / `carrierRadiusLy` | `100` / `500` | How far to search for buyers from the ship, or from the carrier |
 | `hud.mining.maxPriceAgeDays` | `7` | Leave out buyers with older Spansh market data |
+| `hud.build.doneShown` | `3` | Done actions listed at the build panel's current stop before they fold into one "✓ N done" row |
+| `hud.build.outfittingVisit` | `true` | With no build plan for the ship, show what was done this visit while docked. Not built yet: kept for a later release |
 | `hud.bookmarks` | `true` | Show surface bookmarks (Ctrl+Alt+B) on the body and in the system |
 | `hud.edMcpDataDir` | `null` | The ed-mcp sync folder; `null` finds it in ed-mcp's setup |
 
