@@ -4,6 +4,7 @@ import {
   massacre,
   systemAddress,
   type Activity,
+  type ExobiologyBody,
   type JournalEvent,
   type JournalState,
   type Plan,
@@ -271,6 +272,24 @@ const SURFACE_MODES: ReadonlySet<PanelView["mode"]> = new Set<PanelView["mode"]>
   "route",
 ]);
 
+/**
+ * The system's exobiology, for what bio bookmarks still have to sample; read only when the
+ * system has one.
+ */
+function bookmarkBio(input: HudInput, system: string | null): ExobiologyBody[] | null {
+  const j = input.journal;
+  const plan = input.bookmarks;
+  if (!j || !system || !plan) return null;
+  const bio = plan.stops.some(
+    (b) =>
+      b.status === "todo" &&
+      b.kind === "exobiology" &&
+      b.system.toLowerCase() === system.toLowerCase(),
+  );
+  const address = bio ? systemAddress(j.events, system) : null;
+  return address === null ? null : exobiology(j.events, address, { system }).bodies;
+}
+
 export function buildHud(input: HudInput, moving: string | null): HudView {
   const s = input.settings;
   const base = {
@@ -283,12 +302,14 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
   if (mode === "off") return { ...base, mode, panel: null, route: null };
   let panel = mode ? panelFor(mode, input) : null;
   // Bookmarks in this system, from the bookmarks plan.
+  const system = input.journal?.location.system ?? null;
   const marks = !s.bookmarks
     ? []
     : bookmarkRows({
         plan: input.bookmarks ?? null,
-        system: input.journal?.location.system ?? null,
+        system,
         status: input.status,
+        bio: bookmarkBio(input, system),
       });
   // Under the panels about where the ship is. On their own when no panel shows, with no mode or
   // in one of those modes.
@@ -302,7 +323,6 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
   // through it you are. A fuel or mission stop still shows in the route rows.
   // Only while a trade stop is to do and the plotted route, if any, leads to the panel's stops: a
   // route elsewhere (a fuel stop, home) shows below with its jumps.
-  const system = input.journal?.location.system ?? null;
   const tradePlan =
     panel?.mode === "trade" &&
     isTradePlan(input.plan) &&

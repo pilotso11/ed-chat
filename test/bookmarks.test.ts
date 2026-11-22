@@ -508,3 +508,97 @@ describe("clearing bookmarks", () => {
     expect(todoBookmarks(null)).toEqual([]);
   });
 });
+
+describe("bio bookmark rows", () => {
+  const bio = (o: object) =>
+    ({
+      body: BODY,
+      body_id: 6,
+      species: [],
+      not_started: [],
+      genera: [],
+      bio_signals: null,
+      likely: [],
+      ...o,
+    }) as never;
+  const mark = {
+    body: BODY,
+    kind: "exobiology" as const,
+    label: "Bio: Frutexa Acus, Bacterium, Concha, Tussock",
+  };
+  const rows = (b: unknown[], stops: TestStop[] = [mark], s = status({ latitude: null })) =>
+    bookmarkRows({ plan: plan(stops), system: SYSTEM, status: s, bio: b as never });
+
+  it("shows what is still to sample on the body now, not when it was saved", () => {
+    const now = bio({
+      species: [
+        { species: "Frutexa Acus", analysed: true },
+        { species: "Tussock Pennata", analysed: true },
+      ],
+      not_started: ["Bacterium", "Concha"],
+      genera: ["Bacterium", "Concha", "Frutexa", "Tussock"],
+      bio_signals: 4,
+    });
+    expect(rows([now])[0]!.text).toBe("📍 Bio: Bacterium, Concha");
+    const done = bio({
+      species: [{ species: "Frutexa Acus", analysed: true }],
+      genera: ["Frutexa"],
+      bio_signals: 1,
+    });
+    expect(rows([done])[0]!.text).toBe("📍 Bio: all sampled");
+  });
+
+  it("keeps a label the player or Claude chose, and the saved one without the journal", () => {
+    const now = bio({ not_started: ["Concha"], genera: ["Concha"], bio_signals: 1 });
+    expect(rows([now], [{ ...mark, label: "Concha by the crater" }])[0]!.text).toBe(
+      "📍 Concha by the crater",
+    );
+    expect(rows([now], [{ ...mark, kind: "other" }])[0]!.text).toBe(`📍 ${mark.label}`);
+    expect(rows([])[0]!.text).toBe(`📍 ${mark.label}`);
+    expect(
+      bookmarkRows({ plan: plan([mark]), system: SYSTEM, status: status({ latitude: null }) })[0]!
+        .text,
+    ).toBe(`📍 ${mark.label}`);
+  });
+
+  it("reads the biology from the journal in the panel", () => {
+    const e = (event: string, o: object) =>
+      ({ timestamp: "2026-11-22T10:00:00Z", event, ...o }) as unknown as JournalEvent;
+    const events = [
+      e("FSDJump", { StarSystem: SYSTEM, SystemAddress: 7 }),
+      e("SAASignalsFound", {
+        SystemAddress: 7,
+        BodyID: 6,
+        BodyName: BODY,
+        Signals: [{ Type: "$SAA_SignalType_Biological;", Count: 2 }],
+        Genuses: [
+          { Genus: "$Codex_Ent_Bacterial_Genus_Name;", Genus_Localised: "Bacterium" },
+          { Genus: "$Codex_Ent_Conchas_Genus_Name;", Genus_Localised: "Concha" },
+        ],
+      }),
+    ];
+    const input: HudInput = {
+      journal: {
+        location: { system: SYSTEM, station: null, station_type: null, docked: false },
+        ship: { type: null, cargo_capacity: null },
+        cargo: [],
+        missions: [],
+        events,
+      } as unknown as HudInput["journal"],
+      status: status({ body: `${SYSTEM} 5` }),
+      nav: null,
+      activity: null,
+      plan: null,
+      hotkey: { mode: "route", at: Date.UTC(2026, 10, 22) },
+      samples: new Map(),
+      known: null,
+      settings: DEFAULT_SETTINGS.hud,
+      now: Date.UTC(2026, 10, 22),
+      bookmarks: plan([mark]),
+    };
+    expect(buildHud(input, null).panel?.rows[0]?.text).toBe("📍 1 bookmark on 6 k");
+    // On the body, the row says what is still to sample there.
+    const on = { ...input, status: status({ latitude: null }) };
+    expect(buildHud(on, null).panel?.rows[0]?.text).toBe("📍 Bio: Bacterium, Concha");
+  });
+});

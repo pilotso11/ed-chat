@@ -167,7 +167,10 @@ bookmark with its distance, its bearing and which way to turn: under the
 exploration and exobiology panels, and on their own when the exploration or
 exobiology panel has nothing to list, in route mode, or when no mode is on. Massacre,
 mining and passenger mode leave them out. A
-bookmark at a bio site is marked done once every species there is analysed.
+bookmark at a bio site lists what is still to sample on its body, so finished
+species drop off, and is marked done once every species there is analysed. The
+journal does not say what grows where, so the list is for the whole body, not
+the spot.
 Ctrl+Alt+- clears the nearest bookmark on the body you are on; away from a
 bookmarked body, it clears every bookmark in the system. The tray menu's
 Bookmarks item does the same, and can clear every bookmark. A cleared bookmark

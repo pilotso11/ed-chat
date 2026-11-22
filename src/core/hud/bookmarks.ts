@@ -42,17 +42,9 @@ export function bookmarkLabel(
   taken: string[],
 ): { label: string; bio: boolean } {
   const used = new Set(taken.map((t) => t.toLowerCase()));
-  // Abandoned species are left out: their genus is back among those not started.
-  const left = bio
-    ? [
-        ...bio.species.filter((s) => !s.analysed && !s.abandoned).map((s) => s.species),
-        ...bio.not_started,
-      ]
-    : [];
-  // Signals with no genus known yet (no surface scan) are biology too.
-  const unknown = bio ? Math.max(0, (bio.bio_signals ?? 0) - bio.genera.length) : 0;
-  if (left.length || unknown) {
-    const base = `Bio: ${[...left, ...(unknown ? [`${unknown} signal${unknown === 1 ? "" : "s"}`] : [])].join(", ")}`;
+  const left = bio ? bioLeft(bio) : [];
+  if (left.length) {
+    const base = `Bio: ${left.join(", ")}`;
     let label = base;
     for (let n = 2; used.has(label.toLowerCase()); n++) label = `${base} (${n})`;
     return { label, bio: true };
@@ -62,6 +54,38 @@ export function bookmarkLabel(
     .filter(Boolean)
     .map(Number);
   return { label: `Bookmark ${Math.max(0, ...numbers) + 1}`, bio: false };
+}
+
+/**
+ * The biology still to sample on a body: the species started but not analysed, the genera not
+ * started, and signals with no genus known yet ("2 signals", before a surface scan).
+ */
+export function bioLeft(bio: ExobiologyBody): string[] {
+  // Abandoned species are left out: their genus is back among those not started.
+  const left = [
+    ...bio.species.filter((s) => !s.analysed && !s.abandoned).map((s) => s.species),
+    ...bio.not_started,
+  ];
+  const unknown = Math.max(0, (bio.bio_signals ?? 0) - bio.genera.length);
+  return unknown ? [...left, `${unknown} signal${unknown === 1 ? "" : "s"}`] : left;
+}
+
+/** A label the bookmark key made for biology, which the panel redraws from the journal. */
+const BIO_LABEL = /^Bio: /;
+
+/**
+ * What a bookmark's row says. A bio bookmark that the key labelled shows what is still to
+ * sample on its body now, not when it was made, so finished species drop off. A label that the
+ * player or Claude chose is kept.
+ */
+function bookmarkText(s: Stop, bio: ExobiologyBody[] | null, system: string): string {
+  const label = s.label ?? s.purpose;
+  if (s.kind !== "exobiology" || !BIO_LABEL.test(label) || !bio || !s.body) return label;
+  const key = bodyKey(s.body, system);
+  const body = bio.find((b) => bodyKey(b.body, system) === key);
+  if (!body) return label;
+  const left = bioLeft(body);
+  return left.length ? `Bio: ${left.join(", ")}` : "Bio: all sampled";
 }
 
 /** A bookmark as a plan stop. */
@@ -120,6 +144,8 @@ export function bookmarkRows(input: {
   plan: Plan | null;
   system: string | null;
   status: ShipStatus | null;
+  /** The system's exobiology from the journal, for what bio bookmarks still have to sample. */
+  bio?: ExobiologyBody[] | null;
 }): HudRow[] {
   const { plan, system, status } = input;
   if (!plan || !system) return [];
@@ -142,7 +168,7 @@ export function bookmarkRows(input: {
       elsewhere.set(key, { name: seen?.name ?? shortBody(s.body!, system), n: (seen?.n ?? 0) + 1 });
       continue;
     }
-    const text = `📍 ${s.label ?? s.purpose}`;
+    const text = `📍 ${bookmarkText(s, input.bio ?? null, system)}`;
     const pos = stopPosition(s);
     if (!pos || !at || radius === null) {
       // On the body, but where it is or where we are is not known.
