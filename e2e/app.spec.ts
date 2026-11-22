@@ -24,7 +24,8 @@ test("starts with the status strip and the first-run hotkeys card", async () => 
 test("sends a message to Claude and shows the reply", async () => {
   t = await launch({ fixture: "recorded-text.jsonl" });
   // Idle once startup finishes (startAgent): main listens for sends, and the session exists.
-  // Sent before then, the send is refused, or fails with no handler registered.
+  // Sent before then, the send is refused, or fails with no handler registered: main opens the
+  // window before it awaits the agent configs and the approval server, then registers handlers.
   await expect(t.chat.locator(".strip .state")).toContainText("idle");
   expect(await t.chat.evaluate(() => window.overlay.send("what is 2 + 2?"))).toBe(true);
   // The reply shows on the strip, under the status line.

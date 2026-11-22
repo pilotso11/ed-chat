@@ -204,8 +204,12 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
   });
 }
 
-/** Panels that bookmark rows show under; massacre has nothing to do with places on a body. */
-const SURFACE_PANELS = new Set<PanelView["mode"]>(["exploration", "exobiology"]);
+/**
+ * The modes about where the ship is: bookmark rows show under their panels, or on their own
+ * when the mode has nothing to show. The other modes, such as massacre, mining and passenger,
+ * have nothing to do with places on a body, and a new mode is left out until it is added here.
+ */
+const SURFACE_MODES: ReadonlySet<string> = new Set<HudModeId>(["exploration", "exobiology"]);
 
 export function buildHud(input: HudInput, moving: string | null): HudView {
   const s = input.settings;
@@ -226,12 +230,11 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
         system: input.journal?.location.system ?? null,
         status: input.status,
       });
-  // Under the panels about where the ship is; on their own when no panel shows.
-  // Not on their own in massacre, mining or passenger mode either, when that mode has nothing to
-  // show.
+  // Under the panels about where the ship is. On their own when no panel shows, with no mode,
+  // in route mode, or in a surface mode with nothing to show.
   const surface = panel
-    ? SURFACE_PANELS.has(panel.mode)
-    : mode !== "massacre" && mode !== "mining" && mode !== "passenger";
+    ? SURFACE_MODES.has(panel.mode)
+    : !mode || mode === "route" || SURFACE_MODES.has(mode);
   if (marks.length && surface) {
     panel = panel
       ? { ...panel, rows: [...panel.rows, ...marks] }

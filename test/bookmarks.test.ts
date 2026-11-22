@@ -213,6 +213,35 @@ describe("bookmark rows", () => {
     // Nor on their own in massacre mode with no stack to show, or passenger mode with no run.
     expect(buildHud({ ...input, hotkey: { mode: "massacre", at } }, null).panel).toBeNull();
     expect(buildHud({ ...input, hotkey: { mode: "passenger", at } }, null).panel).toBeNull();
+    // On their own in route mode, and in exploration mode before the system is known.
+    expect(buildHud({ ...input, hotkey: { mode: "route", at } }, null).panel?.title).toBe(
+      "BOOKMARKS",
+    );
+    expect(buildHud({ ...input, hotkey: { mode: "exploration", at } }, null).panel?.title).toBe(
+      "BOOKMARKS",
+    );
+    // Not under a passenger panel with a run to show.
+    const run = buildHud(
+      {
+        ...input,
+        journal: {
+          ...input.journal!,
+          missions: [
+            {
+              mission_id: 1,
+              name: "Mission_Sightseeing",
+              destination_system: "Shinrarta Dezhra",
+              destination_station: "Jameson Memorial",
+              passengers: 4,
+            },
+          ],
+        } as unknown as HudInput["journal"],
+        hotkey: { mode: "passenger", at },
+      },
+      null,
+    );
+    expect(run.panel?.mode).toBe("passenger");
+    expect(run.panel?.rows.some((r) => r.text.startsWith("📍"))).toBe(false);
   });
 });
 
