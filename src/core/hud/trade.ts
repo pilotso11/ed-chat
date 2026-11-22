@@ -664,16 +664,19 @@ export function tradePanel(input: {
     const n = `${runs.length} mission${runs.length === 1 ? "" : "s"}`;
     footer.push(pax ? `Passengers: ${pax} aboard · ${n}` : `Deliveries: ${n}`);
   }
-  const rate = totals.rate.session;
+  // How far through the plan: the current stop's place among all its stops, as the plan's own
+  // count says ("3 stops"). The rate is on the Session line.
+  const stops = plan ? plan.stops.length : 0;
+  const at = todo.length ? todo[0]! + 1 : null;
   return {
     mode: "trade",
     title: "TRADE",
     subtitle: plan ? planTitle(plan.name) : undefined,
     right:
       [
+        at !== null && stops > 1 ? `stop ${at}/${stops}` : null,
         plan?.repeat ? `lap ${plan.lap ?? 1}` : null,
         plan ? pricesAge(plan, input.now) : null,
-        hourly(rate),
       ]
         .filter(Boolean)
         .join(" · ") || undefined,

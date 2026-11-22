@@ -693,7 +693,7 @@ describe("the trade panel", () => {
       mode: "trade",
       title: "TRADE",
       subtitle: "Loop: Kremainn ⇄ Wolf 397",
-      right: "lap 1",
+      right: "stop 1/2 · lap 1",
       footer: [],
     });
     expect(p.rows).toEqual([
@@ -747,7 +747,7 @@ describe("the trade panel", () => {
       location: where("Kremainn", "Wohler Terminal"),
       market: market(7, { Silver: [0, 3_000], Gold: [9_380, 0] }),
     })!;
-    expect(p.right).toBe("lap 3");
+    expect(p.right).toBe("stop 1/2 · lap 3");
     expect(p.rows.slice(0, 3)).toEqual([
       { text: "● Kremainn · Wohler Terminal" },
       {
@@ -768,17 +768,17 @@ describe("the trade panel", () => {
     );
     const p = tradePanel({ ...base, plan })!;
     expect(p.subtitle).toBe("Route: A → C, 3 stops");
-    expect(p.right).toBe("prices 30h old");
+    expect(p.right).toBe("stop 1/2 · prices 30h old");
     expect(p.rows).toEqual([
       { text: "● A · a", right: "pass through" },
       { text: "▸ B · b", right: "SELL 5 t Tea", tone: "dim" },
     ]);
     const older = { ...plan, prices_at: new Date(NOW - 100 * 3_600_000).toISOString() };
-    expect(tradePanel({ ...base, plan: older })!.right).toBe("prices 4d old");
-    // A day old or less, or unreadable, shows nothing.
+    expect(tradePanel({ ...base, plan: older })!.right).toBe("stop 1/2 · prices 4d old");
+    // A day old or less shows no age.
     expect(
       tradePanel({ ...base, plan: { ...plan, prices_at: new Date(NOW).toISOString() } })!.right,
-    ).toBeUndefined();
+    ).toBe("stop 1/2");
     // The last stop: nothing next; a stop with no price shows only the hold.
     const last = {
       ...plan,
@@ -812,7 +812,9 @@ describe("the trade panel", () => {
       { text: "No trade plan: ask Claude for a trade loop or route", tone: "dim" },
     ]);
     // 1.0M over 20 minutes counted: from the first trade, a gap counts up to 10 minutes.
-    expect(p.right).toBe("3.0M/h");
+    // No plan, so no stop or lap; the rate is on the Session line.
+    expect(p.right).toBeUndefined();
+    expect(p.footer[0]).toMatch(/· 3\.0M\/h$/);
     expect(p.footer).toEqual(["Session: 1.0M profit · 20m · 3.0M/h"]);
     // A new session with no trade yet has no session line.
     expect(
@@ -1104,8 +1106,9 @@ describe("trade in the panel", () => {
     expect(currentMode(i)).toBe("trade");
     const v = buildHud(i, null);
     expect(v.panel?.title).toBe("TRADE");
-    // The route rows show below, as for any plan.
-    expect(v.route?.[0]).toMatchObject({ kind: "current", text: "Wohler Terminal, Kremainn" });
+    // No route rows: the trade panel already shows the stops and how far through the plan.
+    expect(v.route).toBeNull();
+    expect(v.panel?.right).toBe("stop 1/2 · lap 1");
   });
 
   it("does not follow a trading note with no trade stop to do, or with the mode off", () => {

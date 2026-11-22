@@ -295,12 +295,15 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
       ? { ...panel, rows: [...panel.rows, ...marks] }
       : { mode: "bookmarks", title: "BOOKMARKS", rows: marks, footer: [] };
   }
-  const route = s.modes.route
-    ? routeRows({
-        plan: input.plan,
-        nav: input.nav,
-        system: input.journal?.location.system ?? null,
-      })
-    : null;
+  // A trade plan's panel already shows its stops and how far through it you are.
+  const tradePlan = panel?.mode === "trade" && input.plan?.stops.some((x) => x.kind === "trade");
+  const route =
+    s.modes.route && !tradePlan
+      ? routeRows({
+          plan: input.plan,
+          nav: input.nav,
+          system: input.journal?.location.system ?? null,
+        })
+      : null;
   return { ...base, mode, panel, route };
 }

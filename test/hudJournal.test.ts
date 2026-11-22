@@ -677,7 +677,7 @@ describe("trade from the real ed-mcp journal reader", () => {
       mode: "trade",
       title: "TRADE",
       subtitle: `Loop: ${SYSTEM} ⇄ Wolf 397`,
-      right: "lap 1",
+      right: "stop 1/2 · lap 1",
     });
     // The first lap has nothing to sell at the first stop: only its buy.
     expect(v.panel!.rows).toEqual([
@@ -774,8 +774,8 @@ describe("trade from the real ed-mcp journal reader", () => {
     expect((await judge())?.index).toBe(1);
     await stores.plans.updateStop("trade", { index: 1 }, { status: "done" });
     v = await g.hud();
-    // Then the rate, once the run is five minutes old on the real clock.
-    expect(v.panel!.right).toMatch(/^lap 2( · [\d.]+[kM]\/h)?$/);
+    // Back to the first stop on the next lap. The rate is on the Session line.
+    expect(v.panel!.right).toBe("stop 1/2 · lap 2");
     // On the second lap the first stop sells what the last one bought.
     expect(v.panel!.rows[0]).toEqual({ text: `● ${SYSTEM} · Port` });
     expect(v.panel!.rows[1]).toMatchObject({

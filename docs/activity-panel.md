@@ -111,11 +111,13 @@ its system. Ask Claude for a trade loop or route (ed-mcp's `trade_loops` or
 The panel shows the plan's current stop with what to buy or sell there (tons and
 planned price), and the hold against the planned tons. While you are docked there,
 it also shows the market's price against the plan, amber when it is more than 5%
-worse. The next stop and its action follow. A loop shows its lap; on the first lap
-there is nothing to sell at the first stop, so only its buy shows. When the plan's
-prices are more than a day old, the header says how old.
+worse. The next stop and its action follow. The header says how far through the
+plan you are (stop 2/4) and, for a loop, its lap; on the first lap there is nothing
+to sell at the first stop, so only its buy shows. When the plan's prices are more
+than a day old, the header says how old. The route rows that other plans show below
+are left out, since the panel already lists the stops.
 
-The header and the Session line show profit an hour: each sale less what its tons
+The Session line shows profit an hour: each sale less what its tons
 cost, counted as for exploration, with the last half hour in brackets. Traded cargo
 that leaves without a sale (to a depot, a mission or your carrier, or ejected) takes
 its cost with it. When a stop's
