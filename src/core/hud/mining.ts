@@ -119,6 +119,34 @@ export interface MiningState {
 }
 
 const RATE_WINDOW_MS = 15 * 60_000;
+
+/** Events after which cargo collected is no longer from a core just cracked. */
+const LEAVE_RING = new Set([
+  "FSDJump",
+  "CarrierJump",
+  "Location",
+  "LoadGame",
+  "SupercruiseEntry",
+  "Died",
+]);
+
+/**
+ * Follows the journal for cargo collected from a cracked core: step(e) gives a fragment's
+ * commodityKey(), else null. One tracker for miningState() and refinedKinds(), so they agree.
+ * Docking (at a carrier beside the ring, say) does not end it; leaving the ring or dying does.
+ */
+function fragmentTracker(): (e: JournalEvent) => string | null {
+  let cracked = false;
+  return (e) => {
+    if (e.event === "AsteroidCracked") cracked = true;
+    else if (LEAVE_RING.has(e.event)) cracked = false;
+    else if (e.event === "CollectCargo" && cracked && e.Stolen !== true) {
+      const key = commodityKey(str(e.Type) ?? "");
+      return isMined(key) ? key : null;
+    }
+    return null;
+  };
+}
 /** This long without mining ends a mining session: its counts start again. */
 const SESSION_GAP_MS = 2 * 3_600_000;
 /** Buyers are searched from the mining system for this many jumps, then from where the ship is. */
@@ -169,8 +197,7 @@ export function miningState(
   let lastSale: string | null = null;
   let lastMining = 0;
   let jumpsSince = 0;
-  // A core cracked since arriving in the ring: fragments collected now come from it.
-  let crackedHere = false;
+  const fragment = fragmentTracker();
   const rings = new Map<string, { name: string; count: number }[]>();
   const mined = () => {
     // A long break starts a new session; a relog does not, since miners relog to reset rocks.
@@ -189,9 +216,7 @@ export function miningState(
   };
   for (const e of events) {
     last = Date.parse(e.timestamp) || last;
-    // The same events as refinedKinds(): fragments scooped after these are not from a core
-    // cracked before them.
-    if (LEAVE_RING.has(e.event)) crackedHere = false;
+    const piece = fragment(e);
     switch (e.event) {
       case "LoadGame":
         // A relog resets the rocks: the last prospect is gone.
@@ -222,6 +247,7 @@ export function miningState(
         break;
       case "SupercruiseEntry":
       case "Docked":
+      case "Died":
         // Left the ring: no longer mining here, though the session's counts stay.
         ring = null;
         prospect = null;
@@ -250,15 +276,13 @@ export function miningState(
       case "AsteroidCracked":
         mined();
         cracked++;
-        crackedHere = true;
         ring = str(e.Body) ?? ring;
         break;
       case "CollectCargo": {
         // Fragments from a cracked core count as mined, like refined tons.
-        const key = commodityKey(str(e.Type) ?? "");
-        if (!crackedHere || !isMined(key) || e.Stolen === true) break;
+        if (!piece) break;
         mined();
-        refined.set(key, (refined.get(key) ?? 0) + 1);
+        refined.set(piece, (refined.get(piece) ?? 0) + 1);
         refinedAt.push(last);
         break;
       }
@@ -301,15 +325,6 @@ export function miningState(
 }
 
 const kindsMemo = new WeakMap<JournalEvent[], Set<string>>();
-/** Events after which fragments collected are no longer from rocks just cracked. */
-const LEAVE_RING = new Set([
-  "FSDJump",
-  "CarrierJump",
-  "Location",
-  "LoadGame",
-  "SupercruiseEntry",
-  "Docked",
-]);
 
 /**
  * The commodities the player has mined and not bought since, by commodityKey(): refined by laser,
@@ -323,20 +338,13 @@ export function refinedKinds(events: JournalEvent[]): Set<string> {
   // Buying back from the carrier keeps the mark, even while a decommission is pending.
   const own = ownCarrierId(events, -Infinity);
   const kinds = new Set<string>();
-  // A core cracked since arriving in the ring: fragments collected now come from it.
-  let cracking = false;
+  const fragment = fragmentTracker();
   for (const e of events) {
-    if (e.event === "MiningRefined") {
+    const piece = fragment(e);
+    if (piece) kinds.add(piece);
+    else if (e.event === "MiningRefined") {
       const key = commodityKey(str(e.Type) ?? str(e.Type_Localised) ?? "");
       if (key) kinds.add(key);
-    } else if (e.event === "CollectCargo") {
-      // Fragments from a cracked core; a canister salvaged elsewhere is not mined.
-      const key = commodityKey(str(e.Type) ?? "");
-      if (cracking && isMined(key) && e.Stolen !== true) kinds.add(key);
-    } else if (e.event === "AsteroidCracked") {
-      cracking = true;
-    } else if (LEAVE_RING.has(e.event)) {
-      cracking = false;
     } else if (e.event === "MarketBuy" && (own === null || num(e.MarketID) !== own)) {
       kinds.delete(commodityKey(str(e.Type) ?? ""));
     }

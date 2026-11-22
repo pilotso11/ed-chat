@@ -1109,3 +1109,30 @@ describe("after the relog review", () => {
     expect(miningState(events, T0 + t * 1000).refined.has("gold")).toBe(false);
   });
 });
+
+describe("one fragment tracker", () => {
+  const both = (events: JournalEvent[]) => [
+    refinedKinds(events).has("opal"),
+    miningState(events, T0 + t * 1000).refined.has("opal"),
+  ];
+  it("agrees after a login Location alone, after docking, and after dying", () => {
+    const crack = () => ev("AsteroidCracked", { Body: "R" });
+    const opal = () => ev("CollectCargo", { Type: "opal" });
+    expect(both([crack(), ev("Location", { StarSystem: "A" }), opal()])).toEqual([false, false]);
+    // Docking at a carrier beside the ring keeps the core.
+    expect(both([crack(), ev("Docked", { MarketID: 9 }), opal()])).toEqual([true, true]);
+    expect(both([crack(), ev("Died"), opal()])).toEqual([false, false]);
+  });
+
+  it("forgets the ring and prospect on dying", () => {
+    const s = miningState(
+      [
+        ev("SupercruiseExit", { Body: "X 1 A Ring", BodyType: "PlanetaryRing" }),
+        prospect([["Platinum", 30]]),
+        ev("Died"),
+      ],
+      T0 + t * 1000,
+    );
+    expect([s.ring, s.prospect]).toEqual([null, null]);
+  });
+});
