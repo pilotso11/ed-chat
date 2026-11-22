@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.1](https://github.com/pilotso11/ed-chat/compare/v0.7.0...v0.7.1) (2026-11-22)
+
+
+### Features
+
+* /quit and /exit in the chat quit ED Chat ([#73](https://github.com/pilotso11/ed-chat/issues/73)) ([98fa1be](https://github.com/pilotso11/ed-chat/commit/98fa1be0f83c10d27b87db834d54b6484111037c))
+* every default hotkey on Ctrl+Alt ([#70](https://github.com/pilotso11/ed-chat/issues/70)) ([7884704](https://github.com/pilotso11/ed-chat/commit/7884704ff5f0b3f6fbd13fe2e5149485af712154))
+* passenger and delivery panel ([#71](https://github.com/pilotso11/ed-chat/issues/71)) ([d799cc5](https://github.com/pilotso11/ed-chat/commit/d799cc55c873272caabf80d8a9387c7b6721ec2c))
+* surface bookmarks with a hotkey, and guidance back to them ([#69](https://github.com/pilotso11/ed-chat/issues/69)) ([c7e29d4](https://github.com/pilotso11/ed-chat/commit/c7e29d4d7e66322d6a74e2dd0481f8d9dfb4cf69))
+
 ## [0.7.0](https://github.com/pilotso11/ed-chat/compare/v0.6.1...v0.7.0) (2026-11-22)
 
 
