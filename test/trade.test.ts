@@ -1090,6 +1090,19 @@ describe("the trade panel", () => {
     expect(planned(40_000, long).footer).toEqual([
       { text: "Session: 10k profit · 1h 0m · 10k/h of 40k/h planned (30m 20k/h)", tone: "warn" },
     ]);
+    // A long leg: sold 50 minutes ago, then bought and flew. The session is behind, but a half
+    // hour with no sale says nothing, so plain, and no half-hour rate.
+    const leg2 = [
+      at(70, "LoadGame"),
+      buy(65, "Gold", 10, 1_000),
+      sell(50, "Gold", 10, 1_500),
+      buy(45, "Gold", 10, 1_000),
+      ...Array.from({ length: 9 }, (_, i) => at(40 - i * 5, "Music")),
+    ];
+    const quiet = planned(100_000, leg2).footer;
+    expect(quiet).toHaveLength(1);
+    expect(quiet[0]).toMatch(/^Session: 5k profit · 1h \d+m · [\d.]+k\/h of 100k\/h planned$/);
+    expect(tradeTotals(leg2, NOW)).toMatchObject({ quiet: true, rate: { recent: null } });
     // A route finished: its planned rate no longer applies.
     const finished = route([stop("A", "a", [], "done")], { profit_per_hour: 60_000_000 });
     expect(

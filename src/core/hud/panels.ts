@@ -16,6 +16,7 @@ import {
   type Plan,
 } from "ed-mcp/journal";
 import type { HudModeId } from "../settings.js";
+import type { FooterLine } from "./footer.js";
 import { isHighlight, type KnownBody } from "./known.js";
 import { num, str, type Obj } from "./json.js";
 import { ActiveClock, newGame, perHour, rates, type Rates } from "./rate.js";
@@ -32,11 +33,7 @@ export interface HudRow {
   tone?: Tone;
 }
 
-/** A footer line: its text, or its text and a tone. */
-export type FooterLine = string | { text: string; tone?: Tone };
-
-/** A footer line's text. */
-export const footerText = (f: FooterLine) => (typeof f === "string" ? f : f.text);
+export { footerText, type FooterLine } from "./footer.js";
 
 export interface PanelView {
   /** The panel's mode, or bookmarks for the panel that shows only bookmarks. */
