@@ -1,10 +1,4 @@
-/* Roboto Condensed, for style.font "compact". Latin only; other characters use the system font. */
-@font-face {
-  font-family: "Roboto Condensed";
-  font-style: normal;
-  font-weight: 400 700;
-  src: url("./fonts/RobotoCondensed-latin.woff2") format("woff2");
-}
+@import "./fonts.css";
 
 html,
 body {
@@ -69,8 +63,9 @@ body {
 .row.good {
   color: #8fe388;
 }
+/* A warning stays amber in every theme: in green or white it would not stand apart. */
 .row.warn {
-  color: var(--accent, #ffb347);
+  color: #ffb347;
 }
 .row.dim,
 .footer {

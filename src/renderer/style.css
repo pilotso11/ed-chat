@@ -1,10 +1,4 @@
-/* Roboto Condensed, for style.font "compact". Latin only; other characters use the system font. */
-@font-face {
-  font-family: "Roboto Condensed";
-  font-style: normal;
-  font-weight: 400 700;
-  src: url("./fonts/RobotoCondensed-latin.woff2") format("woff2");
-}
+@import "./fonts.css";
 
 html,
 body {
@@ -119,7 +113,7 @@ body {
   cursor: pointer;
 }
 .chip-detail {
-  color: var(--light, var(--light, #ffd08a));
+  color: var(--light, #ffd08a);
 }
 .keycap {
   display: inline-block;
@@ -169,9 +163,12 @@ body {
   border: 1px solid rgba(var(--strong-rgb, 255, 140, 0), 0.5);
   resize: none;
 }
-.warn,
 .approval .keys {
   color: var(--accent, #ffb347);
+}
+/* A warning stays amber in every theme: in green or white it would not stand apart. */
+.warn {
+  color: #ffb347;
 }
 /* Up to three lines, so the player can read what they allow. */
 .approval .summary {

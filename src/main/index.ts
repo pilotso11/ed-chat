@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
-import { existsSync, watchFile } from "node:fs";
+import { existsSync, unwatchFile, watchFile } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -1432,7 +1432,13 @@ async function main(): Promise<void> {
   // The game's HUD colour, for style.theme "game": read at start and when the player changes it.
   const colourXml = graphicsOverrideFile(process.env.LOCALAPPDATA, os.homedir());
   const readGameMatrix = async () => {
-    const next = parseHudMatrix(await readFile(colourXml, "utf8").catch(() => ""));
+    // A file that is not there means the game's colour; one that cannot be read for now, as
+    // while the game rewrites it, keeps the colour already shown.
+    const xml = await readFile(colourXml, "utf8").catch((err: NodeJS.ErrnoException) =>
+      err.code === "ENOENT" ? "" : null,
+    );
+    if (xml === null) return;
+    const next = parseHudMatrix(xml);
     if (JSON.stringify(next) === JSON.stringify(gameMatrix)) return;
     gameMatrix = next;
     if (settings.style.theme === "game") {
@@ -1662,6 +1668,8 @@ async function main(): Promise<void> {
     focus?.stop();
     status.stop();
     clearInterval(hudTimer);
+    unwatchFile(colourXml);
+    unwatchFile(displayXml);
     settingsStore.unwatch();
     session?.stop();
     void approval.stop();

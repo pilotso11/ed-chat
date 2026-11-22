@@ -52,11 +52,14 @@ const ACCENT: Rgb = [255, 179, 71];
 const STRONG: Rgb = [255, 140, 0];
 const LIGHT: Rgb = [255, 208, 138];
 const INK: Rgb = [242, 230, 208];
+// A matrix whose accent is darker than this, in its brightest channel, is not used: on the dark
+// background the text and borders would vanish.
+const DARKEST_ACCENT = 100;
 
-const mix = (m: Matrix, c: Rgb): Rgb =>
-  m.map((row) =>
-    Math.max(0, Math.min(255, Math.round(row[0] * c[0] + row[1] * c[1] + row[2] * c[2]))),
-  ) as unknown as Rgb;
+const map3 = (t: Rgb, f: (v: number) => number): Rgb => [f(t[0]), f(t[1]), f(t[2])];
+const channel = (row: Rgb, c: Rgb) =>
+  Math.max(0, Math.min(255, Math.round(row[0] * c[0] + row[1] * c[1] + row[2] * c[2])));
+const mix = (m: Matrix, c: Rgb): Rgb => [channel(m[0], c), channel(m[1], c), channel(m[2], c)];
 const hex = (c: Rgb) => "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
 const list = (c: Rgb) => c.join(", ");
 
@@ -69,7 +72,7 @@ export function themeVars(theme: ThemeName, game: Matrix | null): Record<string,
   const m = theme === "game" ? (game ?? IDENTITY) : THEME_MATRICES[theme];
   const orange = m.every((r, i) => r.every((v, j) => v === IDENTITY[i]![j]));
   const tinted = (c: Rgb): Rgb =>
-    orange ? c : (mix(m, c).map((v) => Math.round(v * 0.55 + 255 * 0.45)) as unknown as Rgb);
+    orange ? c : map3(mix(m, c), (v) => Math.round(v * 0.55 + 255 * 0.45));
   const ink = tinted(INK);
   const strong = mix(m, STRONG);
   return {
@@ -118,20 +121,31 @@ export function graphicsOverrideFile(localAppData: string | undefined, home: str
   );
 }
 
+// The game takes weights from 0 up; a few players go above 1 for a brighter colour.
+const MAX_WEIGHT = 4;
+
 function row(xml: string, tag: string): Rgb | null {
   const m = new RegExp(`<${tag}>([^<]*)</${tag}>`, "i").exec(xml);
   if (!m) return null;
-  const v = m[1]!.split(",").map((s) => Number(s.trim()));
-  if (v.length !== 3 || v.some((n) => !Number.isFinite(n))) return null;
-  return v as unknown as Rgb;
+  const parts = m[1]!.split(",").map((s) => s.trim());
+  // Number("") is 0, so an empty entry from a half-edited file must be refused here.
+  if (parts.length !== 3 || parts.some((s) => s === "")) return null;
+  const [r, g, b] = parts.map(Number) as [number, number, number];
+  const ok = (n: number) => Number.isFinite(n) && n >= 0 && n <= MAX_WEIGHT;
+  return ok(r) && ok(g) && ok(b) ? [r, g, b] : null;
 }
 
-/** The HUD colour matrix in the game's override file; null when there is none to use. */
+/**
+ * The HUD colour matrix in the game's override file; null when there is none to use, or when it
+ * would leave the overlay unreadable, such as a matrix of zeros.
+ */
 export function parseHudMatrix(xml: string): Matrix | null {
   const block = /<GUIColour>[\s\S]*?<Default>([\s\S]*?)<\/Default>/i.exec(xml)?.[1];
   if (!block) return null;
   const r = row(block, "MatrixRed");
   const g = row(block, "MatrixGreen");
   const b = row(block, "MatrixBlue");
-  return r && g && b ? [r, g, b] : null;
+  if (!r || !g || !b) return null;
+  const matrix: Matrix = [r, g, b];
+  return Math.max(...mix(matrix, ACCENT)) < DARKEST_ACCENT ? null : matrix;
 }

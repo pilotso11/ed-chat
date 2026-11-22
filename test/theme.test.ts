@@ -121,6 +121,11 @@ describe("parseHudMatrix", () => {
     ["no colour section", "<GraphicsConfig></GraphicsConfig>"],
     ["a row of two numbers", override("1, 0", "0, 1, 0", "0, 0, 1")],
     ["a row that is not a number", override("1, x, 0", "0, 1, 0", "0, 0, 1")],
+    ["an empty entry, as in a half-edited file", override("1,,0", "0, 1, 0", "0, 0, 1")],
+    ["a row of nothing", override(",,", "0, 1, 0", "0, 0, 1")],
+    ["a negative weight", override("-1, 0, 0", "0, 1, 0", "0, 0, 1")],
+    ["a weight far above 1", override("100, 0, 0", "0, 1, 0", "0, 0, 1")],
+    ["a matrix of zeros, which would draw nothing", override("0, 0, 0", "0, 0, 0", "0, 0, 0")],
     [
       "a missing row",
       "<GraphicsConfig><GUIColour><Default><MatrixRed>1,0,0</MatrixRed></Default></GUIColour></GraphicsConfig>",
