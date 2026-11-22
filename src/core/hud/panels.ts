@@ -107,10 +107,16 @@ export function massacrePanel(
 ): PanelView | null {
   if (!groups.length) return null;
   const rows: HudRow[] = [];
-  const missions = groups.flatMap((g) => g.factions.flatMap((f) => f.missions));
+  // A mission that expired before it was done pays nothing and takes no kills: ed-mcp marks it,
+  // and the panel only counts it.
+  const all = groups.flatMap((g) => g.factions.flatMap((f) => f.missions));
+  const missions = all.filter((m) => !m.expired);
+  const expired = all.length - missions.length;
   for (const g of groups) {
     // What the stack still pays for each kill left: one kill counts for every giver at once.
-    const open = rewards(g.factions.flatMap((f) => f.missions).filter((m) => !m.done));
+    const open = rewards(
+      g.factions.flatMap((f) => f.missions).filter((m) => !m.done && !m.expired),
+    );
     const perKill = g.kills_left ? open.sum / g.kills_left : null;
     // No ⚠ on a floor. Judged as shown, so a figure that reads 1.0M is not under 1.0M.
     const low = perKill !== null && !open.floor && shown(perKill) < settings.minPerKill;
@@ -126,8 +132,10 @@ export function massacrePanel(
       tone: "accent",
     });
     for (const f of g.factions) {
-      const need = f.missions.reduce((n, m) => n + m.kills_required, 0);
-      const got = f.missions.reduce((n, m) => n + Math.min(m.kills_counted, m.kills_required), 0);
+      const live = f.missions.filter((m) => !m.expired);
+      if (!live.length) continue;
+      const need = live.reduce((n, m) => n + m.kills_required, 0);
+      const got = live.reduce((n, m) => n + Math.min(m.kills_counted, m.kills_required), 0);
       rows.push({
         text: f.faction,
         right: `${got}/${need}`,
@@ -149,7 +157,12 @@ export function massacrePanel(
     ]
       .filter(Boolean)
       .join(" · "),
-    expiries.length ? `next expires ${timeLeft(Math.min(...expiries) - now)}` : null,
+    [
+      expiries.length ? `next expires ${timeLeft(Math.min(...expiries) - now)}` : null,
+      expired ? `${expired} expired` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || null,
   ].filter((f) => f !== null);
   const total = groups.reduce((n, g) => n + g.kills_left, 0);
   return { mode: "massacre", title: "MASSACRE", right: `${total} left`, rows, footer };

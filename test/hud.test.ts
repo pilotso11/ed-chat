@@ -191,6 +191,7 @@ describe("massacrePanel", () => {
     kills_counted: counted,
     kills_left: required - counted,
     done: counted >= required,
+    expired: false,
   });
 
   it("shows each giver's progress, the stack and the next expiry", () => {
@@ -252,6 +253,36 @@ describe("massacrePanel", () => {
     expect(massacrePanel(groups(14_400_000), 0, { minPerKill: 1_500_000 })!.rows[0]!.right).toBe(
       "10 left · ⚠ 1.4M/kill",
     );
+  });
+
+  it("leaves out a mission that expired before it was done, and counts it", () => {
+    const groups = [
+      {
+        target_faction: "Kumo Crew",
+        kills_left: 10,
+        factions: [
+          {
+            faction: "Lugh",
+            kills_left: 10,
+            missions: [
+              { ...mission(1, 10, 0, null), reward: 5_000_000 },
+              { ...mission(2, 8, 3, null), reward: 30_000_000, expired: true, kills_left: 0 },
+            ],
+          },
+          {
+            faction: "Eravate",
+            kills_left: 0,
+            missions: [{ ...mission(3, 6, 2, null), expired: true, kills_left: 0 }],
+          },
+        ],
+      },
+    ];
+    const p = massacrePanel(groups, 0, { minPerKill: 1_000_000 })!;
+    // Only the live mission pays: 5M over 10 kills.
+    expect(p.rows[0]!.right).toBe("10 left · ⚠ 500k/kill");
+    // Lugh's bar has only its live mission; Eravate, all expired, has none.
+    expect(p.rows.slice(1)).toEqual([{ text: "Lugh", right: "0/10", bar: 0, tone: undefined }]);
+    expect(p.footer).toEqual(["Stack 5.0M", "2 expired"]);
   });
 
   it("is null with no missions", () => {
