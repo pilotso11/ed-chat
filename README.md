@@ -141,9 +141,10 @@ use the left Ctrl and Alt keys, because AltGr types the letter.
 
 Outside the chat, Windows sends AltGr as Ctrl+Alt, so in the game's own chat
 AltGr+Y, N or A answers a waiting tool request, AltGr+H shows the history and
-AltGr+1…9 copies a chip instead of typing a character (€ is AltGr+4 on a UK
-keyboard). If that gets in your way, set those keys in `settings.json`, for
-example `"copyChip": "Ctrl+Shift+{n}"`.
+AltGr+1…9 copies a chip instead of typing a character: € on a UK keyboard, and
+@, #, {, [, ], } or \ on German, French, Spanish, Nordic and other layouts. With
+`hotkeys.scope` set to `"always"` this happens in every app. If that gets in your
+way, set those keys in `settings.json`, for example `"copyChip": "Ctrl+Shift+{n}"`.
 
 If the overlay shows `⚠ 2 hotkeys not working`, another app already uses those
 keys, or `settings.json` sets the same key for two actions. The tray menu item
