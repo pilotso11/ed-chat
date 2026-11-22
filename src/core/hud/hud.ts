@@ -12,6 +12,7 @@ import type { HudModeId, Settings } from "../settings.js";
 import type { KnownBody } from "./known.js";
 import { carrierState, miningPanel, miningState, minedWaiting } from "./mining.js";
 import type { SellLookup, SellQuery } from "./sell.js";
+import { bookmarkRows } from "./bookmarks.js";
 import { journalMode, noteMode, pickMode, type Choice } from "./mode.js";
 import {
   exobiologyPanel,
@@ -48,6 +49,8 @@ export interface ShipStatus {
   latitude: number | null;
   longitude: number | null;
   radius: number | null;
+  /** Degrees, where the ship or commander faces; for turning toward a bookmark. */
+  heading?: number | null;
 }
 
 export function parseShipStatus(text: string): ShipStatus | null {
@@ -59,6 +62,7 @@ export function parseShipStatus(text: string): ShipStatus | null {
       latitude: n(j.Latitude),
       longitude: n(j.Longitude),
       radius: n(j.PlanetRadius),
+      heading: n(j.Heading),
     };
   } catch {
     return null;
@@ -80,6 +84,8 @@ export interface HudInput {
   now: number;
   /** Spansh's sale prices for the mining panel; none when the lookup is off. */
   sell?: (q: SellQuery) => SellLookup;
+  /** The surface bookmarks plan, read each poll; null when there is none. */
+  bookmarks?: Plan | null;
 }
 
 /** The mode now: off by hotkey, else the newest of the journal, the note and the hotkey. */
@@ -176,6 +182,9 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
   });
 }
 
+/** Panels that bookmark rows show under; massacre has nothing to do with places on a body. */
+const SURFACE_PANELS = new Set<PanelView["mode"]>(["exploration", "exobiology"]);
+
 export function buildHud(input: HudInput, moving: string | null): HudView {
   const s = input.settings;
   const base = {
@@ -186,7 +195,23 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
   };
   const mode = currentMode(input);
   if (mode === "off") return { ...base, mode, panel: null, route: null };
-  const panel = mode ? panelFor(mode, input) : null;
+  let panel = mode ? panelFor(mode, input) : null;
+  // Bookmarks in this system, from the bookmarks plan.
+  const marks = !s.bookmarks
+    ? []
+    : bookmarkRows({
+        plan: input.bookmarks ?? null,
+        system: input.journal?.location.system ?? null,
+        status: input.status,
+      });
+  // Under the panels about where the ship is; on their own when no panel shows.
+  // Not on their own in massacre or mining mode either, when that mode has nothing to show.
+  const surface = panel ? SURFACE_PANELS.has(panel.mode) : mode !== "massacre" && mode !== "mining";
+  if (marks.length && surface) {
+    panel = panel
+      ? { ...panel, rows: [...panel.rows, ...marks] }
+      : { mode: "bookmarks", title: "BOOKMARKS", rows: marks, footer: [] };
+  }
   const route = s.modes.route
     ? routeRows({
         plan: input.plan,

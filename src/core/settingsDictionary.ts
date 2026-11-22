@@ -71,6 +71,11 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "hotkeys.hudMove": { text: "Starts moving the activity panel with the move keys." },
   "hotkeys.routeNext": { text: "Copies the next route stop." },
   "hotkeys.routePrev": { text: "Copies the previous route stop." },
+  "hotkeys.bookmark": {
+    text:
+      "Bookmarks where you are on a planet, in the ed-mcp plan bookmarks. The panel then shows " +
+      "the distance and bearing to it when you are back on that body.",
+  },
 
   strip: { text: "The status strip at rest." },
   "strip.lines": { text: "1: status only. 2: also the first line of the last reply." },
@@ -208,6 +213,9 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
     text:
       "Days. Buyers whose Spansh market data is older than this are left out. A price over a " +
       "day old shows its age.",
+  },
+  "hud.bookmarks": {
+    text: "Show surface bookmarks (the bookmark key) on the body and in the system.",
   },
   "hud.edMcpDataDir": {
     text: "The ed-mcp sync folder. null finds it where ed-mcp is set up for Claude Code or Codex.",

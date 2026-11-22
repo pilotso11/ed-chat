@@ -31,7 +31,8 @@ export interface HudRow {
 }
 
 export interface PanelView {
-  mode: HudModeId;
+  /** The panel's mode, or bookmarks for the panel that shows only bookmarks. */
+  mode: HudModeId | "bookmarks";
   title: string;
   subtitle?: string;
   right?: string;

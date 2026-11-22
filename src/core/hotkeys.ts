@@ -18,7 +18,8 @@ export type HotkeyAction =
   | { type: "hudToggle" }
   | { type: "hudMode" }
   | { type: "hudMove" }
-  | { type: "route"; dir: 1 | -1 };
+  | { type: "route"; dir: 1 | -1 }
+  | { type: "bookmark" };
 
 export interface Binding {
   name: string;
@@ -52,6 +53,7 @@ export function bindings(h: Settings["hotkeys"]): Binding[] {
     ...b("hudMove", h.hudMove, { type: "hudMove" }),
     ...b("routeNext", h.routeNext, { type: "route", dir: 1 }),
     ...b("routePrev", h.routePrev, { type: "route", dir: -1 }),
+    ...b("bookmark", h.bookmark, { type: "bookmark" }),
     ...chipPatterns(h).flatMap((p) =>
       Array.from({ length: 9 }, (_, i) => ({
         name: `copyChip${i + 1}`,
@@ -245,6 +247,7 @@ const LABELS: [keyof Settings["hotkeys"], string][] = [
   ["hudMove", "Move panel (then arrows)"],
   ["routeNext", "Next route stop"],
   ["routePrev", "Previous route stop"],
+  ["bookmark", "Bookmark this place"],
 ];
 
 /**
