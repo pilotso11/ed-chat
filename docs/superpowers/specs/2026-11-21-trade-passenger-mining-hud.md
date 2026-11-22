@@ -1,7 +1,7 @@
 # Activity HUD: passenger, trade and mining panels
 
 Date: 2026-11-21
-Status: mining implemented (this PR); passenger and trade proposed. Follows the activity HUD spec
+Status: mining and passengers implemented; trade proposed. Follows the activity HUD spec
 (2026-11-15), which lists mining as a follow-on.
 
 ## Purpose
@@ -98,27 +98,37 @@ panel shows what to do at each stop. The route rows then give the next hop and t
 Massacre still wins while a stack is open. Passenger and trade are both "a run": when both are on
 (passengers taken on a trade run), the panel shows trade with a passenger footer line.
 
-### Passenger panel
+### Passenger panel (built)
 
 ```
-PASSENGERS                         14/16 berths · 18.4M
-Ochosi · Perez Market          6 (2 VIP)   ⚠ 3h 10m
-Ngalinn · Haber Hub            4           1d 2h
-Wolf 397 · Brooks Estate       4 wanted    2d 5h
-● Ochosi · Perez Market                    4 jumps
-▸ Ngalinn · Haber Hub
-route stale: 1 new mission
+PASSENGERS                              10/22 berths · 4.0M
+Ochosi · Perez Market                    6 pax (6 VIP)  1h 0m
+Ngalinn · Haber Hub                    4 pax (4 wanted)  1d 0h
+Wolf 397 · Brooks Estate                   32 t Gold  2d 2h
+Sol · Abraham Lincoln                              hand in
+Route stale: 1 new mission. Ask Claude to re-route
+3 missions · 1 to hand in
+● Ngalinn · Haber Hub                               4 jumps
+  Drop 4 passengers (4 wanted) at Haber Hub
+▸ Wolf 397 · Brooks Estate
 ```
 
-- One row per destination station, in plan order when there is a plan: passengers, VIP and
-  wanted flags, and the soonest expiry. The expiry turns amber when the route's estimated arrival
-  is near or after it.
-- The header shows berths used (from the passenger missions) out of the cabins fitted (from the
-  `Loadout` modules), and the total reward.
-- **Stale.** The plan is stale when a passenger mission is not in any stop's `missions`, or a
-  stop serves only missions that are gone. The line names the change.
-- Delivery missions (`Commodity` and `Count`) show the same way, as "Deliver 32 t Gold", since
-  `missions_route` routes them together.
+- Passenger missions, and deliveries (a commodity and a count, not massacres), grouped by the
+  station where they are handed over: the destination, or the giver once complete. The title is
+  DELIVERIES when no passengers are aboard.
+- One row per station, in the plan's order when the plan has those stops, else the soonest expiry
+  first. Amber under two hours left; dim for stations with only rewards to collect.
+- Berths from the `Loadout` cabins (economy, business, first, luxury by size).
+- **Route.** ed-mcp's `missions_plan` (ed-mcp PR) saves the `missions_route` order as the active
+  plan, one stop per station with the mission IDs it serves. The route rows then show the next
+  stop and copy its system, as for any plan.
+- **Stale.** With a plan whose stops list their missions, an open mission no stop to do serves
+  shows "Route stale". Without a plan, two or more stations suggest asking Claude for a route. A
+  plan read by an ed-mcp too old to keep the stops' missions counts as a route, with no stale check,
+  until ED Chat bundles the new ed-mcp.
+- Mode: a `MissionAccepted` with `PassengerCount`, or a delivery, turns it on while any such mission
+  is open, until a newer activity (a scan, mining). Massacre stacks win. The activity note's kinds
+  `missions` and `hauling` choose it too.
 
 ### Trade panel
 

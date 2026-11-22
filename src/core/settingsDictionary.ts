@@ -164,6 +164,9 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "hud.modes.mining": {
     text: "The last prospected rock, the hold and limpets, and where to sell what you mined.",
   },
+  "hud.modes.passenger": {
+    text: "Passenger and delivery missions: where each goes, berths used and the next expiry.",
+  },
   "hud.modes.route": { text: "The stops of the current route plan." },
   "hud.valuableMin": {
     text:

@@ -64,7 +64,14 @@ const positionSchema = (anchor: Anchor, offsetY: number) =>
 export const PositionSchema = positionSchema("bottom-left", 24);
 export type Position = z.infer<typeof PositionSchema>;
 
-export const HUD_MODES = ["massacre", "exploration", "exobiology", "mining", "route"] as const;
+export const HUD_MODES = [
+  "massacre",
+  "exploration",
+  "exobiology",
+  "mining",
+  "passenger",
+  "route",
+] as const;
 export type HudModeId = (typeof HUD_MODES)[number];
 
 const HudSchema = z.strictObject({
@@ -79,6 +86,7 @@ const HudSchema = z.strictObject({
       exploration: z.boolean().default(true),
       exobiology: z.boolean().default(true),
       mining: z.boolean().default(true),
+      passenger: z.boolean().default(true),
       route: z.boolean().default(true),
     })
     .prefault({}),

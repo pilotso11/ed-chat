@@ -11,6 +11,7 @@ import {
 import type { HudModeId, Settings } from "../settings.js";
 import type { KnownBody } from "./known.js";
 import { carrierState, miningPanel, miningState, minedWaiting } from "./mining.js";
+import { drops, passengerPanel } from "./passenger.js";
 import type { SellLookup, SellQuery } from "./sell.js";
 import { bookmarkRows } from "./bookmarks.js";
 import { journalMode, noteMode, pickMode, type Choice } from "./mode.js";
@@ -97,12 +98,25 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
     j && input.settings.modes.mining
       ? minedWaiting(j.cargo, j.events, input.now, input.settings.mining)
       : false;
+  // A run the panel can show: with the mode off, or nothing to place, taking one changes nothing.
+  const runActive = j && input.settings.modes.passenger ? drops(j.missions).length > 0 : false;
   const fromJournal = j
-    ? journalMode(j.events, groups.length > 0, minedAboard, input.settings.modes.mining)
+    ? journalMode(
+        j.events,
+        groups.length > 0,
+        minedAboard,
+        (m) => input.settings.modes[m],
+        runActive,
+      )
     : null;
   const m = noteMode(input.activity?.kind);
+  // A note for a mode that is off, or a missions or hauling note with no run to show, would leave
+  // the panel empty: the journal's mode shows instead.
   const fromNote =
-    m && input.activity ? { mode: m, at: Date.parse(input.activity.updated_at) } : null;
+    m && input.activity && input.settings.modes[m] && !(m === "passenger" && !runActive)
+      ? { mode: m, at: Date.parse(input.activity.updated_at) }
+      : null;
+  // journalMode skips modes that are off itself, so the run or an older mode still shows.
   const chosen = pickMode(fromJournal, fromNote, input.hotkey)?.mode ?? null;
   if (chosen && chosen !== "off" && !input.settings.modes[chosen]) return null;
   return chosen;
@@ -112,6 +126,14 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
   const j = input.journal;
   if (!j || mode === "route") return null;
   if (mode === "massacre") return massacrePanel(massacre(j.missions, j.events).groups, input.now);
+  if (mode === "passenger") {
+    return passengerPanel({
+      missions: j.missions,
+      events: j.events,
+      plan: input.plan,
+      now: input.now,
+    });
+  }
   const system = j.location.system;
   if (mode === "mining") {
     return miningPanel({

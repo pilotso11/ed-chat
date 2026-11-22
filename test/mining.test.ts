@@ -936,8 +936,8 @@ describe("buyer search origin, pads and trips", () => {
 
   it("changes no mode for mining while the mining mode is off", () => {
     const events = [ev("FSSDiscoveryScan"), ev("LaunchDrone", { Type: "Prospector" })];
-    expect(journalMode(events, false, false, true)?.mode).toBe("mining");
-    expect(journalMode(events, false, false, false)?.mode).toBe("exploration");
+    expect(journalMode(events, false, false, () => true)?.mode).toBe("mining");
+    expect(journalMode(events, false, false, (m) => m !== "mining")?.mode).toBe("exploration");
   });
 
   it("counts the rate from when mining started again after a break", () => {
