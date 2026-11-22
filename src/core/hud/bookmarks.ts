@@ -118,7 +118,7 @@ const MAX_ROWS = 5;
 export function bookmarkRows(input: {
   plan: Plan | null;
   system: string | null;
-  status: (ShipStatus & { heading?: number | null }) | null;
+  status: ShipStatus | null;
 }): HudRow[] {
   const { plan, system, status } = input;
   if (!plan || !system) return [];
@@ -251,8 +251,11 @@ export function finishedBioBookmarks(
           b.species.length > 0 &&
           b.species.every((s) => s.analysed) &&
           !b.not_started.length &&
-          // Every signal sampled, not just every genus seen so far.
-          b.species.length >= (b.bio_signals ?? 0),
+          // Every signal sampled, not just every genus seen so far; with no signal count, the
+          // body might have more, so it is left for the player or Claude to mark done.
+          b.bio_signals !== null &&
+          b.bio_signals !== undefined &&
+          b.species.length >= b.bio_signals,
       )
       .map((b) => bodyKey(b.body, system)),
   );

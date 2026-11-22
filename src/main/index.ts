@@ -113,7 +113,7 @@ import {
   sameBookmark,
 } from "../core/hud/bookmarks.js";
 import { SellPrices, postSpansh, type SellQuery } from "../core/hud/sell.js";
-import { buildHud, currentMode, type HudView } from "../core/hud/hud.js";
+import { buildHud, type HudView } from "../core/hud/hud.js";
 import {
   hudCanShow,
   hudInput,
@@ -599,10 +599,9 @@ async function main(): Promise<void> {
     const started = Date.now();
     try {
       const data = await hudFeed.poll();
-      hudData =
-        savedBookmarks && savedBookmarks.at >= started
-          ? { ...data, bookmarks: savedBookmarks.plan }
-          : data;
+      // A poll that started after the save read it: the override is no longer needed.
+      if (savedBookmarks && savedBookmarks.at < started) savedBookmarks = null;
+      hudData = savedBookmarks ? { ...data, bookmarks: savedBookmarks.plan } : data;
       hudFreshAt = Date.now();
       const stops = todoStops(hudData.plan);
       if (JSON.stringify(stops) !== JSON.stringify(chipStops)) {
@@ -700,7 +699,8 @@ async function main(): Promise<void> {
     if (!hudPlans || !settings.hud.bookmarks) return;
     for (const i of finishedBioBookmarks(data.bookmarks ?? null, data.journal)) {
       const stop = data.bookmarks!.stops[i]!;
-      const id = `${stop.system}|${stop.body}|${stop.purpose}`;
+      // What and where it is: a new bookmark with the same label in another spot is another one.
+      const id = JSON.stringify([stop.system, stop.body, stop.purpose, stop.position ?? null]);
       if (bookmarksDone.has(id)) continue;
       bookmarksDone.add(id);
       try {

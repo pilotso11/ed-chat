@@ -287,6 +287,11 @@ describe("finished bio bookmarks", () => {
     ]);
     expect(finishedBioBookmarks(p, journal)).toEqual([0]);
     expect(finishedBioBookmarks(null, journal)).toEqual([]);
+    // With no signal count the body may hold more: left to do.
+    const noCount = events.map((e) =>
+      e.event === "SAASignalsFound" ? { ...e, Signals: [] } : e,
+    ) as JournalEvent[];
+    expect(finishedBioBookmarks(p, { ...journal, events: noCount })).toEqual([]);
   });
 });
 
