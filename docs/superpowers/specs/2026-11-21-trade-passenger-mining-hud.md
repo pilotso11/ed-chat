@@ -92,7 +92,7 @@ panel shows what to do at each stop. The route rows then give the next hop and t
 |---|---|---|
 | `MissionAccepted` with `PassengerCount` | passenger | no passenger mission left |
 | `MarketBuy` while the hold has no mission cargo, or a plan stop of kind `trade` | trade | hold empty and no trade stop to do, or 5 jumps with no market trade |
-| `ProspectedAsteroid`, `LaunchDrone` of type `Prospector`, `MiningRefined`, `AsteroidCracked` | mining | a jump (`FSDJump`, or `CarrierJump` aboard), a `MarketSell` or a `LoadGame`, once no mined cargo is waiting: none in the hold, and with `useCarrier` none moved to the carrier |
+| `ProspectedAsteroid`, `LaunchDrone` of type `Prospector`, `MiningRefined`, `AsteroidCracked` | mining | a jump (`FSDJump`, or `CarrierJump` aboard) or a `MarketSell`, once no mined cargo is waiting: none in the hold, and with `useCarrier` none moved to the carrier in the last 12 hours. A relog does not end it: miners relog to reset the rocks |
 | The activity note's `kind` | that mode | |
 
 Massacre still wins while a stack is open. Passenger and trade are both "a run": when both are on
