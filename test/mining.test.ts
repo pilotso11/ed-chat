@@ -698,7 +698,7 @@ describe("mining edge cases", () => {
   });
 });
 
-describe("after the review", () => {
+describe("mining after leaving, selling and relogging (1)", () => {
   const cargo = (n: number) => [{ name: "platinum", count: n, stolen: false, mission_id: null }];
   const panel = (events: JournalEvent[], over: Partial<Parameters<typeof miningPanel>[0]> = {}) =>
     miningPanel({
@@ -837,7 +837,7 @@ describe("after the review", () => {
   });
 });
 
-describe("after the third review", () => {
+describe("buyer search origin, pads and trips", () => {
   it("searches from the mining system on the way to the buyer", () => {
     const events = [
       ev("FSDJump", { StarSystem: "HIP 1" }),
@@ -950,7 +950,7 @@ describe("after the third review", () => {
   });
 });
 
-describe("after the fifth review", () => {
+describe("core fragments, carrier buy-backs and search origin", () => {
   it("counts fragments collected from a cracked core as mined", () => {
     const events = [ev("AsteroidCracked", { Body: "R" }), ev("CollectCargo", { Type: "opal" })];
     expect([...refinedKinds(events)]).toEqual(["opal"]);
@@ -984,7 +984,7 @@ describe("after the fifth review", () => {
   });
 });
 
-describe("after the sixth review", () => {
+describe("salvage and leaving the ring", () => {
   it("does not count a canister salvaged away from mining", () => {
     const salvage = [ev("FSDJump", { StarSystem: "X" }), ev("CollectCargo", { Type: "gold" })];
     expect([...refinedKinds(salvage)]).toEqual([]);
@@ -992,11 +992,11 @@ describe("after the sixth review", () => {
     expect([...refinedKinds(cracked)]).toEqual(["gold"]);
   });
 
-  it("stops mining in the ring on entering supercruise or docking", () => {
+  it("stops mining in the ring on entering supercruise", () => {
     const events = [
       ev("SupercruiseExit", { Body: "X 1 A Ring", BodyType: "PlanetaryRing" }),
       prospect([["Platinum", 30]]),
-      ev("Docked", { StationName: "Port" }),
+      ev("SupercruiseEntry"),
     ];
     const s = miningState(events, T0 + t * 1000);
     expect([s.ring, s.prospect]).toEqual([null, null]);
@@ -1004,7 +1004,7 @@ describe("after the sixth review", () => {
   });
 });
 
-describe("after the seventh review", () => {
+describe("ring status, Spansh 404s and collection after leaving", () => {
   it("ends collecting from cracked rocks on leaving the ring", () => {
     const events = [
       ev("AsteroidCracked", { Body: "R" }),
@@ -1033,7 +1033,7 @@ describe("after the seventh review", () => {
   });
 });
 
-describe("after the eighth review", () => {
+describe("carrier jumps, relogs and decommissions", () => {
   it("counts a carrier jump as leaving the mining system", () => {
     const events = [ev("FSDJump", { StarSystem: "A" }), refined("Platinum")];
     for (const s of ["B", "C", "D", "E"]) events.push(ev("CarrierJump", { StarSystem: s }));
@@ -1060,7 +1060,7 @@ describe("after the eighth review", () => {
   });
 });
 
-describe("after the final review", () => {
+describe("core fragments, stolen cargo and prospecting", () => {
   it("counts core fragments as mined tons, but not stolen cargo", () => {
     const events = [
       ev("AsteroidCracked", { Body: "R" }),
@@ -1078,7 +1078,7 @@ describe("after the final review", () => {
   });
 });
 
-describe("after the PR review", () => {
+describe("relogs and cracked cores", () => {
   it("does not count fragments scooped after a relog as from the core cracked before", () => {
     const events = [
       ev("AsteroidCracked", { Body: "R" }),
@@ -1090,7 +1090,7 @@ describe("after the PR review", () => {
   });
 });
 
-describe("after the relog review", () => {
+describe("relogs, prospects and canisters", () => {
   it("forgets the core and the prospect on a relog alone", () => {
     const events = [
       prospect([["Painite", 30]]),
@@ -1134,5 +1134,21 @@ describe("one fragment tracker", () => {
       T0 + t * 1000,
     );
     expect([s.ring, s.prospect]).toEqual([null, null]);
+  });
+});
+
+describe("leaving the ring", () => {
+  it("keeps the ring when docking at a carrier beside it, and clears it on a docked login", () => {
+    const exit = ev("SupercruiseExit", { Body: "X 1 A Ring", BodyType: "PlanetaryRing" });
+    const docked = miningState(
+      [exit, prospect([["Platinum", 30]]), ev("Docked", { MarketID: 9 })],
+      T0 + t * 1000,
+    );
+    expect(docked.ring).toBe("X 1 A Ring");
+    const login = miningState(
+      [exit, ev("LoadGame"), ev("Location", { StarSystem: "A", Docked: true })],
+      T0 + t * 1000,
+    );
+    expect(login.ring).toBeNull();
   });
 });

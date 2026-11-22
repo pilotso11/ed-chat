@@ -120,26 +120,32 @@ export interface MiningState {
 
 const RATE_WINDOW_MS = 15 * 60_000;
 
-/** Events after which cargo collected is no longer from a core just cracked. */
-const LEAVE_RING = new Set([
-  "FSDJump",
-  "CarrierJump",
-  "Location",
-  "LoadGame",
-  "SupercruiseEntry",
-  "Died",
-]);
+const LEAVE_EVENTS = new Set(["FSDJump", "CarrierJump", "SupercruiseEntry", "Died"]);
+
+/**
+ * Whether the event takes the ship out of the ring it was mining: a jump, supercruise, death, or a
+ * login that starts docked. Docking at a carrier beside the ring does not. The one rule for the
+ * ring, the prospect and the cracked core.
+ */
+export function leavesRing(e: JournalEvent): boolean {
+  return LEAVE_EVENTS.has(e.event) || (e.event === "Location" && e.Docked === true);
+}
+
+/** Whether cargo collected after the event cannot be from a core cracked before it. */
+const endsCrack = (e: JournalEvent) =>
+  // A relog resets the rocks, wherever the ship is after it.
+  leavesRing(e) || e.event === "LoadGame" || e.event === "Location";
 
 /**
  * Follows the journal for cargo collected from a cracked core: step(e) gives a fragment's
  * commodityKey(), else null. One tracker for miningState() and refinedKinds(), so they agree.
- * Docking (at a carrier beside the ring, say) does not end it; leaving the ring or dying does.
+ * Docking (at a carrier beside the ring, say) does not end it; leaving the ring or a relog does.
  */
 function fragmentTracker(): (e: JournalEvent) => string | null {
   let cracked = false;
   return (e) => {
     if (e.event === "AsteroidCracked") cracked = true;
-    else if (LEAVE_RING.has(e.event)) cracked = false;
+    else if (endsCrack(e)) cracked = false;
     else if (e.event === "CollectCargo" && cracked && e.Stolen !== true) {
       const key = commodityKey(str(e.Type) ?? "");
       return isMined(key) ? key : null;
@@ -217,6 +223,11 @@ export function miningState(
   for (const e of events) {
     last = Date.parse(e.timestamp) || last;
     const piece = fragment(e);
+    if (leavesRing(e)) {
+      // No longer mining here, though the session's counts stay.
+      ring = null;
+      prospect = null;
+    }
     switch (e.event) {
       case "LoadGame":
         // A relog resets the rocks: the last prospect is gone.
@@ -231,8 +242,6 @@ export function miningState(
         here = str(e.StarSystem) ?? here;
         // A carrier jump moves the ship too.
         jumpsSince++;
-        prospect = null;
-        ring = null;
         stintStart = null;
         break;
       case "MarketSell":
@@ -244,13 +253,6 @@ export function miningState(
         break;
       case "SupercruiseExit":
         if (e.BodyType === "PlanetaryRing") ring = str(e.Body);
-        break;
-      case "SupercruiseEntry":
-      case "Docked":
-      case "Died":
-        // Left the ring: no longer mining here, though the session's counts stay.
-        ring = null;
-        prospect = null;
         break;
       case "SAASignalsFound": {
         const body = str(e.BodyName);
