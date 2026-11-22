@@ -328,6 +328,7 @@ export function App() {
 
   if (!v) return null;
   const style = {
+    ...v.ui.look,
     "--font": `${v.ui.fontSize}px`,
     "--bg-alpha": v.ui.backgroundOpacity,
     "--max-lines": v.ui.maxLines,

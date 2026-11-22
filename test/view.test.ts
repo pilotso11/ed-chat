@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { INITIAL_STATE, reduce, type Action, type OverlayState } from "../src/core/controller.js";
 import { DEFAULT_SETTINGS, SettingsSchema } from "../src/core/settings.js";
+import { lookVars } from "../src/core/theme.js";
 import { buildView, noticeCommand, pickNotice, shortTool, statusText } from "../src/core/view.js";
 
 const run = (actions: Action[]) => actions.reduce(reduce, INITIAL_STATE);
@@ -74,7 +75,28 @@ describe("buildView", () => {
       growsUp: true,
       align: "start",
       copyChipKey: "Ctrl+Alt+1–9",
+      look: lookVars({ theme: "orange", font: "standard" }, null),
     });
+  });
+
+  it("is orange by default when the game has no colour override", () => {
+    expect(buildView(run([ready]), DEFAULT_SETTINGS).ui.look["--accent"]).toBe("#ffb347");
+  });
+
+  it("gives the overlay the chosen theme and fonts", () => {
+    const blue = SettingsSchema.parse({ style: { theme: "blue", font: "compact" } });
+    const look = buildView(run([ready]), blue).ui.look;
+    expect(look["--accent"]).toBe("#47b3ff");
+    expect(look["--font-ui"]).toContain("Roboto Condensed");
+    // The game theme takes the game's matrix, or orange when there is none.
+    const game = SettingsSchema.parse({ style: { theme: "game" } });
+    const matrix = [
+      [0, 0, 1],
+      [0, 1, 0],
+      [1, 0, 0],
+    ] as const;
+    expect(buildView(run([ready]), game, matrix).ui.look["--accent"]).toBe("#47b3ff");
+    expect(buildView(run([ready]), game).ui.look["--accent"]).toBe("#ffb347");
   });
 
   it("shows only the icon at rest in icon mode, with a dot for chips or notices", () => {

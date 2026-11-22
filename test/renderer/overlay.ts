@@ -122,6 +122,7 @@ export function baseView(over: Partial<ViewModel> = {}): ViewModel {
       chatLines: 12,
       growsUp: false,
       align: "start",
+      look: {},
       copyChipKey: "Ctrl+Alt+1-9",
     },
     ...over,

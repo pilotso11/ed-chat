@@ -155,6 +155,7 @@ import { displaySetting, hudWindowSize, onNextDisplay, overlaySize } from "../co
 import { PlayerOnlyGuard } from "../core/playerOnlyGuard.js";
 import { PLAYER_ONLY_PATHS_V0_5 } from "../core/settingsDictionary.js";
 import { buildView, pickNotice, shortTool } from "../core/view.js";
+import { graphicsOverrideFile, lookVars, parseHudMatrix, type Matrix } from "../core/theme.js";
 import { fetchLatestEdMcp, freshLatest, versionText, type Versions } from "../core/version.js";
 import { IPC } from "../shared/ipc.js";
 import {
@@ -289,6 +290,8 @@ async function main(): Promise<void> {
   ({ position: hudPosition, saved } = effectiveHudPosition(settings.hud.position, saved));
 
   const viewSettings = (): Settings => ({ ...settings, position });
+  // The HUD colour in the game's settings; null until read, or when there is none.
+  let gameMatrix: Matrix | null = null;
 
   // When the approval on screen appeared; an answer key pressed just before that is ignored.
   let shownApproval: { id: string; at: number } | null = null;
@@ -302,7 +305,7 @@ async function main(): Promise<void> {
     const props = windowProps(state);
     applyWindow(win, props, prevProps);
     prevProps = props;
-    const view = buildView(state, viewSettings());
+    const view = buildView(state, viewSettings(), gameMatrix);
     const t = (c: Chip[]) => withTargets(c, chipStops);
     win.webContents.send(IPC.view, {
       ...view,
@@ -552,6 +555,7 @@ async function main(): Promise<void> {
     const visible = hudCanShow(settings.hud, saved, focus?.current ?? null);
     const input = {
       ...hudInput(hudData, saved, settings.hud, Date.now()),
+      look: lookVars(settings.style, gameMatrix),
       sell: settings.hud.spansh && visible ? (q: SellQuery) => sellPrices.get(q) : undefined,
     };
     const view = buildHud(input, hudMoving ? moveHint(settings.hotkeys) : null);
@@ -1424,6 +1428,20 @@ async function main(): Promise<void> {
   await openHudFeed().catch((err) => log.log("warn", `panel: ${message(err)}`));
   const hudTimer = setInterval(() => void pollHud(), 1_000);
   void pollHud();
+
+  // The game's HUD colour, for style.theme "game": read at start and when the player changes it.
+  const colourXml = graphicsOverrideFile(process.env.LOCALAPPDATA, os.homedir());
+  const readGameMatrix = async () => {
+    const next = parseHudMatrix(await readFile(colourXml, "utf8").catch(() => ""));
+    if (JSON.stringify(next) === JSON.stringify(gameMatrix)) return;
+    gameMatrix = next;
+    if (settings.style.theme === "game") {
+      render();
+      renderHud();
+    }
+  };
+  void readGameMatrix();
+  watchFile(colourXml, { interval: 5_000 }, () => void readGameMatrix());
 
   const displayXml = displaySettingsFile(process.env.LOCALAPPDATA, os.homedir());
   const checkFullscreen = async () => {

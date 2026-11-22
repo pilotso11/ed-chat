@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DEFAULT_MINING_TARGETS } from "./miningTargets.js";
+import { FONT_NAMES, THEME_NAMES } from "./theme.js";
 import { annotateSchema, type JsonSchemaNode } from "./settingsDictionary.js";
 
 export { DEFAULT_MINING_TARGETS };
@@ -162,6 +163,11 @@ export const SettingsSchema = z.strictObject({
     .strictObject({
       fontSize: z.number().min(8).max(48).default(14),
       backgroundOpacity: z.number().min(0).max(1).default(0.78),
+      // standard: Segoe UI. compact: a narrower face, for more text in the same width.
+      font: z.enum(FONT_NAMES).default("standard"),
+      // The overlay's colour. game follows the HUD colour in the game's own settings, and is
+      // orange, the game's default, when there is none.
+      theme: z.enum(THEME_NAMES).default("game"),
     })
     .prefault({}),
   position: PositionSchema.prefault({}),

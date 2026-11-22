@@ -43,6 +43,8 @@ next start.
 | `chat.lines` | `14` | History lines in the chat |
 | `style.fontSize` | `14` | Font size; scales the whole overlay, the icon too |
 | `style.backgroundOpacity` | `0.78` | Panel background opacity, from 0 (none) to 1 (solid). Text stays opaque and gets a dark outline as the background gets clearer |
+| `style.font` | `standard` | `standard`: Segoe UI, with Cascadia Mono for code (Consolas on Windows 10). `compact`: Roboto Condensed with Consolas, about 10% narrower, for more text in the same width. The activity panel uses the same fonts |
+| `style.theme` | `game` | The colour. `game` follows the HUD colour you set in the game's `GraphicsConfigurationOverride.xml`, and is orange, the game's default, when there is none. Or choose `orange`, `blue`, `green`, `cyan` or `white`. The activity panel uses the same colour |
 | `position.anchor` | `bottom-left` | `top-left`, `top`, `top-right`, `left`, `right`, `bottom-left`, `bottom`, `bottom-right` |
 | `position.offsetX` / `offsetY` | `24` | Pixels from the screen edges |
 | `position.display` | `primary` | `primary` or a monitor number (0, 1, …) |

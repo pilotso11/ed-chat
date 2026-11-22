@@ -36,6 +36,7 @@ export function HudPanel() {
   }, []);
   const style = v
     ? ({
+        ...v.look,
         "--font": `${v.fontSize}px`,
         "--bg-alpha": v.backgroundOpacity,
         "--min-width": `${Math.round(v.width * (v.fontSize / 15))}px`,

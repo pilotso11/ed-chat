@@ -11,6 +11,7 @@ import {
 } from "./controller.js";
 import { chipKeyLabel, keyLabel, type KeyRow } from "./hotkeys.js";
 import type { Settings } from "./settings.js";
+import { lookVars, type Matrix } from "./theme.js";
 
 export interface Notice {
   text: string;
@@ -62,6 +63,8 @@ export interface ViewModel {
     growsUp: boolean;
     align: "start" | "center" | "end";
     copyChipKey: string;
+    /** CSS variables for the colours and fonts. */
+    look: Record<string, string>;
   };
 }
 
@@ -124,7 +127,12 @@ export function pickNotice(notices: Record<string, string>): Notice | null {
   return { text, command, more: keys.length - 1 };
 }
 
-export function buildView(s: OverlayState, settings: Settings): ViewModel {
+export function buildView(
+  s: OverlayState,
+  settings: Settings,
+  /** The game's HUD colour, for the game theme. */
+  gameMatrix: Matrix | null = null,
+): ViewModel {
   const open = s.chatOpen || s.historyOpen;
   // A refused chat or focus shows the strip for its notice's few seconds, also in icon mode:
   // the icon has no room for text, and the key must not look broken.
@@ -186,6 +194,7 @@ export function buildView(s: OverlayState, settings: Settings): ViewModel {
       growsUp: growsUp(settings.position.anchor),
       align: ALIGN[column(settings.position.anchor)],
       copyChipKey: chipKeyLabel(settings.hotkeys),
+      look: lookVars(settings.style, gameMatrix),
     },
   };
 }
