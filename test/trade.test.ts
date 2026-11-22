@@ -24,6 +24,7 @@ import {
   tradeJournal,
   NO_MISSIONS,
 } from "../src/core/hud/trade.js";
+import { commodityKey } from "../src/core/hud/mining.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
 
 const NOW = Date.UTC(2026, 10, 22, 12, 0, 0);
@@ -218,14 +219,43 @@ describe("trade profit", () => {
     expect(tradeTotals(left, NOW).profit).toBe(500);
   });
 
+  it("replays once for the mode and the panel, whatever else they pass with the missions", () => {
+    const events = [buy(3, "Gold", 1, 1)];
+    const missions = { missionCargo: [{ id: 1, commodity: "Tea" }], wanted: [] };
+    const first = tradeJournal(events, missions);
+    // journalMode passes its whole TradeNow, which holds the same missions.
+    const mode = { ...missions, active: true, aboard: true, stops: [] };
+    expect(tradeJournal(events, mode as MissionsNow)).toBe(first);
+    expect(tradeJournal(events, { ...missions, wanted: [{ id: 2, commodity: "Tea" }] })).not.toBe(
+      first,
+    );
+  });
+
+  it("takes cargo moved by its internal name out of the cost", () => {
+    const bought = at(40, "MarketBuy", {
+      Type: "agritreatment",
+      Type_Localised: "Agronomic Treatment",
+      Count: 10,
+      BuyPrice: 100,
+      TotalCost: 1_000,
+    });
+    const moved = at(30, "CargoTransfer", {
+      Transfers: [{ Type: "agritreatment", Count: 4, Direction: "tocarrier" }],
+    });
+    const j = tradeJournal([bought, moved]);
+    expect(j.tons.get(commodityKey("Agronomic Treatment"))).toBe(6);
+    expect(j.tons.get("agritreatment")).toBe(6);
+  });
+
   it("has no rate before five minutes", () => {
     const t = tradeTotals([buy(3, "Gold", 1, 1), sell(2, "Gold", 1, 3)], NOW);
     expect(t.profit).toBe(2);
     expect(t.rate.session).toBeNull();
   });
 
-  it("uses the sale's average price paid for tons bought before the journal, and skips mined cargo", () => {
+  it("uses the sale's average price paid only for more of a traded commodity, and skips the rest", () => {
     const events = [
+      // Never bought as trade: a mission's reward, stolen or mined, whatever the game says was paid.
       sell(30, "Gold", 10, 30_000, { AvgPricePaid: 10_000 }),
       sell(29, "Platinum", 10, 200_000, { AvgPricePaid: 0 }),
       // Partly known: 5 t bought here at 1,000, 5 t at the game's 2,000.
@@ -237,8 +267,10 @@ describe("trade profit", () => {
       at(25, "MarketBuy", { Type: "tea", Count: 0 }),
     ];
     const t = tradeTotals(events, NOW);
-    expect(t.profit).toBe(200_000 + 10_000 + 5_000);
-    expect(t.trades).toBe(3);
+    expect(t.profit).toBe(10_000 + 5_000);
+    // The silver buy and its sale.
+    expect(t.trades).toBe(2);
+    expect(tradeJournal(events).sales.size).toBe(1);
   });
 
   it("starts again each game session, keeps the cost over a relog, and loses it on death", () => {
@@ -461,13 +493,17 @@ describe("buys that are trade", () => {
   });
 
   it("leaves out buys while supplying a colonisation depot", () => {
-    const depot = at(60, "ColonisationConstructionDepot", { ConstructionComplete: false });
-    expect(trade([depot, tea(20)])).toEqual([]);
-    expect(trade([at(60, "ColonisationContribution", {}), tea(20)])).toEqual([]);
+    const gave = at(60, "ColonisationContribution", {});
+    expect(trade([gave, tea(20)])).toEqual([]);
+    // Opening the depot screen is not supplying it.
+    const looked = at(60, "ColonisationConstructionDepot", { ConstructionComplete: false });
+    expect(trade([looked, tea(20)])).toHaveLength(1);
     // Long ago, or finished.
     expect(trade([at(200, "ColonisationContribution", {}), tea(20)])).toHaveLength(1);
     const built = at(30, "ColonisationConstructionDepot", { ConstructionComplete: true });
-    expect(trade([depot, built, tea(20)])).toHaveLength(1);
+    expect(trade([gave, built, tea(20)])).toHaveLength(1);
+    const failed = at(30, "ColonisationConstructionDepot", { ConstructionFailed: true });
+    expect(trade([gave, failed, tea(20)])).toHaveLength(1);
   });
 });
 
@@ -686,6 +722,56 @@ describe("the trade panel", () => {
     missions: [] as Mission[],
     now: NOW,
   };
+
+  it("counts the stop among all the plan's stops in visit order", () => {
+    const fuel = {
+      system: "F",
+      station: "f",
+      purpose: "fuel",
+      kind: "fuel" as const,
+      status: "done" as const,
+    };
+    const a = stop("A", "a", []);
+    const b = stop("B", "b", []);
+    // Trade, fuel, trade: at the second trade stop, after the fuel stop.
+    const mixed = route([{ ...a, status: "done" }, fuel, b]);
+    expect(tradePanel({ ...base, plan: mixed })!.right).toBe("stop 3/3");
+    // A saved route visits B first: A, done last in the stops, is the second stop.
+    const reordered = route([a, b], {
+      route: {
+        computed_at: new Date(NOW).toISOString(),
+        from: "X",
+        stops: ["B", "A"],
+        total_min: 1,
+        plotted: false,
+        stop_indexes: [[1], [0]],
+      },
+    });
+    const done = { ...reordered, stops: [a, { ...b, status: "done" as const }] };
+    expect(tradePanel({ ...base, plan: done })!.right).toBe("stop 2/2");
+    expect(tradePanel({ ...base, plan: reordered })!.right).toBe("stop 1/2");
+  });
+
+  it("shows the jumps left on the row of the stop the plotted route leads to", () => {
+    const nav = { systems: ["Here", "Mid", "Wolf 397"] };
+    const location = where("Here", null);
+    const p = tradePanel({ ...base, plan: loop({ lap: 2 }), nav, location })!;
+    expect(p.rows.find((r) => r.text.startsWith("▸"))!.right).toBe(
+      "SELL 720 t Gold · BUY 720 t Silver · 2 jumps",
+    );
+    expect(p.rows[0]!.right).toBeUndefined();
+    // A route to the current stop: on its row.
+    const toCur = { systems: ["Here", "Kremainn"] };
+    const q = tradePanel({ ...base, nav: toCur, location })!;
+    expect(q.rows[0]!.right).toBe("BUY 720 t Gold · 1 jump");
+    const many = tradePanel({ ...base, plan: loop({ lap: 2 }), nav: toCur, location })!;
+    expect(many.rows[0]!.right).toBe("1 jump");
+    const pass = route([stop("A", "a", []), stop("B", "b", [])]);
+    expect(
+      tradePanel({ ...base, plan: pass, nav: { systems: ["Here", "A"] }, location })!.rows[0]!
+        .right,
+    ).toBe("pass through · 1 jump");
+  });
 
   it("shows the current stop's buy, the hold, and the next stop", () => {
     const p = tradePanel(base)!;
@@ -1109,6 +1195,16 @@ describe("trade in the panel", () => {
     // No route rows: the trade panel already shows the stops and how far through the plan.
     expect(v.route).toBeNull();
     expect(v.panel?.right).toBe("stop 1/2 · lap 1");
+    // A plan with a fuel stop keeps the route rows, which show it.
+    const fuel = { system: "Sol", purpose: "fuel", kind: "fuel" as const, status: "todo" as const };
+    const mixed = loop({ stops: [...loop().stops, fuel] });
+    const w = buildHud(input({ activity: note, plan: mixed }), null);
+    expect(w.panel?.title).toBe("TRADE");
+    expect(w.route?.[0]).toMatchObject({ kind: "current" });
+    // The jumps on the plotted route reach the panel.
+    const nav = { systems: ["Kremainn", "Mid", "Wolf 397"] };
+    const x = buildHud(input({ activity: note, plan: loop({ lap: 2 }), nav }), null);
+    expect(x.panel?.rows.find((r) => r.text.startsWith("▸"))?.right).toMatch(/· 2 jumps$/);
   });
 
   it("does not follow a trading note with no trade stop to do, or with the mode off", () => {

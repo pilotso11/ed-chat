@@ -114,8 +114,10 @@ it also shows the market's price against the plan, amber when it is more than 5%
 worse. The next stop and its action follow. The header says how far through the
 plan you are (stop 2/4) and, for a loop, its lap; on the first lap there is nothing
 to sell at the first stop, so only its buy shows. When the plan's prices are more
-than a day old, the header says how old. The route rows that other plans show below
-are left out, since the panel already lists the stops.
+than a day old, the header says how old. With a plotted route, the jumps left show
+on the row of the stop it leads to. For a plan of only trade stops, the route rows
+that other plans show below are left out, since the panel already lists the stops;
+a plan with a fuel or mission stop keeps them.
 
 The Session line shows profit an hour: each sale less what its tons
 cost, counted as for exploration, with the last half hour in brackets. Traded cargo

@@ -11,10 +11,11 @@ import { isRun } from "./passenger.js";
 import {
   credits,
   currentStop,
-  hourly,
+  jumpsLeft,
   rateText,
   timeLeft,
   type HudRow,
+  type NavRoute,
   type PanelView,
   type Tone,
 } from "./panels.js";
@@ -214,9 +215,11 @@ export function tradeBuys(events: JournalEvent[], now: MissionsNow): Set<Journal
         pending.delete(m);
         break;
       case "ColonisationContribution":
+        colony = last;
+        break;
       case "ColonisationConstructionDepot":
-        colony =
-          e.ConstructionComplete === true || e.ConstructionFailed === true ? -Infinity : last;
+        // Written whenever the depot screen opens, so it only ends the window: once built.
+        if (e.ConstructionComplete === true || e.ConstructionFailed === true) colony = -Infinity;
         break;
       case "MarketBuy": {
         if (!tradeBuy(e)) break;
@@ -256,7 +259,8 @@ const journals = new WeakMap<
  * every render, more often than the journal grows.
  */
 export function tradeJournal(events: JournalEvent[], now: MissionsNow = NO_MISSIONS): TradeJournal {
-  const key = JSON.stringify(now);
+  // Only what tradeBuys() reads: callers pass MissionsNow inside larger objects.
+  const key = JSON.stringify([now.missionCargo, now.wanted]);
   const kept = journals.get(events);
   if (kept && kept.length === events.length && kept.now === key) return kept.journal;
   const journal = replay(events, tradeBuys(events, now));
@@ -266,17 +270,18 @@ export function tradeJournal(events: JournalEvent[], now: MissionsNow = NO_MISSI
 
 /**
  * The cost of traded cargo and the session's profit. A sale's tons cost the average paid for that
- * commodity in the trade buys before it (kept over a relog, since the cargo is); tons bought before
- * the journal's window cost the sale's AvgPricePaid. Tons with no cost, such as mined cargo or a
- * mission's reward, are not trade and count nothing. Tons that leave without a sale (given to a
+ * commodity in the trade buys before it (kept over a relog, since the cargo is); more tons of a
+ * traded commodity, bought before the journal's window, cost the sale's AvgPricePaid. A sale with
+ * no trade-bought tons, such as mined cargo or a mission's reward, is not trade and counts nothing. Tons that leave without a sale (given to a
  * depot or a mission, moved to the carrier, ejected) leave the cost too. The clock runs from the
  * session's first trade, as the exploration rate's does from its first scan.
  */
 function replay(events: JournalEvent[], buys: Set<JournalEvent>): TradeJournal {
-  // Tons bought and what they cost, by commodity.
+  // Tons bought and what they cost, by commodity: under each of its names (internal and the
+  // game's), since CargoTransfer and EjectCargo give only the internal one.
   const basis = new Map<string, { tons: number; cost: number }>();
-  const take = (key: string, count: number) => {
-    const b = basis.get(key);
+  const take = (keys: string[], count: number) => {
+    const b = keys.map((k) => basis.get(k)).find(Boolean);
     const n = Math.min(count, b?.tons ?? 0);
     if (!b || n <= 0) return { n: 0, cost: 0 };
     const cost = (b.cost / b.tons) * n;
@@ -306,11 +311,11 @@ function replay(events: JournalEvent[], buys: Set<JournalEvent>): TradeJournal {
       case "MarketBuy": {
         const count = num(e.Count) ?? 0;
         if (count <= 0 || !buys.has(e)) break;
-        const key = commodityOf(e);
-        const b = basis.get(key) ?? { tons: 0, cost: 0 };
+        const keys = keysOf(e.Type, e.Type_Localised);
+        const b = keys.map((k) => basis.get(k)).find(Boolean) ?? { tons: 0, cost: 0 };
         b.tons += count;
         b.cost += num(e.TotalCost) ?? count * (num(e.BuyPrice) ?? 0);
-        basis.set(key, b);
+        for (const k of keys) basis.set(k, b);
         trades++;
         if (!Number.isNaN(at)) clock.start(at);
         break;
@@ -319,16 +324,14 @@ function replay(events: JournalEvent[], buys: Set<JournalEvent>): TradeJournal {
         const count = num(e.Count) ?? 0;
         if (count <= 0) break;
         const price = (num(e.TotalSale) ?? count * (num(e.SellPrice) ?? 0)) / count;
-        const known = take(commodityOf(e), count);
+        const known = take(keysOf(e.Type, e.Type_Localised), count);
+        // Only a sale of cargo bought as trade is a trade: not a mission's reward, stolen goods or
+        // mined ore, whatever the game says was paid for them.
+        if (!known.n) break;
         let profit = price * known.n - known.cost;
-        let costed = known.n;
+        // The rest of a traded commodity was bought before the journal's window: the game's price.
         const paid = num(e.AvgPricePaid) ?? 0;
-        if (count > known.n && paid > 0) {
-          profit += (price - paid) * (count - known.n);
-          costed += count - known.n;
-        }
-        // Only a sale of cargo that was bought is a trade.
-        if (!costed) break;
+        if (count > known.n && paid > 0) profit += (price - paid) * (count - known.n);
         sales.add(e);
         trades++;
         if (!Number.isNaN(at)) {
@@ -340,20 +343,20 @@ function replay(events: JournalEvent[], buys: Set<JournalEvent>): TradeJournal {
       // Cargo that leaves without a sale.
       case "ColonisationContribution":
         for (const c of objs(e.Contributions))
-          take(keyOf(c.Name, c.Name_Localised), num(c.Amount) ?? 0);
+          take(keysOf(c.Name, c.Name_Localised), num(c.Amount) ?? 0);
         break;
       case "MissionCompleted":
         // A source or collect mission takes its goods; a delivery's were the mission's own.
         if (typeof e.DestinationSystem !== "string")
-          take(keyOf(e.Commodity, e.Commodity_Localised), num(e.Count) ?? 0);
+          take(keysOf(e.Commodity, e.Commodity_Localised), num(e.Count) ?? 0);
         break;
       case "CargoTransfer":
         for (const t of objs(e.Transfers)) {
-          if (t.Direction !== "toship") take(keyOf(t.Type, t.Type_Localised), num(t.Count) ?? 0);
+          if (t.Direction !== "toship") take(keysOf(t.Type, t.Type_Localised), num(t.Count) ?? 0);
         }
         break;
       case "EjectCargo":
-        if (num(e.MissionID) === null) take(commodityOf(e), num(e.Count) ?? 0);
+        if (num(e.MissionID) === null) take(keysOf(e.Type, e.Type_Localised), num(e.Count) ?? 0);
         break;
     }
   }
@@ -396,6 +399,10 @@ export function tradeTotals(
  */
 export const stopAt = (s: { system: string; station?: string }, system: string, station: string) =>
   same(s.system, system) && (!s.station || same(s.station, station));
+
+/** A plan with a trade stop: the trade panel shows it. */
+export const isTradePlan = (plan: Plan | null | undefined): plan is Plan =>
+  !!plan && plan.stops.some((s) => s.kind === "trade");
 
 /** The trade stops still to do, as plan.stops indexes in visit order: the current one first. */
 export function tradeTodo(plan: Plan | null | undefined): number[] {
@@ -596,8 +603,10 @@ export function tradePanel(input: {
   now: number;
   /** The hold's mission cargo and the goods missions ask for: see tradeBuys(). */
   missionsNow?: MissionsNow;
+  /** The plotted route, for the jumps left to the stop it leads to. */
+  nav?: NavRoute | null;
 }): PanelView | null {
-  const plan = input.plan?.stops.some((s) => s.kind === "trade") ? input.plan : null;
+  const plan = isTradePlan(input.plan) ? input.plan : null;
   const todo = tradeTodo(plan);
   const hold = { cargo: input.cargo, capacity: input.capacity };
   const journal = tradeJournal(input.events, input.missionsNow);
@@ -606,6 +615,19 @@ export function tradePanel(input: {
   const rows: HudRow[] = [];
   if (plan && todo.length) {
     const cur = plan.stops[todo[0]!]!;
+    // The jumps left on the plotted route, on the row of the stop it leads to: the next stop
+    // when the route ends in its system, else the current one, as the route rows show them.
+    const nav = input.nav ?? null;
+    const jumps = jumpsLeft(nav, input.location.system);
+    const jumpText = jumps !== null ? `${jumps} jump${jumps === 1 ? "" : "s"}` : null;
+    const nextStop = todo[1] !== undefined ? plan.stops[todo[1]]! : null;
+    const toNext =
+      jumpText !== null &&
+      nextStop !== null &&
+      same(nav!.systems.at(-1), nextStop.system) &&
+      !same(nextStop.system, cur.system);
+    const withJumps = (right: string | undefined, on: boolean) =>
+      on && jumpText ? [right, jumpText].filter(Boolean).join(" · ") : right;
     const cargo = stopCargo(plan, todo[0]!);
     const here = atStop(cur, dock) ? dock : null;
     // The market only of this station: Market.json is of the last market screen opened.
@@ -615,20 +637,21 @@ export function tradePanel(input: {
       status(c, hold, market, here !== null && actionDone(c, hold, input.events, here));
     if (cargo.length === 1) {
       const s = line(cargo[0]!);
-      rows.push({ text: `● ${place(cur)}`, right: actionText(cargo[0]!) });
+      rows.push({ text: `● ${place(cur)}`, right: withJumps(actionText(cargo[0]!), !toNext) });
       rows.push({ text: `  ${s.text}`, tone: s.tone });
     } else if (cargo.length) {
-      rows.push({ text: `● ${place(cur)}` });
+      const right = withJumps(undefined, !toNext);
+      rows.push(right ? { text: `● ${place(cur)}`, right } : { text: `● ${place(cur)}` });
       for (const c of cargo) {
         const s = line(c);
         rows.push({ text: `  ${actionText(c)}`, right: s.text, tone: s.tone });
       }
-    } else rows.push({ text: `● ${place(cur)}`, right: "pass through" });
+    } else rows.push({ text: `● ${place(cur)}`, right: withJumps("pass through", !toNext) });
     const next = todo[1];
     if (next !== undefined) {
       rows.push({
         text: `▸ ${place(plan.stops[next]!)}`,
-        right: actionsText(stopCargo(plan, next)),
+        right: withJumps(actionsText(stopCargo(plan, next)), toNext),
         tone: "dim",
       });
     }
@@ -664,10 +687,12 @@ export function tradePanel(input: {
     const n = `${runs.length} mission${runs.length === 1 ? "" : "s"}`;
     footer.push(pax ? `Passengers: ${pax} aboard · ${n}` : `Deliveries: ${n}`);
   }
-  // How far through the plan: the current stop's place among all its stops, as the plan's own
-  // count says ("3 stops"). The rate is on the Session line.
-  const stops = plan ? plan.stops.length : 0;
-  const at = todo.length ? todo[0]! + 1 : null;
+  // How far through the plan: the current stop's place among all its stops in visit order (which
+  // follows a saved route), as the plan's own count says ("3 stops"). The rate is on the Session
+  // line.
+  const order = plan ? visitOrder(plan) : [];
+  const stops = order.length;
+  const at = todo.length ? order.indexOf(todo[0]!) + 1 : null;
   return {
     mode: "trade",
     title: "TRADE",

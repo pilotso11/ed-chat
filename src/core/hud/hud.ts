@@ -15,6 +15,7 @@ import { drops, passengerPanel } from "./passenger.js";
 import type { SellLookup, SellQuery } from "./sell.js";
 import { bookmarkRows } from "./bookmarks.js";
 import {
+  isTradePlan,
   missionsNow,
   NO_MISSIONS,
   tradeCargo,
@@ -184,6 +185,7 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
       missions: j.missions,
       now: input.now,
       missionsNow: missionsNow(j),
+      nav: input.nav,
     });
   }
   const system = j.location.system;
@@ -295,8 +297,12 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
       ? { ...panel, rows: [...panel.rows, ...marks] }
       : { mode: "bookmarks", title: "BOOKMARKS", rows: marks, footer: [] };
   }
-  // A trade plan's panel already shows its stops and how far through it you are.
-  const tradePlan = panel?.mode === "trade" && input.plan?.stops.some((x) => x.kind === "trade");
+  // A plan of only trade stops: the trade panel already shows them, the jumps left and how far
+  // through it you are. A fuel or mission stop still shows in the route rows.
+  const tradePlan =
+    panel?.mode === "trade" &&
+    isTradePlan(input.plan) &&
+    input.plan.stops.every((x) => x.kind === "trade");
   const route =
     s.modes.route && !tradePlan
       ? routeRows({
