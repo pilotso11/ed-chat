@@ -475,6 +475,10 @@ describe("exploration totals", () => {
     const jumps = [timed(0, ev("LoadGame"))];
     for (let n = 0; n <= 40; n += 5) jumps.push(timed(n, ev("FSDJump", { SystemAddress: 1 })));
     expect(explorationTotals(jumps, min(100)).rate.recent).toBeNull();
+    // Coming back closes the gap with a jump at 100: the window still has none of the time away,
+    // only the 5 minutes of work after it.
+    const back = [...jumps, timed(100, ev("FSDJump", { SystemAddress: 1 })), analyse(105)];
+    expect(explorationTotals(back, min(105)).rate.recent).toBeCloseTo(species * 12);
     // Dying stops the planet's clock: an hour later it still has its 7 minutes.
     const died = explorationTotals([...events.slice(0, 4), timed(12, ev("Died"))], min(72));
     expect(died.planetRate.get("1|3")).toBeCloseTo(((mapped - scanned + species) * 60) / 7);

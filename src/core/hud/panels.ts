@@ -207,8 +207,11 @@ const IDLE_MS = 10 * 60_000;
  */
 class ActiveClock {
   private last: number | null = null;
-  /** Each counted stretch, by when it ended, for the time within a window. */
-  private readonly spans: { at: number; ms: number }[] = [];
+  /**
+   * Each counted stretch, from its start: a gap counts as its first IDLE_MS, so the time away
+   * after it falls outside any window that starts later.
+   */
+  private readonly spans: { from: number; ms: number }[] = [];
 
   start(at: number): void {
     if (this.last === null) this.last = at;
@@ -217,7 +220,7 @@ class ActiveClock {
   tick(at: number): void {
     if (this.last === null) return;
     const ms = Math.min(Math.max(0, at - this.last), IDLE_MS);
-    if (ms) this.spans.push({ at, ms });
+    if (ms) this.spans.push({ from: this.last, ms });
     this.last = at;
   }
 
@@ -231,17 +234,15 @@ class ActiveClock {
     this.last = null;
   }
 
-  /** The time counted, until now; with `since`, only the stretches that ended after it. */
+  /**
+   * The time counted until now, with the time since the last event as one more stretch; with
+   * `since`, only the part of each stretch after it.
+   */
   total(now: number, since = -Infinity): number {
-    // Since the last event, up to IDLE_MS, and only the part after `since`.
+    const after = (from: number, ms: number) => Math.max(0, from + ms - Math.max(from, since));
     const tail =
-      this.last !== null
-        ? Math.max(0, Math.min(now, this.last + IDLE_MS) - Math.max(this.last, since))
-        : 0;
-    // A stretch that began before `since` counts from it.
-    return this.spans
-      .filter((s) => s.at > since)
-      .reduce((n, s) => n + Math.min(s.ms, s.at - since), tail);
+      this.last !== null ? after(this.last, Math.min(Math.max(0, now - this.last), IDLE_MS)) : 0;
+    return this.spans.reduce((n, s) => n + after(s.from, s.ms), tail);
   }
 }
 
@@ -255,7 +256,7 @@ const perHour = (credits: number, ms: number) =>
 const newGame = (e: JournalEvent) =>
   e.event === "Commander" ||
   e.event === "LoadGame" ||
-  (e.event === "Fileheader" && !(typeof e.part === "number" && e.part > 1));
+  (e.event === "Fileheader" && !(Number(e.part) > 1));
 
 /** Events that start an exploring session's clock. */
 const EXPLORING = new Set([
