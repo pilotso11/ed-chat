@@ -79,10 +79,22 @@ From real journals (2021 to November 2026). Field names are exact.
 - **`ModuleStore`**: `Slot`, `StoredItem`, `Ship`, `ShipID`, `Hot`, and `EngineerModifications`,
   `Level`, `Quality` for an engineered module. **`ModuleRetrieve`**: `Slot`, `RetrievedItem`,
   the same engineering fields, and `SwapOutItem` when the slot was full.
+- **`MassModuleStore`**: `MarketID`, `Ship`, `ShipID`, `Items[]` with `Slot`, `Name`, `Hot`,
+  `EngineerModifications`, `Level`, `Quality`: several modules stored in one transaction.
+  **`ModuleBuyAndStore`**: `BuyItem`, `BuyPrice`, `MarketID`, `Ship`, `ShipID`: a module bought
+  straight into storage. Both are in Frontier's journal documentation; neither occurs in the
+  journals read for this spec, so their fields are as documented.
+- **`ShipyardRedeem`** (a ship redeemed, such as a pre-order): `ShipType`, `MarketID`, followed
+  by `ShipyardNew`. **`ShipyardTransfer`**: `ShipType`, `ShipID`, `System`, `ShipMarketID`,
+  `Distance`, `TransferPrice`, `TransferTime`, `MarketID` (the station it is coming to).
 - **`StoredModules`**: `MarketID`, `StationName`, `StarSystem`, `Items[]` with `Name`,
   `StorageSlot`, `StarSystem` and `MarketID` (where it is stored), `InTransit` while moving,
   `TransferCost`, `TransferTime` (seconds), `BuyPrice`, `Hot`, `EngineerModifications`,
-  `Level`, `Quality`. Written when the outfitting screen opens.
+  `Level`, `Quality`: every module in storage. In the journals read for this spec it was written
+  1,798 times: 1,188 beside an `Outfitting` event (the outfitting screen opened), 608 right after
+  a `ModuleStore`, `ModuleRetrieve`, `ModuleSellRemote` or `FetchRemoteModule`, and 2 at login.
+  Wherever it is written, the newest one is the whole store, and its items' own `StarSystem` and
+  `MarketID` say where each module is, whatever station the event names.
   **`FetchRemoteModule`**: `StorageSlot`, `StoredItem`, `ServerId`, `TransferCost`,
   `TransferTime`, `ShipID`.
 - **`EngineerCraft`**: `Slot`, `Module`, `Engineer`, `EngineerID`, `BlueprintName`, `BlueprintID`,
@@ -203,7 +215,7 @@ one marked done by hand (by Claude or a route key) takes none. The rest of the e
 
 **Writing once.** The panel writes an action's status once, keyed by kind:
 
-- **By event** (the purchases, moves and sales, `buy_ship`, `swap_ship`, `unlock_tech`,
+- **By event** (the purchases, moves and sales, `buy_ship`, `transfer_ship`, `swap_ship`, `unlock_tech`,
   `engineer`, `experimental`, `synthesis`, `buy_suit`, `buy_weapon`, `upgrade_suit`,
   `upgrade_weapon`): the key is the plan, the action and the event that did it.
 - **By sum** (`trade_material`, `trade_resource`, `buy_resource`): written once, when the
@@ -217,13 +229,14 @@ one marked done by hand (by Claude or a route key) takes none. The rest of the e
 
 | Kind | Example | Fields | Done when |
 |---|---|---|---|
-| `buy_module` | Buy FSD 5A | `module`, `slot`? | A `ModuleBuy` for the ship with that `BuyItem` (and `Slot`, if given) |
+| `buy_module` | Buy FSD 5A | `module`, `slot`? | A `ModuleBuy` for the ship with that `BuyItem` (and `Slot`, if given). With no `slot`, a `ModuleBuyAndStore` of it counts too: the module is then in storage, and a `retrieve_module` fits it |
 | `retrieve_module` | Retrieve stored Shield Booster (Heavy Duty G5) | `module`, `blueprint`?, `grade`? | A `ModuleRetrieve` for the ship with that `RetrievedItem` (and `EngineerModifications`, `Level` at least `grade`, if given) |
 | `fetch_module` | Transfer stored Power Plant 6A here (15 min) | `module`, `storage_slot`? | A `FetchRemoteModule` with that `StoredItem` (or `StorageSlot`). A `retrieve_module` follows at the same stop once it arrives |
-| `store_module` | Store Fuel Scoop 6A | `module` | A `ModuleStore` with that `StoredItem`, or a `ModuleBuy` or `ModuleRetrieve` that stored it as the old module (`StoredItem`, `SwapOutItem`) |
+| `store_module` | Store Fuel Scoop 6A | `module` | A `ModuleStore` with that `StoredItem`; a `MassModuleStore` item with that `Name` (each item counts for one action); or a `ModuleBuy` or `ModuleRetrieve` that stored it as the old module (`StoredItem`, `SwapOutItem`) |
 | `sell_module` | Sell AFM Unit 2A | `module` | A `ModuleSell` or `ModuleSellRemote` with that `SellItem`, or a `ModuleBuy` that sold it (`SellItem`) |
 | `move_module` | Move Shield Cell Bank to Slot05 | `module`, `slot` | A `ModuleSwap` with that item and `ToSlot` (or `FromSlot`, for the item moved the other way) |
-| `buy_ship` | Buy Python Mk II | `ship` | A `ShipyardBuy` with that `ShipType`; the next `ShipyardNew` gives the plan its `ship_id` |
+| `buy_ship` | Buy Python Mk II | `ship` | A `ShipyardBuy` (or `ShipyardRedeem`) with that `ShipType`; the next `ShipyardNew` gives the plan its `ship_id` |
+| `transfer_ship` | Transfer the Python here (40 min) | `ship_id` | A `ShipyardTransfer` of that `ShipID` |
 | `swap_ship` | Take out the Python | `ship_id` | A `ShipyardSwap` (or `ShipyardBuy` / `ShipyardNew`) to that ship |
 | `unlock_tech` | Unlock Guardian FSD Booster | `broker`, `item` | A `TechnologyBroker` whose `ItemsUnlocked` has that `Name` |
 
@@ -236,7 +249,8 @@ one marked done by hand (by Claude or a route key) takes none. The rest of the e
 | `experimental` | Apply Mass Manager to FSD | `slot`, `experimental` | An `EngineerCraft` for the ship and slot with `ApplyExperimentalEffect` (or `ExperimentalEffect`) of that key |
 
 An `engineer` action's `needs` is the materials for every grade it still has to roll at the
-plan's rolls per grade (`build.rolls_per_grade`), and `needs_by_grade` gives one roll's
+plan's rolls per grade (`build.rolls_per_grade`; 1, 2, 3, 4, 5 for grades 1 to 5 when
+missing, as `materials_plan` has it), and `needs_by_grade` gives one roll's
 materials for each grade. The game opens the next grade only when the current one is full
 (`Quality` 1), so what is left counts both:
 
@@ -273,9 +287,9 @@ early still counts: the journal shows it, and the stop has one less thing to do.
 | `upgrade_weapon` | Upgrade Karma AR-50 to G4 | `weapon_id`, `grade` | An `UpgradeWeapon` for that `SuitModuleID` with `Class` at least `grade` |
 | `modify_suit` | Apply Extra Ammo Capacity to Maverick | `suit_id`, `modification` | A loadout event (`SuitLoadout`, `SwitchSuitLoadout`, `CreateSuitLoadout`) for that `SuitID` whose `SuitMods` has it |
 | `modify_weapon` | Apply Faster Handling to Karma AR-50 | `weapon_id`, `modification` | A loadout event, or `LoadoutEquipModule`, whose weapon with that `SuitModuleID` has it in `WeaponMods` |
-| `trade_resource` | Trade for 4 Health Monitor (bartender) | `received`, `count` | `TradeMicroResources` with that `Received` add up to the count |
+| `trade_resource` | Trade for 4 Health Monitor (bartender) | `received` (material, count) | `TradeMicroResources` events whose `Received` is that material add up (by their `Count`) to `received.count` |
 | `buy_resource` | Buy 10 Mineral Survey (bartender) | `resource`, `count` | `BuyMicroResources` with it add up to the count |
-| `collect_resource` | Collect 3 Suit Schematic | `resource`, `count` (to hold) | The ship locker (`ShipLocker.json`, through ed-mcp's journal state) holds the count |
+| `collect_resource` | Collect 3 Suit Schematic | `resource`, `count` (to hold) | The ship locker and the backpack together (ed-mcp's journal state `locker` and `backpack`) hold the count |
 
 The game writes no event when an on-foot modification is applied. It shows in the next loadout
 event, written when the loadout is equipped or at the next login. Until then a modify action
@@ -330,6 +344,12 @@ Target: FSD G5 · PD G5 · shields Reinforced G5 · 8 boosters HD G5
   which the feed already polls: ed-mcp's journal `credits` changes only at `LoadGame`.
 - **The route rows** are not repeated below: the panel is the route. The galaxy map copy works as
   it does for every plan.
+- **The plan shown leads everything.** When the panel shows a plan that is not the note's (see
+  Two plans open), the route rows under other modes, the arrival copy and the `routeNext` /
+  `routePrev` keys all follow the plan shown, not the note's. The game note sent to Claude has
+  the panel's rows, so it is about the plan shown, and when that is not the note's plan it adds
+  one line: "Showing build plan <id> (docked at its stop); the activity note names <id>." Claude
+  then knows which plan the player is working on without the note being changed.
 
 ### At an outfitting station
 
@@ -350,8 +370,9 @@ BUILD · Python Mk II · stop 4/7                      5/20 actions
   "not sold here" in amber for a module it does not list, so the player can ask Claude for
   another station. The file is used only when its `MarketID` is the docked station's and its
   `timestamp` is after this docking; an older file, or one for another station, shows nothing. The panel does not search Spansh: `build_plan` chose the station.
-- A retrieve shows "here" when the newest `StoredModules` has the module at this station, else
-  the transfer time.
+- A retrieve shows "here" when `stored_modules` has the module with this station's `MarketID`,
+  else the transfer time. A `StoredModules` written at login counts like any other: each item
+  says where it is.
 
 ### At a material trader
 
@@ -459,9 +480,10 @@ The mode is `build`. `hud.modes.build` turns it off.
 |---|---|---|
 | The activity note's `kind` `engineering` with a build plan | build | every action is done or skipped, and the ship undocks |
 | Docking at a stop of the build plan | build | a newer activity |
-| An event that judges an action: `ModuleBuy`, `ModuleSell`, `ModuleSellRemote`, `ModuleSwap`, `ModuleStore`, `ModuleRetrieve`, `FetchRemoteModule`, `EngineerCraft`, `MaterialTrade`, `TechnologyBroker`, `ShipyardBuy`, `ShipyardNew`, `ShipyardSwap`, `Synthesis` | build | with a build plan for the ship: a newer activity. With no plan: undocking |
+| An event that matches an open action of the plan: `ModuleBuy`, `ModuleBuyAndStore`, `ModuleSell`, `ModuleSellRemote`, `ModuleSwap`, `ModuleStore`, `MassModuleStore`, `ModuleRetrieve`, `FetchRemoteModule`, `EngineerCraft`, `MaterialTrade`, `TechnologyBroker`, `ShipyardBuy`, `ShipyardRedeem`, `ShipyardNew`, `ShipyardTransfer`, `ShipyardSwap`, `Synthesis` | build | a newer activity |
 | `EngineerProgress` for one engineer (not the list at login) that unlocks the engineer of an open `unlock_engineer` action | build | as above |
-| On foot (later): `BuySuit`, `BuyWeapon`, `UpgradeSuit`, `UpgradeWeapon`, `TradeMicroResources`, `BuyMicroResources`; a `SwitchSuitLoadout`, `CreateSuitLoadout` or `LoadoutEquipModule` that completes an open modify action | build | as above |
+| On foot (later): a `BuySuit`, `BuyWeapon`, `UpgradeSuit`, `UpgradeWeapon`, `TradeMicroResources` or `BuyMicroResources` that matches an open action; a `SwitchSuitLoadout`, `CreateSuitLoadout` or `LoadoutEquipModule` that completes an open modify action | build | as above |
+| No build plan for the ship: a module event or `EngineerCraft` while docked (the visit view) | build | undocking |
 
 - **Ranking.** Massacre still wins while a stack is open. Otherwise the newest choice wins, as
   for every mode: a scan, a prospect or a trade after the last build event takes over, and
@@ -470,6 +492,12 @@ The mode is `build`. `hud.modes.build` turns it off.
   stop, dimmed, as now.
 - `noteMode("engineering")` gives `build`; the note kind exists already. A note of that kind
   whose plan has no stop actions shows the route rows only, as now.
+- **Only a matching event.** With a plan open, an event turns the mode on only when it matches an
+  open action of the plan (the same match the judge uses), not because of its kind. Players
+  synthesise ammunition, chaff and FSD injections and trade materials all the time: a
+  `Synthesis` or `MaterialTrade` the plan does not ask for changes nothing. With no plan,
+  `Synthesis` and `MaterialTrade` never turn the visit view on; only module events and
+  `EngineerCraft` while docked do.
 - `MaterialCollected` and `Materials` change the counts but never turn the mode on: collecting
   happens during every other activity. Nor do the events written at every login
   (`EngineerProgress` with its list, `SuitLoadout`, `Loadout`), and a `ShipyardSwap` turns it on
@@ -579,6 +607,7 @@ As `TradeStopFinisher` does, after each poll (`BuildFinisher`, in `src/core/hud/
     loadout_id: z.number().int().optional(), // on foot: LoadoutID
     started_at: z.string().optional(),       // actions count from journal events after this
     summary: z.string().optional(),          // one line of the target
+    // Rolls for grades 1-5, for the needs and the rolls left; [1, 2, 3, 4, 5] when missing.
     rolls_per_grade: z.array(z.number().int().min(0)).length(5).optional(),
   }).optional(),
   ```
@@ -600,7 +629,7 @@ ship for an upgrade) and the ship now (the journal `Loadout`, or CAPI), it write
    from the grade fitted now to the target, and experimentals. With `scope: "upgrade"`, only the
    slots asked for.
 2. **Needs:** for each engineer action, the materials per grade from the catalog at the rolls per
-   grade (default 1, 2, 3, 4, 5); for each experimental, its materials; for each purchase, the
+   grade (an argument, default 1, 2, 3, 4, 5, saved as `build.rolls_per_grade`); for each experimental, its materials; for each purchase, the
    price from Spansh.
 3. **Trades and collecting:** what the actions need beyond the inventory, as `materials_plan`
    works it out: trades at the nearest trader of each type (`trade_material` actions at a
@@ -624,13 +653,18 @@ stops and checks the needs against the ship locker.
 - Journal state's `ship` gains `id` (the `ShipID` of the newest `Loadout`, `ShipyardSwap` or
   `ShipyardNew`); it has `name` and `ident` already. So Claude can write `build.ship_id` before
   `build_plan` exists, and the panel can name the ship.
-- `KEPT_EVENTS` gains `StoredModules`, `ShipyardBuy`, `ShipyardNew`, `ModuleStore`,
-  `ModuleRetrieve`, `FetchRemoteModule`, `ModuleSellRemote` (for `build_plan`'s stored
-  modules). Journal state gains `stored_modules`.
+- `KEPT_EVENTS` gains `StoredModules`, `ShipyardBuy`, `ShipyardNew`, `ShipyardRedeem`,
+  `ShipyardTransfer`, `ModuleStore`, `MassModuleStore`, `ModuleBuyAndStore`, `ModuleRetrieve`,
+  `FetchRemoteModule`, `ModuleSellRemote` (for `build_plan`'s stored modules). Journal state
+  gains `stored_modules`: the newest `StoredModules`, wherever it was written (at login, on
+  opening outfitting, or after a storage change), with the store, retrieve, sale and transfer
+  events after it applied, until the next one replaces it.
 - Later, on foot: `SuitLoadout`, `SwitchSuitLoadout`, `CreateSuitLoadout`, `LoadoutEquipModule`,
   `BuySuit`, `BuyWeapon`, `UpgradeSuit`, `UpgradeWeapon`, `ShipLocker`; journal state gains
-  `suits` (each suit and weapon seen, with grade and mods) and `locker` (from `ShipLocker.json`,
-  as `Cargo.json` is read now).
+  `suits` (each suit and weapon seen, with grade and mods), `locker` (from `ShipLocker.json`,
+  as `Cargo.json` is read now) and `backpack` (from `Backpack.json`, kept up to date between
+  writes by `BackpackChange`'s `Added` and `Removed`). `Backpack` and `BackpackChange` are kept
+  too.
 - Library exports (`ed-mcp/journal`): `normaliseModule()` for the symbol forms, and
   `planTrades` so the panel can say a trade is still possible from the inventory now.
 
@@ -653,8 +687,9 @@ for on foot. ED Chat pins each.
   action to do, or a visit to show) as `runActive` is for passengers. `noteMode("engineering")`
   gives `build`.
 - **`HUD_EVENTS`** gains `ModuleBuy`, `ModuleSell`, `ModuleSellRemote`, `ModuleSwap`,
-  `ModuleStore`, `ModuleRetrieve`, `FetchRemoteModule`, `StoredModules`, `ShipyardBuy`,
-  `ShipyardNew`, `Outfitting`, and lists those ed-mcp keeps already (`EngineerCraft`,
+  `ModuleStore`, `MassModuleStore`, `ModuleBuyAndStore`, `ModuleRetrieve`, `FetchRemoteModule`,
+  `StoredModules`, `ShipyardBuy`, `ShipyardRedeem`, `ShipyardNew`, `ShipyardTransfer`,
+  `Outfitting`, and lists those ed-mcp keeps already (`EngineerCraft`,
   `MaterialTrade`, `Materials`, `EngineerProgress`, `TechnologyBroker`, `Synthesis`,
   `ShipyardSwap`, `Loadout`), as trade's `TRADE_EVENTS` does, with a test that the reader keeps
   every one.
@@ -663,7 +698,7 @@ for on foot. ED Chat pins each.
   `src/main/index.ts` beside `TradeStopFinisher`.
 - **Feed:** `Outfitting.json` while docked at an outfitting stop, used only for that station and
   this visit. `parseShipStatus()` gains `balance` from `Status.json`'s `Balance`, for the credits
-  held. The ship locker comes from ed-mcp's journal state.
+  held. The ship locker and the backpack come from ed-mcp's journal state (on-foot phase).
 - **Game note:** the panel's rows go to Claude with each message, so "what's next on the Python?"
   needs no tool call.
 - **Docs:** a Build section in `docs/activity-panel.md`; the mode in `docs/settings.md`.
@@ -673,7 +708,17 @@ for on foot. ED Chat pins each.
   swap between two ships with plans; an action done at a later stop first; a done action no
   longer fitted; eight identical buys needing eight events; a trade shared across two actions;
   a stop reopened with `routePrev` that stays open; a stop with no actions; a partial roll's
-  rolls left.
+  rolls left; a `MassModuleStore` filling two store actions.
+- **Mode tests,** as event sequences and the mode expected: a matching module event, docking at a
+  build stop and the note each turn it on; a `Synthesis` or `MaterialTrade` the plan does not ask
+  for, the login events and a jump do not; massacre wins while a stack is open and the build
+  comes back after; a scan or a prospect after the last build event takes over, and docking at
+  the next build stop brings it back; the visit view ends on undocking; "Build complete" ends on
+  undocking; two plans open, docked at a stop of the one the note does not name, with the route
+  rows and the game note following the plan shown.
+- **Gather stop tests:** a collect stop done when the inventory reaches the count (from
+  collecting and from a trade), not reopened when the materials are spent, and its "collect at
+  stop N" pointer on the engineer action short of the material.
 
 ## Order of work
 
@@ -689,7 +734,7 @@ for on foot. ED Chat pins each.
 3. **ed-mcp: `build_plan`.** The diff, needs, trades, engineers and route, `save_to_plan`.
    Tested against SLEF from Coriolis and EDSY and real `Loadout` events. Release.
 4. **ED Chat: the no-plan outfitting visit.** Needs no ed-mcp change; can go at any point.
-5. **ed-mcp: on foot.** The on-foot action kinds' journal state (`suits`, `locker`), kept
+5. **ed-mcp: on foot.** The on-foot action kinds' journal state (`suits`, `locker`, `backpack`), kept
    events, `build_plan` for a suit loadout with needs given by Claude. Release.
 6. **ED Chat: on-foot actions.** Their judges, the choice between two open plans, "equip to check".
 
@@ -699,7 +744,7 @@ Each is its own PR.
 
 - `EngineerCraft` has no `ShipID`; the ship is the one flown at the time. A remote workshop
   craft is always for the ship flown, so this holds.
-- The rolls left are an estimate from the plan's rolls per grade and the quality reached; a lucky
+- The rolls left are an estimate from `build.rolls_per_grade` and the quality reached; a lucky
   roll finishes sooner.
 - A stop whose last action was done while ED Chat was not running is not marked done on the next
   start (the first poll marks nothing); `routeNext` marks it.
