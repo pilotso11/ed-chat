@@ -389,6 +389,14 @@ describe("exploration totals", () => {
       timed(6, ev("SAAScanComplete", { SystemAddress: 1, BodyID: 1 })),
     ];
     expect(explorationTotals(soldFirst, min(10)).rate.session!).toBeCloseTo(mappedWorth * 6);
+    // After dying, a map with no new scan earns nothing: the scan was lost with the data.
+    const diedThenMap = [
+      timed(0, ev("LoadGame")),
+      timed(0, elw("A", 1)),
+      timed(1, ev("Died")),
+      timed(2, ev("SAAScanComplete", { SystemAddress: 1, BodyID: 1 })),
+    ];
+    expect(explorationTotals(diedThenMap, min(10)).rate.session!).toBeCloseTo(elwWorth * 6);
     // A sale does not take back what was earned.
     const sold = [...scans, timed(7, ev("SellExplorationData", { Systems: ["A"] }))];
     expect(explorationTotals(sold, min(10)).rate.session!).toBeCloseTo(once);

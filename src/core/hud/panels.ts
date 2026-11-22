@@ -492,6 +492,8 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
         // The data is lost, so scanning the bodies again earns again. What was earned stays: the
         // rate is of the work done, not of what is left to sell.
         worth.clear();
+        // A map needs a new scan first: the old one was lost too.
+        scanned.clear();
         if (!Number.isNaN(at)) stopPlanets(at);
         bio = 0;
         bioCount = 0;
