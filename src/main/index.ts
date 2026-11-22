@@ -811,6 +811,8 @@ async function main(): Promise<void> {
     } else {
       // The system and position read now: the last poll may be from before a jump.
       const [system, status] = await Promise.all([hudFeed.readSystem(), hudFeed.readStatus()]);
+      // Not knowing where the player is is not the same as being away from the body.
+      if (!status) return flash("bookmark", "ⓘ could not read where you are: try again", 3_000);
       const pick = bookmarksToClear({ plan, system, status });
       picked = pick.stops;
       const stops = picked.map((i) => plan.stops[i]!);
@@ -904,7 +906,12 @@ async function main(): Promise<void> {
         // marked done; found again in the plan as it is now (only while still to do).
         const plans = hudPlans;
         await queueBookmarks(async () => {
-          const ref = bookmarkRef(await plans.get(BOOKMARKS_PLAN), stop);
+          const now = await plans.get(BOOKMARKS_PLAN);
+          // This very bookmark, label too, still to do: not another in the same place.
+          const still = now.stops.some(
+            (s) => s.status === "todo" && sameBookmark(s, stop) && s.label === stop.label,
+          );
+          const ref = still ? bookmarkRef(now, stop) : null;
           if (!ref) return;
           await plans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
           flash("bookmark", `📍 done: ${stop.label ?? stop.purpose}`, 4_000);
@@ -1792,11 +1799,14 @@ async function main(): Promise<void> {
     );
   // Built when opened, so the chips and problems are current.
   function trayMenu(): Menu {
-    const here = bookmarksToClear({
-      plan: hudData?.bookmarks ?? null,
-      system: hudData?.journal?.location.system ?? null,
-      status: hudData?.status ?? null,
-    });
+    // With no position known, the item is left out rather than offering the whole system.
+    const here = hudData?.status
+      ? bookmarksToClear({
+          plan: hudData.bookmarks ?? null,
+          system: hudData.journal?.location.system ?? null,
+          status: hudData.status,
+        })
+      : { stops: [], whole: false };
     trayHere = here.stops.map((i) => hudData!.bookmarks!.stops[i]!);
     const items = trayItems({
       chips: withTargets(currentChips(state), chipStops),
