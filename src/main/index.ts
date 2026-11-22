@@ -852,6 +852,15 @@ async function main(): Promise<void> {
         plan = await plans.updateStop(BOOKMARKS_PLAN, ref, { status: "skipped" });
         cleared.push(stop);
       }
+    } catch (err) {
+      // Some were cleared before the failure: say so, not "not cleared".
+      if (!cleared.length) throw err;
+      const n = picked.length;
+      return flash(
+        "bookmark",
+        `⚠ cleared ${cleared.length} of ${n} bookmarks, then: ${message(err)}`,
+        5_000,
+      );
     } finally {
       // Shown at once, as for a new bookmark, with those cleared before any failed write.
       if (cleared.length) {
