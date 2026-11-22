@@ -168,18 +168,43 @@ function game() {
 const north = (m: number) => (m / RADIUS) * (180 / Math.PI);
 
 describe("events the panel asks the reader to keep", () => {
-  it("keeps Shutdown, which stops the exploration rate's clocks", async () => {
+  it("keeps every event the exploration rate reads", async () => {
+    // explorationTotals times the session and each planet with these: a reader that stopped
+    // keeping one would quietly drop credits or time.
+    const read = [
+      "LoadGame",
+      "FSDJump",
+      "Scan",
+      "SAAScanComplete",
+      "ApproachBody",
+      "LeaveBody",
+      "ScanOrganic",
+      "Died",
+      "Shutdown",
+    ];
+    const body = { BodyName: `${SYSTEM} 3`, BodyID: 3, SystemAddress: ADDRESS };
     const stamp = new Date(start).toISOString().slice(0, 19).replace(/:/g, "");
     await writeFile(
       path.join(dir, `Journal.${stamp}.01.log`),
-      [...arrive(), ev("Shutdown")].map((e) => JSON.stringify(e) + "\n").join(""),
+      [
+        ...arrive(),
+        planet(3),
+        ev("SAAScanComplete", body),
+        ev("ApproachBody", { StarSystem: SYSTEM, Body: `${SYSTEM} 3`, ...body }),
+        stratum(3, "Analyse"),
+        ev("LeaveBody", { StarSystem: SYSTEM, Body: `${SYSTEM} 3`, ...body }),
+        ev("Died"),
+        ev("Shutdown"),
+      ]
+        .map((e) => JSON.stringify(e) + "\n")
+        .join(""),
     );
     const stores = openStores(
       { ED_JOURNAL_DIR: dir, ED_MCP_SYNC_DIR: syncDir },
       { keep: HUD_EVENTS },
     );
-    const state = await stores.journal.state();
-    expect(state.events.map((e) => e.event)).toContain("Shutdown");
+    const kept = new Set((await stores.journal.state()).events.map((e) => e.event));
+    expect(read.filter((e) => !kept.has(e))).toEqual([]);
   });
 });
 
