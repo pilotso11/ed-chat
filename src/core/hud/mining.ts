@@ -189,13 +189,17 @@ export function miningState(
   };
   for (const e of events) {
     last = Date.parse(e.timestamp) || last;
+    // The same events as refinedKinds(): fragments scooped after these are not from a core
+    // cracked before them.
+    if (LEAVE_RING.has(e.event)) crackedHere = false;
     switch (e.event) {
       case "LoadGame":
+        // A relog resets the rocks: the last prospect is gone.
+        prospect = null;
+        break;
       case "Location":
-        // Written at login too, in the same place: not a move. But a relog resets the rocks, so
-        // fragments scooped after it are not from the core cracked before.
-        if (e.event === "Location") here = str(e.StarSystem) ?? here;
-        crackedHere = false;
+        // Written at login too, in the same place: not a move.
+        here = str(e.StarSystem) ?? here;
         break;
       case "FSDJump":
       case "CarrierJump":
@@ -205,7 +209,6 @@ export function miningState(
         prospect = null;
         ring = null;
         stintStart = null;
-        crackedHere = false;
         break;
       case "MarketSell":
         lastSale = e.timestamp;
@@ -221,7 +224,6 @@ export function miningState(
       case "Docked":
         // Left the ring: no longer mining here, though the session's counts stay.
         ring = null;
-        crackedHere = false;
         prospect = null;
         break;
       case "SAASignalsFound": {
@@ -321,11 +323,10 @@ export function refinedKinds(events: JournalEvent[]): Set<string> {
   // Buying back from the carrier keeps the mark, even while a decommission is pending.
   const own = ownCarrierId(events, -Infinity);
   const kinds = new Set<string>();
-  // Mining in this system since arriving: fragments collected now come from rocks.
+  // A core cracked since arriving in the ring: fragments collected now come from it.
   let cracking = false;
   for (const e of events) {
     if (e.event === "MiningRefined") {
-      cracking = true;
       const key = commodityKey(str(e.Type) ?? str(e.Type_Localised) ?? "");
       if (key) kinds.add(key);
     } else if (e.event === "CollectCargo") {

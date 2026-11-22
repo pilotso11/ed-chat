@@ -1089,3 +1089,23 @@ describe("after the PR review", () => {
     expect(miningState(events, T0 + t * 1000).refined.size).toBe(0);
   });
 });
+
+describe("after the relog review", () => {
+  it("forgets the core and the prospect on a relog alone", () => {
+    const events = [
+      prospect([["Painite", 30]]),
+      ev("AsteroidCracked", { Body: "R" }),
+      ev("LoadGame"),
+      ev("CollectCargo", { Type: "opal" }),
+    ];
+    const s = miningState(events, T0 + t * 1000);
+    expect(s.refined.size).toBe(0);
+    expect(s.prospect).toBeNull();
+  });
+
+  it("agrees with the hold: a canister after laser mining is not a fragment", () => {
+    const events = [refined("Platinum"), ev("CollectCargo", { Type: "gold" })];
+    expect(refinedKinds(events).has("gold")).toBe(false);
+    expect(miningState(events, T0 + t * 1000).refined.has("gold")).toBe(false);
+  });
+});
