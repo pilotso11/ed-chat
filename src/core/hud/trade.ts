@@ -11,6 +11,7 @@ import { isRun } from "./passenger.js";
 import {
   credits,
   currentStop,
+  hourly,
   jumpsLeft,
   jumpsText,
   rateText,
@@ -644,6 +645,8 @@ const actionText = (c: Cargo) => `${c.action.toUpperCase()} ${c.amount} t ${c.co
 const actionsText = (cargo: Cargo[]) =>
   cargo.length ? cargo.map(actionText).join(" · ") : "pass through";
 
+/** A session rate under this share of the plan's shows in amber. */
+const PLAN_SHORT = 0.8;
 /** A live price this much worse than the plan's shows in amber. */
 const PRICE_SLIP = 0.05;
 /** Older market data than this shows its age in the header. */
@@ -755,15 +758,30 @@ export function tradePanel(input: {
 
   const totals = tradeTotals(input.events, input.now, input.missionsNow);
   const footer: string[] = [];
-  if (totals.trades) {
+  const footerTones: (Tone | undefined)[] = [];
+  // The rate the plan was chosen for (ed-mcp's profit_per_hour): the session's against it, amber
+  // under PLAN_SHORT of it once a session rate shows.
+  const planned = plan?.profit_per_hour && plan.profit_per_hour > 0 ? plan.profit_per_hour : null;
+  if (totals.trades || planned) {
+    const session = totals.rate.session;
+    const recent = hourly(totals.rate.recent);
+    const rate =
+      planned === null
+        ? rateText(totals.rate)
+        : session === null
+          ? `${hourly(planned)} planned`
+          : `${hourly(session)} of ${hourly(planned)} planned${recent ? ` (30m ${recent})` : ""}`;
     footer.push(
       `Session: ${[
-        `${credits(totals.profit)} profit`,
-        totals.active >= 60_000 ? timeLeft(totals.active) : "0m",
-        rateText(totals.rate),
+        totals.trades ? `${credits(totals.profit)} profit` : null,
+        totals.trades ? (totals.active >= 60_000 ? timeLeft(totals.active) : "0m") : null,
+        rate,
       ]
         .filter(Boolean)
         .join(" · ")}`,
+    );
+    footerTones.push(
+      planned !== null && session !== null && session < planned * PLAN_SHORT ? "warn" : undefined,
     );
   }
   // Passengers taken on a trade run show here, not as their own panel.
@@ -793,5 +811,6 @@ export function tradePanel(input: {
         .join(" · ") || undefined,
     rows,
     footer,
+    ...(footerTones.some(Boolean) ? { footerTones } : {}),
   };
 }

@@ -125,7 +125,11 @@ lists the stops. They show for a plan with a fuel or mission stop, for a plotted
 route anywhere else (a fuel stop, home), and once the plan is done.
 
 The Session line shows profit an hour: each sale less what its tons
-cost, counted as for exploration, with the last half hour in brackets. Traded cargo
+cost, counted as for exploration, with the last half hour in brackets. A plan saved
+by ed-mcp's trade tools carries the rate it was chosen for (`profit_per_hour`: for a
+loop, its sustained rate over a session), and the Session line shows yours against it,
+such as `51.1M/h of 60.0M/h planned`, in amber under 80% of it. Before your first rate
+it shows the planned rate alone. Traded cargo
 that leaves without a sale (to a depot, a mission or your carrier, or ejected) takes
 its cost with it. When a stop's
 buys are bought there and in the hold, and its sales are sold there, the stop is marked done and the next

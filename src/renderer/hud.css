@@ -66,6 +66,9 @@ body {
 .footer {
   color: rgba(242, 230, 208, 0.6);
 }
+.footer.warn {
+  color: #ffb347;
+}
 .footer {
   font-size: 0.85em;
   white-space: nowrap;

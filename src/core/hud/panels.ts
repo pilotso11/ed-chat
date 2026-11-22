@@ -40,6 +40,8 @@ export interface PanelView {
   right?: string;
   rows: HudRow[];
   footer: string[];
+  /** A tone for some footer lines, by their place in footer. */
+  footerTones?: (Tone | undefined)[];
   /** A system to copy for the galaxy map once, with a note for the chat strip: a new key copies again. */
   copy?: { key: string; text: string; note: string };
 }

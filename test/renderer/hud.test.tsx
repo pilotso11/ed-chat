@@ -64,7 +64,8 @@ describe("activity panel", () => {
           { text: "Bacterium", detail: "likely Aurasus" },
           { text: "  ↔ 600 m / 500 m" },
         ],
-        footer: ["one more sample"],
+        footer: ["one more sample", "behind plan"],
+        footerTones: [undefined, "warn"],
       },
     });
     expect(hud.style.getPropertyValue("--font")).toBe("30px");
@@ -87,7 +88,10 @@ describe("activity panel", () => {
     expect(rows[0]!.querySelector(".detail")).toBeNull();
     expect(rows[1]!.querySelector(".detail")?.textContent).toBe("likely Aurasus");
     expect(rows[1]!.querySelector(".bar")).toBeNull();
-    expect(hud.querySelector(".footer")?.textContent).toBe("one more sample");
+    const footers = hud.querySelectorAll(".footer");
+    expect(footers[0]?.textContent).toBe("one more sample");
+    expect(footers[0]?.className).toBe("footer");
+    expect(footers[1]?.className).toBe("footer warn");
     // No route: no route block.
     expect(hud.querySelector(".route")).toBeNull();
   });

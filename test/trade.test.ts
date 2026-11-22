@@ -1050,6 +1050,39 @@ describe("the trade panel", () => {
     );
   });
 
+  it("shows the session's rate against the plan's", () => {
+    const planned = (perHour: number, events: JournalEvent[]) =>
+      tradePanel({ ...base, plan: loop({ profit_per_hour: perHour }), events })!;
+    // No trade yet: the planned rate alone.
+    expect(planned(60_000_000, []).footer).toEqual(["Session: 60.0M/h planned"]);
+    // Trades, but too soon for a rate.
+    expect(planned(60_000_000, [buy(1, "Gold", 1, 1)]).footer).toEqual([
+      "Session: 0 profit · 1m · 60.0M/h planned",
+    ]);
+    // 1.0M over 20 minutes: 3.0M/h, under 80% of 60M/h, in amber.
+    const run = [at(60, "LoadGame"), buy(40, "Gold", 200, 10_000), sell(20, "Gold", 100, 20_000)];
+    const short = planned(60_000_000, run);
+    expect(short.footer).toEqual(["Session: 1.0M profit · 20m · 3.0M/h of 60.0M/h planned"]);
+    expect(short.footerTones).toEqual(["warn"]);
+    // At 80% or more, plain.
+    const near = planned(3_500_000, run);
+    expect(near.footer).toEqual(["Session: 1.0M profit · 20m · 3.0M/h of 3.5M/h planned"]);
+    expect(near.footerTones).toBeUndefined();
+    // With the last half hour.
+    const long = [
+      buy(60, "Gold", 10, 1_000),
+      ...Array.from({ length: 11 }, (_, i) => at(55 - i * 5, "Music")),
+      sell(0, "Gold", 10, 2_000),
+    ];
+    expect(planned(10_000, long).footer).toEqual([
+      "Session: 10k profit · 1h 0m · 10k/h of 10k/h planned (30m 20k/h)",
+    ]);
+    // No planned rate: as before.
+    expect(tradePanel({ ...base, events: run })!.footer).toEqual([
+      "Session: 1.0M profit · 20m · 3.0M/h",
+    ]);
+  });
+
   it("leaves stolen cargo out of the hold, the rows and the mode", () => {
     const stolen = [{ name: "Gold", count: 5, stolen: true, mission_id: null }];
     expect(tradePanel({ ...base, plan: null, cargo: stolen })).toBeNull();

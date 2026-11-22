@@ -640,6 +640,8 @@ describe("trade from the real ed-mcp journal reader", () => {
     await stores.plans.upsert({
       id: "trade",
       name: `Trade loop: ${SYSTEM} ⇄ Wolf 397`,
+      // As ed-mcp 0.9.2 saves it: the sustained rate the loop was chosen for.
+      profit_per_hour: 60_000_000,
       repeat: true,
       lap: 1,
       stops: [
@@ -750,7 +752,12 @@ describe("trade from the real ed-mcp journal reader", () => {
       { text: "  BUY 10 t Silver", right: "hold 0/10 · plan 3,000" },
     ]);
     // 10 t sold at 30,000 that cost 9,410, a few minutes ago.
-    expect(v.panel!.footer).toEqual([expect.stringMatching(/^Session: 206k profit · \d+m$/)]);
+    // Against the plan's rate, once the run has a rate on the real clock.
+    expect(v.panel!.footer).toEqual([
+      expect.stringMatching(
+        /^Session: 206k profit · \d+m · ([\d.]+[kM]\/h of )?60\.0M\/h planned$/,
+      ),
+    ]);
     // The silver is not bought yet, so the stop stays open.
     expect(await judge()).toBeNull();
 

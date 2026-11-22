@@ -71,7 +71,7 @@ export function HudPanel() {
                 </div>
               ))}
               {p.footer.map((f, i) => (
-                <div key={`f${i}`} className="footer">
+                <div key={`f${i}`} className={`footer ${p.footerTones?.[i] ?? ""}`.trim()}>
                   {f}
                 </div>
               ))}
