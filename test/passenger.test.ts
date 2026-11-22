@@ -73,6 +73,9 @@ describe("passenger missions", () => {
   it("counts the berths in the fitted cabins", () => {
     expect(berths([loadout])).toBe(22);
     expect(berths([])).toBeNull();
+    // The newest Loadout: after a refit, or in another ship.
+    const refit = ev("Loadout", { Modules: [{ Item: "int_passengercabin_size4_class2" }] });
+    expect(berths([loadout, refit])).toBe(6);
   });
 
   it("groups missions where they are handed over", () => {
@@ -324,6 +327,21 @@ describe("passenger mode", () => {
       },
     };
     expect(currentMode(sampled)).toBe("passenger");
+
+    // A scan after the run shows exploration; a missions or hauling note newer than both shows the
+    // run again.
+    const explored = {
+      ...input,
+      journal: { ...input.journal!, events: [...events, ev("FSSDiscoveryScan")] },
+    };
+    expect(currentMode(explored)).toBe("exploration");
+    for (const kind of ["missions", "hauling"]) {
+      const followed = {
+        ...explored,
+        activity: { kind, updated_at: new Date(NOW).toISOString() } as never,
+      };
+      expect(currentMode(followed)).toBe("passenger");
+    }
 
     // A missions note with no run to show is not followed.
     const note = {
