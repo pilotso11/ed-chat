@@ -13,6 +13,7 @@ import {
   exobiologyPanel,
   explorationPanel,
   jumpsLeft,
+  liveMassacre,
   massacrePanel,
   parseNavRoute,
   routeRows,
@@ -283,6 +284,28 @@ describe("massacrePanel", () => {
     // Lugh's bar has only its live mission; Eravate, all expired, has none.
     expect(p.rows.slice(1)).toEqual([{ text: "Lugh", right: "0/10", bar: 0, tone: undefined }]);
     expect(p.footer).toEqual(["Stack 5.0M", "2 expired"]);
+  });
+
+  it("leaves out a target whose missions all expired, and shows nothing when every one did", () => {
+    const target = (name: string, expired: boolean) => ({
+      target_faction: name,
+      kills_left: expired ? 0 : 10,
+      factions: [
+        {
+          faction: "Lugh",
+          kills_left: expired ? 0 : 10,
+          missions: [{ ...mission(1, 10, 0, null), expired, kills_left: expired ? 0 : 10 }],
+        },
+      ],
+    });
+    const p = massacrePanel([target("Kumo Crew", false), target("Pirates", true)], 0, {
+      minPerKill: 0,
+    })!;
+    expect(p.rows.map((r) => r.text)).toEqual(["Kumo Crew", "Lugh"]);
+    expect(p.footer.at(-1)).toBe("1 expired");
+    // Every mission expired: the stack has lapsed, and there is no panel.
+    expect(massacrePanel([target("Pirates", true)], 0, { minPerKill: 0 })).toBeNull();
+    expect(liveMassacre([target("Pirates", true)])).toEqual([]);
   });
 
   it("is null with no missions", () => {

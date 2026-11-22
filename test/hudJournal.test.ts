@@ -279,6 +279,30 @@ describe("panel from the real ed-mcp journal reader", () => {
     });
   });
 
+  it("drops a massacre stack whose missions all expired, so massacre mode ends", async () => {
+    const g = game();
+    g.add(...arrive());
+    g.add(
+      ev("Docked", { StationName: "Port", StarSystem: SYSTEM, SystemAddress: ADDRESS }),
+      ev("MissionAccepted", {
+        Faction: "Giver One",
+        Name: "Mission_MassacreWing",
+        LocalisedName: "Kill Pirates",
+        TargetFaction: "Bad Guys",
+        KillCount: 10,
+        // A minute after it was taken, and before now.
+        Expiry: new Date(start + 60_000).toISOString().replace(/\.\d+Z$/, "Z"),
+        Reward: 5_000_000,
+        MissionID: 102,
+      }),
+      ev("Undocked", { StationName: "Port" }),
+    );
+    const v = await g.hud();
+    // Nothing else is going on in this journal, so no panel at all.
+    expect(v.mode).not.toBe("massacre");
+    expect(v.panel).toBeNull();
+  });
+
   it("counts massacre kills against the target faction", async () => {
     const g = game();
     g.add(...arrive());

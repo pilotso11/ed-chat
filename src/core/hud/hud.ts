@@ -28,6 +28,7 @@ import {
   type PanelView,
   type Point,
   wasFootfalled,
+  liveMassacre,
 } from "./panels.js";
 
 /** What the panel window shows. */
@@ -93,7 +94,8 @@ export interface HudInput {
 export function currentMode(input: HudInput): HudModeId | "off" | null {
   if (input.hotkey?.mode === "off") return "off";
   const j = input.journal;
-  const groups = j ? massacre(j.missions, j.events).groups : [];
+  // Expired on the panel's clock, and a stack whose missions all expired is not open.
+  const groups = j ? liveMassacre(massacre(j.missions, j.events, input.now).groups) : [];
   const minedAboard =
     j && input.settings.modes.mining
       ? minedWaiting(j.cargo, j.events, input.now, input.settings.mining)
@@ -126,7 +128,11 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
   const j = input.journal;
   if (!j || mode === "route") return null;
   if (mode === "massacre")
-    return massacrePanel(massacre(j.missions, j.events).groups, input.now, input.settings.massacre);
+    return massacrePanel(
+      massacre(j.missions, j.events, input.now).groups,
+      input.now,
+      input.settings.massacre,
+    );
   if (mode === "passenger") {
     return passengerPanel({
       missions: j.missions,

@@ -100,6 +100,11 @@ function shown(n: number): number {
   return m ? Number(m[1]) * UNITS[m[2]!]! : n;
 }
 
+/** The targets with a mission still live: done, or not yet expired. */
+export function liveMassacre(groups: MassacreGroup[]): MassacreGroup[] {
+  return groups.filter((g) => g.factions.some((f) => f.missions.some((m) => !m.expired)));
+}
+
 export function massacrePanel(
   groups: MassacreGroup[],
   now: number,
@@ -112,7 +117,9 @@ export function massacrePanel(
   const all = groups.flatMap((g) => g.factions.flatMap((f) => f.missions));
   const missions = all.filter((m) => !m.expired);
   const expired = all.length - missions.length;
-  for (const g of groups) {
+  // Nothing live: the stack has lapsed, and there is nothing left to do.
+  if (!missions.length) return null;
+  for (const g of liveMassacre(groups)) {
     // What the stack still pays for each kill left: one kill counts for every giver at once.
     const open = rewards(
       g.factions.flatMap((f) => f.missions).filter((m) => !m.done && !m.expired),
@@ -140,7 +147,7 @@ export function massacrePanel(
         text: f.faction,
         right: `${got}/${need}`,
         bar: need ? got / need : 1,
-        tone: f.kills_left === 0 ? "good" : undefined,
+        tone: got === need ? "good" : undefined,
       });
     }
   }
