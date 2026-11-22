@@ -142,7 +142,7 @@ function game() {
           PlanetRadius: RADIUS,
         }),
       ),
-    async hud(): Promise<HudView> {
+    async hud(settings = DEFAULT_SETTINGS.hud): Promise<HudView> {
       // Appended, as the game writes it.
       await appendFile(
         journal,
@@ -159,10 +159,7 @@ function game() {
       expect(errors).toEqual([]);
       // ed-mcp reports a journal it could not read as a warning, with an empty state.
       expect((data.journal as { warnings?: string[] } | null)?.warnings).toEqual([]);
-      return buildHud(
-        { ...data, hotkey: null, settings: DEFAULT_SETTINGS.hud, now: Date.now() },
-        null,
-      );
+      return buildHud({ ...data, hotkey: null, settings, now: Date.now() }, null);
     },
   };
 }
@@ -334,5 +331,41 @@ describe("mining from the real ed-mcp journal reader", () => {
     g.add(ev("MarketSell", { Type: "platinum", Count: 1 }), cargo(0));
     v = await g.hud();
     expect(v.panel?.mode).not.toBe("mining");
+  });
+
+  it("finds the carrier and the tons moved to it", async () => {
+    const ID = 3_700_000_001;
+    const g = game();
+    g.add(
+      ...arrive(),
+      ev("CarrierLocation", { CarrierType: "FleetCarrier", CarrierID: ID, StarSystem: SYSTEM }),
+      ev("CarrierStats", {
+        CarrierID: ID,
+        Callsign: "XFZ-12K",
+        Name: "DISTANT HORIZONS",
+        SpaceUsage: { FreeSpace: 10_000 },
+      }),
+      ev("SupercruiseExit", { StarSystem: SYSTEM, Body: RING, BodyType: "PlanetaryRing" }),
+      ev("MiningRefined", { Type: "$platinum_name;", Type_Localised: "Platinum" }),
+      ev("MiningRefined", { Type: "$platinum_name;", Type_Localised: "Platinum" }),
+      cargo(2),
+      ev("Docked", {
+        StationName: "XFZ-12K",
+        StationType: "FleetCarrier",
+        StarSystem: SYSTEM,
+        MarketID: ID,
+      }),
+      ev("CargoTransfer", {
+        Transfers: [{ Type: "platinum", Count: 2, Direction: "tocarrier" }],
+      }),
+      cargo(0),
+    );
+    const hud = DEFAULT_SETTINGS.hud;
+    const v = await g.hud({ ...hud, mining: { ...hud.mining, useCarrier: true } });
+    expect(v.panel!.mode).toBe("mining");
+    expect(v.panel!.rows.find((r) => r.text.startsWith("Carrier"))).toMatchObject({
+      text: `Carrier XFZ-12K · ${SYSTEM}`,
+      right: "2 t moved · 9,998 t free",
+    });
   });
 });

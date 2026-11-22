@@ -231,7 +231,8 @@ between it and a station in the same system.
 As before: a rule per mode in `mode.ts`, a panel function in `panels.ts` (or a file per mode if
 `panels.ts` grows past easy reading), and tests from journal event sequences. New `HUD_EVENTS`:
 `MarketBuy`, `MarketSell`, `ProspectedAsteroid`, `MiningRefined`, `LaunchDrone`, `Passengers`.
-The feed reads `Cargo.json` and `Market.json` as it reads `Status.json`.
+Cargo comes from ed-mcp's journal state (the `Cargo` event); the feed reads no `Cargo.json`. A
+trade panel would need a `Market.json` reader, which does not exist yet.
 
 ## Order of work
 
