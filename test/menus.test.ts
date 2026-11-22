@@ -85,8 +85,20 @@ describe("tray menu", () => {
   });
 
   it("offers to clear bookmarks when there are any", () => {
-    expect(labels(trayItems({ ...base, bookmarks: 0 }))).not.toContain("Bookmarks");
-    const menu = trayItems({ ...base, bookmarks: 3 }).find(
+    expect(labels(trayItems({ ...base, bookmarks: { here: 0, all: 0 } }))).not.toContain(
+      "Bookmarks",
+    );
+    // None in this system: only Clear all.
+    const away = trayItems({ ...base, bookmarks: { here: 0, all: 3 } }).find(
+      (i) => "label" in i && i.label === "Bookmarks",
+    );
+    expect(away).toEqual({
+      label: "Bookmarks",
+      submenu: [
+        { label: "Clear all bookmarks (3)…", action: { type: "clearBookmarks", all: true } },
+      ],
+    });
+    const menu = trayItems({ ...base, bookmarks: { here: 1, all: 3 } }).find(
       (i) => "label" in i && i.label === "Bookmarks",
     );
     expect(menu).toEqual({

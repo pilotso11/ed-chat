@@ -308,6 +308,54 @@ describe("bio rows", () => {
     expect(tone(2)).toBe("good");
   });
 
+  it("takes Spansh's signal count when the journal has none, and says map when worth it", () => {
+    const row = (o: { bio_signals: number | null; analysed: number; mapped?: boolean }) =>
+      bioRows({
+        system: "Sys",
+        address: 42,
+        events: [],
+        exploration: {
+          bodies: [
+            {
+              body: "Sys 5",
+              body_id: 5,
+              distance_ls: 300,
+              was_discovered: true,
+              value_scanned: 900_000,
+              mapped_by_you: o.mapped ?? false,
+            },
+          ],
+        } as unknown as Exploration,
+        bio: [
+          {
+            body: "Sys 5",
+            body_id: 5,
+            bio_signals: o.bio_signals,
+            genera: ["Clypeus"],
+            not_started: [],
+            species: [
+              { genus: "Clypeus", species: "Clypeus Speculumi", analysed: o.analysed > 0 },
+              ...(o.analysed > 1
+                ? [{ genus: "Bacterium", species: "Bacterium Cerbrus", analysed: true }]
+                : []),
+            ],
+          },
+        ] as never,
+        known: [{ bodyId: 5, name: "Sys 5", bioSignals: 2, genera: [] }] as never,
+        bioMin: 0,
+        valuableMin: 500_000,
+      })[0]!;
+    // Spansh says 2 signals, the journal none: 1 analysed is 1/2, not done.
+    expect(row({ bio_signals: null, analysed: 1 })).toMatchObject({
+      text: "5  2 bio · map",
+      right: expect.stringMatching(/1\/2$/),
+    });
+    expect(row({ bio_signals: null, analysed: 2, mapped: true })).toMatchObject({
+      text: "5  2 bio",
+      tone: "good",
+    });
+  });
+
   it("says when Spansh does not know the system", () => {
     const x = {
       discovery: {
@@ -499,6 +547,13 @@ describe("bio rows", () => {
     });
     expect(bioBody.rows.some((r) => r.text.startsWith("9"))).toBe(true);
     expect(bioBody.right).toMatch(/ · mapped 3\/4$/);
+    expect(bioBody.rows.find((r) => r.text.startsWith("9"))!.text).toMatch(/ · map$/);
+    // A belt cluster (no type) is never mapped, so it does not keep the header from done.
+    const belt = mapping([
+      ...worth.bodies.map((b) => ({ ...b, mapped_by_you: true })),
+      { ...body(10, "x", 0), type: null },
+    ]);
+    expect(belt.tone).toBe("good");
     expect(bioBody.tone).toBeUndefined();
     // Before all bodies are found the empty state says "yet", and two geo bodies are plural.
     const early = explorationPanel({

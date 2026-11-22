@@ -726,22 +726,23 @@ async function main(): Promise<void> {
 
   let askingClearAll = false;
   async function confirmClearAll(): Promise<void> {
-    // One question at a time: a second click while it is open does nothing.
+    // One question at a time: a second click while it is open, or while the plan is read, does
+    // nothing.
     if (askingClearAll) return;
     const plans = hudPlans;
-    if (!settings.hud.enabled || !settings.hud.bookmarks || !plans) {
+    if (!settings.hud.enabled || !settings.hud.bookmarks || !plans || !hudFeed) {
       return flash("bookmark", "ⓘ bookmarks are off or the panel could not open ed-mcp", 3_000);
     }
-    // The count from the plan as it is now, not as the last poll read it.
-    let n = 0;
-    try {
-      n = todoBookmarks(await plans.get(BOOKMARKS_PLAN)).length;
-    } catch (err) {
-      if (!isPlanNotFound(err)) throw err;
-    }
-    if (!n) return flash("bookmark", "ⓘ no bookmarks", 3_000);
     askingClearAll = true;
     try {
+      // The count from the plan as it is now, not as the last poll read it.
+      let n = 0;
+      try {
+        n = todoBookmarks(await plans.get(BOOKMARKS_PLAN)).length;
+      } catch (err) {
+        if (!isPlanNotFound(err)) throw err;
+      }
+      if (!n) return flash("bookmark", "ⓘ no bookmarks", 3_000);
       await askClearAll(n);
     } finally {
       askingClearAll = false;
@@ -1755,8 +1756,15 @@ async function main(): Promise<void> {
       visible: state.visible,
       bookmarks:
         settings.hud.enabled && settings.hud.bookmarks
-          ? todoBookmarks(hudData?.bookmarks ?? null).length
-          : 0,
+          ? {
+              here: bookmarksToClear({
+                plan: hudData?.bookmarks ?? null,
+                system: hudData?.journal?.location.system ?? null,
+                status: null,
+              }).stops.length,
+              all: todoBookmarks(hudData?.bookmarks ?? null).length,
+            }
+          : undefined,
     });
     return Menu.buildFromTemplate(menuTemplate(items));
   }

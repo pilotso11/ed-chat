@@ -253,9 +253,9 @@ export function bookmarkHere(
   };
 }
 
-/** The bookmarks still to do: their indexes in the plan. */
+/** The bookmarks still to do, with a body as the panel shows them: their indexes in the plan. */
 export const todoBookmarks = (plan: Plan | null): number[] =>
-  (plan?.stops ?? []).flatMap((s, i) => (s.status === "todo" ? [i] : []));
+  (plan?.stops ?? []).flatMap((s, i) => (s.status === "todo" && s.body ? [i] : []));
 
 /**
  * The bookmarks that the clear key clears, as indexes in the plan. On a body, the nearest
@@ -270,9 +270,7 @@ export function bookmarksToClear(input: {
 }): { stops: number[]; whole: boolean } {
   const { plan, system, status } = input;
   if (!plan || !system) return { stops: [], whole: false };
-  const here = todoBookmarks(plan).filter(
-    (i) => !!plan.stops[i]!.body && same(plan.stops[i]!.system, system),
-  );
+  const here = todoBookmarks(plan).filter((i) => same(plan.stops[i]!.system, system));
   const onBody = status?.body ? bodyKey(status.body, system) : null;
   const body = here.filter((i) => bodyKey(plan.stops[i]!.body!, system) === onBody);
   if (!body.length) return { stops: here, whole: here.length > 0 };

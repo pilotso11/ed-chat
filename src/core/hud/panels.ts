@@ -690,6 +690,8 @@ export function bioRows(input: {
   bio: ExobiologyBody[];
   known: KnownBody[] | null;
   bioMin: number;
+  /** hud.valuableMin: a planet worth this much mapped, not mapped yet, says "map". */
+  valuableMin?: number;
   /** Filled with the body IDs that got a row. */
   listed?: Set<number>;
 }): HudRow[] {
@@ -729,16 +731,22 @@ export function bioRows(input: {
     const base = known_ ? sum((g) => g.likely) : null;
     const likely = base !== null ? base * bonus : null;
     if (likely !== null && likely < input.bioMin) continue;
-    const signals = j ? bioProgress(j).signals : (k?.bioSignals ?? genera.length);
-    const analysed = j ? bioProgress(j).analysed : 0;
-    // From the journal, the same rule as the exobiology header; Spansh alone has none analysed.
-    const done = j ? bioProgress(j).done : false;
+    // From the journal, the same rule as the exobiology header, with Spansh's signal count when
+    // the journal has none; Spansh alone has none analysed.
+    const progress = j ? bioProgress(j, k?.bioSignals) : null;
+    const signals = progress?.signals ?? k?.bioSignals ?? genera.length;
+    const analysed = progress?.analysed ?? 0;
+    const done = progress?.done ?? false;
+    // A planet worth mapping says so here too, as it is not listed with the bodies to map.
+    const value = x?.value_mapped ?? x?.value_scanned ?? 0;
+    const map =
+      !!x && input.valuableMin !== undefined && value >= input.valuableMin && !x.mapped_by_you;
     const name = x?.body ?? j?.body ?? k?.name ?? String(id);
     const ls = x?.distance_ls ?? k?.distance_ls ?? null;
     const labels = guesses.map((g, i) => g?.label ?? genera[i]!);
     input.listed?.add(id);
     items.push({
-      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio${geo ? ` · ${geo} geo` : ""}`,
+      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio${geo ? ` · ${geo} geo` : ""}${map ? " · map" : ""}`,
       // The species can be many: on their own line, which wraps.
       ...(labels.length ? { detail: labels.join(", ") } : {}),
       right: [
@@ -791,6 +799,7 @@ export function explorationPanel(input: {
     bio: input.bio,
     known,
     bioMin: input.bioMin ?? 0,
+    valuableMin: input.valuableMin,
   });
   let geoOnly = 0;
   for (const b of x.bodies) {
@@ -857,10 +866,12 @@ export function explorationPanel(input: {
   const found = d.body_count !== null ? `${scanned}/${d.body_count} bodies` : `${scanned} scanned`;
   // The bodies worth mapping: the Earth-like, water and ammonia worlds, and every other planet
   // over hud.valuableMin, those listed with the bio planets too.
+  // Belt clusters have no type, and are never mapped.
   const worth = x.bodies
     .filter(
       (b) =>
-        !b.type?.endsWith(" star") &&
+        b.type !== null &&
+        !b.type.endsWith(" star") &&
         (isHighlight(b.type, b.terraformable) ||
           (b.value_mapped ?? b.value_scanned ?? 0) >= input.valuableMin),
     )
@@ -921,7 +932,11 @@ function bioRateLine(input: {
  * count (null, or 0 from a later scan) the body may hold more, so it is never done. The one rule
  * for the header, the In system rows and bio bookmarks (finishedBioBookmarks).
  */
-export function bioProgress(b: ExobiologyBody): {
+export function bioProgress(
+  b: ExobiologyBody,
+  /** Another source's signal count (Spansh), for a body the journal has none for. */
+  knownSignals?: number | null,
+): {
   analysed: number;
   signals: number;
   done: boolean;
@@ -929,9 +944,9 @@ export function bioProgress(b: ExobiologyBody): {
   // An abandoned species was left for another of its genus: it is neither analysed nor waiting.
   const kept = b.species.filter((s) => !s.abandoned);
   const analysed = kept.filter((s) => s.analysed).length;
-  const signals = Math.max(b.bio_signals ?? 0, b.genera.length);
-  const done =
-    !!b.bio_signals && analysed >= signals && analysed === kept.length && !b.not_started.length;
+  const count = b.bio_signals ?? knownSignals ?? null;
+  const signals = Math.max(count ?? 0, b.genera.length);
+  const done = !!count && analysed >= signals && analysed === kept.length && !b.not_started.length;
   return { analysed, signals, done };
 }
 

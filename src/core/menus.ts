@@ -50,10 +50,13 @@ export function trayItems(s: {
   failedHotkeys: number;
   iconMode: boolean;
   visible: boolean;
-  /** Surface bookmarks still to do; the Bookmarks menu shows when there are any. */
-  bookmarks?: number;
+  /**
+   * Surface bookmarks still to do, in this system and in all; the Bookmarks menu shows when
+   * there are any, and its "here" item when this system has some.
+   */
+  bookmarks?: { here: number; all: number };
 }): TrayItem[] {
-  const bookmarks = s.bookmarks ?? 0;
+  const { here, all: bookmarks } = s.bookmarks ?? { here: 0, all: 0 };
   return [
     ...s.chips.map((c): TrayItem => ({
       label: menuLabel(`Copy ${c.n}: ${chipLabel(c)}`),
@@ -77,7 +80,14 @@ export function trayItems(s: {
           {
             label: "Bookmarks",
             submenu: [
-              { label: "Clear bookmarks here", action: { type: "clearBookmarks", all: false } },
+              ...(here
+                ? [
+                    {
+                      label: "Clear bookmarks here",
+                      action: { type: "clearBookmarks", all: false } as const,
+                    },
+                  ]
+                : []),
               {
                 label: `Clear all bookmarks (${bookmarks})…`,
                 action: { type: "clearBookmarks", all: true },

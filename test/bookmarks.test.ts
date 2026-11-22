@@ -510,7 +510,9 @@ describe("clearing bookmarks", () => {
   });
 
   it("lists every bookmark still to do", () => {
-    expect(todoBookmarks(plan([far, { ...near, status: "skipped" }, away]))).toEqual([0, 2]);
+    expect(
+      todoBookmarks(plan([far, { ...near, status: "skipped" }, away, { label: "x" }])),
+    ).toEqual([0, 2]);
     expect(todoBookmarks(null)).toEqual([]);
   });
 });
