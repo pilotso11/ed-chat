@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { JournalEvent, Mission, Plan } from "ed-mcp/journal";
 import { buildHud, currentMode, type HudInput } from "../src/core/hud/hud.js";
-import { journalMode, noteMode } from "../src/core/hud/mode.js";
+import { HUD_EVENTS, journalMode, noteMode } from "../src/core/hud/mode.js";
 import { berths, drops, isRun, passengerPanel } from "../src/core/hud/passenger.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
 
@@ -163,6 +163,25 @@ describe("passengerPanel", () => {
     expect(done.title).toBe("PASSENGERS");
   });
 
+  it("follows the route's visit order, not the order the stops are stored in", () => {
+    const route = {
+      ...plan([
+        { system: "Ngalinn", station: "Haber Hub", kind: "mission" },
+        { system: "Wolf 397", station: "Brooks Estate", kind: "mission" },
+      ]),
+      route: {
+        computed_at: "",
+        from: "Sol",
+        stops: ["Wolf 397", "Ngalinn"],
+        total_min: 10,
+        plotted: false,
+        stop_indexes: [[1], [0]],
+      },
+    };
+    const p = passengerPanel({ missions, events: [], plan: route, now: NOW })!;
+    expect(p.rows[0]!.text).toBe("Wolf 397 · Brooks Estate");
+  });
+
   it("orders by a plan stop that names only the system", () => {
     const route = plan([
       { system: "Wolf 397", kind: "mission" },
@@ -197,6 +216,10 @@ describe("passenger mode", () => {
     );
     const massacre = ev("MissionAccepted", { Name: "Mission_Massacre", KillCount: 9 });
     expect(journalMode([massacre, taken()], true, false, ALL, true)?.mode).toBe("massacre");
+  });
+
+  it("keeps every event the passenger rules read", () => {
+    for (const e of ["Loadout", "MissionAccepted"]) expect(HUD_EVENTS).toContain(e);
   });
 
   it("follows the activity note", () => {

@@ -1,4 +1,4 @@
-import type { JournalEvent, Mission, Plan } from "ed-mcp/journal";
+import { visitOrder, type JournalEvent, type Mission, type Plan } from "ed-mcp/journal";
 import { credits, timeLeft, type HudRow, type PanelView } from "./panels.js";
 
 type Obj = Record<string, unknown>;
@@ -91,12 +91,15 @@ export function passengerPanel(input: {
 }): PanelView | null {
   const all = drops(input.missions);
   if (!all.length) return null;
-  // In the plan's order when it has these stops, else the soonest expiry first.
+  // In the order the route flies the plan's stops (visitOrder, as the route rows use), else the
+  // soonest expiry first.
   const order = new Map<string, number>();
-  for (const [i, s] of (input.plan?.stops ?? []).entries()) {
+  const plan = input.plan;
+  for (const [rank, i] of (plan ? visitOrder(plan) : []).entries()) {
+    const s = plan!.stops[i]!;
     if (s.status !== "todo" || !isMissionStop(s)) continue;
     const k = placeKey(s.system, s.station ?? null);
-    if (!order.has(k)) order.set(k, i);
+    if (!order.has(k)) order.set(k, rank);
   }
   const expiry = (d: Drop) =>
     Math.min(
