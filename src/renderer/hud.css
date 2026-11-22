@@ -49,6 +49,10 @@ body {
   text-overflow: ellipsis;
   min-width: 0;
 }
+.text {
+  /* Leading spaces indent a row under the one above, such as "  or nearer". */
+  white-space: pre;
+}
 .right {
   margin-left: auto;
   font-variant-numeric: tabular-nums;

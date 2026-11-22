@@ -152,7 +152,7 @@ Hotspots: Platinum ×2 · Painite
 Hold 256/256 t                        0 t free · 10 limpets
 Sell Platinum 246 t                           244k · 12 ly
   Haber Hub, Ngalinn
-or nearer                                     230k · 4 ly
+  or nearer                                   230k · 4 ly
   Brooks Estate, Wolf 397
 Refined: Platinum 74 t · Osmium 12 t                 ~21.8M
 Session: 23 prospected · 4 worth mining · 1 motherlode

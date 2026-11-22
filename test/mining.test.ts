@@ -382,7 +382,7 @@ describe("miningPanel", () => {
       right: "244k · 12 ly",
       detail: "Haber Hub, Ngalinn",
     });
-    expect(p.rows.find((r) => r.text === "or nearer")?.detail).toBe("Brooks Estate, Wolf 397");
+    expect(p.rows.find((r) => r.text === "  or nearer")?.detail).toBe("Brooks Estate, Wolf 397");
     expect(p.rows.find((r) => r.text.startsWith("Refined"))).toMatchObject({
       text: "Refined: Platinum 2 t",
       right: "~487k",

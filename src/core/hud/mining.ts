@@ -946,7 +946,7 @@ export function miningPanel(input: {
     });
     if (pick.near) {
       rows.push({
-        text: "or nearer",
+        text: "  or nearer",
         right: `${credits(pick.near.price)} · ${ly(pick.near.distanceLy)}${from(t.query.near)}`,
         detail: place(pick.near),
         tone: "dim",
