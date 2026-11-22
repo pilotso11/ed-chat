@@ -161,109 +161,45 @@ A second, smaller panel shows what matters for what you are doing. It reads the
 game journal directly and never calls Claude. It shows only while the game is in
 front.
 
-- **Massacre:** each target faction, the kills still needed for the stack, a bar
-  for each faction that gave you missions, missions ready to hand in, and the
-  next expiry. The footer shows what the whole stack pays and what is ready to
-  hand in. Each target shows what its unfinished missions still pay for each kill
-  left; below `hud.massacre.minPerKill` (1M) it is marked ⚠, a sign to take more
-  missions.
-- **Exploration:** the discovery scan progress and the bodies worth the time:
-  Earth-like, water and ammonia worlds, terraformable planets, bodies with
-  biological signals, and other bodies worth `hud.valuableMin` when mapped. Each
-  shows its distance, its value and whether it still needs a scan or a map. ★
-  marks a first discovery. Bodies worth less with geological signals are only
-  counted.
-  Earth-like, water and ammonia worlds and terraformables are listed from
-  [Spansh](https://spansh.co.uk) as soon as you arrive: grey until you scan them,
-  then green. Planets with biological signals are listed the same way, with
-  the likely species of each genus (marked ?) and what they are likely worth:
-  grey before the scan, plain after, and green once every species is analysed.
-  ★ marks a first discovery and ×5 a first-footfall bonus.
-  The prediction compares the planet's atmosphere, type, temperature, gravity,
-  pressure, volcanism, star and galactic region with where Canonn has recorded
-  each species. Planets likely worth less than `hud.bioMin` are left off.
-  Before you scan a planet, its value is a range: the low end has no bonus, and
-  the high end includes the first-discovery and first-mapped bonuses, or the 5×
-  first-footfall bonus for biology. A planet listed on Spansh can still pay these
-  bonuses if nobody has handed in its data. After the scan, the game says which
-  bonuses apply. A system Spansh does not know gets ★ as a hint, since not
-  everyone uploads their scans.
-  The Session line ends with credits an hour, and the last half hour's rate in
-  brackets. They count what each scan, map and analysed species is worth when you
-  make it, with its bonuses, sold or not. A gap of more than 10 minutes with no
-  journal events (docked, or away) counts as 10, and a rate shows after 5 minutes.
-- **Exobiology:** on a body with biological signals, each species with its
-  samples (2/3) and value, the genera not started yet, and, while you sample, the
-  distance from your last sample against the minimum distance for that genus.
-  Genera not started show their likely species. The system's Earth-like,
-  water and ammonia worlds, terraformables and other bio planets stay listed
-  below. The last line compares this planet's credits an hour with the session's
-  and the last half hour's: when the planet falls behind, it may be time to move
-  on.
-- **Mining:** turns on when you launch a prospector, prospect, refine or crack
-  a rock. It shows the last prospected rock against `hud.mining.targets` (MINE or
-  skip, and any motherlode), the ring's hotspots, the hold, limpets left, tons
-  refined per hour, and the tons refined this session. It
-  also suggests where to sell what is in the hold, with what each load sells for: the best price on
-  [Spansh](https://spansh.co.uk) that has a pad for your ship and takes the whole
-  load, and a nearer station that pays at least 90% of that. The session line ends
-  with what the cargo sells for in all. When the hold fills,
-  the best buyer's system is copied for the galaxy map. With
-  `hud.mining.useCarrier`, the search is around your fleet carrier and includes
-  what you moved to it in the last 12 hours. After a jump, the panel stays on while mined
-  cargo is aboard.
-- **Passengers and deliveries:** turns on when you take a passenger or delivery
-  mission, and stays while one is open, until a newer activity. Each destination
-  station shows its passengers (with VIP and wanted counts) or goods and the
-  soonest expiry, amber under two hours. The header shows berths used against
-  the cabins fitted, and the total reward. Ask Claude to plan the route
-  (ed-mcp's `missions_plan`): the stops then follow its order, the route below
-  shows the next stop, and arriving copies the next system. When you take a
-  mission the route does not cover, the panel says the route is stale.
-- **Route:** the current stop of the active ed-mcp plan (with its body or
-  station, what it is for and the jumps left on the plotted route), the next
-  stop, and how many stops follow. It shows under the other panels too. When you arrive in
-  a stop's system, the next stop's system is copied for the galaxy map.
+- **Massacre:** kills left for each target, each giver's progress, and what the
+  stack still pays a kill, with ⚠ when it is time to take more missions.
+- **Exploration:** the bodies worth scanning and mapping, with their values, and
+  your credits an hour.
+- **Exobiology:** each species' samples and value, the distance from your last
+  sample, and whether this planet earns as well as the rest of your session.
+- **Mining:** whether the rock is worth mining, the hold, and where to sell each
+  load.
+- **Passengers and deliveries:** each stop's passengers or goods and deadlines,
+  with the planned route.
+- **Route:** the current and next stop of the plan you are following.
+- **Bookmarks:** Ctrl+Alt+B marks a spot on a planet, and the panel shows the
+  way back.
 
-These are real panels: ED Chat's own panel code, run on moments from a
-commander's journals, with Spansh's data where the panel uses it.
+The mode follows what you do in the game, or what you tell Claude you are doing.
+[docs/activity-panel.md](docs/activity-panel.md) has the details of each mode.
 
 | | |
 | --- | --- |
-| ![Exploration panel after scanning: a terraformable HMC and a water world in green, bio planets with their likely species](docs/images/hud-explore-scanned.png) | **Exploration.** Every body found. Scanned worlds worth mapping turn green with the game's value. Bio planets list their likely species until you land. ×5 marks a first footfall. |
-| ![Exobiology panel while sampling, with a bookmark back to the ship](docs/images/hud-exobiology.png) | **Exobiology.** Three species analysed, the fourth at 2/3, the genus not started with its likely species, the other bio planets in the system, and a bookmark back to the ship. |
-| ![Massacre panel partway through a stack](docs/images/hud-massacre.png) | **Massacre.** Partway through a stack: each giver's progress, what the stack still pays a kill (⚠ under the threshold), and what is ready to hand in. |
-| ![Mining panel on a rich platinum rock, with buyers for the hold](docs/images/hud-mining.png) | **Mining.** A 59.5% platinum rock, the ring's hotspots, the hold, and the best buyers for each load, with a nearer one for the gold. |
-| ![Passenger panel after taking six missions, with the route below](docs/images/hud-passenger.png) | **Passengers.** Six missions taken: each stop's passengers and soonest expiry, amber under two hours, berths used, and the planned route below. |
+| ![Exploration panel after scanning: a terraformable HMC and a water world in green, bio planets with their likely species](docs/images/hud-explore-scanned.png) | **Exploration**, once every body is found. |
+| ![Exobiology panel while sampling, with a bookmark back to the ship](docs/images/hud-exobiology.png) | **Exobiology**, partway through a planet, with a bookmark back to the ship. |
+| ![Massacre panel partway through a stack](docs/images/hud-massacre.png) | **Massacre**, partway through a stack. |
+| ![Mining panel on a rich platinum rock, with buyers for the hold](docs/images/hud-mining.png) | **Mining**, on a rich platinum rock. |
+| ![Passenger panel after taking six missions, with the route below](docs/images/hud-passenger.png) | **Passengers**, after taking six missions. |
 
-To make them again, see `scripts/hud-scenes.ts`.
-
-The mode changes by itself. Accepting a massacre mission turns on massacre mode
-until the stack is handed in. A discovery scan or a detailed scan turns on
-exploration, and five jumps with no scan turn it off again. Approaching a body
-with biological signals, or taking a sample, turns on exobiology. A jump alone
-starts nothing. Telling Claude what you are doing ("I'm doing massacres") sets
-the ed-mcp activity note, which the panel follows.
+These are real panels, built from a commander's journals.
 
 | Key | Action |
 | --- | --- |
 | Ctrl+Alt+P | Show or hide the panel |
-| Ctrl+Alt+Shift+P | Mode: auto, massacre, exploration, exobiology, route, off |
+| Ctrl+Alt+Shift+P | Choose the mode: automatic, then each mode, then off |
 | Ctrl+Alt+Home | Move the panel: for 15 seconds the move keys move the panel, not the chat |
 | Ctrl+Alt+PageDown / PageUp | Mark the current route stop done / go back one stop, and copy the stop's system |
 | Ctrl+Alt+B | Bookmark where you are on a planet |
 
-The panel uses the same activity note and plans as ed-mcp. ED Chat finds the
-ed-mcp sync folder where ed-mcp is set up: Claude Code's `~/.claude.json`, the
-ed-mcp plugin's options, or Codex's `~/.codex/config.toml` (`CLAUDE_CONFIG_DIR`
-and `CODEX_HOME` move them, as they do for the CLIs). The panel reads only
-`ED_MCP_SYNC_DIR`, never the password. Set `hud.edMcpDataDir` if it is somewhere
-else.
-
-ed-mcp needs to be set up only once. If Claude Code has no ed-mcp of its own,
-ED Chat gives it the one from another Claude project or else from Codex's config,
-with its whole `env`, sync password included. That copy is written to
-`approval-mcp.json` in ED Chat's data folder, `%APPDATA%\ed-chat`.
+The panel uses ed-mcp's activity note and plans, and finds ed-mcp's settings by
+itself. If it cannot, set `hud.edMcpDataDir`. If Claude Code has no ed-mcp of its
+own, ED Chat gives it a copy of the one set up elsewhere, sync password included,
+in `%APPDATA%\ed-chat\approval-mcp.json`.
 
 ## Permissions
 
