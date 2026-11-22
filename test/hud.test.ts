@@ -13,6 +13,7 @@ import {
   exobiologyPanel,
   explorationPanel,
   jumpsLeft,
+  liveMassacre,
   massacrePanel,
   parseNavRoute,
   routeRows,
@@ -164,6 +165,21 @@ describe("currentMode", () => {
     expect(currentMode(baseInput({ activity, hotkey: { mode: "off", at: 0 } }))).toBe("off");
   });
 
+  it("ignores a massacre note when the journal has no live stack", () => {
+    const activity = { kind: "massacre" as const, summary: "x", updated_at: "2026-11-15T11:00Z" };
+    const journal = {
+      location: { system: "Sys", station: null, station_type: null, docked: false },
+      ship: { type: null, cargo_capacity: null },
+      cargo: [],
+      missions: [],
+      events: [],
+    } as unknown as HudInput["journal"];
+    // The stack is over, so the note would leave an empty panel.
+    expect(currentMode(baseInput({ activity, journal }))).toBeNull();
+    // Before the journal is read, the note still chooses.
+    expect(currentMode(baseInput({ activity }))).toBe("massacre");
+  });
+
   it("ignores a mode turned off in settings", () => {
     const activity = { kind: "massacre" as const, summary: "x", updated_at: "2026-11-15T11:00Z" };
     const settings = {
@@ -191,6 +207,7 @@ describe("massacrePanel", () => {
     kills_counted: counted,
     kills_left: required - counted,
     done: counted >= required,
+    expired: false,
   });
 
   it("shows each giver's progress, the stack and the next expiry", () => {
@@ -252,6 +269,83 @@ describe("massacrePanel", () => {
     expect(massacrePanel(groups(14_400_000), 0, { minPerKill: 1_500_000 })!.rows[0]!.right).toBe(
       "10 left · ⚠ 1.4M/kill",
     );
+  });
+
+  it("leaves out a mission that expired before it was done, and counts it", () => {
+    const groups = [
+      {
+        target_faction: "Kumo Crew",
+        kills_left: 10,
+        factions: [
+          {
+            faction: "Lugh",
+            kills_left: 10,
+            missions: [
+              { ...mission(1, 10, 0, null), reward: 5_000_000 },
+              { ...mission(2, 8, 3, null), reward: 30_000_000, expired: true, kills_left: 0 },
+            ],
+          },
+          {
+            faction: "Eravate",
+            kills_left: 0,
+            missions: [{ ...mission(3, 6, 2, null), expired: true, kills_left: 0 }],
+          },
+        ],
+      },
+    ];
+    const p = massacrePanel(groups, 0, { minPerKill: 1_000_000 })!;
+    // Only the live mission pays: 5M over 10 kills.
+    expect(p.rows[0]!.right).toBe("10 left · ⚠ 500k/kill");
+    // Lugh's bar has only its live mission; Eravate, all expired, has none.
+    expect(p.rows.slice(1)).toEqual([{ text: "Lugh", right: "0/10", bar: 0, tone: undefined }]);
+    expect(p.footer).toEqual(["Stack 5.0M", "2 expired"]);
+  });
+
+  it("leaves out a target whose missions all expired, and shows nothing when every one did", () => {
+    const target = (name: string, expired: boolean) => ({
+      target_faction: name,
+      kills_left: expired ? 0 : 10,
+      factions: [
+        {
+          faction: "Lugh",
+          kills_left: expired ? 0 : 10,
+          missions: [{ ...mission(1, 10, 0, null), expired, kills_left: expired ? 0 : 10 }],
+        },
+      ],
+    });
+    const p = massacrePanel([target("Kumo Crew", false), target("Pirates", true)], 0, {
+      minPerKill: 0,
+    })!;
+    expect(p.rows.map((r) => r.text)).toEqual(["Kumo Crew", "Lugh"]);
+    // The lapsed target is not shown, so its mission is not counted as expired either.
+    expect(p.footer).toEqual(["Stack 1.0M"]);
+    // Nor in the header's kills left, even if a lapsed target reported some.
+    const lapsed = { ...target("Pirates", true), kills_left: 7 };
+    expect(massacrePanel([target("Kumo Crew", false), lapsed], 0, { minPerKill: 0 })!.right).toBe(
+      "10 left",
+    );
+    // Every mission expired: the stack has lapsed, and there is no panel.
+    expect(massacrePanel([target("Pirates", true)], 0, { minPerKill: 0 })).toBeNull();
+    expect(liveMassacre([target("Pirates", true)])).toEqual([]);
+  });
+
+  it("shows a giver done when the game completed its missions, whatever kills were counted", () => {
+    const done = { ...mission(1, 24, 20, null), done: true, kills_left: 0 };
+    const p = massacrePanel(
+      [
+        {
+          target_faction: "Kumo Crew",
+          kills_left: 5,
+          factions: [
+            { faction: "Lugh", kills_left: 0, missions: [done] },
+            { faction: "Eravate", kills_left: 5, missions: [mission(2, 10, 5, null)] },
+          ],
+        },
+      ],
+      0,
+      { minPerKill: 0 },
+    )!;
+    expect(p.rows[1]).toMatchObject({ text: "Lugh", right: "20/24", tone: "good" });
   });
 
   it("is null with no missions", () => {
