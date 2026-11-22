@@ -105,6 +105,9 @@ describe("journalMode", () => {
     expect(journalMode([ev("ApproachBody", { SystemAddress: 1, BodyID: 5 })], false)).toBeNull();
     const leave = ev("LeaveBody", { SystemAddress: 1, BodyID: 4 });
     expect(journalMode([signals, approach, leave], false)?.mode).toBe("exploration");
+    // With exploration off, leaving the body ends exobiology all the same.
+    const noExplore = (m: string) => m !== "exploration";
+    expect(journalMode([signals, approach, leave], false, false, noExplore)).toBeNull();
   });
 
   it("turns on exobiology for a sample", () => {

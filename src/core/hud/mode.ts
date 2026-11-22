@@ -39,6 +39,9 @@ export const HUD_EVENTS = [
   "Undocked",
   "Died",
   "Cargo",
+  // Read by the passenger panel: cabins for the berths, and the run's acceptance.
+  "Loadout",
+  "MissionAccepted",
 ] as const;
 
 export interface Choice {
@@ -46,6 +49,15 @@ export interface Choice {
   /** Epoch ms. The newest choice wins. */
   at: number;
 }
+
+/** A passenger mission, or a delivery: goods to take to a station. */
+// As passenger.ts's isRun, on the acceptance event: goods need a destination.
+const isRun = (e: JournalEvent) =>
+  typeof e.PassengerCount === "number" ||
+  (typeof e.Commodity === "string" &&
+    typeof e.Count === "number" &&
+    typeof e.DestinationSystem === "string" &&
+    !isMassacre(e));
 
 const isMassacre = (e: JournalEvent) =>
   typeof e.Name === "string" && /massacre/i.test(e.Name) && typeof e.KillCount === "number";
@@ -66,13 +78,18 @@ export const LAPSE_JUMPS = 5;
  * exploration. A jump or a sale ends mining unless mined cargo is still waiting to be sold.
  * `massacreActive` is whether a massacre mission is still open now (from ed-mcp's massacre()).
  * `minedAboard` is whether mined cargo is waiting to be sold now (minedWaiting()).
- * `miningOn` is false when the mining mode is off: mining then changes no mode.
+ * `on` says which modes are turned on: a mode that is off changes no mode, so the one before it
+ * (or a run) still shows.
+ * `runActive` is whether the passenger panel has a run to show now (the mode on, and a passenger
+ * or delivery mission open that it can place): taking one then turns on the passenger mode,
+ * which lasts until a newer activity or the last such mission is done.
  */
 export function journalMode(
   events: JournalEvent[],
   massacreActive: boolean,
   minedAboard = false,
-  miningOn = true,
+  on: (m: HudModeId) => boolean = () => true,
+  runActive = false,
 ): Choice | null {
   const bio = new Set<string>();
   // Exploration and exobiology, followed through every event, before and during a stack.
@@ -81,9 +98,12 @@ export function journalMode(
   let mode: "exploration" | "exobiology" | "mining" | null = null;
   let at = 0;
   let massacreAt: number | null = null;
+  // The newest passenger or delivery mission taken, which shows those missions while any is left.
+  let runAt: number | null = null;
   // Whether the ship left the system after the last mining event.
   let leftMining = false;
   const set = (m: "exploration" | "exobiology" | "mining") => {
+    if (!on(m)) return;
     jumps = 0;
     leftMining = false;
     mode = m;
@@ -111,14 +131,15 @@ export function journalMode(
       case "ProspectedAsteroid":
       case "MiningRefined":
       case "AsteroidCracked":
-        if (miningOn) set("mining");
+        set("mining");
         break;
       case "LaunchDrone":
-        if (miningOn && e.Type === "Prospector") set("mining");
+        if (e.Type === "Prospector") set("mining");
         break;
       case "MissionAccepted":
         // An acceptance with no readable time still counts, dated by the newest readable event.
         if (isMassacre(e)) massacreAt = last;
+        else if (isRun(e)) runAt = last;
         break;
       case "FSSDiscoveryScan":
         set("exploration");
@@ -138,12 +159,21 @@ export function journalMode(
         set("exobiology");
         break;
       case "LeaveBody":
-        if (mode === "exobiology") set("exploration");
+        // Leaving the body ends exobiology: exploration when it is on, else nothing.
+        if (mode === "exobiology") {
+          if (on("exploration")) set("exploration");
+          else mode = null;
+        }
         break;
     }
   }
-  if (massacreActive && massacreAt !== null) return { mode: "massacre", at: massacreAt };
-  if (mode === "mining" && leftMining && !minedAboard) return null;
+  if (massacreActive && massacreAt !== null && on("massacre"))
+    return { mode: "massacre", at: massacreAt };
+  if (mode === "mining" && leftMining && !minedAboard) mode = null;
+  // Passengers and deliveries show from when they were taken until another activity is newer.
+  if (runActive && runAt !== null && (mode === null || runAt >= at)) {
+    return { mode: "passenger", at: runAt };
+  }
   return mode ? { mode, at } : null;
 }
 
@@ -172,6 +202,9 @@ export function noteMode(kind: string | undefined): HudModeId | null {
     case "exobiology":
     case "mining":
       return kind;
+    case "missions":
+    case "hauling":
+      return "passenger";
     default:
       return null;
   }

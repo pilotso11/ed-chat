@@ -202,6 +202,14 @@ front.
   `hud.mining.useCarrier`, the search is around your fleet carrier and includes
   what you moved to it in the last 12 hours. After a jump, the panel stays on while mined
   cargo is aboard.
+- **Passengers and deliveries:** turns on when you take a passenger or delivery
+  mission, and stays while one is open, until a newer activity. Each destination
+  station shows its passengers (with VIP and wanted counts) or goods and the
+  soonest expiry, amber under two hours. The header shows berths used against
+  the cabins fitted, and the total reward. Ask Claude to plan the route
+  (ed-mcp's `missions_plan`): the stops then follow its order, the route below
+  shows the next stop, and arriving copies the next system. When you take a
+  mission the route does not cover, the panel says the route is stale.
 - **Route:** the current stop of the active ed-mcp plan (with its body or
   station, what it is for and the jumps left on the plotted route), the next
   stop, and how many stops follow. It shows under the other panels too. When you arrive in
@@ -370,7 +378,7 @@ next start.
 | `hud.position` | `top-right`, 24, 120 | Where the panel sits, like `position` |
 | `hud.width` | `380` | Least panel width in pixels at font size 15. The panel grows so long names fit |
 | `hud.fontSize` / `hud.backgroundOpacity` | `15` / `0.55` | Panel text size and background |
-| `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology`, `mining` or `route` |
+| `hud.modes.*` | `true` | Turn off `massacre`, `exploration`, `exobiology`, `mining`, `passenger` or `route` |
 | `hud.valuableMin` | `500000` | Bodies worth less when mapped are left off the exploration panel. Those with geological signals are counted on one line |
 | `hud.bioMin` | `5000000` | Planets whose likely species are worth less than this in total are left off the exploration panel |
 | `hud.spansh` | `true` | Look up each system's planets on Spansh when you arrive, and buyers for mined cargo. Only the system's ID, or for buyers the system name and commodity, is sent |
