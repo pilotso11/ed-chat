@@ -292,6 +292,13 @@ describe("finished bio bookmarks", () => {
       e.event === "SAASignalsFound" ? { ...e, Signals: [] } : e,
     ) as JournalEvent[];
     expect(finishedBioBookmarks(p, { ...journal, events: noCount })).toEqual([]);
+    // A count of 0 from a later scan with no biology listed is no count either.
+    const zero = events.map((e) =>
+      e.event === "SAASignalsFound"
+        ? { ...e, Signals: [{ Type: "$SAA_SignalType_Geological;", Count: 2 }] }
+        : e,
+    ) as JournalEvent[];
+    expect(finishedBioBookmarks(p, { ...journal, events: zero })).toEqual([]);
   });
 });
 

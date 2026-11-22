@@ -246,17 +246,20 @@ export function finishedBioBookmarks(
   if (address === null) return [];
   const done = new Set(
     exobiology(journal.events, address, { system })
-      .bodies.filter(
-        (b) =>
-          b.species.length > 0 &&
-          b.species.every((s) => s.analysed) &&
+      .bodies.filter((b) => {
+        // An abandoned species was left for another of its genus: it neither blocks nor counts.
+        const kept = b.species.filter((s) => !s.abandoned);
+        return (
+          kept.length > 0 &&
+          kept.every((s) => s.analysed) &&
           !b.not_started.length &&
-          // Every signal sampled, not just every genus seen so far; with no signal count, the
-          // body might have more, so it is left for the player or Claude to mark done.
-          b.bio_signals !== null &&
-          b.bio_signals !== undefined &&
-          b.species.length >= b.bio_signals,
-      )
+          // Every signal sampled, not just every genus seen so far. With no signal count (null, or
+          // 0 from a later scan with no biology listed) the body might hold more, so it is left
+          // for the player or Claude to mark done.
+          !!b.bio_signals &&
+          kept.length >= b.bio_signals
+        );
+      })
       .map((b) => bodyKey(b.body, system)),
   );
   return todo.filter((i) => done.has(bodyKey(plan.stops[i]!.body!, system)));

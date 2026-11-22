@@ -700,7 +700,7 @@ async function main(): Promise<void> {
     for (const i of finishedBioBookmarks(data.bookmarks ?? null, data.journal)) {
       const stop = data.bookmarks!.stops[i]!;
       // What and where it is: a new bookmark with the same label in another spot is another one.
-      const id = JSON.stringify([stop.system, stop.body, stop.purpose, stop.position ?? null]);
+      const id = JSON.stringify([stop.system, stop.body, stop.label, stop.purpose, stop.position]);
       if (bookmarksDone.has(id)) continue;
       bookmarksDone.add(id);
       try {
