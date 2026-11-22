@@ -1197,3 +1197,15 @@ describe("logging in elsewhere", () => {
     expect(miningState(squadron, T0 + t * 1000).ring).toBe("A 1 A Ring");
   });
 });
+
+describe("trips for the hold-full copy", () => {
+  it("starts a new trip on selling mined cargo, not limpets", () => {
+    const base = [refined("Platinum")];
+    expect(
+      miningState([...base, ev("MarketSell", { Type: "drones", Count: 4 })], T0 + t * 1000)
+        .lastSale,
+    ).toBeNull();
+    const sold = ev("MarketSell", { Type: "platinum", Count: 4 });
+    expect(miningState([...base, sold], T0 + t * 1000).lastSale).toBe(sold.timestamp);
+  });
+});

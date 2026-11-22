@@ -254,7 +254,8 @@ export function miningState(
         jumpsSince++;
         break;
       case "MarketSell":
-        lastSale = e.timestamp;
+        // Selling mined cargo ends the trip; selling spare limpets does not.
+        if (isMined(commodityKey(str(e.Type) ?? ""))) lastSale = e.timestamp;
         break;
       case "CargoTransfer":
         // The hold emptied to the carrier: the next full hold is a new trip.

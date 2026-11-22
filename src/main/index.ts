@@ -541,7 +541,7 @@ async function main(): Promise<void> {
     };
     const view = buildHud(input, hudMoving ? moveHint(settings.hotkeys) : null);
     lastHudView = view;
-    const next = panelCopy(view, visible, hudCopied);
+    const next = panelCopy(view.panel?.copy, visible, hudCopied);
     hudCopied = next.copied;
     if (next.copy) {
       clipboard.writeText(next.copy.text);

@@ -3,6 +3,7 @@ import { HUD_MODES, keyList, type Settings } from "../settings.js";
 import type { SavedState } from "../stores.js";
 import type { FeedData } from "./feed.js";
 import type { HudInput, HudView } from "./hud.js";
+import type { PanelView } from "./panels.js";
 import { cycleMode } from "./mode.js";
 
 // What the activity panel shows and when, from the feed, the saved state and the settings;
@@ -90,11 +91,11 @@ export function nextHudMode(
  * hold no longer full, a search in progress), so the same trip is not copied again.
  */
 export function panelCopy(
-  view: HudView,
+  copy: PanelView["copy"] | null,
   canShow: boolean,
   copied: string | null,
 ): { copy: { text: string; note: string } | null; copied: string | null } {
-  const c = canShow ? (view.panel?.copy ?? null) : null;
+  const c = canShow ? (copy ?? null) : null;
   if (!c) return { copy: null, copied };
   return { copy: c.key === copied ? null : { text: c.text, note: c.note }, copied: c.key };
 }
