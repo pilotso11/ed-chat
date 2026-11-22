@@ -37,8 +37,11 @@ jobs:
         with:
           name: coverage
           path: coverage/
-      - run: npm run dist
-      # The built app in Electron (npm run dist built it).
+      - run: npm run build
+      # Packages the app without the installers, so electron-builder errors show up here. The
+      # NSIS and AppX installers take most of npm run dist's time; release.yml builds them.
+      - run: npx electron-builder --win --dir --publish never
+      # Runs the out/ build in Electron, not the packaged app.
       - run: npx playwright test
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -47,10 +50,6 @@ jobs:
           path: |
             playwright-report/
             test-results/
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ed-chat-installer
-          path: dist/*.exe
 
   ci-ok:
     # Single stable check name for branch protection.
