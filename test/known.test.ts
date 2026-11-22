@@ -464,6 +464,41 @@ describe("bio rows", () => {
     ]);
     expect(elw.right).toMatch(/ · mapped 3\/4$/);
     expect(elw.tone).toBeUndefined();
+    // A planet worth mapping that is listed with the bio planets still counts.
+    const bioBody = explorationPanel({
+      system: "Sys",
+      exploration: {
+        ...worth,
+        bodies: [
+          ...worth.bodies.map((b) => ({ ...b, mapped_by_you: true })),
+          body(9, "High metal content body", 1_000_000),
+        ],
+      } as unknown as Exploration,
+      bio: [
+        {
+          body: "Sys 9",
+          body_id: 9,
+          bio_signals: 1,
+          genera: ["Bacterium"],
+          species: [],
+          not_started: ["Bacterium"],
+          likely: [],
+        },
+      ],
+      totals: {
+        unsoldCartographic: 0,
+        unsoldBio: 0,
+        unsoldBioCount: 0,
+        session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+        rate: { session: null, recent: null },
+        planetRate: new Map(),
+      },
+      valuableMin: 500_000,
+      known: null,
+    });
+    expect(bioBody.rows.some((r) => r.text.startsWith("9"))).toBe(true);
+    expect(bioBody.right).toMatch(/ · mapped 3\/4$/);
+    expect(bioBody.tone).toBeUndefined();
     // Before all bodies are found the empty state says "yet", and two geo bodies are plural.
     const early = explorationPanel({
       system: "Sys",

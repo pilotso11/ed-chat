@@ -670,8 +670,7 @@ async function main(): Promise<void> {
   // Bookmark key presses run one at a time, so two quick presses do not both read the same plan.
   let bookmarking: Promise<void> = Promise.resolve();
   function addBookmark(): Promise<void> {
-    bookmarking = bookmarking.then(saveBookmark, saveBookmark);
-    return bookmarking;
+    return queueBookmarks(saveBookmark);
   }
 
   // Saves where the ship or commander is now (Status.json read fresh) to the bookmarks plan.
@@ -712,11 +711,12 @@ async function main(): Promise<void> {
     renderHud();
   }
 
-  // Clears bookmarks: the clear key's (clearHere), or all of them after asking. The writes run in
-  // turn with the bookmark key, so the two do not race; the question does not hold up that queue.
-  function clearBookmarks(scope: "here" | "all"): Promise<void> {
+  // Clears bookmarks: those here (the key, which asks for a second press before it clears a whole
+  // system, or the tray, a deliberate choice), or all of them after asking. The writes run in turn
+  // with the bookmark key, so the two do not race; the question does not hold up that queue.
+  function clearBookmarks(scope: "here" | "all", from: "key" | "tray"): Promise<void> {
     if (scope === "all") return confirmClearAll();
-    return queueBookmarks(() => unmarkBookmarks("here"));
+    return queueBookmarks(() => unmarkBookmarks("here", from === "tray"));
   }
 
   function queueBookmarks(run: () => Promise<void>): Promise<void> {
@@ -725,11 +725,18 @@ async function main(): Promise<void> {
   }
 
   async function confirmClearAll(): Promise<void> {
-    const n = todoBookmarks(hudData?.bookmarks ?? null).length;
+    // The count from the plan as it is now, not as the last poll read it.
+    let n = 0;
+    try {
+      n = hudPlans ? todoBookmarks(await hudPlans.get(BOOKMARKS_PLAN)).length : 0;
+    } catch (err) {
+      if (!isPlanNotFound(err)) throw err;
+    }
+    if (!n) return flash("bookmark", "ⓘ no bookmarks", 3_000);
     const r = await dialog.showMessageBox({
       type: "question",
       title: "ED Chat",
-      message: n ? `Clear all ${n} bookmark${n === 1 ? "" : "s"}?` : "Clear all bookmarks?",
+      message: `Clear all ${n} bookmark${n === 1 ? "" : "s"}?`,
       detail: "They are marked skipped in the ed-mcp plan bookmarks.",
       buttons: ["Clear", "Cancel"],
       defaultId: 1,
@@ -743,7 +750,7 @@ async function main(): Promise<void> {
   const CLEAR_AGAIN_MS = 4_000;
   let clearSystemUntil = 0;
 
-  async function unmarkBookmarks(scope: "here" | "all"): Promise<void> {
+  async function unmarkBookmarks(scope: "here" | "all", confirmed = false): Promise<void> {
     const plans = hudPlans;
     if (!settings.hud.enabled || !settings.hud.bookmarks || !plans || !hudFeed) {
       return flash("bookmark", "ⓘ bookmarks are off or the panel could not open ed-mcp", 3_000);
@@ -763,7 +770,7 @@ async function main(): Promise<void> {
     } else {
       const pick = bookmarksToClear({ plan, system, status: await hudFeed.readStatus() });
       picked = pick.stops;
-      if (pick.whole && Date.now() > clearSystemUntil) {
+      if (pick.whole && !confirmed && Date.now() > clearSystemUntil) {
         clearSystemUntil = Date.now() + CLEAR_AGAIN_MS;
         const n = picked.length;
         return flash(
@@ -1451,7 +1458,7 @@ async function main(): Promise<void> {
           flash("bookmark", `⚠ bookmark not saved: ${message(err)}`, 4_000),
         );
       case "clearBookmark":
-        return void clearBookmarks("here").catch((err: unknown) =>
+        return void clearBookmarks("here", "key").catch((err: unknown) =>
           flash("bookmark", `⚠ bookmark not cleared: ${message(err)}`, 4_000),
         );
     }
@@ -1692,7 +1699,7 @@ async function main(): Promise<void> {
       case "openLogs":
         return openPath(logDir);
       case "clearBookmarks":
-        return void clearBookmarks(a.all ? "all" : "here").catch((err: unknown) =>
+        return void clearBookmarks(a.all ? "all" : "here", "tray").catch((err: unknown) =>
           flash("bookmark", `⚠ bookmarks not cleared: ${message(err)}`, 4_000),
         );
       case "about":

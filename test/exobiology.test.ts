@@ -124,13 +124,24 @@ describe("exobiology panel", () => {
       species: [...done.species.slice(0, 2), { ...done.species[2]!, abandoned: true as const }],
     };
     expect(bioProgress(abandoned)).toEqual({ analysed: 2, signals: 3, done: false });
+    // With no signal count the body may hold more: never done, and the genera found are counted.
     expect(bioProgress({ ...done, bio_signals: null })).toEqual({
+      analysed: 3,
+      signals: 3,
+      done: false,
+    });
+    expect(bioProgress({ ...done, bio_signals: null, genera: [], species: [] }).done).toBe(false);
+    expect(bioProgress({ ...done, bio_signals: 0 })).toEqual({
+      analysed: 3,
+      signals: 3,
+      done: false,
+    });
+    // More genera found than signals counted: the genera are the total.
+    expect(bioProgress({ ...done, bio_signals: 2 })).toEqual({
       analysed: 3,
       signals: 3,
       done: true,
     });
-    expect(bioProgress({ ...done, bio_signals: null, genera: [], species: [] }).done).toBe(false);
-    expect(bioProgress({ ...done, bio_signals: 0 }).done).toBe(false);
   });
 
   it("pays five times on a first footfall", () => {

@@ -854,11 +854,16 @@ export function explorationPanel(input: {
   // The game's body count leaves out belt clusters, which have no planet class or star type.
   const scanned = x.bodies.filter((b) => b.type !== null).length;
   const found = d.body_count !== null ? `${scanned}/${d.body_count} bodies` : `${scanned} scanned`;
-  // The bodies worth mapping: those listed, and the Earth-like, water and ammonia worlds.
-  const worth = [
-    ...items.map((i) => i.done),
-    ...x.bodies.filter((b) => isHighlight(b.type, b.terraformable)).map((b) => b.mapped_by_you),
-  ];
+  // The bodies worth mapping: the Earth-like, water and ammonia worlds, and every other planet
+  // over hud.valuableMin, those listed with the bio planets too.
+  const worth = x.bodies
+    .filter(
+      (b) =>
+        !b.type?.endsWith(" star") &&
+        (isHighlight(b.type, b.terraformable) ||
+          (b.value_mapped ?? b.value_scanned ?? 0) >= input.valuableMin),
+    )
+    .map((b) => b.mapped_by_you);
   const mapped = worth.filter(Boolean).length;
   // Done when every body is found and every one worth mapping is mapped.
   const done = d.all_bodies_found && mapped === worth.length;
@@ -910,9 +915,9 @@ function bioRateLine(input: {
 
 /**
  * How far through a body's biology the player is: species analysed (an abandoned one is not)
- * out of the signals, or the genera when the signal count is not known. Done once every signal
- * has a species analysed, as the In system rows count it. Bio bookmarks are marked done by a
- * stricter rule (finishedBioBookmarks), which also waits for a signal count.
+ * out of the signals, or out of the genera found when there are more of those. Done once every
+ * signal has a species analysed; with no signal count (null, or 0 from a later scan) the body
+ * may hold more, so it is never done, as for bio bookmarks (finishedBioBookmarks).
  */
 export function bioProgress(b: ExobiologyBody): {
   analysed: number;
@@ -920,9 +925,8 @@ export function bioProgress(b: ExobiologyBody): {
   done: boolean;
 } {
   const analysed = b.species.filter((s) => s.analysed && !s.abandoned).length;
-  // As the In system rows count: a signal count of 0 is not done, null falls back to the genera.
-  const signals = b.bio_signals ?? b.genera.length;
-  return { analysed, signals, done: signals > 0 && analysed >= signals };
+  const signals = Math.max(b.bio_signals ?? 0, b.genera.length);
+  return { analysed, signals, done: !!b.bio_signals && analysed >= signals };
 }
 
 export function exobiologyPanel(input: {

@@ -178,8 +178,8 @@ journal does not say what grows where, so the list is for the whole body, not
 the spot.
 Ctrl+Alt+- clears the nearest bookmark on the body you are on. Away from a
 bookmarked body, a second press within 4 seconds clears every bookmark in the
-system. The tray menu's Bookmarks item does the same, and can clear every
-bookmark after asking. A cleared bookmark
+system. The tray menu's Bookmarks item clears the same ones in one click, and
+can clear every bookmark after asking. A cleared bookmark
 is marked skipped in the plan. Bookmarks are an ed-mcp plan, so Claude can see
 and change them too. `hud.bookmarks` turns them off.
 
