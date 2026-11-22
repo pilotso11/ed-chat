@@ -14,7 +14,7 @@ const MARKS: Record<RouteRow["kind"], string> = {
  * them): half an em each.
  */
 function indent(text: string): { paddingLeft: string } | undefined {
-  const n = text.length - text.trimStart().length;
+  const n = /^ */.exec(text)![0].length;
   return n ? { paddingLeft: `${n / 2}em` } : undefined;
 }
 
@@ -58,7 +58,7 @@ export function HudPanel() {
                 <div key={i} className={`row ${r.tone ?? ""}`}>
                   <div className="line">
                     <span className="text" style={indent(r.text)}>
-                      {r.text.trimStart()}
+                      {r.text.replace(/^ +/, "")}
                     </span>
                     {r.right && <span className="right">{r.right}</span>}
                   </div>
