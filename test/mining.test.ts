@@ -591,6 +591,17 @@ describe("Spansh sale prices", () => {
     });
     expect(failing.get(q)).toBe("pending");
     await vi.waitFor(() => expect(failing.get(q)).toBe("failed"));
+    // It tries again five minutes after the failure, not before.
+    const fail = vi.fn(async () => Promise.reject(new Error("Spansh 503")));
+    const retrying = new SellPrices(fail, { now: () => now });
+    retrying.get(q);
+    await vi.waitFor(() => expect(retrying.get(q)).toBe("failed"));
+    now += 4 * 60_000;
+    retrying.get(q);
+    expect(fail).toHaveBeenCalledTimes(1);
+    now += 2 * 60_000;
+    retrying.get(q);
+    expect(fail).toHaveBeenCalledTimes(2);
   });
 });
 
