@@ -15,6 +15,7 @@ import { carrierState, miningPanel, miningState, minedWaiting } from "./mining.j
 import { drops, passengerPanel } from "./passenger.js";
 import type { SellLookup, SellQuery } from "./sell.js";
 import { bookmarkRows } from "./bookmarks.js";
+import { same } from "./json.js";
 import {
   isTradePlan,
   missionsNow,
@@ -281,10 +282,7 @@ function bookmarkBio(input: HudInput, system: string | null): ExobiologyBody[] |
   const plan = input.bookmarks;
   if (!j || !system || !plan) return null;
   const bio = plan.stops.some(
-    (b) =>
-      b.status === "todo" &&
-      b.kind === "exobiology" &&
-      b.system.toLowerCase() === system.toLowerCase(),
+    (b) => b.status === "todo" && b.kind === "exobiology" && same(b.system, system),
   );
   const address = bio ? systemAddress(j.events, system) : null;
   return address === null ? null : exobiology(j.events, address, { system }).bodies;

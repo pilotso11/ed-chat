@@ -911,7 +911,8 @@ function bioRateLine(input: {
 /**
  * How far through a body's biology the player is: species analysed (an abandoned one is not)
  * out of the signals, or the genera when the signal count is not known. Done once every signal
- * has a species analysed, as the In system rows count it.
+ * has a species analysed, as the In system rows count it. Bio bookmarks are marked done by a
+ * stricter rule (finishedBioBookmarks), which also waits for a signal count.
  */
 export function bioProgress(b: ExobiologyBody): {
   analysed: number;
@@ -919,7 +920,8 @@ export function bioProgress(b: ExobiologyBody): {
   done: boolean;
 } {
   const analysed = b.species.filter((s) => s.analysed && !s.abandoned).length;
-  const signals = b.bio_signals || b.genera.length;
+  // As the In system rows count: a signal count of 0 is not done, null falls back to the genera.
+  const signals = b.bio_signals ?? b.genera.length;
   return { analysed, signals, done: signals > 0 && analysed >= signals };
 }
 

@@ -477,30 +477,36 @@ describe("clearing bookmarks", () => {
 
   it("clears the nearest bookmark on this body", () => {
     const p = plan([far, other, near, away]);
-    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: status() })).toEqual([2]);
+    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: status() })).toEqual({
+      stops: [2],
+      whole: false,
+    });
   });
 
   it("clears the first on the body when positions are not known", () => {
     const p = plan([other, { body: BODY, label: "A" }, { body: BODY, label: "B" }]);
-    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: status() })).toEqual([1]);
+    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: status() }).stops).toEqual([1]);
     const q = plan([far, near]);
     expect(
-      bookmarksToClear({ plan: q, system: SYSTEM, status: status({ latitude: null }) }),
+      bookmarksToClear({ plan: q, system: SYSTEM, status: status({ latitude: null }) }).stops,
     ).toEqual([0]);
   });
 
-  it("clears every bookmark in the system away from a bookmarked body", () => {
-    const p = plan([far, other, away, { ...near, status: "done" }]);
+  it("clears every bookmark in the system away from a bookmarked body, as a whole system", () => {
+    // A stop with no body is not shown, so it is not cleared either.
+    const p = plan([far, other, away, { ...near, status: "done" }, { label: "No body" }]);
+    const whole = { stops: [0, 1], whole: true };
     expect(
       bookmarksToClear({ plan: p, system: SYSTEM, status: status({ body: `${SYSTEM} 3` }) }),
-    ).toEqual([0, 1]);
-    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: null })).toEqual([0, 1]);
+    ).toEqual(whole);
+    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: null })).toEqual(whole);
   });
 
   it("clears nothing in a system without bookmarks", () => {
-    expect(bookmarksToClear({ plan: plan([far]), system: "Sol", status: status() })).toEqual([]);
-    expect(bookmarksToClear({ plan: null, system: SYSTEM, status: status() })).toEqual([]);
-    expect(bookmarksToClear({ plan: plan([far]), system: null, status: status() })).toEqual([]);
+    const none = { stops: [], whole: false };
+    expect(bookmarksToClear({ plan: plan([far]), system: "Sol", status: status() })).toEqual(none);
+    expect(bookmarksToClear({ plan: null, system: SYSTEM, status: status() })).toEqual(none);
+    expect(bookmarksToClear({ plan: plan([far]), system: null, status: status() })).toEqual(none);
   });
 
   it("lists every bookmark still to do", () => {
@@ -546,6 +552,10 @@ describe("bio bookmark rows", () => {
       bio_signals: 1,
     });
     expect(rows([done])[0]!.text).toBe("📍 Bio: all sampled");
+    // A second bookmark's " (2)" stays, so the two rows still differ.
+    expect(rows([now], [{ ...mark, label: `${mark.label} (2)` }])[0]!.text).toBe(
+      "📍 Bio: Bacterium, Concha (2)",
+    );
   });
 
   it("keeps a label the player or Claude chose, and the saved one without the journal", () => {

@@ -22,7 +22,7 @@ hand in. Done rows are green with a ✓ too.
 | Ctrl+Alt+Home | Move the panel: for 15 seconds the move keys move the panel, not the chat |
 | Ctrl+Alt+PageDown / PageUp | Mark the current route stop done / go back one stop, and copy the stop's system |
 | Ctrl+Alt+B | Bookmark where you are on a planet |
-| Ctrl+Alt+- | Clear the nearest bookmark on this body, or every bookmark in the system when not on a bookmarked body |
+| Ctrl+Alt+- | Clear the nearest bookmark on this body; away from a bookmarked body, press twice to clear every bookmark in the system |
 
 ## Massacre
 
@@ -176,9 +176,10 @@ bookmark at a bio site lists what is still to sample on its body, so finished
 species drop off, and is marked done once every species there is analysed. The
 journal does not say what grows where, so the list is for the whole body, not
 the spot.
-Ctrl+Alt+- clears the nearest bookmark on the body you are on; away from a
-bookmarked body, it clears every bookmark in the system. The tray menu's
-Bookmarks item does the same, and can clear every bookmark. A cleared bookmark
+Ctrl+Alt+- clears the nearest bookmark on the body you are on. Away from a
+bookmarked body, a second press within 4 seconds clears every bookmark in the
+system. The tray menu's Bookmarks item does the same, and can clear every
+bookmark after asking. A cleared bookmark
 is marked skipped in the plan. Bookmarks are an ed-mcp plan, so Claude can see
 and change them too. `hud.bookmarks` turns them off.
 

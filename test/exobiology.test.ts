@@ -130,6 +130,7 @@ describe("exobiology panel", () => {
       done: true,
     });
     expect(bioProgress({ ...done, bio_signals: null, genera: [], species: [] }).done).toBe(false);
+    expect(bioProgress({ ...done, bio_signals: 0 }).done).toBe(false);
   });
 
   it("pays five times on a first footfall", () => {

@@ -85,7 +85,9 @@ function bookmarkText(s: Stop, bio: ExobiologyBody[] | null, system: string): st
   const body = bio.find((b) => bodyKey(b.body, system) === key);
   if (!body) return label;
   const left = bioLeft(body);
-  return left.length ? `Bio: ${left.join(", ")}` : "Bio: all sampled";
+  // The " (2)" that kept the label unique stays, so two bookmarks on a body still differ.
+  const n = / \(\d+\)$/.exec(label)?.[0] ?? "";
+  return `${left.length ? `Bio: ${left.join(", ")}` : "Bio: all sampled"}${n}`;
 }
 
 /** A bookmark as a plan stop. */
@@ -252,24 +254,22 @@ export const todoBookmarks = (plan: Plan | null): number[] =>
 /**
  * The bookmarks that the clear key clears, as indexes in the plan. On a body, the nearest
  * bookmark on it (the first when where it is or where the player is is not known). Elsewhere in
- * the system, every bookmark in the system. Empty when the system has none.
+ * the system, every bookmark in the system (whole: true, which the key asks to confirm). Only
+ * bookmarks with a body, as the panel shows. Empty when the system has none.
  */
 export function bookmarksToClear(input: {
   plan: Plan | null;
   system: string | null;
   status: ShipStatus | null;
-}): number[] {
+}): { stops: number[]; whole: boolean } {
   const { plan, system, status } = input;
-  if (!plan || !system) return [];
+  if (!plan || !system) return { stops: [], whole: false };
   const here = todoBookmarks(plan).filter(
-    (i) => plan.stops[i]!.system.toLowerCase() === system.toLowerCase(),
+    (i) => !!plan.stops[i]!.body && same(plan.stops[i]!.system, system),
   );
   const onBody = status?.body ? bodyKey(status.body, system) : null;
-  const body = here.filter((i) => {
-    const b = plan.stops[i]!.body;
-    return !!b && bodyKey(b, system) === onBody;
-  });
-  if (!body.length) return here;
+  const body = here.filter((i) => bodyKey(plan.stops[i]!.body!, system) === onBody);
+  if (!body.length) return { stops: here, whole: here.length > 0 };
   const at =
     status && status.latitude !== null && status.longitude !== null && status.radius !== null
       ? { latitude: status.latitude, longitude: status.longitude, radius: status.radius }
@@ -279,7 +279,7 @@ export function bookmarksToClear(input: {
     return pos && at ? surfaceDistance(at, pos, at.radius) : Infinity;
   };
   // The first of the nearest: a stable sort keeps the plan's order among equals.
-  return [[...body].sort((a, b) => far(a) - far(b))[0]!];
+  return { stops: [[...body].sort((a, b) => far(a) - far(b))[0]!], whole: false };
 }
 
 /** Whether an ed-mcp plan store error says the plan does not exist. */
