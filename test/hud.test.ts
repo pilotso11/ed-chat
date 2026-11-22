@@ -392,6 +392,66 @@ describe("exploration totals", () => {
     expect(explorationTotals(died, min(10)).rate.session!).toBeCloseTo(elwWorth * 2 * 6);
   });
 
+  it("keeps a planet's time and worth over a relog, a map and time away", () => {
+    const T = Date.UTC(2026, 10, 15, 10);
+    const min = (n: number) => T + n * 60_000;
+    const timed = (n: number, e: JournalEvent) => ({
+      ...e,
+      timestamp: new Date(min(n)).toISOString(),
+    });
+    const body = (event: string, n: number, extra: Record<string, unknown> = {}) =>
+      timed(n, ev(event, { SystemAddress: 1, BodyID: 3, ...extra }));
+    const analyse = (n: number) =>
+      timed(
+        n,
+        ev("ScanOrganic", {
+          ScanType: "Analyse",
+          Species: "$Codex_Ent_Stratum_07_Name;",
+          SystemAddress: 1,
+          Body: 3,
+        }),
+      );
+    const species = explorationTotals([analyse(0)]).unsoldBio;
+    const planet = ev("Scan", {
+      ScanType: "Detailed",
+      StarSystem: "A",
+      SystemAddress: 1,
+      BodyID: 3,
+      PlanetClass: "Water world",
+      TerraformState: "Terraformable",
+      MassEM: 1,
+      WasDiscovered: true,
+      WasMapped: true,
+    });
+    const scanned = explorationTotals([planet]).unsoldCartographic;
+    const mapped = explorationTotals([planet, body("SAAScanComplete", 0)]).unsoldCartographic;
+    const events = [
+      timed(0, ev("LoadGame")),
+      timed(0, planet),
+      // Mapping starts the planet's clock, and the map's worth counts toward it.
+      body("SAAScanComplete", 5),
+      analyse(10),
+      // A relog on the planet keeps its time and worth; the next sample starts its clock again.
+      timed(12, ev("LoadGame")),
+      analyse(20),
+    ];
+    const t = explorationTotals(events, min(25));
+    // 5 to 12 and 20 to 25: 12 minutes, with the map and two species.
+    expect(t.planetRate.get("1|3")).toBeCloseTo(((mapped - scanned + 2 * species) * 60) / 12);
+    // The new session: from the sample at 20, five minutes.
+    expect(t.rate.session).toBeCloseTo(species * 12);
+    // Dying stops the planet's clock: an hour later it still has its 7 minutes.
+    const died = explorationTotals([...events.slice(0, 4), timed(12, ev("Died"))], min(72));
+    expect(died.planetRate.get("1|3")).toBeCloseTo(((mapped - scanned + species) * 60) / 7);
+    // Time away counts at most 10 minutes in the last half hour too: after 50 minutes of work
+    // and 25 away, it is the 5 minutes of work in it and 10 of the time away.
+    const work = [timed(0, ev("LoadGame")), timed(0, ev("FSDJump", { SystemAddress: 1 }))];
+    for (let n = 5; n <= 50; n += 5) work.push(timed(n, ev("FSDJump", { SystemAddress: 1 })));
+    work.push(analyse(50));
+    const away = explorationTotals(work, min(75));
+    expect(away.rate.recent).toBeCloseTo((species * 60) / 15);
+  });
+
   it("shows the session rate once on the exobiology panel", () => {
     const totals = {
       unsoldCartographic: 0,

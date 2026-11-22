@@ -201,6 +201,41 @@ const HOUR_MS = 3_600_000;
 /** A gap between events longer than this is time away: only this much of it counts. */
 const IDLE_MS = 10 * 60_000;
 
+/**
+ * Time spent at something: from start() to stop(), from event to event, where a gap counts up to
+ * IDLE_MS, so time docked or away does not lower a rate.
+ */
+class ActiveClock {
+  private last: number | null = null;
+  /** Each counted stretch, by when it ended, for the time within a window. */
+  private readonly spans: { at: number; ms: number }[] = [];
+
+  start(at: number): void {
+    if (this.last === null) this.last = at;
+  }
+
+  tick(at: number): void {
+    if (this.last === null) return;
+    const ms = Math.min(Math.max(0, at - this.last), IDLE_MS);
+    if (ms) this.spans.push({ at, ms });
+    this.last = at;
+  }
+
+  stop(at: number): void {
+    this.tick(at);
+    this.last = null;
+  }
+
+  /** The time counted, until now; with `since`, only the stretches that ended after it. */
+  total(now: number, since = -Infinity): number {
+    const tail = this.last !== null ? Math.min(Math.max(0, now - this.last), IDLE_MS) : 0;
+    // A stretch that began before `since` counts from it.
+    return this.spans
+      .filter((s) => s.at > since)
+      .reduce((n, s) => n + Math.min(s.ms, s.at - since), tail);
+  }
+}
+
 const perHour = (credits: number, ms: number) =>
   ms >= RATE_MIN_MS ? (credits * HOUR_MS) / ms : null;
 
@@ -245,22 +280,26 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
   // What each body is worth so far, so a rescan or a map adds only the difference. Kept over a
   // relog, so a rescan after one is not counted again.
   const worth = new Map<string, number>();
-  // This session's earnings, and the time spent at it from its first exploring event: a gap
-  // between events counts up to IDLE_MS, so time docked or away does not lower the rate.
-  let start: number | null = null;
-  let last: number | null = null;
-  let active = 0;
+  // This session's earnings, and its clock from its first exploring event.
+  let session0 = new ActiveClock();
   const earned: { at: number; credits: number }[] = [];
-  // Each body's time and earnings: the clock runs from approaching it (else its first sample)
-  // until leaving it, and again on each return.
-  const planets = new Map<string, { ms: number; open: number | null; credits: number }>();
+  // Each body's clock and earnings: the clock runs from approaching or mapping it (else its first
+  // sample) until leaving it, and again on each return. Kept over a relog, often made on a planet.
+  const planets = new Map<string, { clock: ActiveClock; credits: number }>();
   const visit = (body: string, at: number) => {
-    const p = planets.get(body);
-    if (!p) planets.set(body, { ms: 0, open: at, credits: 0 });
-    else if (p.open === null) p.open = at;
+    const p = planets.get(body) ?? { clock: new ActiveClock(), credits: 0 };
+    planets.set(body, p);
+    p.clock.start(at);
   };
-  const earn = (at: number, credits: number) => {
-    if (credits > 0) earned.push({ at, credits });
+  const stopPlanets = (at: number) => {
+    for (const p of planets.values()) p.clock.stop(at);
+  };
+  const earn = (at: number, credits: number, body?: string) => {
+    if (credits <= 0) return;
+    earned.push({ at, credits });
+    // What the body is worth counts toward its own rate too: mapping it, and its species.
+    const p = body !== undefined ? planets.get(body) : undefined;
+    if (p) p.credits += credits;
   };
   const rework = (key: string, at: number, scan: Obj, mapped: boolean) => {
     const v =
@@ -271,17 +310,15 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
         firstMapped: scan.WasMapped === false,
       }) ?? 0;
     const before = worth.get(key) ?? 0;
-    earn(at, v - before);
+    earn(at, v - before, key);
     worth.set(key, Math.max(v, before));
   };
   for (const e of events) {
     const at = Date.parse(e.timestamp);
     if (!Number.isNaN(at)) {
-      if (start === null && EXPLORING.has(e.event)) start = at;
-      if (start !== null) {
-        if (last !== null) active += Math.min(Math.max(0, at - last), IDLE_MS);
-        last = at;
-      }
+      if (EXPLORING.has(e.event)) session0.start(at);
+      session0.tick(at);
+      for (const p of planets.values()) p.clock.tick(at);
     }
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     const address = num(e.SystemAddress);
@@ -294,23 +331,22 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
         found.clear();
         firstFound = 0;
         settled.clear();
-        start = null;
-        last = null;
-        active = 0;
+        session0 = new ActiveClock();
         earned.length = 0;
-        planets.clear();
+        if (!Number.isNaN(at)) stopPlanets(at);
+        break;
+      case "Shutdown":
+        if (!Number.isNaN(at)) {
+          session0.stop(at);
+          stopPlanets(at);
+        }
         break;
       case "ApproachBody":
         if (!Number.isNaN(at)) visit(key, at);
         break;
-      case "LeaveBody": {
-        const p = planets.get(key);
-        if (p?.open != null && !Number.isNaN(at)) {
-          p.ms += Math.max(0, at - p.open);
-          p.open = null;
-        }
+      case "LeaveBody":
+        if (!Number.isNaN(at)) planets.get(key)?.clock.stop(at);
         break;
-      }
       case "FSDJump":
         session.systems++;
         here = address;
@@ -345,7 +381,11 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
         const s = scans.get(key);
         if (s) s.mapped = true;
         session.mapped++;
-        if (s && !Number.isNaN(at)) rework(key, at, s.scan, true);
+        if (s && !Number.isNaN(at)) {
+          // Mapping is time spent at the body: its clock starts, and the map counts toward it.
+          visit(key, at);
+          rework(key, at, s.scan, true);
+        }
         break;
       }
       case "SellExplorationData":
@@ -391,10 +431,7 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
           const value = untrodden.has(body) ? v * FOOTFALL_BONUS : v;
           bio += value;
           bioCount++;
-          if (!Number.isNaN(at)) {
-            earn(at, value);
-            planets.get(body)!.credits += value;
-          }
+          if (!Number.isNaN(at)) earn(at, value, body);
         }
         break;
       }
@@ -404,8 +441,10 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
         break;
       case "Died":
         scans.clear();
-        // The data is lost, so scanning the bodies again earns again.
+        // The data is lost, so scanning the bodies again earns again. What was earned stays: the
+        // rate is of the work done, not of what is left to sell.
         worth.clear();
+        if (!Number.isNaN(at)) stopPlanets(at);
         bio = 0;
         bioCount = 0;
         break;
@@ -424,19 +463,21 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
   }
   session.firstDiscoveries = firstFound + [...found].filter((k) => !discovered.has(k)).length;
   const sum = (list: { credits: number }[]) => list.reduce((n, x) => n + x.credits, 0);
-  const elapsed = last !== null ? active + Math.min(Math.max(0, now - last), IDLE_MS) : 0;
+  const elapsed = session0.total(now);
   const rate = {
     session: perHour(sum(earned), elapsed),
-    // Only once the session is longer than the window, else it repeats the session rate.
+    // Only once the session is longer than the window, else it repeats the session rate. Over
+    // the time spent in the window, so time away does not lower it either.
     recent:
       elapsed > RECENT_MS
-        ? perHour(sum(earned.filter((x) => x.at > now - RECENT_MS)), RECENT_MS)
+        ? perHour(
+            sum(earned.filter((x) => x.at > now - RECENT_MS)),
+            session0.total(now, now - RECENT_MS),
+          )
         : null,
   };
   const planetRate = new Map(
-    [...planets].map(
-      ([k, p]) => [k, perHour(p.credits, p.ms + (p.open !== null ? now - p.open : 0))] as const,
-    ),
+    [...planets].map(([k, p]) => [k, perHour(p.credits, p.clock.total(now))] as const),
   );
   return {
     unsoldCartographic: carto,
@@ -467,7 +508,7 @@ function totalsFooter(t: ExplorationTotals, withRate = true): string[] {
   const s = t.session;
   return [
     unsold.length ? `Unsold: ${unsold.join(" · ")}` : null,
-    s.systems || s.scanned
+    s.systems || s.scanned || (withRate && rateText(t))
       ? `Session: ${[
           `${s.systems} jumps`,
           `${s.scanned} scanned`,
