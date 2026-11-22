@@ -34,7 +34,15 @@ describe("activeBindings", () => {
     const all = bindings(DEFAULT_SETTINGS.hotkeys);
     expect(activeBindings(all, false)).toHaveLength(all.length);
     const names = activeBindings(all, true).map((b) => b.name);
-    for (const gone of ["cancel", "nextDisplay", "approve", "deny", "alwaysAllow"]) {
+    for (const gone of [
+      "cancel",
+      "nextDisplay",
+      "approve",
+      "deny",
+      "alwaysAllow",
+      "showHistory",
+      "copyChip1",
+    ]) {
       expect(names).not.toContain(gone);
     }
     // The chat input reports these as real Ctrl+Alt chords, so they still work there.
@@ -42,16 +50,11 @@ describe("activeBindings", () => {
       ["Ctrl+Alt+Y", "approve"],
       ["Ctrl+Alt+N", "deny"],
       ["Ctrl+Alt+A", "alwaysAllow"],
+      ["Ctrl+Alt+H", "showHistory"],
+      ["Ctrl+Alt+1", "copyChip1"],
     ];
     for (const [chord, name] of chords) expect(chordBinding(all, chord)?.name).toBe(name);
-    for (const kept of [
-      "openChat",
-      "toggleIcon",
-      "moveLeft",
-      "moveUp",
-      "showHistory",
-      "copyChip1",
-    ]) {
+    for (const kept of ["openChat", "toggleIcon", "moveLeft", "moveUp"]) {
       expect(names).toContain(kept);
     }
   });
@@ -114,7 +117,7 @@ describe("bindings", () => {
   it("expands copyChip to 9 bindings and lists the rest", () => {
     const b = bindings(DEFAULT_SETTINGS.hotkeys);
     expect(b).toHaveLength(18 + 9);
-    expect(b.find((x) => x.accelerator === "Ctrl+Shift+3")?.action).toEqual({
+    expect(b.find((x) => x.accelerator === "Ctrl+Alt+3")?.action).toEqual({
       type: "copyChip",
       n: 3,
     });
@@ -197,7 +200,7 @@ describe("HotkeyManager", () => {
   // Each row of the keys card matches the actions behind it, chips and arrows included.
   it.each([
     // The chip keys register last, so the chip loses here.
-    [{ hudMode: "Ctrl+Shift+5" }, "Copy chip", "Panel mode"],
+    [{ hudMode: "Ctrl+Alt+5" }, "Copy chip", "Panel mode"],
     [{ hudToggle: "Ctrl+Alt+Up" }, "Activity panel", "Move overlay"],
     [{ hudMove: "Ctrl+Alt+M" }, "Move panel (then arrows)", "Next monitor"],
   ])("marks only the row that lost a shared key (%o)", (set, loser, winner) => {
@@ -239,9 +242,9 @@ describe("key lists", () => {
         .map((x) => x.accelerator);
     expect(keys({})).not.toContain("Ctrl+num1");
     expect(keys({ copyChipNumpad: true })).toEqual(
-      expect.arrayContaining(["Ctrl+Shift+1", "Ctrl+num9"]),
+      expect.arrayContaining(["Ctrl+Alt+1", "Ctrl+num9"]),
     );
-    expect(chipKeyLabel(hk({ copyChipNumpad: true }))).toBe("Ctrl+Shift+1–9 / Ctrl+num1–9");
+    expect(chipKeyLabel(hk({ copyChipNumpad: true }))).toBe("Ctrl+Alt+1–9 / Ctrl+num1–9");
   });
 
   it("drops keys without a modifier in always scope, so other apps keep them", () => {
@@ -252,11 +255,7 @@ describe("key lists", () => {
   });
 
   it("lists the keys for the keys card and marks the taken ones", () => {
-    const rows = keyRows(DEFAULT_SETTINGS.hotkeys, [
-      "Ctrl+Alt+Enter",
-      "Ctrl+Shift+3",
-      "Ctrl+Alt+Up",
-    ]);
+    const rows = keyRows(DEFAULT_SETTINGS.hotkeys, ["Ctrl+Alt+Enter", "Ctrl+Alt+3", "Ctrl+Alt+Up"]);
     expect(rows[0]).toEqual({
       label: "Reply → whole reply → chat",
       keys: "Ctrl+`",
@@ -271,8 +270,8 @@ describe("key lists", () => {
     });
     expect(rows[2]).toEqual({
       label: "Copy chip",
-      keys: "Ctrl+Shift+1–9",
-      failed: ["Ctrl+Shift+3"],
+      keys: "Ctrl+Alt+1–9",
+      failed: ["Ctrl+Alt+3"],
       unused: [],
     });
     expect(rows.find((r) => r.label === "Move overlay")).toEqual({

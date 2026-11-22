@@ -6,7 +6,7 @@ next to each item.
 ## Phase 0, part B (first run only; copy results to the spec's "Phase 0 results")
 
 1. Hotkeys: with the game in Borderless mode and in front, do Ctrl+Alt+Enter,
-   Ctrl+Shift+1 and Ctrl+Alt+Left reach the overlay?
+   Ctrl+Alt+1 and Ctrl+Alt+Left reach the overlay?
 2. Focus: after Enter, does the game have focus again (ship controls respond at
    once)?
 3. `DisplaySettings.xml`: the `FullScreen` value for Windowed, Fullscreen and
@@ -23,9 +23,9 @@ next to each item.
 - [ ] The overlay shows over the game in Borderless mode.
 - [ ] The fullscreen warning shows in exclusive fullscreen.
 - [ ] Hotkeys work while the game is in front, and not while another app is.
-- [ ] Ctrl+Shift+Enter switches to the icon and back, and the game does not also act on it.
-- [ ] Ctrl+` steps: the last reply, the whole reply, the chat, then back to rest with focus on the game. From minimized, the first press restores the overlay and the last press minimizes it again. With the history open (Ctrl+Shift+H), a press adds the input and the next closes both.
-- [ ] Quit ED Chat after a reply and start it again: the status line shows `↺ resumed your last conversation`, Ctrl+Shift+H shows the earlier turns, and Claude remembers them.
+- [ ] Ctrl+Alt+Shift+Enter switches to the icon and back, and the game does not also act on it.
+- [ ] Ctrl+` steps: the last reply, the whole reply, the chat, then back to rest with focus on the game. From minimized, the first press restores the overlay and the last press minimizes it again. With the history open (Ctrl+Alt+H), a press adds the input and the next closes both.
+- [ ] Quit ED Chat after a reply and start it again: the status line shows `↺ resumed your last conversation`, Ctrl+Alt+H shows the earlier turns, and Claude remembers them.
 - [ ] After `/new`, a restart does not resume. With `resumeHours` at `0`, no restart resumes.
 - [ ] In icon mode, a reply expands the overlay and it stays expanded.
 - [ ] With the chat open, dragging the status line moves the overlay, and it snaps to the nearest edge or corner.

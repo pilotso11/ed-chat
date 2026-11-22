@@ -127,7 +127,7 @@ export function activeBindings(
 /** How a key list reads on screen: "Ctrl+Alt+C" or "Ctrl+Alt+C / F13". */
 export const keyLabel = (k: Keys) => keyList(k).join(" / ");
 
-/** The copy keys as one label: "Ctrl+Shift+1–9". */
+/** The copy keys as one label: "Ctrl+Alt+1–9". */
 export function chipKeyLabel(h: Settings["hotkeys"]): string {
   return chipPatterns(h)
     .map((p) => p.replace("{n}", "1–9"))

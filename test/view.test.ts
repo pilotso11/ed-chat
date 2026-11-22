@@ -73,7 +73,7 @@ describe("buildView", () => {
       chatLines: 14,
       growsUp: true,
       align: "start",
-      copyChipKey: "Ctrl+Shift+1–9",
+      copyChipKey: "Ctrl+Alt+1–9",
     });
   });
 
@@ -156,7 +156,7 @@ describe("buildView", () => {
     expect(buildView(hist, DEFAULT_SETTINGS).chat?.input).toBe(false);
   });
 
-  // Ctrl+Shift+n copies currentChips, so the chat must number the same chips.
+  // Ctrl+Alt+n copies currentChips, so the chat must number the same chips.
   it("shows the streaming reply's chips in the chat and blocks sending meanwhile", () => {
     const done: Action = {
       type: "backend",
