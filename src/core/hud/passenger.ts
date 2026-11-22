@@ -68,7 +68,7 @@ export function drops(missions: Mission[]): Drop[] {
 /** Mission IDs the plan's stops still to do serve; null when the plan does not say. */
 function planned(plan: Plan | null): Set<number> | null {
   if (!plan) return null;
-  const stops = plan.stops as (Plan["stops"][number] & { missions?: number[] })[];
+  const stops = plan.stops;
   if (!stops.some((s) => Array.isArray(s.missions))) return null;
   return new Set(stops.filter((s) => s.status === "todo").flatMap((s) => s.missions ?? []));
 }
@@ -139,8 +139,8 @@ export function passengerPanel(input: {
     all.length > 1 &&
     !input.plan?.stops.some((s) => s.kind === "mission" || s.kind === "hand_in")
   ) {
-    // A plan with mission stops is a route, even when an older ed-mcp read it without the
-    // missions each stop serves (so it cannot say whether the route is stale).
+    // A plan with mission stops is a route, even when its stops do not list their missions (one
+    // planned by hand), so it cannot say whether the route is stale.
     rows.push({ text: "No mission route: ask Claude to plan one", tone: "dim" });
   }
 
