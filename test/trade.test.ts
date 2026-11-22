@@ -1050,6 +1050,88 @@ describe("the trade panel", () => {
     );
   });
 
+  it("shows the session's rate against the plan's", () => {
+    const planned = (perHour: number, events: JournalEvent[]) =>
+      tradePanel({ ...base, plan: loop({ profit_per_hour: perHour }), events })!;
+    // No trade yet: the planned rate alone.
+    expect(planned(60_000_000, []).footer).toEqual(["Session: 60.0M/h planned"]);
+    // Trades, but too soon for a rate.
+    expect(planned(60_000_000, [buy(1, "Gold", 1, 1)]).footer).toEqual([
+      "Session: 0 profit · 1m · 60.0M/h planned",
+    ]);
+    // 1.0M over 20 minutes: 3.0M/h, under 80% of 60M/h, in amber.
+    const run = [at(60, "LoadGame"), buy(40, "Gold", 200, 10_000), sell(20, "Gold", 100, 20_000)];
+    expect(planned(60_000_000, run).footer).toEqual([
+      { text: "Session: 1.0M profit · 20m · 3.0M/h of 60.0M/h planned", tone: "warn" },
+    ]);
+    // At 80% or more, plain.
+    expect(planned(3_500_000, run).footer).toEqual([
+      "Session: 1.0M profit · 20m · 3.0M/h of 3.5M/h planned",
+    ]);
+    // The first leg of a loop: bought, nothing sold yet, so nothing earned. Not behind.
+    const leg = [at(60, "LoadGame"), buy(20, "Gold", 200, 10_000)];
+    expect(planned(60_000_000, leg).footer).toEqual([
+      "Session: 0 profit · 10m · 0/h of 60.0M/h planned",
+    ]);
+    // With the last half hour.
+    const long = [
+      buy(60, "Gold", 10, 1_000),
+      ...Array.from({ length: 11 }, (_, i) => at(55 - i * 5, "Music")),
+      sell(0, "Gold", 10, 2_000),
+    ];
+    expect(planned(10_000, long).footer).toEqual([
+      "Session: 10k profit · 1h 0m · 10k/h of 10k/h planned (30m 20k/h)",
+    ]);
+    // Behind over the session, but the last half hour is on plan: a slow start, not amber.
+    expect(planned(20_000, long).footer).toEqual([
+      "Session: 10k profit · 1h 0m · 10k/h of 20k/h planned (30m 20k/h)",
+    ]);
+    // Both behind: amber.
+    expect(planned(40_000, long).footer).toEqual([
+      { text: "Session: 10k profit · 1h 0m · 10k/h of 40k/h planned (30m 20k/h)", tone: "warn" },
+    ]);
+    // A long leg: sold 50 minutes ago, then bought and flew. The session is behind, but a half
+    // hour with no sale says nothing, so plain, and no half-hour rate.
+    const leg2 = [
+      at(70, "LoadGame"),
+      buy(65, "Gold", 10, 1_000),
+      sell(50, "Gold", 10, 1_500),
+      buy(45, "Gold", 10, 1_000),
+      ...Array.from({ length: 9 }, (_, i) => at(40 - i * 5, "Music")),
+    ];
+    const quiet = planned(100_000, leg2).footer;
+    expect(quiet).toHaveLength(1);
+    expect(quiet[0]).toMatch(/^Session: 5k profit · 1h \d+m · [\d.]+k\/h of 100k\/h planned$/);
+    expect(tradeTotals(leg2, NOW)).toMatchObject({ quiet: true, rate: { recent: null } });
+    // The same leg with no journal events at all for 45 minutes: the window has too little
+    // counted time for a rate, which must not end the quiet. Still plain.
+    const silent = [
+      at(80, "LoadGame"),
+      buy(75, "Gold", 10, 1_000),
+      at(70, "Music"),
+      at(65, "Music"),
+      at(60, "Music"),
+      at(55, "Music"),
+      sell(50, "Gold", 10, 1_500),
+      buy(45, "Gold", 10, 1_000),
+    ];
+    expect(tradeTotals(silent, NOW)).toMatchObject({ quiet: true });
+    const plain = planned(100_000, silent).footer;
+    expect(plain).toHaveLength(1);
+    // A plain line (a string, not amber), with no half-hour rate.
+    expect(typeof plain[0]).toBe("string");
+    expect(plain[0]).toMatch(/^Session: 5k profit · \d+m · [\d.]+k\/h of 100k\/h planned$/);
+    // A route finished: its planned rate no longer applies.
+    const finished = route([stop("A", "a", [], "done")], { profit_per_hour: 60_000_000 });
+    expect(
+      tradePanel({ ...base, plan: finished, events: run, cargo: hold({ Gold: 100 }) })!.footer,
+    ).toEqual(["Session: 1.0M profit · 20m · 3.0M/h"]);
+    // No planned rate: as before.
+    expect(tradePanel({ ...base, events: run })!.footer).toEqual([
+      "Session: 1.0M profit · 20m · 3.0M/h",
+    ]);
+  });
+
   it("leaves stolen cargo out of the hold, the rows and the mode", () => {
     const stolen = [{ name: "Gold", count: 5, stolen: true, mission_id: null }];
     expect(tradePanel({ ...base, plan: null, cargo: stolen })).toBeNull();

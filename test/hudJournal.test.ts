@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HudFeed } from "../src/core/hud/feed.js";
 import { buildHud, type HudView } from "../src/core/hud/hud.js";
 import { HUD_EVENTS } from "../src/core/hud/mode.js";
+import { footerText, footerTone } from "../src/core/hud/footer.js";
 import { EXPLORATION_EVENTS } from "../src/core/hud/panels.js";
 import { TRADE_EVENTS, tradeAdvance } from "../src/core/hud/trade.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
@@ -640,6 +641,8 @@ describe("trade from the real ed-mcp journal reader", () => {
     await stores.plans.upsert({
       id: "trade",
       name: `Trade loop: ${SYSTEM} ⇄ Wolf 397`,
+      // As ed-mcp 0.9.2 saves it: the sustained rate the loop was chosen for.
+      profit_per_hour: 60_000_000,
       repeat: true,
       lap: 1,
       stops: [
@@ -749,8 +752,15 @@ describe("trade from the real ed-mcp journal reader", () => {
       { text: "  SELL 10 t Gold", right: "hold 0/10 · plan 30,000", tone: "good" },
       { text: "  BUY 10 t Silver", right: "hold 0/10 · plan 3,000" },
     ]);
-    // 10 t sold at 30,000 that cost 9,410, a few minutes ago.
-    expect(v.panel!.footer).toEqual([expect.stringMatching(/^Session: 206k profit · \d+m$/)]);
+    // 10 t sold at 30,000 that cost 9,410, a few minutes ago. The run reaches a rate only if the
+    // test takes long enough on the real clock; then it is far under plan, and amber.
+    expect(v.panel!.footer).toHaveLength(1);
+    const session = v.panel!.footer[0]!;
+    expect(footerText(session)).toMatch(
+      /^Session: 206k profit · \d+m · ([\d.]+[kM]\/h of )?60\.0M\/h planned$/,
+    );
+    const rated = / of 60\.0M\/h planned$/.test(footerText(session));
+    expect(footerTone(session)).toBe(rated ? "warn" : undefined);
     // The silver is not bought yet, so the stop stays open.
     expect(await judge()).toBeNull();
 

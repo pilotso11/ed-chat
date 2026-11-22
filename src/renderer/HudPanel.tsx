@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { HudView } from "../core/hud/hud.js";
 import type { RouteRow } from "../core/hud/panels.js";
+import { footerText, footerTone } from "../core/hud/footer.js";
 
 const MARKS: Record<RouteRow["kind"], string> = {
   current: "●",
@@ -71,8 +72,8 @@ export function HudPanel() {
                 </div>
               ))}
               {p.footer.map((f, i) => (
-                <div key={`f${i}`} className="footer">
-                  {f}
+                <div key={`f${i}`} className={footerTone(f) ? `footer ${footerTone(f)}` : "footer"}>
+                  {footerText(f)}
                 </div>
               ))}
             </>

@@ -21,6 +21,7 @@ import {
   sellQueries,
 } from "../src/core/hud/mining.js";
 import { HUD_EVENTS, journalMode, noteMode } from "../src/core/hud/mode.js";
+import { footerText } from "../src/core/hud/panels.js";
 import {
   parseSellHits,
   sellSearchBody,
@@ -858,18 +859,18 @@ describe("mining after leaving, selling and relogging (1)", () => {
     // Only what is aboard is priced: the osmium was sold.
     let p = panel(events, { cargo: hold(5), sell: prices("pending") });
     expect(seen).toEqual(["Platinum", "Painite"]);
-    expect(p.footer[0]?.endsWith(" · 1.0M+ to sell")).toBe(true);
+    expect(footerText(p.footer[0]!).endsWith(" · 1.0M+ to sell")).toBe(true);
     p = panel(events, { cargo: hold(5), sell: prices([]) });
-    expect(p.footer[0]?.endsWith(" · 1.0M+ to sell")).toBe(true);
+    expect(footerText(p.footer[0]!).endsWith(" · 1.0M+ to sell")).toBe(true);
     p = panel(events, { cargo: hold(5), sell: prices([hit({ price: 200_000 })]) });
-    expect(p.footer[0]?.endsWith(" · 2.0M to sell")).toBe(true);
+    expect(footerText(p.footer[0]!).endsWith(" · 2.0M to sell")).toBe(true);
     // A buyer that takes less than the load: what it takes, and the rest has no price.
     p = panel(events, {
       cargo: cargo(10),
       sell: () => [hit({ price: 100_000, demand: 4, station: "Small Hub" })],
     });
     expect(p.rows.find((r) => r.text === "Sell Platinum 10 t")?.right).toMatch(/^400k · /);
-    expect(p.footer[0]?.endsWith(" · 400k+ to sell")).toBe(true);
+    expect(footerText(p.footer[0]!).endsWith(" · 400k+ to sell")).toBe(true);
     // More commodities aboard than sell rows: the ones without a row have no price.
     p = panel([...events, refined("Gold")], {
       cargo: ["platinum", "osmium", "painite", "gold"].map((name, i) => ({
@@ -881,7 +882,7 @@ describe("mining after leaving, selling and relogging (1)", () => {
       sell: () => [hit({ price: 100_000 })],
     });
     expect(p.rows.filter((r) => r.text.startsWith("Sell"))).toHaveLength(3);
-    expect(p.footer[0]?.endsWith(" · 2.7M+ to sell")).toBe(true);
+    expect(footerText(p.footer[0]!).endsWith(" · 2.7M+ to sell")).toBe(true);
     // No price at all: no total.
     p = panel(events, { cargo: hold(5), sell: () => "pending" });
     expect(p.footer[0]).not.toMatch(/to sell/);

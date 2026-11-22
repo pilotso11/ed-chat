@@ -53,13 +53,17 @@ body {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
-.row.accent {
+/* A row's tone, and a footer line's. */
+.row.accent,
+.footer.accent {
   color: #ffd08a;
 }
-.row.good {
+.row.good,
+.footer.good {
   color: #8fe388;
 }
-.row.warn {
+.row.warn,
+.footer.warn {
   color: #ffb347;
 }
 .row.dim,

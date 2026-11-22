@@ -17,7 +17,10 @@ const view: HudView = {
       { text: "Stratum Tectonicas", right: "✓  19.0M", tone: "good" },
       { text: "Bacterium Cerbrus", right: "1/3  1.7M", tone: "accent" },
     ],
-    footer: ["Unsold: 1.2M cartographic"],
+    footer: [
+      "Unsold: 1.2M cartographic",
+      { text: "Session: 3.0M/h of 60.0M/h planned", tone: "warn" },
+    ],
   },
   route: [
     { kind: "current", text: "Wredguia WJ-H d10-14", right: "4 jumps" },
@@ -39,6 +42,9 @@ describe("game note", () => {
     expect(note).toContain("Location: in HIP 68111, near HIP 68111 5.");
     expect(note).toContain("Panel: EXOBIOLOGY · 5 · 2 genera");
     expect(note).toContain("- Stratum Tectonicas · ✓  19.0M");
+    // Footer lines, with a tone or not, go as their text.
+    expect(note).toContain("- Unsold: 1.2M cartographic");
+    expect(note).toContain("- Session: 3.0M/h of 60.0M/h planned");
     expect(note).toContain("Route: now Wredguia WJ-H d10-14 4 jumps; next Col 285");
     expect(withGameContext("where next?", note)).toBe(`${note}\n\nwhere next?`);
   });
