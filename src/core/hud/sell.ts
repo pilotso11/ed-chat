@@ -151,7 +151,8 @@ export class SellPrices {
         })
         .catch((err: unknown) => {
           this.failed.delete(key);
-          this.failed.set(key, now);
+          // From when it failed, not when it started: a timeout is retried five minutes after it.
+          this.failed.set(key, (this.opts.now ?? Date.now)());
           while (this.failed.size > KEEP) this.failed.delete(this.failed.keys().next().value!);
           this.opts.onError?.(err instanceof Error ? err.message : String(err));
         })

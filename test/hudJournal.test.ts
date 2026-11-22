@@ -302,9 +302,9 @@ describe("mining from the real ed-mcp journal reader", () => {
     expect(v.panel).toMatchObject({ mode: "mining", title: "MINING", subtitle: "2 A Ring" });
     expect(v.panel!.rows[0]).toMatchObject({ text: "Platinum 31.4% · High", right: "MINE" });
     expect(v.panel!.rows.some((r) => r.text === "Hotspots: Platinum ×2")).toBe(true);
-    // The reader's cargo (no MissionID) counts as the ship's own: the hold and the mined ton.
+    // The reader's cargo reaches the hold row; the refined ton comes from MiningRefined.
     expect(v.panel!.rows.find((r) => r.text.startsWith("Hold"))).toMatchObject({
-      text: expect.stringMatching(/^Hold 11(\/\d+)? t$/),
+      text: "Hold 11 t",
       right: expect.stringContaining("10 limpets"),
     });
     expect(v.panel!.rows.some((r) => r.text === "Refined: Platinum 1 t")).toBe(true);
@@ -321,7 +321,8 @@ describe("mining from the real ed-mcp journal reader", () => {
     v = await g.hud();
     expect(v.panel!.subtitle).toBe("2 A Ring");
 
-    // A jump with the platinum aboard keeps mining, to sell it: the reader's cargo counts as mined.
+    // A jump ends mining unless mined cargo is aboard, so this checks that the reader's cargo (no
+    // MissionID) counts as the ship's own mined platinum.
     g.add(
       ev("Undocked"),
       ev("FSDJump", { StarSystem: "Other", SystemAddress: 1, StarPos: [0, 0, 0] }),
