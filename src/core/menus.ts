@@ -31,7 +31,11 @@ export type TrayAction =
   | { type: "toggleOverlay" }
   | { type: "openSettings" }
   | { type: "openLogs" }
+  | { type: "about" }
   | { type: "quit" };
+
+/** ED Chat's home page, which the tray's About item opens in the browser. */
+export const ABOUT_URL = "https://github.com/pilotso11/ed-chat#readme";
 
 export type TrayItem =
   | { separator: true }
@@ -81,6 +85,7 @@ export function trayItems(s: {
     },
     { label: "Open settings", action: { type: "openSettings" } },
     { label: "Open log folder", action: { type: "openLogs" } },
+    { label: "About ED Chat", action: { type: "about" } },
     { separator: true },
     { label: "Quit", action: { type: "quit" } },
   ];

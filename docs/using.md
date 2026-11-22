@@ -85,9 +85,9 @@ The overlay has an orange chat bubble icon in the notification area (system tray
 Windows 11 may hide it under the **^** arrow; drag it to the taskbar to keep it
 in view. Click it for a menu: copy a chip, open the chat, start a new
 conversation, show the hotkeys, switch icon mode, minimize the overlay to the
-tray or restore it, open `settings.json` or the log folder, or quit. While the
-overlay is minimized, the hotkeys still work, and the chat and approvals still
-show.
+tray or restore it, open `settings.json` or the log folder, open ED Chat's home
+page on GitHub (**About ED Chat**), or quit. While the overlay is minimized, the
+hotkeys still work, and the chat and approvals still show.
 
 In icon mode a reply, an approval or the chat shows over the icon, and the
 overlay goes back to the icon when the reply card closes. A click on the icon
