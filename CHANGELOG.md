@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0](https://github.com/pilotso11/ed-chat/compare/v0.7.1...v0.8.0) (2026-11-22)
+
+
+### Features
+
+* About ED Chat in the tray menu opens the home page ([#80](https://github.com/pilotso11/ed-chat/issues/80)) ([ca54e68](https://github.com/pilotso11/ed-chat/commit/ca54e687a14bd9fc94d485c79bd3551ee37bd4cb))
+* credits an hour for exploration and exobiology ([#77](https://github.com/pilotso11/ed-chat/issues/77)) ([19ace9a](https://github.com/pilotso11/ed-chat/commit/19ace9abe76274bd024ef152b08237258336356a))
+* massacre value per kill left, mining load values, README panels from real journals ([#76](https://github.com/pilotso11/ed-chat/issues/76)) ([5c0f7bd](https://github.com/pilotso11/ed-chat/commit/5c0f7bd10e870736ba43c9e8487859aa72d6ca63))
+
+
+### Bug Fixes
+
+* no bookmarks panel on its own in an empty passenger mode ([#74](https://github.com/pilotso11/ed-chat/issues/74)) ([cc7d1f8](https://github.com/pilotso11/ed-chat/commit/cc7d1f80f30276894b0ae9dbbc9bf5a63a6a982f))
+* the massacre panel leaves out expired missions, and a stack whose missions all expired ends massacre mode (ed-mcp 0.9.1) ([37e1c1d](https://github.com/pilotso11/ed-chat/commit/37e1c1d3f709d40120d0b21e9f84192eb4e5560f))
+
 ## [0.7.1](https://github.com/pilotso11/ed-chat/compare/v0.7.0...v0.7.1) (2026-11-22)
 
 
