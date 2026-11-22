@@ -1,7 +1,19 @@
 # Activity panel in detail
 
 What each mode of the activity panel shows, and how it works it out. The
-[README](../README.md#activity-panel) has the short version and pictures.
+[README](../README.md#pictures) has pictures of each mode. The keys are in
+[the Keys section](#keys) below, and the panel's settings, all under
+`hud`, in [Settings](settings.md).
+
+## Keys
+
+| Key | Action |
+| --- | --- |
+| Ctrl+Alt+P | Show or hide the panel |
+| Ctrl+Alt+Shift+P | Choose the mode: automatic, then each mode that is on, then off |
+| Ctrl+Alt+Home | Move the panel: for 15 seconds the move keys move the panel, not the chat |
+| Ctrl+Alt+PageDown / PageUp | Mark the current route stop done / go back one stop, and copy the stop's system |
+| Ctrl+Alt+B | Bookmark where you are on a planet |
 
 ## Massacre
 
@@ -53,8 +65,8 @@ and other bio planets stay listed below.
 
 The last line compares this planet's credits an hour with the session's and the
 last half hour's. When the planet falls behind, it may be time to move on. The
-planet's clock runs while you are at it, from approaching or mapping it, and its
-rate counts its map and its species.
+planet's clock runs while you are at it, from approaching it, mapping it or taking
+its first sample, and its rate counts its map and its species.
 
 ## Mining
 
@@ -80,7 +92,7 @@ open, until a newer activity. Each destination station shows its passengers (wit
 VIP and wanted counts) or goods and the soonest expiry, amber under two hours. The
 header shows berths used against the cabins fitted, and the total reward.
 
-Ask Claude to plan the route (ed-mcp's `missions_plan`): the stops then follow its
+Ask Claude to plan the route (ed-mcp's `missions_route`): the stops then follow its
 order, the route below shows the next stop, and arriving copies the next system.
 When you take a mission the route does not cover, the panel says the route is
 stale.
@@ -96,7 +108,8 @@ the next stop's system is copied for the galaxy map.
 
 Ctrl+Alt+B saves where you are on a planet. On that body, the panel shows each
 bookmark with its distance, its bearing and which way to turn: under the
-exploration and exobiology panels, or on its own when no other panel shows. A
+exploration and exobiology panels, and on its own in route mode, or when no mode is
+on. Massacre, mining and passenger mode leave them out. A
 bookmark at a bio site is marked done once every species there is analysed.
 Bookmarks are an ed-mcp plan, so Claude can see and change them. `hud.bookmarks`
 turns them off.
@@ -106,11 +119,14 @@ turns them off.
 The mode changes by itself. Accepting a massacre mission turns on massacre mode
 until the stack is handed in. A discovery scan or a detailed scan turns on
 exploration, and five jumps with no scan turn it off again. Approaching a body with
-biological signals, or taking a sample, turns on exobiology. Mining and passenger
-missions turn on their modes as their sections say. A jump alone starts nothing.
+biological signals, or taking a sample, turns on exobiology. Prospecting, refining
+or cracking a rock turns on mining, and taking a passenger or delivery mission turns
+on passenger mode. A jump alone starts nothing.
 
 Telling Claude what you are doing ("I'm doing massacres") sets the ed-mcp activity
-note, which the panel follows. Ctrl+Alt+Shift+P chooses a mode yourself.
+note, which the panel follows. Ctrl+Alt+Shift+P chooses a mode yourself: automatic,
+then each mode that is on in `hud.modes`, then off. Bookmarks are not a mode: they
+show with the modes above.
 
 ## ed-mcp
 
