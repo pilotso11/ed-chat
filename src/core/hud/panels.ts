@@ -41,6 +41,8 @@ export interface PanelView {
   title: string;
   subtitle?: string;
   right?: string;
+  /** The header's tone: good when everything the panel tracks is done. */
+  tone?: Tone;
   rows: HudRow[];
   footer: FooterLine[];
   /** A system to copy for the galaxy map once, with a note for the chat strip: a new key copies again. */
@@ -187,7 +189,10 @@ export function massacrePanel(
   // The targets shown only. ed-mcp gives a lapsed target no kills left already; this keeps the
   // header in step with the rows if that changes.
   const total = targets.reduce((n, g) => n + g.kills_left, 0);
-  return { mode: "massacre", title: "MASSACRE", right: `${total} left`, rows, footer };
+  // Every kill done: what is left is to hand the missions in.
+  return total
+    ? { mode: "massacre", title: "MASSACRE", right: `${total} left`, rows, footer }
+    : { mode: "massacre", title: "MASSACRE", right: "done ✓", tone: "good", rows, footer };
 }
 
 // ---------- Exploration ----------
@@ -725,7 +730,7 @@ export function bioRows(input: {
     const likely = base !== null ? base * bonus : null;
     if (likely !== null && likely < input.bioMin) continue;
     const signals = j?.bio_signals ?? k?.bioSignals ?? genera.length;
-    const analysed = j?.species.filter((s) => s.analysed).length ?? 0;
+    const analysed = j ? bioProgress(j).analysed : 0;
     const done = signals > 0 && analysed >= signals;
     const name = x?.body ?? j?.body ?? k?.name ?? String(id);
     const ls = x?.distance_ls ?? k?.distance_ls ?? null;
@@ -812,7 +817,8 @@ export function explorationPanel(input: {
       ]
         .filter(Boolean)
         .join("  "),
-      tone: done ? "dim" : "accent",
+      // Green with ✓ once mapped, as an analysed species is.
+      tone: done ? "good" : "accent",
       done,
       value,
     });
@@ -847,12 +853,28 @@ export function explorationPanel(input: {
   const d = x.discovery;
   // The game's body count leaves out belt clusters, which have no planet class or star type.
   const scanned = x.bodies.filter((b) => b.type !== null).length;
-  const right = d.body_count !== null ? `${scanned}/${d.body_count} bodies` : `${scanned} scanned`;
+  const found = d.body_count !== null ? `${scanned}/${d.body_count} bodies` : `${scanned} scanned`;
+  // The bodies worth mapping: those listed, and the Earth-like, water and ammonia worlds.
+  const worth = [
+    ...items.map((i) => i.done),
+    ...x.bodies.filter((b) => isHighlight(b.type, b.terraformable)).map((b) => b.mapped_by_you),
+  ];
+  const mapped = worth.filter(Boolean).length;
+  // Done when every body is found and every one worth mapping is mapped.
+  const done = d.all_bodies_found && mapped === worth.length;
   return {
     mode: "exploration",
     title: "EXPLORE",
     subtitle: system ?? undefined,
-    right: d.all_bodies_found ? `${right} ✓` : right,
+    right: [
+      d.all_bodies_found ? `${found} ✓` : found,
+      worth.length
+        ? `mapped ${mapped}/${worth.length}${mapped === worth.length ? " ✓" : ""}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    ...(done ? { tone: "good" as const } : {}),
     rows,
     footer: totalsFooter(input.totals),
   };
@@ -884,6 +906,21 @@ function bioRateLine(input: {
     Boolean,
   );
   return parts.length ? [`Rate: ${parts.join(" · ")}`] : [];
+}
+
+/**
+ * How far through a body's biology the player is: species analysed (an abandoned one is not)
+ * out of the signals, or the genera when the signal count is not known. Done once every signal
+ * has a species analysed, as the In system rows count it.
+ */
+export function bioProgress(b: ExobiologyBody): {
+  analysed: number;
+  signals: number;
+  done: boolean;
+} {
+  const analysed = b.species.filter((s) => s.analysed && !s.abandoned).length;
+  const signals = b.bio_signals || b.genera.length;
+  return { analysed, signals, done: signals > 0 && analysed >= signals };
 }
 
 export function exobiologyPanel(input: {
@@ -942,11 +979,18 @@ export function exobiologyPanel(input: {
   if (input.highlights?.length) {
     rows.push({ text: "In system", tone: "dim" }, ...input.highlights);
   }
+  const { analysed, signals, done } = bioProgress(body);
   return {
     mode: "exobiology",
     title: "EXOBIOLOGY",
     subtitle: shortBody(body.body, input.system),
-    right: `${bonus > 1 ? "first footfall ×5 · " : ""}${body.genera.length || body.bio_signals || 0} genera`,
+    right: [
+      bonus > 1 ? "first footfall ×5" : null,
+      signals ? `${analysed}/${signals} genera${done ? " ✓" : ""}` : "0 genera",
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    ...(done ? { tone: "good" as const } : {}),
     rows,
     // The rate line has the session rate, so the Session line, kept when nothing is unsold,
     // leaves it out.

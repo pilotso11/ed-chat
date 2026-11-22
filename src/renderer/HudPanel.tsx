@@ -50,7 +50,7 @@ export function HudPanel() {
           {v.moving && <div className="hint">{v.moving}</div>}
           {p && (
             <>
-              <div className="head">
+              <div className={p.tone ? `head ${p.tone}` : "head"}>
                 <span className="title">{p.title}</span>
                 {p.subtitle && <span className="subtitle">· {p.subtitle}</span>}
                 {p.right && <span className="right">{p.right}</span>}

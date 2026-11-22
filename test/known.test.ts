@@ -389,6 +389,8 @@ describe("bio rows", () => {
     ]);
     // Stars count, belt clusters do not.
     expect(p.right).toBe("4/4 bodies ✓");
+    // All found and nothing worth mapping: done.
+    expect(p.tone).toBe("good");
     // Over the threshold: listed, most valuable first, mapped last.
     const worth = {
       ...x,
@@ -431,7 +433,37 @@ describe("bio rows", () => {
       known: null,
     }).rows;
     expect(listed[0]).toEqual({ text: "6  HMC", right: "100 ls  700k  map", tone: "accent" });
-    expect(listed[2]).toEqual({ text: "7  HMC", right: "100 ls  800k  ✓", tone: "dim" });
+    expect(listed[2]).toEqual({ text: "7  HMC", right: "100 ls  800k  ✓", tone: "good" });
+    // Bodies worth mapping still to map: the header counts them and is not done.
+    const mapping = (bodies: unknown[]) =>
+      explorationPanel({
+        system: "Sys",
+        exploration: { ...worth, bodies } as unknown as Exploration,
+        bio: [],
+        totals: {
+          unsoldCartographic: 0,
+          unsoldBio: 0,
+          unsoldBioCount: 0,
+          session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+          rate: { session: null, recent: null },
+          planetRate: new Map(),
+        },
+        valuableMin: 500_000,
+        known: null,
+      });
+    const part = mapping(worth.bodies);
+    expect(part.right).toMatch(/ · mapped 1\/3$/);
+    expect(part.tone).toBeUndefined();
+    const all = mapping(worth.bodies.map((b) => ({ ...b, mapped_by_you: true })));
+    expect(all.right).toMatch(/ ✓ · mapped 3\/3 ✓$/);
+    expect(all.tone).toBe("good");
+    // An Earth-like world not mapped keeps it from done.
+    const elw = mapping([
+      ...worth.bodies.map((b) => ({ ...b, mapped_by_you: true })),
+      { ...body(9, "Earthlike body", 3_000_000), mapped_by_you: false },
+    ]);
+    expect(elw.right).toMatch(/ · mapped 3\/4$/);
+    expect(elw.tone).toBeUndefined();
     // Before all bodies are found the empty state says "yet", and two geo bodies are plural.
     const early = explorationPanel({
       system: "Sys",

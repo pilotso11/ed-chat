@@ -8,6 +8,11 @@ mode. The keys are in
 [the Keys section](#keys) below, and the panel's settings, all under
 `hud`, in [Settings](settings.md).
 
+When everything a panel tracks is done, its header turns green with a ✓: every
+species on the planet analysed, every body found and every one worth mapping
+mapped, every massacre kill done, or every passenger or delivery mission ready to
+hand in. Done rows are green with a ✓ too.
+
 ## Keys
 
 | Key | Action |

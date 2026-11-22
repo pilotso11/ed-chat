@@ -189,6 +189,16 @@ describe("passengerPanel", () => {
       now: NOW,
     })!;
     expect(done.title).toBe("PASSENGERS");
+    // Every mission ready to hand in: the run is done.
+    expect(done.right).toBe("4 berths · 1.0M · ✓");
+    expect(done.tone).toBe("good");
+    const open = passengerPanel({
+      missions: [mission(1, { passengers: 4, status: "complete" }), mission(2, { passengers: 2 })],
+      events: [],
+      plan: null,
+      now: NOW,
+    })!;
+    expect(open.tone).toBeUndefined();
   });
 
   it("follows the route's visit order, not the order the stops are stored in", () => {
