@@ -1339,3 +1339,51 @@ describe("trips, kept events and the no-buyer message", () => {
     );
   });
 });
+
+describe("carrier jumps, own-carrier buyers, bought goods and caching", () => {
+  it("ends mining on a carrier jump with nothing mined aboard", () => {
+    const events = [refined("Platinum"), ev("CarrierJump", { StarSystem: "B" })];
+    expect(journalMode(events, false, false)).toBeNull();
+    expect(journalMode(events, false, true)?.mode).toBe("mining");
+  });
+
+  it("says when only the player's own carrier buys", () => {
+    const p = miningPanel({
+      system: "A",
+      state: miningState([refined("Platinum")], T0 + t * 1000),
+      events: [refined("Platinum")],
+      cargo: [{ name: "platinum", count: 5, stolen: false, mission_id: null }],
+      capacity: null,
+      shipType: null,
+      carrier: {
+        id: 9,
+        callsign: null,
+        name: null,
+        system: "A",
+        jumping: null,
+        freeSpace: null,
+        moved: new Map(),
+      },
+      settings: M,
+      now: T0 + t * 1000,
+      sell: () => [hit({ marketId: 9 })],
+    });
+    expect(p.rows.find((r) => r.text.startsWith("Sell"))?.right).toBe("only your own carrier buys");
+  });
+
+  it("does not start a trip for bought goods sold or moved to the carrier", () => {
+    const events = [
+      refined("Platinum"),
+      ev("MarketSell", { Type: "gold", Count: 4 }),
+      ev("CargoTransfer", { Transfers: [{ Type: "tritium", Count: 4, Direction: "tocarrier" }] }),
+    ];
+    expect(miningState(events, T0 + t * 1000).lastSale).toBeNull();
+  });
+
+  it("reads the journal again for each new events array", () => {
+    const first = [refined("Platinum")];
+    expect([...refinedKinds(first)]).toEqual(["platinum"]);
+    // The feed reads a fresh array each poll: a new one is read again, not served from the memo.
+    expect([...refinedKinds([...first, refined("Osmium")])]).toEqual(["platinum", "osmium"]);
+  });
+});

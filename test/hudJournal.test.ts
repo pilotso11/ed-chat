@@ -266,8 +266,8 @@ describe("panel from the real ed-mcp journal reader", () => {
 });
 
 describe("mining from the real ed-mcp journal reader", () => {
-  // The mining rules read events outside HUD_EVENTS (Docked, Location, LoadGame, Died, FSDJump,
-  // CarrierJump, Cargo), from ed-mcp's own keep set: a test here fails if ed-mcp stops keeping one.
+  // The mining rules read Docked, Location, LoadGame, Died, FSDJump, CarrierJump and Cargo, all in
+  // HUD_EVENTS: this runs them through ed-mcp's real reader, so a test fails if one stops arriving.
   const RING = `${SYSTEM} 2 A Ring`;
   const cargo = (platinum: number): Event =>
     ev("Cargo", {

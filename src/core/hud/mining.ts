@@ -271,15 +271,15 @@ export function miningState(
         break;
       }
       case "MarketSell":
-        // Selling mined cargo ends the trip; selling spare limpets does not.
-        if (isMined(commodityKey(str(e.Type) ?? ""))) lastSale = e.timestamp;
+        // Selling what was mined this session ends the trip; limpets or bought goods do not.
+        if (refined.has(commodityKey(str(e.Type) ?? ""))) lastSale = e.timestamp;
         break;
       case "CargoTransfer":
         // Mined cargo moved to the carrier: the next full hold is a new trip. Moving other cargo
         // (limpets, trade goods) is not.
         if (
           objs(e.Transfers).some(
-            (x) => x.Direction === "tocarrier" && isMined(commodityKey(str(x.Type) ?? "")),
+            (x) => x.Direction === "tocarrier" && refined.has(commodityKey(str(x.Type) ?? "")),
           )
         ) {
           lastSale = e.timestamp;
@@ -920,9 +920,11 @@ export function miningPanel(input: {
       rows.push({
         text: `Sell ${t.name} ${t.tons} t`,
         // Buyers found but none usable says why, rather than that there are none.
-        right: found.length
-          ? "no buyer with a pad for this ship"
-          : `no buyer within ${t.query.radiusLy} ly`,
+        right: !found.length
+          ? `no buyer within ${t.query.radiusLy} ly`
+          : found.every((h) => h.marketId !== null && h.marketId === input.carrier?.id)
+            ? "only your own carrier buys"
+            : "no buyer with a pad for this ship",
         tone: "dim",
       });
       continue;
