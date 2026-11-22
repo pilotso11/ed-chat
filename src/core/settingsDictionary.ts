@@ -167,6 +167,11 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "hud.modes.passenger": {
     text: "Passenger and delivery missions: where each goes, berths used and the next expiry.",
   },
+  "hud.modes.trade": {
+    text:
+      "Trade runs: what to buy or sell at the current stop of the trade plan, the hold and the " +
+      "market price against the plan, and profit an hour.",
+  },
   "hud.modes.route": { text: "The stops of the current route plan." },
   "hud.valuableMin": {
     text:

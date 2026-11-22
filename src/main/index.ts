@@ -128,6 +128,7 @@ import { arrivalCopy, currentSystem, routeStep } from "../core/hud/routeSteps.js
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS } from "../core/hud/mode.js";
 import { todoStops } from "../core/hud/panels.js";
+import { TradeStopFinisher } from "../core/hud/tradeStops.js";
 import {
   ABOUT_URL,
   noticeMenuItems,
@@ -623,6 +624,9 @@ async function main(): Promise<void> {
       void finishBioBookmarks(hudData).catch((err: unknown) =>
         log.log("warn", `panel bookmarks: ${message(err)}`),
       );
+      void finishTradeStop(hudData).catch((err: unknown) =>
+        log.log("warn", `panel trade stop: ${message(err)}`),
+      );
       lastSystem = system;
       renderHud();
     } catch (err) {
@@ -704,6 +708,22 @@ async function main(): Promise<void> {
     savedBookmarks = { plan: saved, afterPoll: pollsStarted };
     if (hudData) hudData = { ...hudData, bookmarks: saved };
     renderHud();
+  }
+
+  // A trade stop whose buys and sales are done is marked done, once per docking, and the next
+  // stop's system is copied for the galaxy map.
+  const tradeStops = new TradeStopFinisher({
+    plans: () => hudPlans,
+    copy: (system, note) => {
+      clipboard.writeText(system);
+      flash("copy", `📋 ${note}`, 6_000);
+    },
+    notice: (text) => flash("route", text, 4_000),
+    warn: (m) => log.log("warn", `panel trade stop: ${m}`),
+  });
+  function finishTradeStop(data: FeedData): Promise<void> {
+    if (!settings.hud.modes.trade) return Promise.resolve();
+    return tradeStops.finish(data.plan, data.journal);
   }
 
   // Bio bookmarks whose species are all analysed are marked done, once each.

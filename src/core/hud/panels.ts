@@ -18,6 +18,7 @@ import {
 import type { HudModeId } from "../settings.js";
 import { isHighlight, type KnownBody } from "./known.js";
 import { num, str, type Obj } from "./json.js";
+import { ActiveClock, newGame, perHour, rates, type Rates } from "./rate.js";
 
 export type Tone = "dim" | "good" | "warn" | "accent";
 
@@ -62,6 +63,12 @@ function keepVisited(prev: Obj | undefined, e: Obj): Obj {
 }
 
 export function credits(n: number): string {
+  // A loss, such as a trade sold below its cost.
+  if (n < 0) {
+    // Only a loss that shows as one: -0.4 rounds to 0.
+    const loss = credits(-n);
+    return loss === "0" ? loss : `-${loss}`;
+  }
   // Each unit from where the one below would round to a thousand: 999,999 is 1.0M, not 1000k.
   if (n >= 999_950_000) return `${(n / 1e9).toFixed(1)}B`;
   if (n >= 999_500) return `${(n / 1e6).toFixed(1)}M`;
@@ -213,75 +220,10 @@ export interface ExplorationTotals {
   unsoldBioCount: number;
   session: { systems: number; scanned: number; mapped: number; firstDiscoveries: number };
   /** Credits an hour, from what scans, maps and samples are worth when made; null while too new. */
-  rate: { session: number | null; recent: number | null };
+  rate: Rates;
   /** Credits an hour on each body visited, by "address|bodyId"; null while too new. */
   planetRate: Map<string, number | null>;
 }
-
-/** A rate needs this long, so the first scan does not read as a huge hourly rate. */
-const RATE_MIN_MS = 5 * 60_000;
-/** The recent rate: the last half hour. */
-const RECENT_MS = 30 * 60_000;
-const HOUR_MS = 3_600_000;
-/** A gap between events longer than this is time away: only this much of it counts. */
-const IDLE_MS = 10 * 60_000;
-
-/**
- * Time spent at something: from start() to stop(), from event to event, where a gap counts up to
- * IDLE_MS, so time docked or away does not lower a rate.
- */
-class ActiveClock {
-  private last: number | null = null;
-  /**
-   * Each counted stretch, from its start: a gap counts as its first IDLE_MS, so the time away
-   * after it falls outside any window that starts later.
-   */
-  private readonly spans: { from: number; ms: number }[] = [];
-
-  start(at: number): void {
-    if (this.last === null) this.last = at;
-  }
-
-  tick(at: number): void {
-    if (this.last === null) return;
-    const ms = Math.min(Math.max(0, at - this.last), IDLE_MS);
-    if (ms) this.spans.push({ from: this.last, ms });
-    this.last = at;
-  }
-
-  stop(at: number): void {
-    this.tick(at);
-    this.halt();
-  }
-
-  /** Stops without counting the time since the last event: it was spent away. */
-  halt(): void {
-    this.last = null;
-  }
-
-  /**
-   * The time counted until now, with the time since the last event as one more stretch; with
-   * `since`, only the part of each stretch after it.
-   */
-  total(now: number, since = -Infinity): number {
-    const after = (from: number, ms: number) => Math.max(0, from + ms - Math.max(from, since));
-    const tail =
-      this.last !== null ? after(this.last, Math.min(Math.max(0, now - this.last), IDLE_MS)) : 0;
-    return this.spans.reduce((n, s) => n + after(s.from, s.ms), tail);
-  }
-}
-
-const perHour = (credits: number, ms: number) =>
-  ms >= RATE_MIN_MS ? (credits * HOUR_MS) / ms : null;
-
-/**
- * The events a new game's journal starts with, before LoadGame. A full journal rolls over to a
- * new part mid-game with a Fileheader too, but its part is 2 or more.
- */
-const newGame = (e: JournalEvent) =>
-  e.event === "Commander" ||
-  e.event === "LoadGame" ||
-  (e.event === "Fileheader" && !(Number(e.part) > 1));
 
 /** Events that start an exploring session's clock. */
 const EXPLORING = new Set([
@@ -537,20 +479,7 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
       }) ?? 0;
   }
   session.firstDiscoveries = firstFound + [...found].filter((k) => !discovered.has(k)).length;
-  const sum = (list: { credits: number }[]) => list.reduce((n, x) => n + x.credits, 0);
-  const elapsed = session0.total(now);
-  const rate = {
-    session: perHour(sum(earned), elapsed),
-    // Only once the session is longer than the window, else it repeats the session rate. Over
-    // the time spent in the window, so time away does not lower it either.
-    recent:
-      elapsed > RECENT_MS
-        ? perHour(
-            sum(earned.filter((x) => x.at > now - RECENT_MS)),
-            session0.total(now, now - RECENT_MS),
-          )
-        : null,
-  };
+  const rate = rates(session0, earned, now);
   const planetRate = new Map(
     [...planets].map(([k, p]) => [k, perHour(p.credits, p.clock.total(now))] as const),
   );
@@ -565,13 +494,13 @@ export function explorationTotals(events: JournalEvent[], now = Date.now()): Exp
 }
 
 /** "52M/h", or null with no rate yet. */
-const hourly = (n: number | null | undefined) => (n != null ? `${credits(n)}/h` : null);
+export const hourly = (n: number | null | undefined) => (n != null ? `${credits(n)}/h` : null);
 
 /** The session and last half hour rates: "52M/h (30m 80M/h)". */
-function rateText(t: ExplorationTotals): string | null {
-  const session = hourly(t.rate.session);
+export function rateText(rate: Rates): string | null {
+  const session = hourly(rate.session);
   if (!session) return null;
-  const recent = hourly(t.rate.recent);
+  const recent = hourly(rate.recent);
   return recent ? `${session} (30m ${recent})` : session;
 }
 
@@ -583,13 +512,13 @@ function totalsFooter(t: ExplorationTotals, withRate = true): string[] {
   const s = t.session;
   return [
     unsold.length ? `Unsold: ${unsold.join(" · ")}` : null,
-    s.systems || s.scanned || (withRate && rateText(t))
+    s.systems || s.scanned || (withRate && rateText(t.rate))
       ? `Session: ${[
           `${s.systems} jumps`,
           `${s.scanned} scanned`,
           `${s.mapped} mapped`,
           `${s.firstDiscoveries} ★`,
-          withRate ? rateText(t) : null,
+          withRate ? rateText(t.rate) : null,
         ]
           .filter(Boolean)
           .join(" · ")}`
@@ -943,7 +872,7 @@ function bioRateLine(input: {
   totals: ExplorationTotals;
 }): string[] {
   const planet = hourly(input.totals.planetRate.get(`${input.address}|${input.body.body_id}`));
-  const session = rateText(input.totals);
+  const session = rateText(input.totals.rate);
   const parts = [planet && `this planet ${planet}`, session && `session ${session}`].filter(
     Boolean,
   );
@@ -1053,6 +982,9 @@ function stopPlace(s: PlanStop, prev: PlanStop | undefined, full = false): strin
   return sameSystem ? s.body : `${s.system} ${s.body}`;
 }
 
+/** "1 jump", "5 jumps". */
+export const jumpsText = (n: number) => `${n} jump${n === 1 ? "" : "s"}`;
+
 /** Jumps left on the plotted route from the current system; null when there is no route. */
 export function jumpsLeft(nav: NavRoute | null, system: string | null): number | null {
   if (!nav) return null;
@@ -1081,7 +1013,7 @@ export function routeRows(input: {
   system: string | null;
 }): RouteRow[] | null {
   const jumps = jumpsLeft(input.nav, input.system);
-  const right = jumps !== null ? `${jumps} jump${jumps === 1 ? "" : "s"}` : undefined;
+  const right = jumps !== null ? jumpsText(jumps) : undefined;
   const withRight = (r: RouteRow): RouteRow => (right ? { ...r, right } : r);
   const plan = input.plan;
   if (plan && plan.stops.length) {

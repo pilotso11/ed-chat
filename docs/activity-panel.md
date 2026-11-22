@@ -100,6 +100,48 @@ order, the route below shows the next stop, and arriving copies the next system.
 When you take a mission the route does not cover, the panel says the route is
 stale.
 
+## Trade
+
+Turns on when you buy at a market, or dock at a stop of the trade plan. Some buys
+are not trade: limpets, goods a mission has aboard or asks for, and anything bought
+within two hours of supplying a colonisation depot, and goods a colonisation depot you
+viewed in the last two hours still needs. They do not count toward profit. A sale of
+goods the plan sells counts, at the game's price paid, even when the buy was before
+the journal the panel reads. A stop with no station stands for any station in
+its system. Ask Claude for a trade loop or route (ed-mcp's `trade_loops` or
+`trade_route` with `save_to_plan`) to make the plan.
+
+The panel shows the plan's current stop with what to buy or sell there (tons and
+planned price), and the hold against the planned tons. While you are docked there,
+it also shows the market's price against the plan, amber when it is more than 5%
+worse. The live price shows once the station's market has been opened on this visit
+(a relog while docked keeps it). The next stop and its action follow. The header says how far through the
+plan you are (stop 2/4) and, for a loop, its lap; on the first lap there is nothing
+to sell at the first stop, so only its buy shows. When the plan's prices are more
+than a day old, the header says how old. With a plotted route to the current or
+next stop, the jumps left show on that stop's row. For a plan of only trade stops,
+the route rows that other plans show below are left out, since the panel already
+lists the stops. They show for a plan with a fuel or mission stop, for a plotted
+route anywhere else (a fuel stop, home), and once the plan is done.
+
+The Session line shows profit an hour: each sale less what its tons
+cost, counted as for exploration, with the last half hour in brackets. Traded cargo
+that leaves without a sale (to a depot, a mission or your carrier, or ejected) takes
+its cost with it. When a stop's
+buys are bought there and in the hold, and its sales are sold there, the stop is marked done and the next
+stop's system is copied for the galaxy map. Undocking first leaves the stop open;
+the route keys still work. Passengers taken on a trade run show on a footer line;
+a passenger or delivery mission taken after your last trade shows the passenger
+panel until you trade again. Trade ends when no traded cargo is aboard (mined ore
+and salvage do not count) and no trade stop is left, or after five jumps with no
+trade buy or sale of traded cargo, unless traded cargo is aboard on the way to a
+trade stop. Auto-advance follows the plan's current stop, only when it is a trade
+stop; a relog while docked is the same visit.
+
+Known limit: goods are matched by the names the game gives them, which match the
+plan's English names only on an English game client. On another language, auto-advance
+and the market's price do not work, as for mining.
+
 ## Route
 
 The current stop of the active ed-mcp plan (with its body or station, what it is
@@ -126,8 +168,8 @@ exploration, and five jumps with no scan turn it off again. Approaching a body w
 biological signals, landing on one, or taking a sample, turns on exobiology, and
 leaving the body goes back to exploration, when that mode is on. Launching a
 prospector limpet, prospecting, refining or cracking a rock turns on mining, and
-taking a passenger or delivery mission turns on passenger mode. A jump alone starts
-nothing.
+taking a passenger or delivery mission turns on passenger mode. Buying at a market
+(not limpets), or docking at a stop of the trade plan, turns on trade. A jump alone starts nothing.
 
 Telling Claude what you are doing ("I'm doing massacres") sets the ed-mcp activity
 note, which the panel follows. Ctrl+Alt+Shift+P chooses a mode yourself: automatic,
