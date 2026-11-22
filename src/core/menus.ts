@@ -31,6 +31,7 @@ export type TrayAction =
   | { type: "toggleOverlay" }
   | { type: "openSettings" }
   | { type: "openLogs" }
+  | { type: "clearBookmarks"; all: boolean }
   | { type: "about" }
   | { type: "quit" };
 
@@ -49,7 +50,10 @@ export function trayItems(s: {
   failedHotkeys: number;
   iconMode: boolean;
   visible: boolean;
+  /** Surface bookmarks still to do; the Bookmarks menu shows when there are any. */
+  bookmarks?: number;
 }): TrayItem[] {
+  const bookmarks = s.bookmarks ?? 0;
   return [
     ...s.chips.map((c): TrayItem => ({
       label: menuLabel(`Copy ${c.n}: ${chipLabel(c)}`),
@@ -68,6 +72,20 @@ export function trayItems(s: {
       })),
     },
     { label: "Show hotkeys", action: { type: "showKeys" } },
+    ...(bookmarks
+      ? [
+          {
+            label: "Bookmarks",
+            submenu: [
+              { label: "Clear bookmarks here", action: { type: "clearBookmarks", all: false } },
+              {
+                label: `Clear all bookmarks (${bookmarks})…`,
+                action: { type: "clearBookmarks", all: true },
+              },
+            ] satisfies TrayItem[],
+          },
+        ]
+      : []),
     ...(s.failedHotkeys
       ? [
           {

@@ -16,12 +16,14 @@ import {
   bookmarkHere,
   bookmarkLabel,
   bookmarkRows,
+  bookmarksToClear,
   finishedBioBookmarks,
   isPlanNotFound,
   keepSavedBookmarks,
   newBookmark,
   sameBookmark,
   stopPosition,
+  todoBookmarks,
   turn,
 } from "../src/core/hud/bookmarks.js";
 import { buildHud, parseShipStatus, type HudInput } from "../src/core/hud/hud.js";
@@ -464,5 +466,45 @@ describe("a bookmark saved during a poll", () => {
       saved: null,
     });
     expect(keepSavedBookmarks({ bookmarks: read }, null, 1).data.bookmarks).toBe(read);
+  });
+});
+
+describe("clearing bookmarks", () => {
+  const near = { body: BODY, label: "Near", position: { latitude: 54.14287, longitude: -51.7435 } };
+  const far = { body: BODY, label: "Far", position: { latitude: 54.16, longitude: -51.74 } };
+  const other = { body: `${SYSTEM} 5`, label: "Other body" };
+  const away = { system: "Elsewhere", body: "Elsewhere 1", label: "Away" };
+
+  it("clears the nearest bookmark on this body", () => {
+    const p = plan([far, other, near, away]);
+    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: status() })).toEqual([2]);
+  });
+
+  it("clears the first on the body when positions are not known", () => {
+    const p = plan([other, { body: BODY, label: "A" }, { body: BODY, label: "B" }]);
+    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: status() })).toEqual([1]);
+    const q = plan([far, near]);
+    expect(
+      bookmarksToClear({ plan: q, system: SYSTEM, status: status({ latitude: null }) }),
+    ).toEqual([0]);
+  });
+
+  it("clears every bookmark in the system away from a bookmarked body", () => {
+    const p = plan([far, other, away, { ...near, status: "done" }]);
+    expect(
+      bookmarksToClear({ plan: p, system: SYSTEM, status: status({ body: `${SYSTEM} 3` }) }),
+    ).toEqual([0, 1]);
+    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: null })).toEqual([0, 1]);
+  });
+
+  it("clears nothing in a system without bookmarks", () => {
+    expect(bookmarksToClear({ plan: plan([far]), system: "Sol", status: status() })).toEqual([]);
+    expect(bookmarksToClear({ plan: null, system: SYSTEM, status: status() })).toEqual([]);
+    expect(bookmarksToClear({ plan: plan([far]), system: null, status: status() })).toEqual([]);
+  });
+
+  it("lists every bookmark still to do", () => {
+    expect(todoBookmarks(plan([far, { ...near, status: "skipped" }, away]))).toEqual([0, 2]);
+    expect(todoBookmarks(null)).toEqual([]);
   });
 });

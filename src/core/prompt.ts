@@ -15,6 +15,8 @@ export const HUD_PROMPT = [
   "At the start of a conversation, if activity_get is listed, call it and use the activity and its plan as context without repeating them back.",
   "When the player starts a new activity or changes their goal, save it with activity_set if it is listed.",
   "When the player finishes a stop on a route, mark it with plan_update_stop if it is listed.",
+  // ED Chat's bookmark key saves to this plan; without this line the model took them for the game's own bookmarks.
+  "The bookmarks in the activity panel are stops in the ed-mcp plan bookmarks, not the game's own bookmarks. To clear one, mark it skipped with plan_update_stop.",
   // From the comparison runs: the models took a saved plan as the player's present.
   "The activity note and saved plans say what the player meant to do, not what they are doing now. Use them for questions about the plan, but do not assume the player is following a plan unless the journal shows it.",
   "When the player asks what they were doing, answer from the recent journal events, and use the activity note only for the goal behind them.",

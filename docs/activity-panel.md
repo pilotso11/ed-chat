@@ -17,6 +17,7 @@ mode. The keys are in
 | Ctrl+Alt+Home | Move the panel: for 15 seconds the move keys move the panel, not the chat |
 | Ctrl+Alt+PageDown / PageUp | Mark the current route stop done / go back one stop, and copy the stop's system |
 | Ctrl+Alt+B | Bookmark where you are on a planet |
+| Ctrl+Alt+- | Clear the nearest bookmark on this body, or every bookmark in the system when not on a bookmarked body |
 
 ## Massacre
 
@@ -167,8 +168,11 @@ exploration and exobiology panels, and on their own when the exploration or
 exobiology panel has nothing to list, in route mode, or when no mode is on. Massacre,
 mining and passenger mode leave them out. A
 bookmark at a bio site is marked done once every species there is analysed.
-Bookmarks are an ed-mcp plan, so Claude can see and change them. `hud.bookmarks`
-turns them off.
+Ctrl+Alt+- clears the nearest bookmark on the body you are on; away from a
+bookmarked body, it clears every bookmark in the system. The tray menu's
+Bookmarks item does the same, and can clear every bookmark. A cleared bookmark
+is marked skipped in the plan. Bookmarks are an ed-mcp plan, so Claude can see
+and change them too. `hud.bookmarks` turns them off.
 
 ## How the mode is chosen
 

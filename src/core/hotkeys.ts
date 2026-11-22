@@ -19,7 +19,8 @@ export type HotkeyAction =
   | { type: "hudMode" }
   | { type: "hudMove" }
   | { type: "route"; dir: 1 | -1 }
-  | { type: "bookmark" };
+  | { type: "bookmark" }
+  | { type: "clearBookmark" };
 
 export interface Binding {
   name: string;
@@ -54,6 +55,7 @@ export function bindings(h: Settings["hotkeys"]): Binding[] {
     ...b("routeNext", h.routeNext, { type: "route", dir: 1 }),
     ...b("routePrev", h.routePrev, { type: "route", dir: -1 }),
     ...b("bookmark", h.bookmark, { type: "bookmark" }),
+    ...b("clearBookmark", h.clearBookmark, { type: "clearBookmark" }),
     ...chipPatterns(h).flatMap((p) =>
       Array.from({ length: 9 }, (_, i) => ({
         name: `copyChip${i + 1}`,
@@ -248,6 +250,7 @@ const LABELS: [keyof Settings["hotkeys"], string][] = [
   ["routeNext", "Next route stop"],
   ["routePrev", "Previous route stop"],
   ["bookmark", "Bookmark this place"],
+  ["clearBookmark", "Clear the bookmark here"],
 ];
 
 /**

@@ -219,6 +219,43 @@ export function bookmarkHere(
   };
 }
 
+/** The bookmarks still to do: their indexes in the plan. */
+export const todoBookmarks = (plan: Plan | null): number[] =>
+  (plan?.stops ?? []).flatMap((s, i) => (s.status === "todo" ? [i] : []));
+
+/**
+ * The bookmarks that the clear key clears, as indexes in the plan. On a body, the nearest
+ * bookmark on it (the first when where it is or where the player is is not known). Elsewhere in
+ * the system, every bookmark in the system. Empty when the system has none.
+ */
+export function bookmarksToClear(input: {
+  plan: Plan | null;
+  system: string | null;
+  status: ShipStatus | null;
+}): number[] {
+  const { plan, system, status } = input;
+  if (!plan || !system) return [];
+  const here = todoBookmarks(plan).filter(
+    (i) => plan.stops[i]!.system.toLowerCase() === system.toLowerCase(),
+  );
+  const onBody = status?.body ? bodyKey(status.body, system) : null;
+  const body = here.filter((i) => {
+    const b = plan.stops[i]!.body;
+    return !!b && bodyKey(b, system) === onBody;
+  });
+  if (!body.length) return here;
+  const at =
+    status && status.latitude !== null && status.longitude !== null && status.radius !== null
+      ? { latitude: status.latitude, longitude: status.longitude, radius: status.radius }
+      : null;
+  const far = (i: number) => {
+    const pos = stopPosition(plan.stops[i]!);
+    return pos && at ? surfaceDistance(at, pos, at.radius) : Infinity;
+  };
+  // The first of the nearest: a stable sort keeps the plan's order among equals.
+  return [[...body].sort((a, b) => far(a) - far(b))[0]!];
+}
+
 /** Whether an ed-mcp plan store error says the plan does not exist. */
 export const isPlanNotFound = (err: unknown) =>
   err instanceof Error && /^Plan ".*" not found$/.test(err.message);

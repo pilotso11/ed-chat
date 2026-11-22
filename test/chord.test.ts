@@ -19,6 +19,8 @@ describe("chordFromKey", () => {
     // QWERTZ: Z sits where US has Y.
     expect(chordFromKey(press({ key: "z", code: "KeyY" }))).toBe("Ctrl+Alt+Z");
     expect(chordFromKey(press({ key: "+", code: "Equal" }))).toBe("Ctrl+Alt+Plus");
+    // The clear-bookmark key.
+    expect(chordFromKey(press({ key: "-", code: "Minus" }))).toBe("Ctrl+Alt+-");
   });
 
   it("takes a non-Latin letter key from its position, as Windows matches it", () => {

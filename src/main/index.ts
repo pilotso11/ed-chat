@@ -91,7 +91,7 @@ import {
   type SavedState,
 } from "../core/stores.js";
 import { resumeId } from "../core/resume.js";
-import { openStores, type Plan } from "ed-mcp/journal";
+import { openStores, type Plan, type Stop } from "ed-mcp/journal";
 import {
   configProblems,
   hasOwnEdMcp,
@@ -108,6 +108,8 @@ import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import {
   BOOKMARKS_PLAN,
   bookmarkHere,
+  bookmarksToClear,
+  todoBookmarks,
   finishedBioBookmarks,
   isPlanNotFound,
   bookmarkRef,
@@ -127,7 +129,7 @@ import {
 import { arrivalCopy, currentSystem, routeStep } from "../core/hud/routeSteps.js";
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS } from "../core/hud/mode.js";
-import { todoStops } from "../core/hud/panels.js";
+import { shortBody, todoStops } from "../core/hud/panels.js";
 import { TradeStopFinisher } from "../core/hud/tradeStops.js";
 import {
   ABOUT_URL,
@@ -707,6 +709,70 @@ async function main(): Promise<void> {
     // Shown at once, not after the next poll, which may have read the plan before the save.
     savedBookmarks = { plan: saved, afterPoll: pollsStarted };
     if (hudData) hudData = { ...hudData, bookmarks: saved };
+    renderHud();
+  }
+
+  // Clears bookmarks: here, the nearest on this body or every one in the system (the clear key),
+  // or all of them after asking. Runs in turn with the bookmark key, so the two do not race.
+  function clearBookmarks(scope: "here" | "all"): Promise<void> {
+    const run = () => unmarkBookmarks(scope);
+    bookmarking = bookmarking.then(run, run);
+    return bookmarking;
+  }
+
+  async function unmarkBookmarks(scope: "here" | "all"): Promise<void> {
+    const plans = hudPlans;
+    if (!settings.hud.enabled || !settings.hud.bookmarks || !plans || !hudFeed) {
+      return flash("bookmark", "ⓘ bookmarks are off or the panel could not open ed-mcp", 3_000);
+    }
+    let plan: Plan;
+    try {
+      plan = await plans.get(BOOKMARKS_PLAN);
+    } catch (err) {
+      if (isPlanNotFound(err)) return flash("bookmark", "ⓘ no bookmarks", 3_000);
+      throw err;
+    }
+    const system = hudData?.journal?.location.system ?? null;
+    const picked =
+      scope === "all"
+        ? todoBookmarks(plan)
+        : bookmarksToClear({ plan, system, status: await hudFeed.readStatus() });
+    if (!picked.length) {
+      return flash("bookmark", scope === "all" ? "ⓘ no bookmarks" : "ⓘ no bookmarks here", 3_000);
+    }
+    if (scope === "all") {
+      const r = await dialog.showMessageBox({
+        type: "question",
+        title: "ED Chat",
+        message: `Clear all ${picked.length} bookmark${picked.length === 1 ? "" : "s"}?`,
+        detail: "They are marked skipped in the ed-mcp plan bookmarks.",
+        buttons: ["Clear", "Cancel"],
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true,
+      });
+      if (r.response !== 0) return;
+    }
+    const cleared: Stop[] = [];
+    for (const stop of picked.map((i) => plan.stops[i]!)) {
+      // Found again in the plan as it is now: Claude may have changed it meanwhile.
+      const ref = bookmarkRef(plan, stop);
+      if (!ref) continue;
+      plan = await plans.updateStop(BOOKMARKS_PLAN, ref, { status: "skipped" });
+      cleared.push(stop);
+    }
+    if (!cleared.length) return flash("bookmark", "ⓘ no bookmarks here", 3_000);
+    const one = cleared[0]!;
+    flash(
+      "bookmark",
+      cleared.length === 1
+        ? `📍 cleared ${one.label ?? one.purpose} on ${shortBody(one.body ?? one.system, one.system)}`
+        : `📍 cleared ${cleared.length} bookmarks`,
+      4_000,
+    );
+    // Shown at once, as for a new bookmark.
+    savedBookmarks = { plan, afterPoll: pollsStarted };
+    if (hudData) hudData = { ...hudData, bookmarks: plan };
     renderHud();
   }
 
@@ -1355,6 +1421,10 @@ async function main(): Promise<void> {
         return void addBookmark().catch((err: unknown) =>
           flash("bookmark", `⚠ bookmark not saved: ${message(err)}`, 4_000),
         );
+      case "clearBookmark":
+        return void clearBookmarks("here").catch((err: unknown) =>
+          flash("bookmark", `⚠ bookmark not cleared: ${message(err)}`, 4_000),
+        );
     }
   }
 
@@ -1592,6 +1662,10 @@ async function main(): Promise<void> {
         return openPath(settingsFile);
       case "openLogs":
         return openPath(logDir);
+      case "clearBookmarks":
+        return void clearBookmarks(a.all ? "all" : "here").catch((err: unknown) =>
+          flash("bookmark", `⚠ bookmarks not cleared: ${message(err)}`, 4_000),
+        );
       case "about":
         // A fixed https address: the home page, in the default browser.
         return void shell
@@ -1624,6 +1698,10 @@ async function main(): Promise<void> {
       failedHotkeys: failedHotkeys.length,
       iconMode: state.iconMode,
       visible: state.visible,
+      bookmarks:
+        settings.hud.enabled && settings.hud.bookmarks
+          ? todoBookmarks(hudData?.bookmarks ?? null).length
+          : 0,
     });
     return Menu.buildFromTemplate(menuTemplate(items));
   }

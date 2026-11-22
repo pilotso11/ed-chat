@@ -84,6 +84,20 @@ describe("tray menu", () => {
     ]);
   });
 
+  it("offers to clear bookmarks when there are any", () => {
+    expect(labels(trayItems({ ...base, bookmarks: 0 }))).not.toContain("Bookmarks");
+    const menu = trayItems({ ...base, bookmarks: 3 }).find(
+      (i) => "label" in i && i.label === "Bookmarks",
+    );
+    expect(menu).toEqual({
+      label: "Bookmarks",
+      submenu: [
+        { label: "Clear bookmarks here", action: { type: "clearBookmarks", all: false } },
+        { label: "Clear all bookmarks (3)…", action: { type: "clearBookmarks", all: true } },
+      ],
+    });
+  });
+
   it("checks the running assistant", () => {
     const assistant = trayItems({ ...base, agentId: "codex" }).find(
       (i) => "label" in i && i.label === "Assistant",
