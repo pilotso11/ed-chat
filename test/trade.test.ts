@@ -166,6 +166,13 @@ describe("trade profit", () => {
     expect(t.rate.recent).toBeNull();
   });
 
+  it("replays the journal again once it grows", () => {
+    const events = [buy(3, "Gold", 1, 1)];
+    expect(tradeTotals(events, NOW).profit).toBe(0);
+    events.push(sell(2, "Gold", 1, 3));
+    expect(tradeTotals(events, NOW).profit).toBe(2);
+  });
+
   it("has no rate before five minutes", () => {
     const t = tradeTotals([buy(3, "Gold", 1, 1), sell(2, "Gold", 1, 3)], NOW);
     expect(t.profit).toBe(2);
@@ -297,6 +304,28 @@ describe("trade auto-advance", () => {
         }),
       ),
     ).toBeNull();
+  });
+
+  it("does not count cargo brought from an earlier stop as bought here", () => {
+    expect(
+      tradeAdvance(input({ events: [docked(10, "Kremainn", "Wohler Terminal", 7)] })),
+    ).toBeNull();
+    // Bought at another market before.
+    const earlier = [buy(20, "Gold", 720, 1, 3), docked(10, "Kremainn", "Wohler Terminal", 7)];
+    expect(tradeAdvance(input({ events: earlier }))).toBeNull();
+  });
+
+  it("marks a stop with no station done at any station in its system", () => {
+    const plan = route([
+      {
+        system: "Kremainn",
+        purpose: "p",
+        kind: "trade",
+        status: "todo",
+        cargo: [{ commodity: "Gold", action: "buy", amount: 720 }],
+      },
+    ]);
+    expect(tradeAdvance(input({ plan }))?.index).toBe(0);
   });
 
   it("counts a full hold as bought when the plan asks for more than fits", () => {
@@ -516,6 +545,12 @@ describe("the trade panel", () => {
     );
   });
 
+  it("leaves stolen cargo out of the hold, the rows and the mode", () => {
+    const stolen = [{ name: "Gold", count: 5, stolen: true, mission_id: null }];
+    expect(tradePanel({ ...base, plan: null, cargo: stolen })).toBeNull();
+    expect(tradePanel({ ...base, cargo: stolen })!.rows[1]!.text).toBe("  hold 0/720 · plan 9,380");
+  });
+
   it("says when the route is done, and shows nothing with no route and an empty hold", () => {
     const plan = route([stop("A", "a", [], "done")]);
     expect(tradePanel({ ...base, plan, cargo: hold({ Gold: 5 }) })!.rows.at(-1)).toEqual({
@@ -551,7 +586,7 @@ describe("the trade panel", () => {
 
 describe("trade mode", () => {
   const ALL = () => true;
-  const active: TradeNow = { active: true, missionCargo: false, stops: [] };
+  const active: TradeNow = { active: true, missionCargo: [], stops: [] };
   const jump = (m: number) => at(m, "FSDJump", { StarSystem: `S${m}` });
 
   it("asks the reader to keep the events it reads", () => {
@@ -565,7 +600,7 @@ describe("trade mode", () => {
       at: NOW - 5 * MIN,
     });
     expect(
-      journalMode(events, false, false, ALL, false, { ...active, missionCargo: true })?.mode,
+      journalMode(events, false, false, ALL, false, { ...active, missionCargo: [9] })?.mode,
     ).toBe("exploration");
     // Off, or with nothing to show, a buy changes nothing.
     expect(journalMode(events, false, false, (m) => m !== "trade", false, active)?.mode).toBe(
@@ -600,7 +635,7 @@ describe("trade mode", () => {
     // A sale, or a buy with mission cargo aboard, counts as a trade.
     const sold = [...bought, ...jumps(3), sell(10, "Gold", 1, 2), ...jumps(3)];
     expect(journalMode(sold, false, false, ALL, false, active)?.mode).toBe("trade");
-    const mission = { ...active, missionCargo: true };
+    const mission = { ...active, missionCargo: [9] };
     const rebought = [...bought, ...jumps(3), buy(10, "Tea", 1, 1), ...jumps(3)];
     // With mission cargo the first buy did not start trade either.
     expect(journalMode(rebought, false, false, ALL, false, mission)).toBeNull();
@@ -618,6 +653,72 @@ describe("trade mode", () => {
     expect(
       journalMode([...events, at(1, "ProspectedAsteroid")], false, false, ALL, true, active)?.mode,
     ).toBe("mining");
+  });
+
+  it("is not started by buying limpets, so mining or exploration stays", () => {
+    const limpets = at(1, "MarketBuy", { Type: "drones", Type_Localised: "Limpet", Count: 4 });
+    expect(
+      journalMode([at(10, "ProspectedAsteroid"), limpets], false, false, ALL, false, active)?.mode,
+    ).toBe("mining");
+    // With an empty hold trade would show nothing, and must not end exploration either.
+    const empty = { ...active, active: false };
+    expect(
+      journalMode([at(10, "FSSDiscoveryScan"), limpets], false, false, ALL, false, empty)?.mode,
+    ).toBe("exploration");
+    // Limpets bought are not a trade in the session's profit either.
+    expect(tradeTotals([limpets], NOW).trades).toBe(0);
+  });
+
+  it("judges each buy by the mission cargo aboard when it was made", () => {
+    const delivery = (m: number, id: number) =>
+      at(m, "MissionAccepted", {
+        MissionID: id,
+        Commodity: "$Gold_Name;",
+        Count: 5,
+        DestinationSystem: "X",
+      });
+    // A delivery taken, a buy while its cargo was aboard, then handed in: the old buy is still not
+    // a trade, though the hold has no mission cargo now.
+    const handedIn = [
+      delivery(30, 1),
+      buy(20, "Tea", 5, 1),
+      at(10, "MissionCompleted", { MissionID: 1 }),
+    ];
+    expect(journalMode(handedIn, false, false, ALL, false, active)).toBeNull();
+    // A buy before taking the delivery now aboard was a trade.
+    const before = [buy(20, "Tea", 5, 1), delivery(10, 2)];
+    expect(
+      journalMode(before, false, false, ALL, false, { ...active, missionCargo: [2] })?.mode,
+    ).toBe("trade");
+    // Abandoned or failed, the cargo is gone, and a buy after is a trade.
+    for (const end of ["MissionAbandoned", "MissionFailed"]) {
+      const ended = [delivery(30, 3), at(25, end, { MissionID: 3 }), buy(20, "Tea", 5, 1)];
+      expect(journalMode(ended, false, false, ALL, false, active)?.mode).toBe("trade");
+    }
+    // Passengers put no cargo in the hold.
+    const pax = [
+      at(30, "MissionAccepted", { MissionID: 4, PassengerCount: 2, DestinationSystem: "X" }),
+      buy(20, "Tea", 5, 1),
+    ];
+    expect(journalMode(pax, false, false, ALL, false, active)?.mode).toBe("trade");
+  });
+
+  it("does not lapse on a long haul while a trade stop is still to do", () => {
+    const jumps = Array.from({ length: LAPSE_JUMPS + 2 }, (_, i) => jump(20 - i));
+    const trade = { ...active, stops: [{ system: "Far", station: "Away" }] };
+    expect(
+      journalMode([buy(30, "Gold", 1, 1), ...jumps], false, false, ALL, false, trade)?.mode,
+    ).toBe("trade");
+  });
+
+  it("matches a trade stop with no station to any station in its system", () => {
+    const trade = { ...active, stops: [{ system: "Kremainn" }] };
+    expect(
+      journalMode([docked(5, "Kremainn", "Any Port", 7)], false, false, ALL, false, trade)?.mode,
+    ).toBe("trade");
+    expect(
+      journalMode([docked(5, "Elsewhere", "Any Port", 7)], false, false, ALL, false, trade),
+    ).toBeNull();
   });
 
   it("follows a trading note only with a trade plan", () => {

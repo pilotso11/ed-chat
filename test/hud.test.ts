@@ -832,6 +832,9 @@ describe("helpers", () => {
     expect(credits(999_999)).toBe("1.0M");
     expect(credits(999_499)).toBe("999k");
     expect(credits(999_999_999)).toBe("1.0B");
+    // A loss, and one too small to show.
+    expect(credits(-2_140_000)).toBe("-2.1M");
+    expect(credits(-0.4)).toBe("0");
     expect(timeLeft(-1)).toBe("expired");
     expect(timeLeft(3 * 3600_000 + 20 * 60_000)).toBe("3h 20m");
   });
@@ -914,6 +917,18 @@ describe("HudFeed bookmarks and a fresh Status.json", () => {
     });
     expect((await feed.readStatus())?.latitude).toBe(1);
     expect(reads).toBe(2);
+  });
+
+  it("parses Market.json again only when it changes", async () => {
+    let text = JSON.stringify({ MarketID: 7, StationName: "Port", Items: [] });
+    const feed = new HudFeed(stores(async () => null) as never, "J", {
+      read: async (f) => (f.endsWith("Market.json") ? text : "{}"),
+    });
+    const first = (await feed.poll()).market;
+    expect(first?.marketId).toBe(7);
+    expect((await feed.poll()).market).toBe(first);
+    text = JSON.stringify({ MarketID: 8, StationName: "Port", Items: [] });
+    expect((await feed.poll()).market?.marketId).toBe(8);
   });
 
   it("takes no bookmarks plan as none, not as an error", async () => {

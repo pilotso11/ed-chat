@@ -6,7 +6,7 @@ import { parseShipStatus, type ShipStatus } from "./hud.js";
 import { BOOKMARKS_PLAN, isPlanNotFound } from "./bookmarks.js";
 import type { KnownBodies } from "./known.js";
 import { navRouteCleared, parseNavRoute, sampleKey, type Point } from "./panels.js";
-import { parseMarket } from "./trade.js";
+import { parseMarket, type Market } from "./trade.js";
 
 export type FeedData = Pick<
   HudInput,
@@ -25,6 +25,8 @@ export class HudFeed {
   private seen = new Set<string>();
   private primed = false;
   private lastError: string | null = null;
+  /** Market.json as last parsed: it changes only when a market screen opens. */
+  private market: { text: string; parsed: Market | null } | null = null;
 
   constructor(
     private readonly stores: Pick<Stores, "journal" | "activity" | "plans">,
@@ -96,8 +98,13 @@ export class HudFeed {
       samples: this.samples,
       known,
       bookmarks,
-      market: marketText ? parseMarket(marketText) : null,
+      market: marketText ? this.parseMarket(marketText) : null,
     };
+  }
+
+  private parseMarket(text: string): Market | null {
+    if (this.market?.text !== text) this.market = { text, parsed: parseMarket(text) };
+    return this.market.parsed;
   }
 
   private noteSamples(events: JournalEvent[], status: FeedData["status"]): void {

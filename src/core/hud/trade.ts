@@ -8,7 +8,15 @@ import {
 import { num, objs, str } from "./json.js";
 import { commodityKey } from "./mining.js";
 import { isRun } from "./passenger.js";
-import { credits, rateText, timeLeft, type HudRow, type PanelView, type Tone } from "./panels.js";
+import {
+  credits,
+  hourly,
+  rateText,
+  timeLeft,
+  type HudRow,
+  type PanelView,
+  type Tone,
+} from "./panels.js";
 import { ActiveClock, rates, type Rates } from "./rate.js";
 
 // The trade panel: the trade plan's current stop and what to buy or sell there, the hold and the
@@ -31,6 +39,11 @@ export const TRADE_EVENTS = [
   "LoadGame",
   "Shutdown",
   "Died",
+  // Mission cargo aboard, which makes a market buy not a trade.
+  "MissionAccepted",
+  "MissionCompleted",
+  "MissionFailed",
+  "MissionAbandoned",
 ] as const;
 
 // ---------- The market ----------
@@ -89,6 +102,29 @@ const commodityOf = (e: JournalEvent) => commodityKey(str(e.Type) ?? str(e.Type_
  * session's first trade, as the exploration rate's does from its first scan.
  */
 export function tradeTotals(events: JournalEvent[], now: number): TradeTotals {
+  // The replay is kept for the same events: the panel renders more often than the journal grows.
+  let r = replays.get(events);
+  if (!r || r.length !== events.length) {
+    r = { length: events.length, ...replay(events) };
+    replays.set(events, r);
+  }
+  return {
+    profit: r.earned.reduce((n, x) => n + x.credits, 0),
+    trades: r.trades,
+    active: r.clock.total(now),
+    rate: rates(r.clock, r.earned, now),
+  };
+}
+
+interface Replay {
+  clock: ActiveClock;
+  earned: { at: number; credits: number }[];
+  trades: number;
+}
+
+const replays = new WeakMap<JournalEvent[], Replay & { length: number }>();
+
+function replay(events: JournalEvent[]): Replay {
   // Tons bought and what they cost, by commodity.
   const basis = new Map<string, { tons: number; cost: number }>();
   let clock = new ActiveClock();
@@ -111,7 +147,8 @@ export function tradeTotals(events: JournalEvent[], now: number): TradeTotals {
         break;
       case "MarketBuy": {
         const count = num(e.Count) ?? 0;
-        if (count <= 0) break;
+        // Limpets are not trade.
+        if (count <= 0 || !tradeBuy(e)) break;
         const key = commodityOf(e);
         const b = basis.get(key) ?? { tons: 0, cost: 0 };
         b.tons += count;
@@ -153,18 +190,21 @@ export function tradeTotals(events: JournalEvent[], now: number): TradeTotals {
       }
     }
   }
-  return {
-    profit: earned.reduce((n, x) => n + x.credits, 0),
-    trades,
-    active: clock.total(now),
-    rate: rates(clock, earned, now),
-  };
+  return { clock, earned, trades };
 }
 
 // ---------- The plan ----------
 
-const same = (a: string | null | undefined, b: string | null | undefined) =>
+/** Names of one place, whatever their case. */
+export const same = (a: string | null | undefined, b: string | null | undefined) =>
   (a ?? "").toLowerCase() === (b ?? "").toLowerCase();
+
+/**
+ * Whether docking at a station is at this stop. A stop with no station (one made by hand) stands
+ * for every station in its system.
+ */
+export const stopAt = (s: { system: string; station?: string }, system: string, station: string) =>
+  same(s.system, system) && (!s.station || same(s.station, station));
 
 /** The trade stops still to do, as plan.stops indexes in visit order: the current one first. */
 export function tradeTodo(plan: Plan | null | undefined): number[] {
@@ -211,21 +251,26 @@ export function dockedAt(events: JournalEvent[], location: JournalState["locatio
 }
 
 const atStop = (s: Stop, dock: Dock | null) =>
-  dock !== null && same(s.system, dock.system) && same(s.station, dock.station);
+  dock !== null && stopAt(s, dock.system, dock.station);
 
-/** Tons of a commodity aboard that the ship may trade: not a mission's, not stolen. */
+/** Cargo the ship may trade: not limpets, not a mission's, not stolen (a black market's). */
+const tradable = (c: JournalState["cargo"][number]) =>
+  c.count > 0 && c.mission_id === null && !c.stolen && commodityKey(c.name) !== "drones";
+
+/** A market buy of something to trade: not limpets. */
+export const tradeBuy = (e: JournalEvent) => e.event === "MarketBuy" && commodityOf(e) !== "drones";
+
+/** Tons of a commodity aboard that the ship may trade. */
 function held(cargo: JournalState["cargo"], commodity: string): number {
   const key = commodityKey(commodity);
   return cargo
-    .filter((c) => c.mission_id === null && !c.stolen && commodityKey(c.name) === key)
+    .filter((c) => tradable(c) && commodityKey(c.name) === key)
     .reduce((n, c) => n + c.count, 0);
 }
 
-/** Whether the hold has cargo the ship could trade: anything but limpets and mission cargo. */
+/** Whether the hold has cargo the ship could trade. */
 export function tradeCargo(cargo: JournalState["cargo"]): boolean {
-  return cargo.some(
-    (c) => c.count > 0 && c.mission_id === null && commodityKey(c.name) !== "drones",
-  );
+  return cargo.some(tradable);
 }
 
 interface Hold {
@@ -234,8 +279,9 @@ interface Hold {
 }
 
 /**
- * Whether one of a stop's actions is done while docked there: a buy once the hold has the planned
- * tons (or is full after buying it here); a sale once it was sold here and none is left aboard.
+ * Whether one of a stop's actions is done while docked there: a buy once it was bought here and
+ * the hold has the planned tons (or is full); a sale once it was sold here and none is left
+ * aboard. Cargo brought from an earlier stop or lap does not count as bought here.
  */
 function actionDone(c: Cargo, hold: Hold, events: JournalEvent[], dock: Dock): boolean {
   const key = commodityKey(c.commodity);
@@ -248,14 +294,9 @@ function actionDone(c: Cargo, hold: Hold, events: JournalEvent[], dock: Dock): b
         commodityOf(e) === key,
     );
   if (c.action === "sell") return aboard === 0 && here.some((e) => e.event === "MarketSell");
-  if (aboard >= c.amount) return true;
+  if (!here.some((e) => e.event === "MarketBuy") || aboard === 0) return false;
   const used = hold.cargo.reduce((n, x) => n + x.count, 0);
-  return (
-    hold.capacity !== null &&
-    used >= hold.capacity &&
-    aboard > 0 &&
-    here.some((e) => e.event === "MarketBuy")
-  );
+  return aboard >= c.amount || (hold.capacity !== null && used >= hold.capacity);
 }
 
 /**
@@ -384,7 +425,7 @@ export function tradePanel(input: {
   } else {
     // Bought with no plan, or the plan is done: what is aboard.
     for (const c of input.cargo) {
-      if (c.mission_id !== null || commodityKey(c.name) === "drones" || c.count <= 0) continue;
+      if (!tradable(c)) continue;
       rows.push({ text: c.name, right: `${c.count} t` });
     }
     rows.push({
@@ -422,7 +463,7 @@ export function tradePanel(input: {
       [
         plan?.repeat ? `lap ${plan.lap ?? 1}` : null,
         plan ? pricesAge(plan, input.now) : null,
-        rate !== null ? `${credits(rate)}/h` : null,
+        hourly(rate),
       ]
         .filter(Boolean)
         .join(" · ") || undefined,

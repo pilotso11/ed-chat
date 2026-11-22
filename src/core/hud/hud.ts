@@ -109,7 +109,7 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
   const tradeStops = input.settings.modes.trade ? tradeTodo(input.plan) : [];
   const trade = {
     active: tradeStops.length > 0 || (!!j && input.settings.modes.trade && tradeCargo(j.cargo)),
-    missionCargo: j ? j.cargo.some((c) => c.mission_id !== null) : false,
+    missionCargo: j ? j.cargo.flatMap((c) => (c.mission_id !== null ? [c.mission_id] : [])) : [],
     stops: tradeStops.map((i) => input.plan!.stops[i]!),
   };
   const fromJournal = j

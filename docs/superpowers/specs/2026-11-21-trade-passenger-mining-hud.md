@@ -262,8 +262,8 @@ Each is its own PR, as the HUD spec says for follow-on modes.
 ## Open questions
 
 - ~~Should the panel mark trade stops done on its own?~~ Decided: on its own. A stop is done
-  while docked there when every buy is in the hold (the planned tons, or a full hold after buying
-  it there) and every sale was sold there with none left aboard; a stop with nothing to buy or
+  while docked there when every buy was bought there and is in the hold (the planned tons, or
+  a full hold) and every sale was sold there with none left aboard; a stop with nothing to buy or
   sell is done on docking. It is judged once per docking, again on the plan as it is now, before
   ED Chat writes it.
 - Passenger missions to a station the player is docked at, but not yet completed (the hand-in is

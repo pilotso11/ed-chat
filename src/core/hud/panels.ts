@@ -64,7 +64,11 @@ function keepVisited(prev: Obj | undefined, e: Obj): Obj {
 
 export function credits(n: number): string {
   // A loss, such as a trade sold below its cost.
-  if (n < 0) return `-${credits(-n)}`;
+  if (n < 0) {
+    // Only a loss that shows as one: -0.4 rounds to 0.
+    const loss = credits(-n);
+    return loss === "0" ? loss : `-${loss}`;
+  }
   // Each unit from where the one below would round to a thousand: 999,999 is 1.0M, not 1000k.
   if (n >= 999_950_000) return `${(n / 1e9).toFixed(1)}B`;
   if (n >= 999_500) return `${(n / 1e6).toFixed(1)}M`;

@@ -224,6 +224,18 @@ describe("events the panel asks the reader to keep", () => {
       ev("MarketSell", { MarketID: 7, Type: "gold", Count: 1, SellPrice: 2, TotalSale: 2 }),
       ev("Undocked", { StationName: "Port" }),
       ev("CarrierJump", { StarSystem: SYSTEM, SystemAddress: ADDRESS, StarPos: [100, 0, 100] }),
+      ...[1, 2, 3].map((id) =>
+        ev("MissionAccepted", {
+          MissionID: id,
+          Name: "Mission_Delivery",
+          Commodity: "$Gold_Name;",
+          Count: 1,
+          DestinationSystem: "X",
+        }),
+      ),
+      ev("MissionCompleted", { MissionID: 1 }),
+      ev("MissionFailed", { MissionID: 2 }),
+      ev("MissionAbandoned", { MissionID: 3 }),
       ev("Died"),
       ev("Shutdown"),
     );

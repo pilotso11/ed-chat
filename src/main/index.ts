@@ -624,7 +624,9 @@ async function main(): Promise<void> {
       void finishBioBookmarks(hudData).catch((err: unknown) =>
         log.log("warn", `panel bookmarks: ${message(err)}`),
       );
-      void finishTradeStop(hudData);
+      void finishTradeStop(hudData).catch((err: unknown) =>
+        log.log("warn", `panel trade stop: ${message(err)}`),
+      );
       lastSystem = system;
       renderHud();
     } catch (err) {
@@ -711,6 +713,8 @@ async function main(): Promise<void> {
   // A trade stop whose buys and sales are done is marked done, once per docking, and the next
   // stop's system is copied for the galaxy map.
   const tradeDone = new Set<string>();
+  // The last failure, logged once: a plan that cannot be judged fails on every poll.
+  let tradeError: string | null = null;
   async function finishTradeStop(data: FeedData): Promise<void> {
     const plans = hudPlans;
     const j = data.journal;
@@ -723,10 +727,12 @@ async function main(): Promise<void> {
         capacity: j.ship.cargo_capacity,
         location: j.location,
       });
-    const step = judge(data.plan);
-    if (!step || tradeDone.has(step.key)) return;
-    tradeDone.add(step.key);
+    let key: string | null = null;
     try {
+      const step = judge(data.plan);
+      if (!step || tradeDone.has(step.key)) return;
+      key = step.key;
+      tradeDone.add(key);
       // Judged again on the plan as it is now: Claude or a route key can change it after the poll.
       const now = await plans.get(data.plan.id);
       if (judge(now)?.key !== step.key) return;
@@ -740,8 +746,9 @@ async function main(): Promise<void> {
       } else flash("route", `✓ ${done}: done`, 4_000);
     } catch (err) {
       // Tried again on the next poll.
-      tradeDone.delete(step.key);
-      log.log("warn", `panel trade stop: ${message(err)}`);
+      if (key) tradeDone.delete(key);
+      if (message(err) !== tradeError) log.log("warn", `panel trade stop: ${message(err)}`);
+      tradeError = message(err);
     }
   }
 
