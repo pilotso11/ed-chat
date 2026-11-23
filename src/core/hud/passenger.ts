@@ -69,12 +69,26 @@ export function drops(missions: Mission[]): Drop[] {
   return [...by.values()];
 }
 
+type Stop = Plan["stops"][number];
+
 /**
- * A stop of a mission or delivery route: kind mission, hand_in or trade, or one that lists the
+ * The missions a stop serves: its stop actions' (complete_mission, deliver_cargo, ...), and the
+ * missions list a plan saved before ed-mcp wrote actions has. Null when it names none.
+ */
+function stopMissions(s: Stop): number[] | null {
+  const fromActions = (s.actions ?? []).flatMap((a) =>
+    a.mission_id !== undefined ? [a.mission_id] : [],
+  );
+  if (!Array.isArray(s.missions) && !fromActions.length) return null;
+  return [...(s.missions ?? []), ...fromActions];
+}
+
+/**
+ * A stop of a mission or delivery route: kind mission, hand_in or trade, or one that names the
  * missions it serves. Another plan's stops (exobiology, say) are not about these missions.
  */
-const isMissionStop = (s: Plan["stops"][number]) =>
-  s.kind === "mission" || s.kind === "hand_in" || s.kind === "trade" || Array.isArray(s.missions);
+const isMissionStop = (s: Stop) =>
+  s.kind === "mission" || s.kind === "hand_in" || s.kind === "trade" || stopMissions(s) !== null;
 
 /**
  * Mission IDs the plan's stops serve, done stops too; null when the plan does not say. A mission
@@ -82,11 +96,11 @@ const isMissionStop = (s: Plan["stops"][number]) =>
  */
 function planned(plan: Plan | null): Set<number> | null {
   if (!plan) return null;
-  const stops = plan.stops;
-  if (!stops.some((s) => Array.isArray(s.missions))) return null;
+  const named = plan.stops.map(stopMissions);
+  if (named.every((m) => m === null)) return null;
   // Every stop, done ones too: the route key marks a stop done while its mission is still open,
   // and that mission is in the route, not new.
-  return new Set(stops.flatMap((s) => s.missions ?? []));
+  return new Set(named.flatMap((m) => m ?? []));
 }
 
 /**

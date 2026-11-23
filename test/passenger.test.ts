@@ -160,6 +160,31 @@ describe("passengerPanel", () => {
     expect(quiet.rows.some((r) => /Route stale|No mission route/.test(r.text))).toBe(false);
   });
 
+  it("reads the missions a stop serves from its actions", () => {
+    const hand = (id: number) => ({
+      id: `complete-${id}`,
+      kind: "complete_mission" as const,
+      label: `Hand in ${id}`,
+      status: "todo" as const,
+      mission_id: id,
+    });
+    // As the same plan with missions lists: same rows, same order, the same new mission.
+    const lists = plan([
+      { system: "Wolf 397", station: "Brooks Estate", missions: [3] },
+      { system: "Ngalinn", station: "Haber Hub", missions: [2] },
+    ]);
+    const actions = plan([
+      { system: "Wolf 397", station: "Brooks Estate", actions: [hand(3)] },
+      { system: "Ngalinn", station: "Haber Hub", actions: [hand(2)] },
+    ]);
+    const p = passengerPanel({ missions, events: [], plan: actions, now: NOW });
+    expect(p).toEqual(passengerPanel({ missions, events: [], plan: lists, now: NOW }));
+    expect(p!.rows.at(-1)!.text).toBe("Route stale: 1 new mission. Ask Claude to re-route");
+    const all = plan([{ system: "Ochosi", actions: [hand(1), hand(2), hand(3)] }]);
+    const ok = passengerPanel({ missions, events: [], plan: all, now: NOW })!;
+    expect(ok.rows.some((r) => r.text.startsWith("Route stale"))).toBe(false);
+  });
+
   it("is titled for deliveries without passengers, and null with nothing to do", () => {
     const p = passengerPanel({
       missions: [mission(1, { commodity: "Gold", count: 5 })],

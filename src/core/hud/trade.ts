@@ -6,6 +6,7 @@ import {
   type Plan,
 } from "ed-mcp/journal";
 import { num, objs, same, str } from "./json.js";
+import { judgeBuild, type BuildJudgement } from "./buildJudge.js";
 import { held, tradable, used } from "./hold.js";
 import { commodityKey } from "./mining.js";
 import { isRun } from "./passenger.js";
@@ -29,6 +30,7 @@ import { ActiveClock, RECENT_MS, rates, type Rates } from "./rate.js";
 
 type Stop = Plan["stops"][number];
 type Cargo = NonNullable<Stop["cargo"]>[number];
+type Action = NonNullable<Stop["actions"]>[number];
 
 /**
  * Every journal event the trade panel, its mode and auto-advance read. The journal reader must keep
@@ -136,9 +138,13 @@ export function missionsNow(
           ...new Set(
             plan.stops
               .filter((s) => s.kind === "trade")
-              .flatMap((s) => s.cargo ?? [])
-              .filter((c) => c.action === "sell")
-              .map((c) => commodityKey(c.commodity)),
+              .flatMap((s) => [
+                ...(s.cargo ?? []).filter((c) => c.action === "sell").map((c) => c.commodity),
+                ...(s.actions ?? []).flatMap((a) =>
+                  a.kind === "sell_commodity" && a.commodity ? [a.commodity] : [],
+                ),
+              ])
+              .map(commodityKey),
           ),
         ]
       : [],
@@ -503,6 +509,36 @@ export function stopCargo(plan: Plan, index: number): Cargo[] {
 }
 
 /**
+ * What to do at a stop, one row each: from its actions when it has them (ed-mcp writes a
+ * buy_commodity or sell_commodity for each cargo row, sales first), else from its cargo
+ * (stopCargo()). A buy or sale is shown as its cargo row would be; any other action by its label.
+ */
+export interface StopTrade {
+  /** The buy or sale, as a cargo row; null for another kind of action. */
+  cargo: Cargo | null;
+  /** The action it comes from; null for a cargo row of a stop with no actions. */
+  action: Action | null;
+}
+
+export function stopTrades(plan: Plan, index: number): StopTrade[] {
+  const actions = plan.stops[index]?.actions ?? [];
+  if (!actions.length) return stopCargo(plan, index).map((cargo) => ({ cargo, action: null }));
+  return actions.map((a) => ({ cargo: cargoOf(a), action: a }));
+}
+
+/** A buy or sale action as the cargo row it stands for. */
+function cargoOf(a: Action): Cargo | null {
+  if ((a.kind !== "buy_commodity" && a.kind !== "sell_commodity") || !a.commodity) return null;
+  return {
+    commodity: a.commodity,
+    action: a.kind === "buy_commodity" ? "buy" : "sell",
+    amount: a.count ?? 0,
+    ...(a.price !== undefined ? { price: a.price } : {}),
+    ...(a.mission_id !== undefined ? { mission_id: a.mission_id } : {}),
+  };
+}
+
+/**
  * Where the ship is docked now, from the newest Docked event, or the Location a game restarted
  * while docked starts with; null when it is not docked.
  */
@@ -646,8 +682,9 @@ export function tradeNextCopy(plan: Plan, here: string | null): string | null {
 const price = (n: number) => Math.round(n).toLocaleString("en-US");
 const place = (s: Stop) => (s.station ? `${s.system} · ${s.station}` : s.system);
 const actionText = (c: Cargo) => `${c.action.toUpperCase()} ${c.amount} t ${c.commodity}`;
-const actionsText = (cargo: Cargo[]) =>
-  cargo.length ? cargo.map(actionText).join(" · ") : "pass through";
+const tradeText = (t: StopTrade) => (t.cargo ? actionText(t.cargo) : t.action!.label);
+const actionsText = (trades: StopTrade[]) =>
+  trades.length ? trades.map(tradeText).join(" · ") : "pass through";
 
 /** A session rate under this share of the plan's shows in amber. */
 const PLAN_SHORT = 0.8;
@@ -703,6 +740,20 @@ function status(
   return { text: parts.join(" · "), tone };
 }
 
+/** The plan's actions judged from the trade panel's own input: the events and the hold. */
+function judgeOf(
+  plan: Plan,
+  input: { events: JournalEvent[]; cargo: JournalState["cargo"]; capacity: number | null },
+): BuildJudgement {
+  return judgeBuild(plan, {
+    events: input.events,
+    cargo: input.cargo,
+    ship: { id: null, type: null, cargo_capacity: input.capacity },
+    materials: { raw: [], manufactured: [], encoded: [] },
+    engineers: [],
+  });
+}
+
 export function tradePanel(input: {
   plan: Plan | null;
   events: JournalEvent[];
@@ -717,6 +768,12 @@ export function tradePanel(input: {
   missionsNow?: MissionsNow;
   /** The plotted route, for the jumps left to the stop it leads to. */
   nav?: NavRoute | null;
+  /**
+   * The plan's actions judged (judgeBuild()) with the whole journal, when the caller has it: a
+   * stop with actions shows them done as the judge says. Judged here from the events and the hold
+   * when not given.
+   */
+  judged?: BuildJudgement | null;
 }): PanelView | null {
   const plan = isTradePlan(input.plan) ? input.plan : null;
   const todo = tradeTodo(plan);
@@ -735,29 +792,45 @@ export function tradePanel(input: {
     const jumpText = jumps !== null ? jumpsText(jumps) : null;
     const withJumps = (right: string | undefined, on: "current" | "next") =>
       leads === on && jumpText ? [right, jumpText].filter(Boolean).join(" · ") : right;
-    const cargo = stopCargo(plan, todo[0]!);
+    const trades = stopTrades(plan, todo[0]!);
     const here = atStop(cur, dock) ? dock : null;
     // Market.json is of the last market screen opened: only this station's, opened on this visit.
     const market = here && input.market && fromVisit(input.market, here) ? input.market : null;
-    const line = (c: Cargo) =>
-      status(c, hold, market, here !== null && actionDone(c, hold, input.events, here));
-    if (cargo.length === 1) {
-      const s = line(cargo[0]!);
-      rows.push({ text: `● ${place(cur)}`, right: withJumps(actionText(cargo[0]!), "current") });
-      rows.push({ text: `  ${s.text}`, tone: s.tone });
-    } else if (cargo.length) {
+    // An action: done as the judge says. A cargo row of a stop with no actions: done while docked
+    // here, as tradeAdvance() judges it.
+    const judged = cur.actions?.length ? (input.judged ?? judgeOf(plan, input)) : null;
+    const done = (t: StopTrade) =>
+      t.action
+        ? (judged?.actions.find((x) => x.stop === todo[0] && x.action.id === t.action!.id)?.done ??
+          t.action.status !== "todo")
+        : here !== null && actionDone(t.cargo!, hold, input.events, here);
+    // Another kind of action than a buy or sale has no hold or price to show.
+    const line = (t: StopTrade): { text: string; tone?: Tone } =>
+      t.cargo
+        ? status(t.cargo, hold, market, done(t))
+        : { text: "", ...(done(t) ? { tone: "good" as const } : {}) };
+    if (trades.length === 1) {
+      const s = line(trades[0]!);
+      rows.push({ text: `● ${place(cur)}`, right: withJumps(tradeText(trades[0]!), "current") });
+      if (s.text) rows.push({ text: `  ${s.text}`, tone: s.tone });
+    } else if (trades.length) {
       const right = withJumps(undefined, "current");
       rows.push(right ? { text: `● ${place(cur)}`, right } : { text: `● ${place(cur)}` });
-      for (const c of cargo) {
-        const s = line(c);
-        rows.push({ text: `  ${actionText(c)}`, right: s.text, tone: s.tone });
+      for (const t of trades) {
+        const s = line(t);
+        // As before actions: the text, the hold and price, the tone.
+        rows.push(
+          s.text
+            ? { text: `  ${tradeText(t)}`, right: s.text, tone: s.tone }
+            : { text: `  ${tradeText(t)}`, tone: s.tone },
+        );
       }
     } else rows.push({ text: `● ${place(cur)}`, right: withJumps("pass through", "current") });
     const next = todo[1];
     if (next !== undefined) {
       rows.push({
         text: `▸ ${place(plan.stops[next]!)}`,
-        right: withJumps(actionsText(stopCargo(plan, next)), "next"),
+        right: withJumps(actionsText(stopTrades(plan, next)), "next"),
         tone: "dim",
       });
     }

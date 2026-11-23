@@ -38,7 +38,7 @@ import {
   type BuildVisit,
   type Outfitting,
 } from "./build.js";
-import { isBuildPlan } from "./buildJudge.js";
+import { hasActions, isBuildPlan, judgeBuild } from "./buildJudge.js";
 import {
   exobiologyPanel,
   explorationPanel,
@@ -267,6 +267,8 @@ function panelFor(
       now: input.now,
       missionsNow: missionsNow(j, input.plan),
       nav: input.nav,
+      // Judged with the whole journal, as ActionFinisher judges it, so both share one judgement.
+      judged: hasActions(input.plan) ? judgeBuild(input.plan, j) : null,
     });
   }
   if (mode === "build") {

@@ -1188,6 +1188,73 @@ describe("the trade panel", () => {
   });
 });
 
+describe("the trade panel with stop actions", () => {
+  /** The plan as ed-mcp 0.11.0 writes it: each cargo row also a buy or sale action. */
+  const withActions = (p: Plan, firstLap = false): Plan => ({
+    ...p,
+    started_at: new Date(NOW - 60 * MIN).toISOString(),
+    stops: p.stops.map((s, i) => ({
+      ...s,
+      actions: (s.cargo ?? [])
+        .filter((c) => !(firstLap && i === 0 && c.action === "sell"))
+        .map((c) => ({
+          id: `${c.action}-${c.commodity.toLowerCase()}`,
+          kind: c.action === "buy" ? ("buy_commodity" as const) : ("sell_commodity" as const),
+          label: `${c.action === "buy" ? "Buy" : "Sell"} ${c.amount} t ${c.commodity}`,
+          status: "todo" as const,
+          commodity: c.commodity,
+          count: c.amount,
+          ...(c.price !== undefined ? { price: c.price } : {}),
+        })),
+    })),
+  });
+  const input = (plan: Plan, o: Partial<Parameters<typeof tradePanel>[0]> = {}) => ({
+    plan,
+    events: [
+      docked(10, "Kremainn", "Wohler Terminal", 7),
+      sell(8, "Silver", 720, 4_100, {}, 7),
+      buy(5, "Gold", 700, 9_400, 7),
+    ],
+    cargo: hold({ Gold: 700 }),
+    capacity: 720,
+    location: where("Kremainn", "Wohler Terminal"),
+    market: market(7, { Gold: [9_400, 9_000], Silver: [3_900, 4_100] }),
+    missions: [] as Mission[],
+    now: NOW,
+    ...o,
+  });
+
+  it("shows a stop's actions as its cargo rows were shown", () => {
+    for (const lap of [1, 2]) {
+      const cargo = loop({ lap });
+      const actions = withActions(loop({ lap, id: `actions-${lap}` }), lap === 1);
+      expect(tradePanel(input(actions))).toEqual(tradePanel(input(cargo)));
+    }
+    // Bought short with room left: open on both. The hold full: done on both.
+    const short = { cargo: hold({ Gold: 700 }), capacity: 800 };
+    const a = withActions(loop({ lap: 2, id: "short" }));
+    expect(tradePanel(input(a, short))).toEqual(tradePanel(input(loop({ lap: 2 }), short)));
+    expect(tradePanel(input(a, short))!.rows[2]!.tone).toBeUndefined();
+  });
+
+  it("shows an action done as the plan has it, docked here or not", () => {
+    const p = withActions(loop({ lap: 2, id: "marked" }));
+    p.stops[0]!.actions![0]!.status = "done";
+    const away = input(p, { events: [], location: where("Kremainn", null), cargo: [] });
+    const rows = tradePanel(away)!.rows;
+    expect(rows[1]).toMatchObject({ text: "  SELL 720 t Silver", tone: "good" });
+    expect(rows[2]!.tone).toBeUndefined();
+  });
+
+  it("shows another kind of action by its label", () => {
+    const p = withActions(loop({ lap: 2, id: "refuel" }));
+    p.stops[0]!.actions!.push({ id: "fuel", kind: "refuel", label: "Refuel", status: "todo" });
+    const rows = tradePanel(input(p))!.rows;
+    expect(rows.at(-2)).toEqual({ text: "  Refuel" });
+    expect(rows.at(-1)!.right).toBe("SELL 720 t Gold · BUY 720 t Silver");
+  });
+});
+
 describe("trade mode", () => {
   const ALL = () => true;
   const active: TradeNow = { active: true, aboard: true, missionCargo: [], wanted: [], stops: [] };
