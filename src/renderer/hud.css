@@ -57,6 +57,11 @@ body {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
+/* A header's tone: green, title too, once everything the panel tracks is done. */
+.head.good,
+.head.good .title {
+  color: #8fe388;
+}
 /* A row's tone, and a footer line's. */
 .row.accent,
 .footer.accent {

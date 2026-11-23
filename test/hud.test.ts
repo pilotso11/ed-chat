@@ -232,6 +232,7 @@ describe("massacrePanel", () => {
       { minPerKill: 0 },
     )!;
     expect(p.right).toBe("12 left");
+    expect(p.tone).toBeUndefined();
     // The unfinished mission's 1.0M over the 12 kills left.
     expect(p.rows[0]).toMatchObject({
       text: "Kumo Crew",
@@ -241,6 +242,22 @@ describe("massacrePanel", () => {
     expect(p.rows[1]).toMatchObject({ text: "Lugh", right: "18/30", bar: 0.6 });
     expect(p.rows[2]).toMatchObject({ text: "Eravate", tone: "good" });
     expect(p.footer).toEqual(["Stack 2.0M · 1 ready to hand in 1.0M", "next expires 1d 4h"]);
+  });
+
+  it("shows done in green once every kill is done", () => {
+    const p = massacrePanel(
+      [
+        {
+          target_faction: "Kumo Crew",
+          kills_left: 0,
+          factions: [{ faction: "Lugh", kills_left: 0, missions: [mission(1, 30, 30, null)] }],
+        },
+      ],
+      Date.UTC(2026, 10, 15, 12),
+      { minPerKill: 0 },
+    )!;
+    expect(p.right).toBe("done ✓");
+    expect(p.tone).toBe("good");
   });
 
   it("marks a target that pays too little a kill left", () => {
@@ -930,6 +947,11 @@ describe("HudFeed bookmarks and a fresh Status.json", () => {
     });
     expect((await feed.readStatus())?.latitude).toBe(1);
     expect(reads).toBe(2);
+  });
+
+  it("reads the system from the journal as it is now", async () => {
+    const feed = new HudFeed(stores(async () => null) as never, "J", { read: async () => "{}" });
+    expect(await feed.readSystem()).toBe("S");
   });
 
   it("parses Market.json again only when it changes", async () => {

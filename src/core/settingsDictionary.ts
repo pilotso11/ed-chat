@@ -76,6 +76,11 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
       "Bookmarks where you are on a planet, in the ed-mcp plan bookmarks. The panel then shows " +
       "the distance and bearing to it when you are back on that body.",
   },
+  "hotkeys.clearBookmark": {
+    text:
+      "Clears the nearest bookmark on the body you are on. The tray menu clears a whole " +
+      "system's bookmarks, or all of them, after asking.",
+  },
 
   strip: { text: "The status strip at rest." },
   "strip.lines": { text: "1: status only. 2: also the first line of the last reply." },

@@ -8,6 +8,11 @@ mode. The keys are in
 [the Keys section](#keys) below, and the panel's settings, all under
 `hud`, in [Settings](settings.md).
 
+When everything a panel tracks is done, its header turns green with a ✓: every
+species on the planet analysed, every body found and every one worth mapping
+mapped, every massacre kill done, or every passenger or delivery mission ready to
+hand in. Analysed species and mapped bodies are green with a ✓ too.
+
 ## Keys
 
 | Key | Action |
@@ -17,6 +22,7 @@ mode. The keys are in
 | Ctrl+Alt+Home | Move the panel: for 15 seconds the move keys move the panel, not the chat |
 | Ctrl+Alt+PageDown / PageUp | Mark the current route stop done / go back one stop, and copy the stop's system |
 | Ctrl+Alt+B | Bookmark where you are on a planet |
+| Ctrl+Alt+- | Clear the nearest bookmark on the body you are on |
 
 ## Massacre
 
@@ -221,9 +227,21 @@ bookmark with its distance, its bearing and which way to turn: under the
 exploration and exobiology panels, and on their own when the exploration or
 exobiology panel has nothing to list, in route mode, or when no mode is on. Massacre,
 mining and passenger mode leave them out. A
-bookmark at a bio site is marked done once every species there is analysed.
-Bookmarks are an ed-mcp plan, so Claude can see and change them. `hud.bookmarks`
-turns them off.
+bookmark at a bio site lists what is still to sample on its body, so finished
+species drop off, and is marked done once every species there is analysed and
+the journal has the body's signal count from a scan (Spansh's count, which can be
+out of date, fills in the panel but does not mark a bookmark done). The
+journal does not say what grows where, so the list is for the whole body, not
+the spot. Only bookmarks the key made keep their list up to date: one renamed,
+or made before ED Chat 0.9, keeps its label as saved.
+Ctrl+Alt+- clears the nearest bookmark on the body you are on, one per press.
+With several on the body and no position to tell which is nearest (in orbit),
+it clears none. The tray menu's
+Bookmarks item clears the nearest one here in one click; away from a bookmarked
+body it offers every bookmark in the system instead, and asks first. It can also
+clear every bookmark, after asking. A cleared bookmark
+is marked skipped in the plan. Bookmarks are an ed-mcp plan, so Claude can see
+and change them too. `hud.bookmarks` turns them off.
 
 ## How the mode is chosen
 

@@ -283,6 +283,7 @@ describe("bio rows", () => {
             body_id: 5,
             bio_signals: 2,
             genera: ["Clypeus", "Bacterium"],
+            not_started: [],
             species: [
               {
                 genus: "Clypeus",
@@ -305,6 +306,54 @@ describe("bio rows", () => {
     expect(tone(0)).toBeUndefined();
     expect(tone(1)).toBeUndefined();
     expect(tone(2)).toBe("good");
+  });
+
+  it("takes Spansh's signal count when the journal has none, and says map when worth it", () => {
+    const row = (o: { bio_signals: number | null; analysed: number; mapped?: boolean }) =>
+      bioRows({
+        system: "Sys",
+        address: 42,
+        events: [],
+        exploration: {
+          bodies: [
+            {
+              body: "Sys 5",
+              body_id: 5,
+              distance_ls: 300,
+              was_discovered: true,
+              value_scanned: 900_000,
+              mapped_by_you: o.mapped ?? false,
+            },
+          ],
+        } as unknown as Exploration,
+        bio: [
+          {
+            body: "Sys 5",
+            body_id: 5,
+            bio_signals: o.bio_signals,
+            genera: ["Clypeus"],
+            not_started: [],
+            species: [
+              { genus: "Clypeus", species: "Clypeus Speculumi", analysed: o.analysed > 0 },
+              ...(o.analysed > 1
+                ? [{ genus: "Bacterium", species: "Bacterium Cerbrus", analysed: true }]
+                : []),
+            ],
+          },
+        ] as never,
+        known: [{ bodyId: 5, name: "Sys 5", bioSignals: 2, genera: [] }] as never,
+        bioMin: 0,
+        valuableMin: 500_000,
+      })[0]!;
+    // Spansh says 2 signals, the journal none: 1 analysed is 1/2, not done.
+    expect(row({ bio_signals: null, analysed: 1 })).toMatchObject({
+      text: "5  2 bio · map",
+      right: expect.stringMatching(/1\/2$/),
+    });
+    expect(row({ bio_signals: null, analysed: 2, mapped: true })).toMatchObject({
+      text: "5  2 bio",
+      tone: "good",
+    });
   });
 
   it("says when Spansh does not know the system", () => {
@@ -389,6 +438,8 @@ describe("bio rows", () => {
     ]);
     // Stars count, belt clusters do not.
     expect(p.right).toBe("4/4 bodies ✓");
+    // All found and nothing worth mapping: done.
+    expect(p.tone).toBe("good");
     // Over the threshold: listed, most valuable first, mapped last.
     const worth = {
       ...x,
@@ -431,7 +482,79 @@ describe("bio rows", () => {
       known: null,
     }).rows;
     expect(listed[0]).toEqual({ text: "6  HMC", right: "100 ls  700k  map", tone: "accent" });
-    expect(listed[2]).toEqual({ text: "7  HMC", right: "100 ls  800k  ✓", tone: "dim" });
+    expect(listed[2]).toEqual({ text: "7  HMC", right: "100 ls  800k  ✓", tone: "good" });
+    // Bodies worth mapping still to map: the header counts them and is not done.
+    const mapping = (bodies: unknown[]) =>
+      explorationPanel({
+        system: "Sys",
+        exploration: { ...worth, bodies } as unknown as Exploration,
+        bio: [],
+        totals: {
+          unsoldCartographic: 0,
+          unsoldBio: 0,
+          unsoldBioCount: 0,
+          session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+          rate: { session: null, recent: null },
+          planetRate: new Map(),
+        },
+        valuableMin: 500_000,
+        known: null,
+      });
+    const part = mapping(worth.bodies);
+    expect(part.right).toMatch(/ · mapped 1\/3$/);
+    expect(part.tone).toBeUndefined();
+    const all = mapping(worth.bodies.map((b) => ({ ...b, mapped_by_you: true })));
+    expect(all.right).toMatch(/ ✓ · mapped 3\/3 ✓$/);
+    expect(all.tone).toBe("good");
+    // An Earth-like world not mapped keeps it from done.
+    const elw = mapping([
+      ...worth.bodies.map((b) => ({ ...b, mapped_by_you: true })),
+      { ...body(9, "Earthlike body", 3_000_000), mapped_by_you: false },
+    ]);
+    expect(elw.right).toMatch(/ · mapped 3\/4$/);
+    expect(elw.tone).toBeUndefined();
+    // A planet worth mapping that is listed with the bio planets still counts.
+    const bioBody = explorationPanel({
+      system: "Sys",
+      exploration: {
+        ...worth,
+        bodies: [
+          ...worth.bodies.map((b) => ({ ...b, mapped_by_you: true })),
+          body(9, "High metal content body", 1_000_000),
+        ],
+      } as unknown as Exploration,
+      bio: [
+        {
+          body: "Sys 9",
+          body_id: 9,
+          bio_signals: 1,
+          genera: ["Bacterium"],
+          species: [],
+          not_started: ["Bacterium"],
+          likely: [],
+        },
+      ],
+      totals: {
+        unsoldCartographic: 0,
+        unsoldBio: 0,
+        unsoldBioCount: 0,
+        session: { systems: 0, scanned: 0, mapped: 0, firstDiscoveries: 0 },
+        rate: { session: null, recent: null },
+        planetRate: new Map(),
+      },
+      valuableMin: 500_000,
+      known: null,
+    });
+    expect(bioBody.rows.some((r) => r.text.startsWith("9"))).toBe(true);
+    expect(bioBody.right).toMatch(/ · mapped 3\/4$/);
+    expect(bioBody.rows.find((r) => r.text.startsWith("9"))!.text).toMatch(/ · map$/);
+    // A belt cluster (no type) is never mapped, so it does not keep the header from done.
+    const belt = mapping([
+      ...worth.bodies.map((b) => ({ ...b, mapped_by_you: true })),
+      { ...body(10, "x", 0), type: null },
+    ]);
+    expect(belt.tone).toBe("good");
+    expect(bioBody.tone).toBeUndefined();
     // Before all bodies are found the empty state says "yet", and two geo bodies are plural.
     const early = explorationPanel({
       system: "Sys",

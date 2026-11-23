@@ -72,6 +72,11 @@ export class HudFeed {
     return null;
   }
 
+  /** The system from the journal as it is now, for a key press that must not use the last poll's. */
+  async readSystem(): Promise<string | null> {
+    return (await this.stores.journal.state()).location.system ?? null;
+  }
+
   private read(name: string): Promise<string | null> {
     const read = this.opts.read ?? ((f: string) => readFile(f, "utf8"));
     return read(path.join(this.journalDir, name)).catch(() => null);

@@ -50,6 +50,7 @@ const HotkeysSchema = z.strictObject({
   routeNext: keys.default("Ctrl+Alt+PageDown"),
   routePrev: keys.default("Ctrl+Alt+PageUp"),
   bookmark: keys.default("Ctrl+Alt+B"),
+  clearBookmark: keys.default("Ctrl+Alt+-"),
 });
 
 // Windows turns Shift+numpad digit into End, Down and so on, so the numpad keys use Ctrl only.

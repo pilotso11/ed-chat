@@ -10,7 +10,8 @@ import {
 } from "ed-mcp/journal";
 import type { ShipStatus } from "./hud.js";
 import { same } from "./json.js";
-import { shortBody, type HudRow } from "./panels.js";
+import type { KnownBody } from "./known.js";
+import { bioProgress, knownSignals, shortBody, type HudRow } from "./panels.js";
 
 /** The plan that holds surface bookmarks, in ed-mcp's plan store so Claude sees them too. */
 export const BOOKMARKS_PLAN = "bookmarks";
@@ -40,19 +41,12 @@ export function stopPosition(s: Stop): Position | null {
 export function bookmarkLabel(
   bio: ExobiologyBody | null,
   taken: string[],
+  knownCount?: number | null,
 ): { label: string; bio: boolean } {
   const used = new Set(taken.map((t) => t.toLowerCase()));
-  // Abandoned species are left out: their genus is back among those not started.
-  const left = bio
-    ? [
-        ...bio.species.filter((s) => !s.analysed && !s.abandoned).map((s) => s.species),
-        ...bio.not_started,
-      ]
-    : [];
-  // Signals with no genus known yet (no surface scan) are biology too.
-  const unknown = bio ? Math.max(0, (bio.bio_signals ?? 0) - bio.genera.length) : 0;
-  if (left.length || unknown) {
-    const base = `Bio: ${[...left, ...(unknown ? [`${unknown} signal${unknown === 1 ? "" : "s"}`] : [])].join(", ")}`;
+  const left = bio ? bioLeft(bio, knownCount) : [];
+  if (left.length) {
+    const base = `Bio: ${left.join(", ")}`;
     let label = base;
     for (let n = 2; used.has(label.toLowerCase()); n++) label = `${base} (${n})`;
     return { label, bio: true };
@@ -62,6 +56,81 @@ export function bookmarkLabel(
     .filter(Boolean)
     .map(Number);
   return { label: `Bookmark ${Math.max(0, ...numbers) + 1}`, bio: false };
+}
+
+/**
+ * The biology still to sample on a body: the species started but not analysed, the genera not
+ * started, and signals with no genus known yet ("2 signals", before a surface scan).
+ */
+export function bioLeft(bio: ExobiologyBody, knownCount?: number | null): string[] {
+  // Abandoned species are left out: their genus is back among those not started.
+  const left = [
+    ...bio.species.filter((s) => !s.analysed && !s.abandoned).map((s) => s.species),
+    ...bio.not_started,
+  ];
+  // Spansh's count stands in when the journal has none (null, or 0 from a later scan).
+  // Every started species and every genus not started accounts for a signal: one genus can grow
+  // two species on a body.
+  const started = bio.species.filter((s) => !s.abandoned).length;
+  const accounted = Math.max(bio.genera.length, started + bio.not_started.length);
+  const unknown = Math.max(0, (bio.bio_signals || knownCount || 0) - accounted);
+  return unknown ? [...left, `${unknown} signal${unknown === 1 ? "" : "s"}`] : left;
+}
+
+/**
+ * The note on a bio bookmark the key made: while its label still starts "Bio: ", the panel
+ * redraws it. A label the player or Claude wrote, even one starting "Bio: ", has no such note,
+ * and a renamed one no longer starts so; both are kept.
+ */
+export const BIO_NOTE = "ED Chat keeps this label up to date from the journal.";
+
+/**
+ * What a bookmark's row says. A bio bookmark that the key made shows what is still to sample on
+ * its body now, not when it was made, so finished species drop off. "All sampled" waits for the
+ * journal's own signal count, as auto-done does (finishedBioBookmarks).
+ */
+function bookmarkText(
+  s: Stop,
+  bio: ExobiologyBody[] | null,
+  known: KnownBody[] | null,
+  system: string,
+): string {
+  const label = s.label ?? s.purpose;
+  // The key's own label, not renamed since: it has the note and still starts "Bio: ".
+  const own = s.notes === BIO_NOTE && label.startsWith("Bio: ");
+  if (s.kind !== "exobiology" || !own || !bio || !s.body) return label;
+  const key = bodyKey(s.body, system);
+  const body = bio.find((b) => bodyKey(b.body, system) === key);
+  if (!body) return label;
+  const count = knownSignals(known, body.body_id);
+  const left = bioLeft(body, count);
+  // "All sampled" when the journal says the body is done. On Spansh's count alone, the row says
+  // so, as the header does, but auto-done waits for the journal's (it can be out of date).
+  const what = left.length
+    ? `Bio: ${left.join(", ")}`
+    : bioProgress(body).done
+      ? "Bio: all sampled"
+      : bioProgress(body, count).done
+        ? "Bio: all sampled by Spansh's count"
+        : "Bio: all found sampled, more may be here";
+  return what;
+}
+
+/**
+ * What the row for a bookmark says, for a note about it: the redrawn bio list when the key made
+ * it, else its label. Reads the system's exobiology from the journal.
+ */
+export function bookmarkShown(
+  s: Stop,
+  journal: (JournalState & { events: JournalEvent[] }) | null,
+  known: KnownBody[] | null,
+): string {
+  const label = s.label ?? s.purpose;
+  if (s.kind !== "exobiology" || s.notes !== BIO_NOTE || !journal) return label;
+  const address = systemAddress(journal.events, s.system);
+  if (address === null) return label;
+  const bio = exobiology(journal.events, address, { system: s.system }).bodies;
+  return bookmarkText(s, bio, known, s.system);
 }
 
 /** A bookmark as a plan stop. */
@@ -80,6 +149,7 @@ export function newBookmark(input: {
     kind: input.bio ? "exobiology" : "other",
     status: "todo",
     position: { ...input.here },
+    ...(input.bio ? { notes: BIO_NOTE } : {}),
   };
 }
 
@@ -120,6 +190,10 @@ export function bookmarkRows(input: {
   plan: Plan | null;
   system: string | null;
   status: ShipStatus | null;
+  /** The system's exobiology from the journal, for what bio bookmarks still have to sample. */
+  bio?: ExobiologyBody[] | null;
+  /** Spansh's bodies in the system, for signal counts the journal lacks. */
+  known?: KnownBody[] | null;
 }): HudRow[] {
   const { plan, system, status } = input;
   if (!plan || !system) return [];
@@ -134,6 +208,17 @@ export function bookmarkRows(input: {
   const heading = status?.heading ?? null;
   const near: (HudRow & { d: number })[] = [];
   const elsewhere = new Map<string, { name: string; n: number }>();
+  // Redrawn bio labels can come out the same for two bookmarks on a body: the later ones in the
+  // plan get " (2)" and so on, so the rows still differ and keep their numbers as you move.
+  const texts = new Map<Stop, string>();
+  const used = new Map<string, number>();
+  for (const s of here) {
+    if (bodyKey(s.body!, system) !== onBody) continue;
+    const base = bookmarkText(s, input.bio ?? null, input.known ?? null, system);
+    const n = (used.get(base.toLowerCase()) ?? 0) + 1;
+    used.set(base.toLowerCase(), n);
+    texts.set(s, n > 1 ? `${base} (${n})` : base);
+  }
   for (const s of here) {
     if (bodyKey(s.body!, system) !== onBody) {
       // Counted ignoring case, as the body is matched; named as first written.
@@ -142,7 +227,7 @@ export function bookmarkRows(input: {
       elsewhere.set(key, { name: seen?.name ?? shortBody(s.body!, system), n: (seen?.n ?? 0) + 1 });
       continue;
     }
-    const text = `📍 ${s.label ?? s.purpose}`;
+    const text = `📍 ${texts.get(s)!}`;
     const pos = stopPosition(s);
     if (!pos || !at || radius === null) {
       // On the body, but where it is or where we are is not known.
@@ -188,6 +273,8 @@ export function bookmarkHere(
   journal: (JournalState & { events: JournalEvent[] }) | null,
   status: ShipStatus | null,
   taken: string[],
+  /** Spansh's bodies in the system, for signal counts the journal lacks. */
+  known?: KnownBody[] | null,
 ): { stop: ReturnType<typeof newBookmark> } | { reason: string } {
   const system = journal?.location.system ?? null;
   if (
@@ -207,7 +294,11 @@ export function bookmarkHere(
           (b) => bodyKey(b.body, system) === body,
         ) ?? null)
       : null;
-  const { label, bio: isBio } = bookmarkLabel(bio, taken);
+  const { label, bio: isBio } = bookmarkLabel(
+    bio,
+    taken,
+    bio ? knownSignals(known, bio.body_id) : null,
+  );
   return {
     stop: newBookmark({
       system,
@@ -217,6 +308,71 @@ export function bookmarkHere(
       bio: isBio,
     }),
   };
+}
+
+/** The bookmarks still to do, with a body as the panel shows them: their indexes in the plan. */
+export const todoBookmarks = (plan: Plan | null): number[] =>
+  (plan?.stops ?? []).flatMap((s, i) => (s.status === "todo" && s.body ? [i] : []));
+
+/**
+ * The bookmarks that the clear key clears, as indexes in the plan. On a body, the nearest
+ * bookmark on it; when there are several and which is nearest is not known (no position for the
+ * player or the bookmark), the first, with unsure: true, so the key refuses. Elsewhere in
+ * the system, every bookmark in the system (whole: true: the tray asks first, the key refuses). Only
+ * bookmarks with a body, as the panel shows. Empty when the system has none.
+ */
+export function bookmarksToClear(input: {
+  plan: Plan | null;
+  system: string | null;
+  status: ShipStatus | null;
+}): { stops: number[]; whole: boolean; unsure?: true } {
+  const { plan, system, status } = input;
+  if (!plan || !system) return { stops: [], whole: false };
+  const here = todoBookmarks(plan).filter((i) => same(plan.stops[i]!.system, system));
+  const onBody = status?.body ? bodyKey(status.body, system) : null;
+  const body = here.filter((i) => bodyKey(plan.stops[i]!.body!, system) === onBody);
+  if (!body.length) return { stops: here, whole: here.length > 0 };
+  const at =
+    status && status.latitude !== null && status.longitude !== null && status.radius !== null
+      ? { latitude: status.latitude, longitude: status.longitude, radius: status.radius }
+      : null;
+  const far = (i: number) => {
+    const pos = stopPosition(plan.stops[i]!);
+    return pos && at ? surfaceDistance(at, pos, at.radius) : Infinity;
+  };
+  // The first of the nearest: a stable sort keeps the plan's order among equals.
+  const nearest = [...body].sort((a, b) => far(a) - far(b))[0]!;
+  const unsure = body.length > 1 && far(nearest) === Infinity;
+  return { stops: [nearest], whole: false, ...(unsure ? { unsure: true as const } : {}) };
+}
+
+/**
+ * A held key repeats after up to a second (Windows' longest delay), then every few tens of
+ * milliseconds. A clear-key press this soon after the last one, repeat or not, is the same
+ * press: one key-down clears one bookmark.
+ */
+export const KEY_REPEAT_MS = 1_100;
+
+/** Whether a clear-key press at `at` is a repeat of the last press at `last`. */
+export const isKeyRepeat = (at: number, last: number) => at - last < KEY_REPEAT_MS;
+
+/**
+ * What the clear key may clear: the one bookmark on the body you are on, never a whole system.
+ * A held key repeats, so no second press can be told from holding it; the tray asks instead.
+ * Nor a guess: with several bookmarks on the body and no position to tell the nearest, none.
+ */
+export function keyClearStops(pick: {
+  stops: number[];
+  whole: boolean;
+  unsure?: true;
+}): { stops: number[] } | { reason: string } {
+  if (pick.whole) {
+    return { reason: "not on a bookmarked body: clear this system's bookmarks from the tray menu" };
+  }
+  if (pick.unsure) {
+    return { reason: "position not known, so not which bookmark is nearest: land and try again" };
+  }
+  return { stops: pick.stops };
 }
 
 /** Whether an ed-mcp plan store error says the plan does not exist. */
@@ -242,25 +398,15 @@ export function finishedBioBookmarks(
   if (address === null) return [];
   const done = new Set(
     exobiology(journal.events, address, { system })
-      .bodies.filter((b) => {
-        // An abandoned species was left for another of its genus: it need not be analysed, but it
-        // is not one of the analysed species either, so the signal count still waits for one.
-        const kept = b.species.filter((s) => !s.abandoned);
-        return (
-          kept.length > 0 &&
-          kept.every((s) => s.analysed) &&
-          !b.not_started.length &&
-          // Every signal sampled, not just every genus seen so far. With no signal count (null, or
-          // 0 from a later scan with no biology listed) the body might hold more, so it is left
-          // for the player or Claude to mark done.
-          !!b.bio_signals &&
-          kept.length >= b.bio_signals
-        );
-      })
+      // The journal's signal count alone: a stale Spansh count could mark one done early.
+      .bodies.filter((b) => bioProgress(b).done)
       .map((b) => bodyKey(b.body, system)),
   );
   return todo.filter((i) => done.has(bodyKey(plan.stops[i]!.body!, system)));
 }
+
+/** The same bookmark and label: not another one added since in the same place. */
+export const sameStop = (a: Stop, b: Stop) => sameBookmark(a, b) && a.label === b.label;
 
 /** The same bookmark: what it is, not where it sits in the plan, which changes with edits. */
 export const sameBookmark = (a: Stop, b: Stop) =>

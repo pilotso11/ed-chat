@@ -41,7 +41,7 @@ export interface PanelView {
   title: string;
   subtitle?: string;
   right?: string;
-  /** The header's tone: green for a finished build. */
+  /** The header's tone: good when everything the panel tracks is done. */
   tone?: Tone;
   rows: HudRow[];
   footer: FooterLine[];
@@ -191,7 +191,10 @@ export function massacrePanel(
   // The targets shown only. ed-mcp gives a lapsed target no kills left already; this keeps the
   // header in step with the rows if that changes.
   const total = targets.reduce((n, g) => n + g.kills_left, 0);
-  return { mode: "massacre", title: "MASSACRE", right: `${total} left`, rows, footer };
+  // Every kill done: what is left is to hand the missions in.
+  return total
+    ? { mode: "massacre", title: "MASSACRE", right: `${total} left`, rows, footer }
+    : { mode: "massacre", title: "MASSACRE", right: "done ✓", tone: "good", rows, footer };
 }
 
 // ---------- Exploration ----------
@@ -689,6 +692,8 @@ export function bioRows(input: {
   bio: ExobiologyBody[];
   known: KnownBody[] | null;
   bioMin: number;
+  /** hud.valuableMin: a planet worth this much mapped, not mapped yet, says "map". */
+  valuableMin?: number;
   /** Filled with the body IDs that got a row. */
   listed?: Set<number>;
 }): HudRow[] {
@@ -728,15 +733,26 @@ export function bioRows(input: {
     const base = known_ ? sum((g) => g.likely) : null;
     const likely = base !== null ? base * bonus : null;
     if (likely !== null && likely < input.bioMin) continue;
-    const signals = j?.bio_signals ?? k?.bioSignals ?? genera.length;
-    const analysed = j?.species.filter((s) => s.analysed).length ?? 0;
-    const done = signals > 0 && analysed >= signals;
+    // From the journal, the same rule as the exobiology header, with Spansh's signal count when
+    // the journal has none; Spansh alone has none analysed.
+    const progress = j ? bioProgress(j, k?.bioSignals) : null;
+    const signals = progress?.signals ?? k?.bioSignals ?? genera.length;
+    const analysed = progress?.analysed ?? 0;
+    const done = progress?.done ?? false;
+    // A planet worth mapping says so here too, as it is not listed with the bodies to map.
+    const value = x?.value_mapped ?? x?.value_scanned ?? 0;
+    // As the header's "mapped n/m" counts: Earth-like, water and ammonia worlds at any value.
+    const map =
+      !!x &&
+      input.valuableMin !== undefined &&
+      (isHighlight(x.type, x.terraformable) || value >= input.valuableMin) &&
+      !x.mapped_by_you;
     const name = x?.body ?? j?.body ?? k?.name ?? String(id);
     const ls = x?.distance_ls ?? k?.distance_ls ?? null;
     const labels = guesses.map((g, i) => g?.label ?? genera[i]!);
     input.listed?.add(id);
     items.push({
-      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio${geo ? ` · ${geo} geo` : ""}`,
+      text: `${x?.was_discovered === false ? "★ " : ""}${shortBody(name, system)}  ${signals} bio${geo ? ` · ${geo} geo` : ""}${map ? " · map" : ""}`,
       // The species can be many: on their own line, which wraps.
       ...(labels.length ? { detail: labels.join(", ") } : {}),
       right: [
@@ -789,6 +805,7 @@ export function explorationPanel(input: {
     bio: input.bio,
     known,
     bioMin: input.bioMin ?? 0,
+    valuableMin: input.valuableMin,
   });
   let geoOnly = 0;
   for (const b of x.bodies) {
@@ -816,7 +833,8 @@ export function explorationPanel(input: {
       ]
         .filter(Boolean)
         .join("  "),
-      tone: done ? "dim" : "accent",
+      // Green with ✓ once mapped, as an analysed species is.
+      tone: done ? "good" : "accent",
       done,
       value,
     });
@@ -851,12 +869,35 @@ export function explorationPanel(input: {
   const d = x.discovery;
   // The game's body count leaves out belt clusters, which have no planet class or star type.
   const scanned = x.bodies.filter((b) => b.type !== null).length;
-  const right = d.body_count !== null ? `${scanned}/${d.body_count} bodies` : `${scanned} scanned`;
+  const found = d.body_count !== null ? `${scanned}/${d.body_count} bodies` : `${scanned} scanned`;
+  // The bodies worth mapping: the Earth-like, water and ammonia worlds, and every other planet
+  // over hud.valuableMin, those listed with the bio planets too.
+  // Belt clusters have no type, and are never mapped.
+  const worth = x.bodies
+    .filter(
+      (b) =>
+        b.type !== null &&
+        !b.type.endsWith(" star") &&
+        (isHighlight(b.type, b.terraformable) ||
+          (b.value_mapped ?? b.value_scanned ?? 0) >= input.valuableMin),
+    )
+    .map((b) => b.mapped_by_you);
+  const mapped = worth.filter(Boolean).length;
+  // Done when every body is found and every one worth mapping is mapped.
+  const done = d.all_bodies_found && mapped === worth.length;
   return {
     mode: "exploration",
     title: "EXPLORE",
     subtitle: system ?? undefined,
-    right: d.all_bodies_found ? `${right} ✓` : right,
+    right: [
+      d.all_bodies_found ? `${found} ✓` : found,
+      worth.length
+        ? `mapped ${mapped}/${worth.length}${mapped === worth.length ? " ✓" : ""}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    ...(done ? { tone: "good" as const } : {}),
     rows,
     footer: totalsFooter(input.totals),
   };
@@ -890,6 +931,39 @@ function bioRateLine(input: {
   return parts.length ? [`Rate: ${parts.join(" · ")}`] : [];
 }
 
+/** Spansh's biological signal count for a body, or null. */
+export const knownSignals = (known: KnownBody[] | null | undefined, bodyId: number) =>
+  known?.find((k) => k.bodyId === bodyId)?.bioSignals ?? null;
+
+/**
+ * How far through a body's biology the player is: species analysed (an abandoned one is not)
+ * out of the signals, or out of the genera found when there are more of those. Done once every
+ * signal has a species analysed and nothing is still in progress or not started. With no signal
+ * count (null, or 0 from a later scan) the body may hold more, so it is never done. Spansh's
+ * count stands in for what the panel shows; auto-done bio bookmarks (finishedBioBookmarks) use
+ * the journal's alone, since a stale Spansh count would clear one early.
+ */
+export function bioProgress(
+  b: ExobiologyBody,
+  /** Another source's signal count (Spansh), for a body the journal has none for. */
+  spanshCount?: number | null,
+): {
+  analysed: number;
+  signals: number;
+  done: boolean;
+} {
+  // An abandoned species was left for another of its genus: it is neither analysed nor waiting.
+  const kept = b.species.filter((s) => !s.abandoned);
+  const analysed = kept.filter((s) => s.analysed).length;
+  // 0 from a later scan is no count, as null is: Spansh's count stands in for either.
+  const count = b.bio_signals || spanshCount || null;
+  // Every started species and every genus not started accounts for a signal, as bioLeft counts:
+  // one genus can grow two.
+  const signals = Math.max(count ?? 0, b.genera.length, kept.length + b.not_started.length);
+  const done = !!count && analysed >= signals && analysed === kept.length && !b.not_started.length;
+  return { analysed, signals, done };
+}
+
 export function exobiologyPanel(input: {
   system: string | null;
   address: number | null;
@@ -903,6 +977,8 @@ export function exobiologyPanel(input: {
   highlights?: HudRow[];
   /** wasFootfalled() for the body: false pays the first-footfall bonus. */
   footfall?: boolean | null;
+  /** Spansh's signal count for the body, when the journal has none. */
+  knownSignals?: number | null;
 }): PanelView {
   const { body } = input;
   const bonus = input.footfall === false ? FOOTFALL_BONUS : 1;
@@ -946,11 +1022,18 @@ export function exobiologyPanel(input: {
   if (input.highlights?.length) {
     rows.push({ text: "In system", tone: "dim" }, ...input.highlights);
   }
+  const { analysed, signals, done } = bioProgress(body, input.knownSignals);
   return {
     mode: "exobiology",
     title: "EXOBIOLOGY",
     subtitle: shortBody(body.body, input.system),
-    right: `${bonus > 1 ? "first footfall ×5 · " : ""}${body.genera.length || body.bio_signals || 0} genera`,
+    right: [
+      bonus > 1 ? "first footfall ×5" : null,
+      signals ? `${analysed}/${signals} genera${done ? " ✓" : ""}` : "0 genera",
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    ...(done ? { tone: "good" as const } : {}),
     rows,
     // The rate line has the session rate, so the Session line, kept when nothing is unsold,
     // leaves it out.

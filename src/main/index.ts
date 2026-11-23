@@ -91,7 +91,7 @@ import {
   type SavedState,
 } from "../core/stores.js";
 import { resumeId } from "../core/resume.js";
-import { openStores, type Plan } from "ed-mcp/journal";
+import { openStores, type Plan, type Stop } from "ed-mcp/journal";
 import {
   configProblems,
   hasOwnEdMcp,
@@ -108,6 +108,12 @@ import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import {
   BOOKMARKS_PLAN,
   bookmarkHere,
+  bookmarkShown,
+  bookmarksToClear,
+  isKeyRepeat,
+  keyClearStops,
+  sameStop,
+  todoBookmarks,
   finishedBioBookmarks,
   isPlanNotFound,
   bookmarkRef,
@@ -127,7 +133,7 @@ import {
 import { arrivalCopy, currentSystem, routeStep } from "../core/hud/routeSteps.js";
 import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.js";
 import { HUD_EVENTS } from "../core/hud/mode.js";
-import { todoStops } from "../core/hud/panels.js";
+import { shortBody, todoStops } from "../core/hud/panels.js";
 import { TradeStopFinisher } from "../core/hud/tradeStops.js";
 import { BuildFinisher } from "../core/hud/buildStops.js";
 import {
@@ -700,8 +706,7 @@ async function main(): Promise<void> {
   // Bookmark key presses run one at a time, so two quick presses do not both read the same plan.
   let bookmarking: Promise<void> = Promise.resolve();
   function addBookmark(): Promise<void> {
-    bookmarking = bookmarking.then(saveBookmark, saveBookmark);
-    return bookmarking;
+    return queueBookmarks(saveBookmark);
   }
 
   // Saves where the ship or commander is now (Status.json read fresh) to the bookmarks plan.
@@ -732,6 +737,7 @@ async function main(): Promise<void> {
       hudData.journal,
       status,
       (old?.stops ?? []).map((s) => s.label ?? s.purpose),
+      hudData.known,
     );
     if ("reason" in made) return flash("bookmark", `ⓘ ${made.reason}`, 3_000);
     const saved = await plans.addStop(BOOKMARKS_PLAN, "Bookmarks", made.stop);
@@ -740,6 +746,177 @@ async function main(): Promise<void> {
     savedBookmarks = { plan: saved, afterPoll: pollsStarted };
     if (hudData) hudData = { ...hudData, bookmarks: saved };
     renderHud();
+  }
+
+  // Clears bookmarks: those here (the key clears one bookmark on the body you are on and refuses
+  // a whole system; the tray clears the nearest one in one click and asks before a whole system),
+  // or all of them after asking. The writes run in turn with the bookmark key, so the two do not
+  // race; the question does not hold up that queue.
+  function clearBookmarks(scope: "here" | "all", from: "key" | "tray"): Promise<void> {
+    if (scope === "all") return confirmClearAll();
+    // The tray clears the bookmarks its item named when the menu opened, not what a fresh read
+    // finds: the player may have lifted off or jumped since.
+    if (from === "tray") {
+      const named = trayHere;
+      // Every bookmark in the system asks first, as Clear all does.
+      if (trayHereWhole) return askClearListed(named, "in this system");
+      return queueBookmarks(() => unmarkBookmarks("listed", named));
+    }
+    // One key-down clears one bookmark: a held key's repeats are ignored.
+    const at = Date.now();
+    const repeat = isKeyRepeat(at, lastClearPress);
+    lastClearPress = at;
+    if (repeat) {
+      flash("bookmark", "ⓘ one bookmark a press: let go, wait a moment and press again", 2_000);
+      return Promise.resolve();
+    }
+    return queueBookmarks(() => unmarkBookmarks("here"));
+  }
+  let lastClearPress = 0;
+
+  // The bookmarks the tray's "here" item names, as the menu was built, and whether they are the
+  // whole system's.
+  let trayHere: Stop[] = [];
+  let trayHereWhole = false;
+
+  function queueBookmarks(run: () => Promise<void>): Promise<void> {
+    bookmarking = bookmarking.then(run, run);
+    return bookmarking;
+  }
+
+  let askingClearAll = false;
+  async function confirmClearAll(): Promise<void> {
+    // One question at a time: a second click while it is open, or while the plan is read, does
+    // nothing.
+    if (askingClearAll) return;
+    const plans = hudPlans;
+    if (!settings.hud.enabled || !settings.hud.bookmarks || !plans || !hudFeed) {
+      return flash("bookmark", "ⓘ bookmarks are off or the panel could not open ed-mcp", 3_000);
+    }
+    askingClearAll = true;
+    try {
+      // The bookmarks in the plan as it is now, not as the last poll read it. Only these are
+      // cleared: one added while the question is open was not asked about.
+      let asked: Stop[] = [];
+      try {
+        const now = await plans.get(BOOKMARKS_PLAN);
+        asked = todoBookmarks(now).map((i) => now.stops[i]!);
+      } catch (err) {
+        if (!isPlanNotFound(err)) throw err;
+      }
+      if (!asked.length) return flash("bookmark", "ⓘ no bookmarks", 3_000);
+      await askClear(asked, null);
+    } finally {
+      askingClearAll = false;
+    }
+  }
+
+  // The tray's whole-system item: asks first, one question at a time.
+  async function askClearListed(listed: Stop[], where: string): Promise<void> {
+    if (askingClearAll || !listed.length) return;
+    askingClearAll = true;
+    try {
+      await askClear(listed, where);
+    } finally {
+      askingClearAll = false;
+    }
+  }
+
+  // Asks before clearing these bookmarks: all of them (where null), or those somewhere.
+  async function askClear(asked: Stop[], where: string | null): Promise<void> {
+    const n = asked.length;
+    const what = `${n} bookmark${n === 1 ? "" : "s"}`;
+    const r = await dialog.showMessageBox({
+      type: "question",
+      title: "ED Chat",
+      message: where === null ? `Clear all ${what}?` : `Clear ${what} ${where}?`,
+      detail: "They are marked skipped in the ed-mcp plan bookmarks.",
+      buttons: ["Clear", "Cancel"],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (r.response === 0) await queueBookmarks(() => unmarkBookmarks("listed", asked));
+  }
+
+  // Clears the bookmark here (the key), or the listed ones that are still to do (the tray, after
+  // naming or asking about them).
+  async function unmarkBookmarks(scope: "here" | "listed", listed: Stop[] = []): Promise<void> {
+    const plans = hudPlans;
+    if (!settings.hud.enabled || !settings.hud.bookmarks || !plans || !hudFeed) {
+      return flash("bookmark", "ⓘ bookmarks are off or the panel could not open ed-mcp", 3_000);
+    }
+    let plan: Plan;
+    try {
+      // Read now, after any question: Claude may have changed the plan meanwhile.
+      plan = await plans.get(BOOKMARKS_PLAN);
+    } catch (err) {
+      if (isPlanNotFound(err)) return flash("bookmark", "ⓘ no bookmarks", 3_000);
+      throw err;
+    }
+    let picked: number[];
+    if (scope === "listed") {
+      // The same bookmark, label too: one added since with the same place is not the one named.
+      const named = (s: Stop) => listed.some((a) => sameStop(a, s));
+      picked = todoBookmarks(plan).filter((i) => named(plan.stops[i]!));
+    } else {
+      // The system and position read now: the last poll may be from before a jump.
+      const [system, status] = await Promise.all([hudFeed.readSystem(), hudFeed.readStatus()]);
+      // Not knowing where the player is is not the same as being away from the body.
+      if (!status) return flash("bookmark", "ⓘ could not read where you are: try again", 3_000);
+      // The key clears one bookmark, on the body you are on; a whole system is the tray's.
+      const allowed = keyClearStops(bookmarksToClear({ plan, system, status }));
+      if ("reason" in allowed) return flash("bookmark", `ⓘ ${allowed.reason}`, 4_000);
+      picked = allowed.stops;
+    }
+    if (!picked.length) {
+      return flash(
+        "bookmark",
+        scope === "listed" ? "ⓘ no bookmarks" : "ⓘ no bookmarks here",
+        3_000,
+      );
+    }
+    const cleared: Stop[] = [];
+    try {
+      for (const stop of picked.map((i) => plan.stops[i]!)) {
+        // Found again in the plan as it is now: an earlier write in this loop changed it.
+        const ref = bookmarkRef(plan, stop);
+        if (!ref) continue;
+        plan = await plans.updateStop(BOOKMARKS_PLAN, ref, { status: "skipped" });
+        cleared.push(stop);
+      }
+    } catch (err) {
+      // Some were cleared before the failure: say so, not "not cleared".
+      if (!cleared.length) throw err;
+      const n = picked.length;
+      return flash(
+        "bookmark",
+        `⚠ cleared ${cleared.length} of ${n} bookmarks, then: ${message(err)}`,
+        5_000,
+      );
+    } finally {
+      // Shown at once, as for a new bookmark, with those cleared before any failed write.
+      if (cleared.length) {
+        savedBookmarks = { plan, afterPoll: pollsStarted };
+        if (hudData) hudData = { ...hudData, bookmarks: plan };
+        renderHud();
+      }
+    }
+    if (!cleared.length) {
+      return flash(
+        "bookmark",
+        scope === "listed" ? "ⓘ no bookmarks" : "ⓘ no bookmarks here",
+        3_000,
+      );
+    }
+    const one = cleared[0]!;
+    flash(
+      "bookmark",
+      cleared.length === 1
+        ? `📍 cleared ${bookmarkShown(one, hudData?.journal ?? null, hudData?.known ?? null)} on ${shortBody(one.body ?? one.system, one.system)}`
+        : `📍 cleared ${cleared.length} bookmarks`,
+      4_000,
+    );
   }
 
   // A trade stop whose buys and sales are done is marked done, once per docking, and the next
@@ -800,12 +977,26 @@ async function main(): Promise<void> {
       if (bookmarksDone.has(id)) continue;
       bookmarksDone.add(id);
       try {
-        // Found again in the plan as it is now: an edit since the poll can move it.
-        const now = await hudPlans.get(BOOKMARKS_PLAN);
-        const ref = bookmarkRef(now, stop);
-        if (!ref) continue;
-        await hudPlans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
-        flash("bookmark", `📍 done: ${stop.label ?? stop.purpose}`, 4_000);
+        // In turn with the bookmark key and clearing, so a bookmark cleared meanwhile is not
+        // marked done; found again in the plan as it is now (only while still to do).
+        const plans = hudPlans;
+        await queueBookmarks(async () => {
+          const now = await plans.get(BOOKMARKS_PLAN);
+          // This very bookmark, label too, still to do: not another in the same place.
+          const still = now.stops.some((s) => s.status === "todo" && sameStop(s, stop));
+          const ref = still ? bookmarkRef(now, stop) : null;
+          if (!ref) return;
+          const plan = await plans.updateStop(BOOKMARKS_PLAN, ref, { status: "done" });
+          flash(
+            "bookmark",
+            `📍 done: ${bookmarkShown(stop, hudData?.journal ?? null, hudData?.known ?? null)}`,
+            4_000,
+          );
+          // Shown at once, as for a new or cleared bookmark.
+          savedBookmarks = { plan, afterPoll: pollsStarted };
+          if (hudData) hudData = { ...hudData, bookmarks: plan };
+          renderHud();
+        });
       } catch (err) {
         // Tried again on the next poll; the other bookmarks are still marked.
         bookmarksDone.delete(id);
@@ -1418,6 +1609,10 @@ async function main(): Promise<void> {
         return void addBookmark().catch((err: unknown) =>
           flash("bookmark", `⚠ bookmark not saved: ${message(err)}`, 4_000),
         );
+      case "clearBookmark":
+        return void clearBookmarks("here", "key").catch((err: unknown) =>
+          flash("bookmark", `⚠ bookmark not cleared: ${message(err)}`, 4_000),
+        );
     }
   }
 
@@ -1678,6 +1873,10 @@ async function main(): Promise<void> {
         return openPath(settingsFile);
       case "openLogs":
         return openPath(logDir);
+      case "clearBookmarks":
+        return void clearBookmarks(a.all ? "all" : "here", "tray").catch((err: unknown) =>
+          flash("bookmark", `⚠ bookmarks not cleared: ${message(err)}`, 4_000),
+        );
       case "about":
         // A fixed https address: the home page, in the default browser.
         return void shell
@@ -1704,12 +1903,31 @@ async function main(): Promise<void> {
     );
   // Built when opened, so the chips and problems are current.
   function trayMenu(): Menu {
+    // With no position known, the item is left out rather than offering the whole system.
+    const here = hudData?.status
+      ? bookmarksToClear({
+          plan: hudData.bookmarks ?? null,
+          system: hudData.journal?.location.system ?? null,
+          status: hudData.status,
+        })
+      : { stops: [], whole: false };
+    // Not a guess at which is nearest: with no position for that, no "here" item.
+    if (here.unsure) here.stops = [];
+    trayHere = here.stops.map((i) => hudData!.bookmarks!.stops[i]!);
+    trayHereWhole = here.whole;
     const items = trayItems({
       chips: withTargets(currentChips(state), chipStops),
       agentId,
       failedHotkeys: failedHotkeys.length,
       iconMode: state.iconMode,
       visible: state.visible,
+      bookmarks:
+        settings.hud.enabled && settings.hud.bookmarks
+          ? {
+              here,
+              all: todoBookmarks(hudData?.bookmarks ?? null).length,
+            }
+          : undefined,
     });
     return Menu.buildFromTemplate(menuTemplate(items));
   }

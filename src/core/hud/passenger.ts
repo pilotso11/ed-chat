@@ -186,6 +186,8 @@ export function passengerPanel(input: {
   const cabins = berths(input.events);
   const ready = input.missions.filter((m) => isRun(m) && m.status === "complete").length;
   const open = input.missions.filter(isRun).length;
+  // Every open mission ready to hand in: the run is done.
+  const done = open > 0 && ready === open;
   return {
     mode: "passenger",
     // Passengers still to hand in make it a passenger run too.
@@ -195,9 +197,11 @@ export function passengerPanel(input: {
     right: [
       aboard || cabins ? `${aboard}${cabins ? `/${cabins}` : ""} berths` : null,
       reward ? credits(reward) : null,
+      done ? "✓" : null,
     ]
       .filter(Boolean)
       .join(" · "),
+    ...(done ? { tone: "good" as const } : {}),
     rows,
     footer: [
       [

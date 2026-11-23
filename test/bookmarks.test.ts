@@ -10,18 +10,25 @@ import {
   type Stop,
 } from "ed-mcp/journal";
 import {
+  BIO_NOTE,
   BOOKMARKS_PLAN,
   bearing,
+  bioLeft,
   bookmarkRef,
   bookmarkHere,
   bookmarkLabel,
   bookmarkRows,
+  bookmarkShown,
+  bookmarksToClear,
+  isKeyRepeat,
+  keyClearStops,
   finishedBioBookmarks,
   isPlanNotFound,
   keepSavedBookmarks,
   newBookmark,
   sameBookmark,
   stopPosition,
+  todoBookmarks,
   turn,
 } from "../src/core/hud/bookmarks.js";
 import { buildHud, parseShipStatus, type HudInput } from "../src/core/hud/hud.js";
@@ -114,7 +121,17 @@ describe("making a bookmark", () => {
       body: BODY,
       status: "todo",
       position: { latitude: 54.142864, longitude: -51.743507 },
+      notes: BIO_NOTE,
     });
+    // Only a bio bookmark carries the note that lets the panel redraw its label.
+    const other = newBookmark({
+      system: SYSTEM,
+      body: BODY,
+      here: { latitude: 0, longitude: 0 },
+      label: "Bookmark 1",
+      bio: false,
+    });
+    expect(other.notes).toBeUndefined();
   });
 
   it("needs a position on a planet", () => {
@@ -371,6 +388,10 @@ describe("finished bio bookmarks", () => {
       e.event === "SAASignalsFound" ? { ...e, Signals: [] } : e,
     ) as JournalEvent[];
     expect(finishedBioBookmarks(p, { ...journal, events: noCount })).toEqual([]);
+    // Spansh's count fills in the signals with no genus known yet; auto-done still waits for the journal's.
+    expect(
+      bioLeft({ genera: ["A"], bio_signals: null, species: [], not_started: [] } as never, 3),
+    ).toEqual(["2 signals"]);
     // A count of 0 from a later scan with no biology listed is no count either.
     const zero = events.map((e) =>
       e.event === "SAASignalsFound"
@@ -464,5 +485,252 @@ describe("a bookmark saved during a poll", () => {
       saved: null,
     });
     expect(keepSavedBookmarks({ bookmarks: read }, null, 1).data.bookmarks).toBe(read);
+  });
+});
+
+describe("clearing bookmarks", () => {
+  const near = { body: BODY, label: "Near", position: { latitude: 54.14287, longitude: -51.7435 } };
+  const far = { body: BODY, label: "Far", position: { latitude: 54.16, longitude: -51.74 } };
+  const other = { body: `${SYSTEM} 5`, label: "Other body" };
+  const away = { system: "Elsewhere", body: "Elsewhere 1", label: "Away" };
+
+  it("clears the nearest bookmark on this body", () => {
+    const p = plan([far, other, near, away]);
+    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: status() })).toEqual({
+      stops: [2],
+      whole: false,
+    });
+  });
+
+  it("clears the first on the body when positions are not known", () => {
+    const p = plan([other, { body: BODY, label: "A" }, { body: BODY, label: "B" }]);
+    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: status() })).toEqual({
+      stops: [1],
+      whole: false,
+      unsure: true,
+    });
+    // The key will not guess.
+    expect(keyClearStops({ stops: [1], whole: false, unsure: true })).toEqual({
+      reason: expect.stringContaining("position not known"),
+    });
+    // One bookmark on the body is no guess.
+    expect(
+      bookmarksToClear({
+        plan: plan([{ body: BODY, label: "A" }]),
+        system: SYSTEM,
+        status: status(),
+      }),
+    ).toEqual({ stops: [0], whole: false });
+    const q = plan([far, near]);
+    expect(
+      bookmarksToClear({ plan: q, system: SYSTEM, status: status({ latitude: null }) }).stops,
+    ).toEqual([0]);
+  });
+
+  it("clears every bookmark in the system away from a bookmarked body, as a whole system", () => {
+    // A stop with no body is not shown, so it is not cleared either.
+    const p = plan([far, other, away, { ...near, status: "done" }, { label: "No body" }]);
+    const whole = { stops: [0, 1], whole: true };
+    expect(
+      bookmarksToClear({ plan: p, system: SYSTEM, status: status({ body: `${SYSTEM} 3` }) }),
+    ).toEqual(whole);
+    expect(bookmarksToClear({ plan: p, system: SYSTEM, status: null })).toEqual(whole);
+  });
+
+  it("lets the key clear one bookmark on the body, never a whole system", () => {
+    expect(keyClearStops({ stops: [2], whole: false })).toEqual({ stops: [2] });
+    const whole = keyClearStops({ stops: [0, 1], whole: true });
+    expect(whole).not.toHaveProperty("stops");
+    expect(whole).toEqual({ reason: expect.stringContaining("tray menu") });
+  });
+
+  it("takes a held key's repeats as one press", () => {
+    // Windows' first repeat comes after up to a second, then every few tens of ms.
+    expect(isKeyRepeat(1_000, 0)).toBe(true);
+    expect(isKeyRepeat(1_033, 1_000)).toBe(true);
+    expect(isKeyRepeat(5_000, 1_000)).toBe(false);
+    expect(isKeyRepeat(1_000_000, 0)).toBe(false);
+  });
+
+  it("clears nothing in a system without bookmarks", () => {
+    const none = { stops: [], whole: false };
+    expect(bookmarksToClear({ plan: plan([far]), system: "Sol", status: status() })).toEqual(none);
+    expect(bookmarksToClear({ plan: null, system: SYSTEM, status: status() })).toEqual(none);
+    expect(bookmarksToClear({ plan: plan([far]), system: null, status: status() })).toEqual(none);
+  });
+
+  it("lists every bookmark still to do", () => {
+    expect(
+      todoBookmarks(plan([far, { ...near, status: "skipped" }, away, { label: "x" }])),
+    ).toEqual([0, 2]);
+    expect(todoBookmarks(null)).toEqual([]);
+  });
+});
+
+describe("bio bookmark rows", () => {
+  const bio = (o: object) =>
+    ({
+      body: BODY,
+      body_id: 6,
+      species: [],
+      not_started: [],
+      genera: [],
+      bio_signals: null,
+      likely: [],
+      ...o,
+    }) as never;
+  const mark = {
+    body: BODY,
+    kind: "exobiology" as const,
+    label: "Bio: Frutexa Acus, Bacterium, Concha, Tussock",
+    notes: BIO_NOTE,
+  };
+  const rows = (b: unknown[], stops: TestStop[] = [mark], s = status({ latitude: null })) =>
+    bookmarkRows({ plan: plan(stops), system: SYSTEM, status: s, bio: b as never });
+
+  it("shows what is still to sample on the body now, not when it was saved", () => {
+    const now = bio({
+      species: [
+        { species: "Frutexa Acus", analysed: true },
+        { species: "Tussock Pennata", analysed: true },
+      ],
+      not_started: ["Bacterium", "Concha"],
+      genera: ["Bacterium", "Concha", "Frutexa", "Tussock"],
+      bio_signals: 4,
+    });
+    expect(rows([now])[0]!.text).toBe("📍 Bio: Bacterium, Concha");
+    const done = bio({
+      species: [{ species: "Frutexa Acus", analysed: true }],
+      genera: ["Frutexa"],
+      bio_signals: 1,
+    });
+    expect(rows([done])[0]!.text).toBe("📍 Bio: all sampled");
+    // One genus with two species: both analysed account for both signals.
+    const twoOfOne = bio({
+      species: [
+        { species: "Bacterium Cerbrus", analysed: true },
+        { species: "Bacterium Aurasus", analysed: true },
+      ],
+      genera: ["Bacterium"],
+      bio_signals: 2,
+    });
+    expect(bioLeft(twoOfOne)).toEqual([]);
+    // Two species of one genus started and another genus not started: all 3 signals are known.
+    const mixed = bio({
+      species: [
+        { species: "A one", analysed: true },
+        { species: "A two", analysed: false },
+      ],
+      not_started: ["B"],
+      genera: ["A", "B"],
+      bio_signals: 3,
+    });
+    expect(bioLeft(mixed)).toEqual(["A two", "B"]);
+    expect(rows([twoOfOne])[0]!.text).toBe("📍 Bio: all sampled");
+    // Spansh's count shows the signals still unknown.
+    expect(
+      bookmarkRows({
+        plan: plan([mark]),
+        system: SYSTEM,
+        status: status({ latitude: null }),
+        bio: [{ ...(done as object), bio_signals: null }] as never,
+        known: [{ bodyId: 6, bioSignals: 3 }] as never,
+      })[0]!.text,
+    ).toBe("📍 Bio: 2 signals");
+    // Done on Spansh's count alone: said so, as the header shows it.
+    expect(
+      bookmarkRows({
+        plan: plan([mark]),
+        system: SYSTEM,
+        status: status({ latitude: null }),
+        bio: [{ ...(done as object), bio_signals: null }] as never,
+        known: [{ bodyId: 6, bioSignals: 1 }] as never,
+      })[0]!.text,
+    ).toBe("📍 Bio: all sampled by Spansh's count");
+    // With no signal count the body may hold more.
+    expect(rows([{ ...(done as object), bio_signals: null }])[0]!.text).toBe(
+      "📍 Bio: all found sampled, more may be here",
+    );
+    // Two bookmarks that redraw the same: the later one in the plan gets " (2)".
+    const two = rows([now], [mark, { ...mark, label: "Bio: Concha" }]).map((r) => r.text);
+    expect(two).toEqual(["📍 Bio: Bacterium, Concha", "📍 Bio: Bacterium, Concha (2)"]);
+  });
+
+  it("names a bookmark in a note as its row does", () => {
+    const e = (event: string, o: object) =>
+      ({ timestamp: "2026-11-22T10:00:00Z", event, ...o }) as unknown as JournalEvent;
+    const journal = {
+      location: { system: SYSTEM },
+      events: [
+        e("FSDJump", { StarSystem: SYSTEM, SystemAddress: 7 }),
+        e("SAASignalsFound", {
+          SystemAddress: 7,
+          BodyID: 6,
+          BodyName: BODY,
+          Signals: [{ Type: "$SAA_SignalType_Biological;", Count: 1 }],
+          Genuses: [{ Genus: "$Codex_Ent_Conchas_Genus_Name;", Genus_Localised: "Concha" }],
+        }),
+      ],
+    } as unknown as JournalState & { events: JournalEvent[] };
+    const stop = plan([mark]).stops[0]!;
+    expect(bookmarkShown(stop, journal, null)).toBe("Bio: Concha");
+    expect(bookmarkShown(stop, null, null)).toBe(mark.label);
+    expect(bookmarkShown({ ...stop, notes: undefined }, journal, null)).toBe(mark.label);
+  });
+
+  it("keeps a label the player or Claude chose, and the saved one without the journal", () => {
+    const now = bio({ not_started: ["Concha"], genera: ["Concha"], bio_signals: 1 });
+    expect(rows([now], [{ ...mark, label: "Concha by the crater" }])[0]!.text).toBe(
+      "📍 Concha by the crater",
+    );
+    // A "Bio: " label without the key's note is someone's own, and kept.
+    expect(rows([now], [{ ...mark, notes: undefined }])[0]!.text).toBe(`📍 ${mark.label}`);
+    expect(rows([now], [{ ...mark, kind: "other" }])[0]!.text).toBe(`📍 ${mark.label}`);
+    expect(rows([])[0]!.text).toBe(`📍 ${mark.label}`);
+    expect(
+      bookmarkRows({ plan: plan([mark]), system: SYSTEM, status: status({ latitude: null }) })[0]!
+        .text,
+    ).toBe(`📍 ${mark.label}`);
+  });
+
+  it("reads the biology from the journal in the panel", () => {
+    const e = (event: string, o: object) =>
+      ({ timestamp: "2026-11-22T10:00:00Z", event, ...o }) as unknown as JournalEvent;
+    const events = [
+      e("FSDJump", { StarSystem: SYSTEM, SystemAddress: 7 }),
+      e("SAASignalsFound", {
+        SystemAddress: 7,
+        BodyID: 6,
+        BodyName: BODY,
+        Signals: [{ Type: "$SAA_SignalType_Biological;", Count: 2 }],
+        Genuses: [
+          { Genus: "$Codex_Ent_Bacterial_Genus_Name;", Genus_Localised: "Bacterium" },
+          { Genus: "$Codex_Ent_Conchas_Genus_Name;", Genus_Localised: "Concha" },
+        ],
+      }),
+    ];
+    const input: HudInput = {
+      journal: {
+        location: { system: SYSTEM, station: null, station_type: null, docked: false },
+        ship: { type: null, cargo_capacity: null },
+        cargo: [],
+        missions: [],
+        events,
+      } as unknown as HudInput["journal"],
+      status: status({ body: `${SYSTEM} 5` }),
+      nav: null,
+      activity: null,
+      plan: null,
+      hotkey: { mode: "route", at: Date.UTC(2026, 10, 22) },
+      samples: new Map(),
+      known: null,
+      settings: DEFAULT_SETTINGS.hud,
+      now: Date.UTC(2026, 10, 22),
+      bookmarks: plan([mark]),
+    };
+    expect(buildHud(input, null).panel?.rows[0]?.text).toBe("📍 1 bookmark on 6 k");
+    // On the body, the row says what is still to sample there.
+    const on = { ...input, status: status({ latitude: null }) };
+    expect(buildHud(on, null).panel?.rows[0]?.text).toBe("📍 Bio: Bacterium, Concha");
   });
 });

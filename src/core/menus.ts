@@ -31,6 +31,7 @@ export type TrayAction =
   | { type: "toggleOverlay" }
   | { type: "openSettings" }
   | { type: "openLogs" }
+  | { type: "clearBookmarks"; all: boolean }
   | { type: "about" }
   | { type: "quit" };
 
@@ -49,7 +50,19 @@ export function trayItems(s: {
   failedHotkeys: number;
   iconMode: boolean;
   visible: boolean;
+  /**
+   * Surface bookmarks still to do, in this system and in all; the Bookmarks menu shows when
+   * there are any, and its "here" item when this system has some.
+   */
+  bookmarks?: { here: { stops: number[]; whole: boolean }; all: number };
 }): TrayItem[] {
+  const bookmarks = s.bookmarks?.all ?? 0;
+  const here = s.bookmarks?.here ?? { stops: [], whole: false };
+  const n = here.stops.length;
+  // What the item clears: the nearest bookmark on this body, or every one in the system.
+  const hereLabel = here.whole
+    ? `Clear ${n} bookmark${n === 1 ? "" : "s"} in this system…`
+    : "Clear the nearest bookmark here";
   return [
     ...s.chips.map((c): TrayItem => ({
       label: menuLabel(`Copy ${c.n}: ${chipLabel(c)}`),
@@ -68,6 +81,27 @@ export function trayItems(s: {
       })),
     },
     { label: "Show hotkeys", action: { type: "showKeys" } },
+    ...(bookmarks
+      ? [
+          {
+            label: "Bookmarks",
+            submenu: [
+              ...(n
+                ? [
+                    {
+                      label: hereLabel,
+                      action: { type: "clearBookmarks", all: false } as const,
+                    },
+                  ]
+                : []),
+              {
+                label: `Clear all bookmarks (${bookmarks})…`,
+                action: { type: "clearBookmarks", all: true },
+              },
+            ] satisfies TrayItem[],
+          },
+        ]
+      : []),
     ...(s.failedHotkeys
       ? [
           {
