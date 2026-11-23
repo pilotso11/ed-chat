@@ -590,8 +590,13 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
       }
       fittedBy.set(flying.id, slots);
     }
-    // A bought hull is the plan's ship once delivered.
-    if (e.event === "ShipyardNew" && armed && boundId === null) {
+    // A bought hull is the plan's ship once delivered: another ship delivered meanwhile is not.
+    if (
+      e.event === "ShipyardNew" &&
+      armed &&
+      boundId === null &&
+      (!hullType || lower(e.ShipType) === hullType)
+    ) {
       boundId = num(e.NewShipID);
       armed = false;
     }

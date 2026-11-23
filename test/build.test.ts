@@ -846,6 +846,24 @@ describe("judging ship actions", () => {
     expect(j.boundId).toBe(77);
   });
 
+  it("binds the bought hull, not another ship delivered before it", () => {
+    const plan = shop(
+      [act({ id: "h", kind: "buy_ship", label: "Buy Krait", ship: "krait_mkii" }), ...buys(1)],
+      { build: { target: "ship", scope: "full", ship: "krait_mkii", started_at: iso(0) } },
+    );
+    const j = judgeBuild(
+      plan,
+      journal([
+        ev(2, "ShipyardBuy", { ShipType: "krait_mkii", ShipPrice: 1 }),
+        ev(3, "ShipyardNew", { ShipType: "type6", NewShipID: 55 }),
+        ev(4, "ShipyardNew", { ShipType: "krait_mkii", NewShipID: 77 }),
+        buy(5, { ShipID: 77 }),
+      ]),
+    );
+    expect(j.boundId).toBe(77);
+    expect(j.actions.map((x) => x.done)).toEqual([true, true]);
+  });
+
   it("takes a bought hull delivered before the journal's window as the ship flown of its type", () => {
     const hull = (status: "todo" | "done") =>
       shop(
