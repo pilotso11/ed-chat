@@ -750,7 +750,10 @@ export function outfittingVisit(journal: Journal, choice: BuildChoice | null): B
   return on.size ? { station: dock.station, index: dock.index, on } : null;
 }
 
-/** The game's names for modules, by the symbol's first word, for an event with no _Localised. */
+/**
+ * Short names for modules, by the symbol's first word: shown in place of the event's _Localised
+ * name for a plain module ("FSD", where the game may say "Frame Shift Drive").
+ */
 const MODULES: Record<string, string> = {
   hyperdrive: "FSD",
   engine: "Thrusters",
@@ -790,38 +793,85 @@ const MODULES: Record<string, string> = {
 /** Class 1 to 5 is rating E to A. */
 const RATINGS = "EDCBA";
 
+/** A hardpoint's size, as the outfitting screen numbers it, and its mount. */
+const SIZES: Record<string, string> = { small: "1", medium: "2", large: "3", huge: "4" };
+const MOUNTS: Record<string, string> = { fixed: "F", gimbal: "G", turret: "T" };
+
 /**
- * A module as the panel names it: the game's name, from the event's _Localised or else the
- * symbol, with its class and rating when the symbol has them: "FSD 5A", "Shield Booster 0A".
+ * A module as the panel names it: a short name (MODULES) for a plain module, else the event's
+ * _Localised name, else the symbol's first word; then its class and rating ("FSD 5A", "Shield
+ * Booster 0A"), or for a weapon its size and mount ("Pulse Laser 3G": large, gimballed).
  */
 export function moduleName(symbol: unknown, localised?: unknown): string {
   const m = mod(symbol) ?? "";
   const words = m.split("_");
   // "int_hyperdrive_size5_class5", "hpt_pulselaser_gimbal_medium", "python_nx_armour_grade3".
   const first = words[0] === "int" || words[0] === "hpt" ? (words[1] ?? "") : "";
+  const rest = first ? words.slice(2) : [];
+  // Only size, class and mount: a variant (a bi-weave shield, "_strong") keeps the game's name.
+  const plain = rest.every((w) => /^(size\d+|class\d|tiny)$/.test(w) || w in SIZES || w in MOUNTS);
   const name = str(localised);
-  const base =
-    name && !name.startsWith("$")
-      ? name
-      : words.includes("armour")
-        ? "Armour"
-        : (MODULES[first] ?? (first || m || "module"));
+  const game = name && !name.startsWith("$") ? name : null;
+  const base = words.includes("armour")
+    ? "Armour"
+    : ((plain ? MODULES[first] : undefined) ?? game ?? MODULES[first] ?? (first || m || "module"));
   const sc = /_size(\d+)_class(\d)/.exec(m);
   const rating = sc ? RATINGS[Number(sc[2]) - 1] : undefined;
-  return sc && rating ? `${base} ${sc[1]}${rating}` : base;
+  if (sc && rating) return `${base} ${sc[1]}${rating}`;
+  const size = rest.find((w) => w in SIZES);
+  const mount = rest.find((w) => w in MOUNTS);
+  return size && mount ? `${base} ${SIZES[size]}${MOUNTS[mount]}` : base;
 }
 
-/** Blueprints whose game name is not their symbol's words. */
+/**
+ * Blueprints whose game name is not their symbol's words, from ed-mcp's catalog (coriolis-data's
+ * blueprints.json, which ed-mcp downloads at run time; the panel makes no catalog downloads, so
+ * they are copied here). Weapon blueprints named for their module, such as "Lockdown Seeker
+ * Missile Rack", keep their symbol's words, since the row names the module already.
+ */
 const BLUEPRINTS: Record<string, string> = {
+  armour_advanced: "Lightweight",
+  armour_explosive: "Blast Resistant",
+  armour_kinetic: "Kinetic Resistant",
+  armour_thermic: "Thermal Resistant",
+  cargorack_increasedcapacity: "Expanded Capacity",
+  collectionlimpet_lightweight: "Lightweight",
+  engine_tuned: "Clean",
+  fsd_fastboot: "Faster Boot Sequence",
   fsd_longrange: "Increased Range",
-  fsd_fastboot: "Faster Boot",
-  engine_dirty: "Dirty Drive",
-  engine_tuned: "Clean Drive",
-  engine_reinforced: "Drive Strengthening",
-  powerdistributor_highfrequency: "Charge Enhanced",
-  powerdistributor_highcapacity: "High Charge Capacity",
-  powerplant_boosted: "Overcharged",
+  fsdinterdictor_expanded: "Expanded Capture Arc",
+  fueltransferlimpet_lightweight: "Lightweight",
+  hatchbreakerlimpet_lightweight: "Lightweight",
+  hullreinforcement_advanced: "Lightweight",
+  hullreinforcement_explosive: "Blast Resistant",
+  hullreinforcement_kinetic: "Kinetic Resistant",
+  hullreinforcement_thermic: "Thermal Resistant",
+  lifesupport_lightweight: "Lightweight",
+  misc_chaffcapacity: "Ammo Capacity",
+  misc_heatsinkcapacity: "Ammo Capacity",
   misc_lightweight: "Lightweight",
+  misc_pointdefensecapacity: "Ammo Capacity",
+  powerdistributor_highcapacity: "High Charge Capacity",
+  powerdistributor_highfrequency: "Charge Enhanced",
+  powerdistributor_priorityengines: "Engine Focused",
+  powerdistributor_prioritysystems: "System Focused",
+  powerdistributor_priorityweapons: "Weapon Focused",
+  powerplant_boosted: "Overcharged",
+  powerplant_stealth: "Low Emissions",
+  prospectinglimpet_lightweight: "Lightweight",
+  sensor_expanded: "Expanded Probe Scanning Radius",
+  sensor_lightweight: "Lightweight",
+  shieldbooster_explosive: "Blast Resistant",
+  shieldbooster_kinetic: "Kinetic Resistant",
+  shieldbooster_resistive: "Resistance Augmented",
+  shieldbooster_thermic: "Thermal Resistant",
+  shieldcellbank_rapid: "Rapid Charge",
+  shieldgenerator_kinetic: "Kinetic Resistant",
+  shieldgenerator_optimised: "Enhanced Low Power",
+  shieldgenerator_thermic: "Thermal Resistant",
+  weapon_farreaching: "Far-Reaching",
+  weapon_highyieldenzyme: "High-Yield",
+  weapon_lightweight: "Lightweight",
 };
 
 /** "FSD_LongRange" is "Increased Range"; "ShieldBooster_HeavyDuty" is "Heavy Duty". */
@@ -851,7 +901,7 @@ function packed(parts: string[]): HudRow[] {
 
 type Tally = Map<string, { n: number; credits: number }>;
 
-/** What was bought or sold, by name, with the count and the credits: "2 Shield Booster 0A 494k". */
+/** What was bought or sold, by name, with the count and the credits: "bought 2 Shield Booster 0A 494k, FSD 5A 5.1M". */
 function priced(verb: string, items: Tally): string[] {
   const text = (name: string, n: number, c: number) =>
     `${n > 1 ? `${n} ` : ""}${name}${c ? ` ${credits(c)}` : ""}`;
@@ -867,7 +917,9 @@ function priced(verb: string, items: Tally): string[] {
       )}`,
     ];
   }
-  return [...items].map(([name, v], i) => `${i ? "" : `${verb} `}${text(name, v.n, v.credits)}`);
+  if (!items.size) return [];
+  // One part, so it never splits across rows: each row starts with its verb.
+  return [`${verb} ${[...items].map(([name, v]) => text(name, v.n, v.credits)).join(", ")}`];
 }
 
 /** The engineering of one module this visit: one blueprint in one slot. */

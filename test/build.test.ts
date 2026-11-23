@@ -1476,7 +1476,7 @@ describe("the outfitting visit, with no build plan", () => {
       { text: "Took out Krait MkII · transfer Cobra MkIII ~40 min" },
       { text: "Redeemed Sidewinder · sold Viper MkIII 1.2M" },
       { text: "Shield Booster 0A Heavy Duty G0 → G1 · 50%", right: "1 roll" },
-      { text: "Thrusters Dirty Drive G0 → G1 · 100%", right: "1 roll" },
+      { text: "Thrusters Dirty G0 → G1 · 100%", right: "1 roll" },
       { text: "FSD Mass Manager", right: "experimental" },
     ]);
   });
@@ -1484,12 +1484,57 @@ describe("the outfitting visit, with no build plan", () => {
   it("names modules and blueprints as the game does", () => {
     expect(moduleName("$int_hyperdrive_size5_class5_name;")).toBe("FSD 5A");
     expect(moduleName("$int_hyperdrive_size5_class5_name;", "$unresolved;")).toBe("FSD 5A");
-    expect(moduleName("hpt_pulselaser_gimbal_medium", "Pulse Laser")).toBe("Pulse Laser");
+    // The short name over the game's, for a plain module; a variant keeps the game's name.
+    expect(moduleName("$int_hyperdrive_size5_class5_name;", "Frame Shift Drive")).toBe("FSD 5A");
+    expect(moduleName("int_shieldgenerator_size5_class3_fast", "Bi-Weave Shield")).toBe(
+      "Bi-Weave Shield 5C",
+    );
+    // A weapon's size and mount; a tiny utility has neither.
+    expect(moduleName("hpt_pulselaser_gimbal_medium", "Pulse Laser")).toBe("Pulse Laser 2G");
+    expect(moduleName("$hpt_multicannon_fixed_huge_name;")).toBe("Multi-Cannon 4F");
+    expect(moduleName("hpt_heatsinklauncher_turret_tiny", "Heatsink")).toBe("Heat Sink Launcher");
     expect(moduleName("Int_Newthing_Size2_Class3")).toBe("newthing 2C");
     expect(moduleName(undefined)).toBe("module");
     expect(blueprintName("FSD_LongRange")).toBe("Increased Range");
     expect(blueprintName("ShieldBooster_HeavyDuty")).toBe("Heavy Duty");
     expect(blueprintName("Odd")).toBe("Odd");
+    expect(blueprintName("ShieldBooster_Kinetic")).toBe("Kinetic Resistant");
+    expect(blueprintName("HullReinforcement_Explosive")).toBe("Blast Resistant");
+    expect(blueprintName("PowerDistributor_PriorityEngines")).toBe("Engine Focused");
+    expect(blueprintName("ShieldGenerator_Optimised")).toBe("Enhanced Low Power");
+    expect(blueprintName("PowerPlant_Stealth")).toBe("Low Emissions");
+    expect(blueprintName("Misc_ChaffCapacity")).toBe("Ammo Capacity");
+    expect(blueprintName("Engine_Dirty")).toBe("Dirty");
+  });
+
+  it("starts every row of purchases and sales with its verb", () => {
+    const v = buildHud(
+      input(
+        visit([
+          ev(11, "ModuleBuy", {
+            BuyItem: "$int_shieldgenerator_size6_class5_name;",
+            BuyPrice: 16_000_000,
+          }),
+          ev(12, "ModuleBuy", {
+            BuyItem: "$int_powerplant_size6_class5_name;",
+            BuyPrice: 16_000_000,
+          }),
+          ev(13, "ModuleSell", {
+            SellItem: "$int_fuelscoop_size6_class5_name;",
+            SellPrice: 9_000_000,
+          }),
+          ev(14, "ModuleSell", {
+            SellItem: "$int_lifesupport_size4_class2_name;",
+            SellPrice: 9_000,
+          }),
+        ]),
+      ),
+      null,
+    );
+    expect(v.panel?.rows.slice(0, 2)).toEqual([
+      { text: "Bought Shield Generator 6A 16.0M, Power Plant 6A 16.0M" },
+      { text: "Sold Fuel Scoop 6A 9.0M, Life Support 4D 9k" },
+    ]);
   });
 
   it("ends on undocking, and keeps over a relog while docked", () => {
