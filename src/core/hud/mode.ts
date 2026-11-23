@@ -173,8 +173,9 @@ export function journalMode(
     last = Date.parse(e.timestamp) || last;
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     // A build event the plan asked for, docking or landing at a build stop, swapping to a ship
-    // with a build plan, or with no plan with work here, outfitting used this docking. Set after the rules below, so landing at a build's gather stop on a body
-    // with biological signals is the build.
+    // with a build plan, or with no plan with work here, outfitting used this docking. Set after
+    // the rules below, so landing at a build's gather stop on a body with biological signals is
+    // the build.
     const building =
       build.matched.has(e) ||
       build.visit.has(e) ||

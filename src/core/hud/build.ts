@@ -730,15 +730,22 @@ export interface BuildVisit {
 
 /**
  * The outfitting visit to show: docked, with outfitting, the shipyard or an engineer used since
- * docking, and no build plan with work here. A plan has work here when the ship is docked at its
- * stop with an action to do, or an event of this docking did one of its actions (so "Build
- * complete" too): its panel shows instead. Undocking ends it. `choice` is the plan shown
- * (chooseBuild()).
+ * docking, and no build plan with work here. A plan has work here when a stop of it at this
+ * station is still to do and has an action to do, or an event of this docking did one of its
+ * actions (so "Build complete" too): its panel shows instead. Undocking ends it. `choice` is the
+ * plan shown (chooseBuild()).
  */
 export function outfittingVisit(journal: Journal, choice: BuildChoice | null): BuildVisit | null {
   const dock = dockedAt(journal.events, journal.location);
   if (!dock) return null;
-  if (choice && (choice.here === "docked" || choice.judged.lastMatch > dock.index)) return null;
+  if (choice) {
+    const plan = choice.plan;
+    // A stop of the plan at this station with an action still to do.
+    const work = plan.stops.some(
+      (s, i) => s.status === "todo" && stopHere(s, dock, null) && openAt(choice.judged, i).length,
+    );
+    if (work || choice.judged.lastMatch > dock.index) return null;
+  }
   const on = new Set(journal.events.slice(dock.index + 1).filter((e) => VISIT_ON.has(e.event)));
   return on.size ? { station: dock.station, index: dock.index, on } : null;
 }

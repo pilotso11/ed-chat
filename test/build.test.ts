@@ -1558,5 +1558,36 @@ describe("the outfitting visit, with no build plan", () => {
     expect(
       buildHud(input(visit([buy, thrusters]), { buildPlans: [elsewhere] }), null).panel?.title,
     ).toBe("UPGRADE");
+    // A stop here with no action to do is no work here, though it is the plan's first stop.
+    const passing = upgrade({}, [
+      { system: "Deciat", station: "Farseer Inc", purpose: "x", kind: "engineer", status: "todo" },
+      ...upgrade().stops.slice(2),
+    ]);
+    const j = visit([buy]);
+    expect(chooseBuild({ note: null, plans: [passing], journal: j })?.here).toBe("docked");
+    expect(buildHud(input(j, { buildPlans: [passing] }), null).panel?.title).toBe("OUTFITTING");
+  });
+
+  it("shows the plan when the hotkey or the activity note asks for build mode", () => {
+    const buy = ev(30, "ModuleBuy", { BuyItem: "$int_cargorack_size5_class1_name;", BuyPrice: 1 });
+    const elsewhere = upgrade({}, upgrade().stops.slice(2));
+    const j = visit([buy]);
+    // The visit's own event chose the mode: the visit.
+    expect(buildHud(input(j, { buildPlans: [elsewhere] }), null).panel?.title).toBe("OUTFITTING");
+    // Asked for by the hotkey after it: the plan, with its work elsewhere.
+    const hotkey = { mode: "build" as const, at: T0 + 40_000 };
+    const asked = buildHud(input(j, { buildPlans: [elsewhere], hotkey }), null);
+    expect(asked.panel?.title).toBe("UPGRADE");
+    expect(asked.route).toBeNull();
+    // The engineering note naming the plan, newer than the visit: the plan.
+    const activity = {
+      kind: "engineering" as const,
+      summary: "Krait",
+      plan_id: "krait",
+      updated_at: iso(40),
+    };
+    expect(buildHud(input(j, { activity, plan: elsewhere }), null).panel?.title).toBe("UPGRADE");
+    // With no plan to show, the hotkey shows the visit.
+    expect(buildHud(input(j, { hotkey }), null).panel?.title).toBe("OUTFITTING");
   });
 });
