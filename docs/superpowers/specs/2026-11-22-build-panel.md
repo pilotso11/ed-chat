@@ -877,8 +877,11 @@ Each is its own PR.
   craft is always for the ship flown, so this holds.
 - The rolls left are an estimate from `build.rolls_per_grade` and the quality reached; a lucky
   roll finishes sooner.
-- A stop whose last action was done while ED Chat was not running is not marked done on the next
-  start (the first poll marks nothing); `routeNext` marks it.
+- A stop whose last action was done while ED Chat was not running is marked done on the next
+  start when the first poll writes that action (the journal shows it done and the plan does not
+  yet), quietly unless it is the stop shown. A stop whose actions were all marked done in the plan
+  already (by Claude while ED Chat was off, or by a poll whose stop write failed before ED Chat
+  closed) is not: the first poll only notes which stops are open. `routeNext` marks it.
 - A pinned blueprint and the remote workshop are not in the journal, so the panel always points
   to the engineer's base.
 - On foot, a modification shows only when the loadout is next written.

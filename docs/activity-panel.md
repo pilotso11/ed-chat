@@ -210,8 +210,10 @@ shows (the note's, when both have one), else the one you acted on last. That pla
 the route keys and the arrival copy, and Claude is told it differs from the note. Swapping to a
 ship with its own build plan points the note at that plan.
 
-Known limits: an action done while ED Chat was not running is ticked off on the next start,
-but its stop waits for a route key. Without a build plan for the ship, nothing shows yet.
+Known limits: an action done while ED Chat was not running is ticked off on the next start, and
+when that finishes its stop, the stop is marked done too. A stop whose actions were all marked
+done already when ED Chat started waits for a route key. Without a build plan for the ship,
+nothing shows yet.
 
 ## Route
 
