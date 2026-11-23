@@ -695,7 +695,9 @@ async function main(): Promise<void> {
     // routeStep gives an update only for a plan, and there is a plan only with its store.
     if (!plans || !plan) return;
     const { index, status } = change.update;
-    await plans.updateStop(plan.id, { index }, { status });
+    // The newest journal event's time: when this ends a loop's lap, the next counts from it.
+    const lapStart = await hudJournal?.newestEventAt().catch(() => null);
+    await plans.updateStop(plan.id, { index }, { status }, lapStart ? { lapStart } : undefined);
     // Read the plan back rather than through pollHud(), which skips while the timer's poll runs
     // and would leave the plan from before the change.
     const now = await plans.get(plan.id).catch(() => null);
