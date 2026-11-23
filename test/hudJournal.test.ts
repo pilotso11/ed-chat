@@ -903,6 +903,33 @@ describe("builds from the real ed-mcp journal reader", () => {
         Quality: 1,
         Ingredients: [],
       }),
+      // On foot.
+      ev("BuySuit", { Name: "TacticalSuit_Class1", Price: 1, SuitID: 11, SuitMods: [] }),
+      ev("BuyWeapon", { Name: "Wpn_X", Class: 1, Price: 1, SuitModuleID: 21, WeaponMods: [] }),
+      ev("UpgradeSuit", { Name: "tacticalsuit_class1", SuitID: 11, Class: 2, Cost: 1 }),
+      ev("UpgradeWeapon", { Name: "wpn_x", SuitModuleID: 21, Class: 2, Cost: 1 }),
+      ev("TradeMicroResources", { Offered: [], Received: "healthmonitor", Count: 1, MarketID: 7 }),
+      ev("BuyMicroResources", { Name: "healthpack", Count: 1, Price: 1, MarketID: 7 }),
+      ev("CreateSuitLoadout", {
+        SuitID: 11,
+        SuitName: "tacticalsuit_class2",
+        LoadoutID: 1,
+        Modules: [],
+      }),
+      ev("SwitchSuitLoadout", {
+        SuitID: 11,
+        SuitName: "tacticalsuit_class2",
+        LoadoutID: 1,
+        Modules: [],
+      }),
+      ev("SuitLoadout", { SuitID: 11, SuitName: "tacticalsuit_class2", LoadoutID: 1, Modules: [] }),
+      ev("LoadoutEquipModule", {
+        SuitID: 11,
+        LoadoutID: 1,
+        SlotName: "SecondaryWeapon",
+        SuitModuleID: 21,
+        ModuleName: "wpn_x",
+      }),
     );
     const kept = new Set((await g.events()).map((e) => e.event));
     expect(BUILD_EVENTS.filter((e) => !kept.has(e))).toEqual([]);
