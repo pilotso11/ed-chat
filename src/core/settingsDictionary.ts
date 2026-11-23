@@ -183,6 +183,12 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
       "Trade runs: what to buy or sell at the current stop of the trade plan, the hold and the " +
       "market price against the plan, and profit an hour.",
   },
+  "hud.modes.build": {
+    text:
+      "Ship builds and upgrades: the build plan's current stop and what to do there, what each " +
+      "action still needs, the next stop and the credits to spend. Each action is ticked off " +
+      "from the journal.",
+  },
   "hud.modes.route": { text: "The stops of the current route plan." },
   "hud.valuableMin": {
     text:
@@ -206,6 +212,10 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
     text:
       "Credits a kill. A target whose unfinished missions pay less than this for each kill " +
       "left is marked ⚠, as a sign to take more missions. 0 turns it off.",
+  },
+  "hud.build": { text: "The build panel." },
+  "hud.build.doneShown": {
+    text: 'Done actions listed at the current stop before they fold into one "✓ N done" row.',
   },
   "hud.mining": { text: "The mining panel." },
   "hud.mining.targets": {

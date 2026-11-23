@@ -50,6 +50,7 @@ export function gameContext(
       ...rows.map((r) => `- ${r}`),
       ...p.footer.map((f) => `- ${clean(footerText(f))}`),
     );
+    if (p.note) lines.push(clean(p.note)!);
   }
   if (view?.route?.length) {
     const stops = view.route.map((r) =>

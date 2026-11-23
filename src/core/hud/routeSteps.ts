@@ -20,12 +20,17 @@ export type RouteStep = { update: { index: number; status: "done" | "todo" } } |
 
 /**
  * A route key: forward marks the current stop done; back puts the stop done last, in visit
- * order, back to todo.
+ * order, back to todo. `current` is the stop the panel shows as current when it is not the
+ * plan's first stop to do: the build stop the ship is docked at.
  */
-export function routeStep(plan: Plan | null | undefined, dir: 1 | -1): RouteStep {
+export function routeStep(
+  plan: Plan | null | undefined,
+  dir: 1 | -1,
+  current?: number | null,
+): RouteStep {
   if (!plan) return { notice: "ⓘ no active route plan" };
   if (dir === 1) {
-    const i = currentStop(plan);
+    const i = current ?? currentStop(plan);
     return i === null ? { notice: "ⓘ route finished" } : { update: { index: i, status: "done" } };
   }
   const prev = previousStop(plan);

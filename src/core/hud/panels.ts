@@ -41,8 +41,12 @@ export interface PanelView {
   title: string;
   subtitle?: string;
   right?: string;
+  /** The header's tone: green for a finished build. */
+  tone?: Tone;
   rows: HudRow[];
   footer: FooterLine[];
+  /** A line for the game note sent to Claude, not shown on the panel. */
+  note?: string;
   /** A system to copy for the galaxy map once, with a note for the chat strip: a new key copies again. */
   copy?: { key: string; text: string; note: string };
 }

@@ -63,7 +63,9 @@ body {
   color: var(--light, #ffd08a);
 }
 .row.good,
-.footer.good {
+.footer.good,
+.head.good .title,
+.head.good .right {
   color: #8fe388;
 }
 /* A warning stays amber in every theme: in green or white it would not stand apart. */

@@ -853,7 +853,14 @@ describe("helpers", () => {
   it("reads the ship's position from Status.json", () => {
     expect(
       parseShipStatus('{"BodyName":"X 1","Latitude":1.5,"Longitude":-2,"PlanetRadius":3e6}'),
-    ).toEqual({ body: "X 1", latitude: 1.5, longitude: -2, radius: 3e6, heading: null });
+    ).toEqual({
+      body: "X 1",
+      latitude: 1.5,
+      longitude: -2,
+      radius: 3e6,
+      balance: null,
+      heading: null,
+    });
     expect(parseShipStatus("{")).toBeNull();
   });
 
@@ -881,7 +888,7 @@ describe("HudFeed sample positions", () => {
     const stores = {
       journal: { state: async () => ({ events, missions: [], location: { system: "S" } }) },
       activity: { get: async () => null },
-      plans: { get: async () => null },
+      plans: { get: async () => null, list: async () => [] },
     };
     const feed = new HudFeed(stores as never, "J", {
       read: async (f) => (f.endsWith("Status.json") ? status : "{}"),
@@ -913,7 +920,7 @@ describe("HudFeed bookmarks and a fresh Status.json", () => {
   const stores = (get: () => Promise<unknown>) => ({
     journal: { state: async () => ({ events: [], missions: [], location: { system: "S" } }) },
     activity: { get: async () => null },
-    plans: { get },
+    plans: { get, list: async () => [] },
   });
 
   it("reads Status.json again when it is caught mid-write", async () => {
@@ -935,6 +942,63 @@ describe("HudFeed bookmarks and a fresh Status.json", () => {
     expect((await feed.poll()).market).toBe(first);
     text = JSON.stringify({ MarketID: 8, StationName: "Port", Items: [] });
     expect((await feed.poll()).market?.marketId).toBe(8);
+  });
+
+  it("keeps a build plan finished while docked until the ship undocks", async () => {
+    const summary = (done: number) => [
+      {
+        id: "b",
+        name: "B",
+        items: 0,
+        done: 0,
+        actions: 1,
+        actions_done: done,
+        next_stop: null,
+        updated_at: `u${done}`,
+      },
+    ];
+    let list = summary(0);
+    const gets: string[] = [];
+    const docked = { system: "S", station: "Port", docked: true };
+    let events = [
+      { timestamp: "2026-11-22T12:00:00Z", event: "Docked", StarSystem: "S", StationName: "Port" },
+    ];
+    let location: Record<string, unknown> = docked;
+    const feed = new HudFeed(
+      {
+        journal: { state: async () => ({ events, missions: [], location }) },
+        activity: { get: async () => null },
+        plans: {
+          get: async (id: string) => {
+            if (id !== "b") throw new Error(`Plan "${id}" not found`);
+            gets.push(id);
+            return { id, updated_at: list[0]!.updated_at, stops: [] };
+          },
+          list: async () => list,
+        },
+      } as never,
+      "J",
+      { read: async () => "{}" },
+    );
+    expect((await feed.poll()).buildPlans).toHaveLength(1);
+    // Read once while unchanged.
+    expect((await feed.poll()).buildPlans).toHaveLength(1);
+    expect(gets).toEqual(["b"]);
+    // Finished at this docking: kept, for "Build complete".
+    list = summary(1);
+    expect((await feed.poll()).buildPlans).toHaveLength(1);
+    // Undocked: gone.
+    events = [
+      ...events,
+      {
+        timestamp: "2026-11-22T12:05:00Z",
+        event: "Undocked",
+        StarSystem: "S",
+        StationName: "Port",
+      },
+    ];
+    location = { system: "S", station: null, docked: false };
+    expect((await feed.poll()).buildPlans).toEqual([]);
   });
 
   it("takes no bookmarks plan as none, not as an error", async () => {

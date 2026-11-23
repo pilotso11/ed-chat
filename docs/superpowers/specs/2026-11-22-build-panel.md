@@ -1,7 +1,8 @@
 # Activity panel: ship and on-foot builds
 
 Date: 2026-11-22
-Status: proposed. Issue #81, widened by its author's comment to take in purchases, full ship
+Status: step 2 of the order of work (the ship build panel in ED Chat) is built; the others are
+to do. Issue #81, widened by its author's comment to take in purchases, full ship
 builds, upgrades of the current ship (a subset of a full build), and suit and on-foot weapon
 upgrades. Follows the activity HUD spec (2026-11-15) and the trade, passenger and mining spec
 (2026-11-21).
@@ -53,7 +54,7 @@ ordered route; the module events (`ModuleBuy`, `ModuleSell`, `ModuleSwap`, `Modu
 `ModuleRetrieve`, `StoredModules`, `FetchRemoteModule`) and shipyard purchases in the kept
 events; anything on foot (journal state skips suits and has no ship locker).
 
-**In ED Chat** (`origin/t3/trade-panel`): the trade panel judges each action of the current stop
+**In ED Chat** (on main since PR #83): the trade panel judges each action of the current stop
 (`actionDone()`), and `TradeStopFinisher` (`tradeStops.ts`) marks the stop done once, keyed by
 plan, lap, stop and docking, after judging it again on the plan as it is now, then copies the
 next stop's system. The build panel follows the same pattern with more kinds of action.
@@ -163,13 +164,16 @@ Module symbols differ by event. `Loadout` and `EngineerCraft` give `int_engine_s
 - **No plan, no tracking.** With no build plan for the ship, the panel shows only what was done
   this visit while docked, with a line inviting a plan.
 - **Two plans open.** With an on-foot plan and a ship plan both open, the panel shows the plan
-  that has work to do where the player is: docked at a stop of either plan (of any kind), that
-  plan; otherwise the plan whose action was done most recently; else the plan the activity note
-  names. Being on foot or in the ship does not choose: on-foot steps such as the bartender's
-  material exchange can be done from the ship too, so an action is judged done from its journal
-  event either way (`TradeMicroResources` and `BuyMicroResources` count on foot or in the ship).
-  When the plan chosen is not the note's plan, the panel shows it and leaves the note to Claude;
-  the one case where the panel changes the note is a ship swap (see Auto-advance).
+  that has work to do where the player is: docked or landed at a stop of either plan (of any
+  kind), that plan; when both plans have a stop there, the plan the activity note names, else the
+  one acted on most recently. Otherwise the plan whose action was done most recently; else the
+  plan the activity note names. Being on foot or in the ship does not choose: on-foot steps such
+  as the bartender's material exchange can be done from the ship too, so an action is judged done
+  from its journal event either way (`TradeMicroResources` and `BuyMicroResources` count on foot
+  or in the ship). When the plan chosen is not the note's plan, the panel shows it and leaves the
+  note to Claude; the one case where the panel changes the note is a ship swap (see
+  Auto-advance). The same rule chooses between two ship plans, such as a plan for the ship flown
+  and a plan buying a new hull docked at one of its stops.
 - **On-foot costs come from Claude.** Claude writes each upgrade's and modification's needs
   into the action. ed-mcp gets no table of on-foot costs; the player corrects a wrong figure by
   telling Claude.
@@ -275,7 +279,7 @@ not claimed by a done action are shared out to the open actions.
 | `store_module` | Store Fuel Scoop 6A | `module` | A `ModuleStore` with that `StoredItem`; a `MassModuleStore` item with that `Name` (each item counts for one action); or a `ModuleBuy` or `ModuleRetrieve` that stored it as the old module (`StoredItem`, `SwapOutItem`) |
 | `sell_module` | Sell AFM Unit 2A | `module` | A `ModuleSell` or `ModuleSellRemote` with that `SellItem`, or a `ModuleBuy` that sold it (`SellItem`) |
 | `move_module` | Move Shield Cell Bank to Slot05 | `module`, `slot` | A `ModuleSwap` with that item and `ToSlot` (or `FromSlot`, for the item moved the other way) |
-| `buy_ship` | Buy Python Mk II | `ship` | A `ShipyardBuy` (or `ShipyardRedeem`) with that `ShipType`; the next `ShipyardNew` gives the plan its `ship_id` |
+| `buy_ship` | Buy Python MkII | `ship` | A `ShipyardBuy` (or `ShipyardRedeem`) with that `ShipType`; the next `ShipyardNew` of that type gives the plan its `ship_id` |
 | `transfer_ship` | Transfer the Python here (40 min) | `ship_id` | A `ShipyardTransfer` of that `ShipID` |
 | `swap_ship` | Take out the Python | `ship_id` | A `ShipyardSwap` (or `ShipyardBuy` / `ShipyardNew`) to that ship |
 | `unlock_tech` | Unlock Guardian FSD Booster | `broker`, `item` | A `TechnologyBroker` whose `ItemsUnlocked` has that `Name` |
@@ -312,8 +316,8 @@ rolls left count both grade and quality:
 
 | Kind | Example | Fields | Done when |
 |---|---|---|---|
-| `trade_material` | Trade 12 Security Firmware Patch → 2 Modified Embedded Firmware | `paid` (material, count), `received` (material, count) | `MaterialTrade` events with that `Received.Material` add up to the count |
-| `collect_material` | Collect 12 Arsenic | `material`, `count` (to hold) | The inventory (`materials` in journal state) holds the count. Collection is spread over many events, so the count held decides |
+| `trade_material` | Trade 12 Strange Wake Solutions → 2 Eccentric Hyperspace Trajectories | `paid` (material, count), `received` (material, count) | `MaterialTrade` events with that `Received.Material` add up to the count |
+| `collect_material` | Collect 4 Selenium | `material`, `count` (to hold) | The inventory (`materials` in journal state) holds the count. Collection is spread over many events, so the count held decides |
 | `synthesis` | Synthesise FSD Injection (premium) | `recipe` | A `Synthesis` with that `Name` |
 
 A stop of kind `trader` holds trades. Collect actions always have a stop of their own, of kind
@@ -361,32 +365,39 @@ now", and the plan is left as it is. The panel never reopens an action.
 
 ### Ship build
 
-The examples below are moments of one route: six stops, sixteen actions.
+The examples below are moments of one route: six stops, fifteen actions. The engineers, their
+grades and the recipes are from ed-mcp's catalog (`catalog_engineers`, `catalog_blueprint`):
+Farseer goes to G5 for FSD Increased Range; thrusters Dirty goes to G5 at Professor Palin (Elvira
+Martuuk only to G2), and shield boosters Heavy Duty at Didi Vatermann.
 
 | Stop | Place | Actions |
 |---|---|---|
 | 1 | Jotunheim · Gaspar de Lemos Ring (encoded trader) | 2 trades |
-| 2 | HIP 36601 · C 3 b (collect) | collect 12 Arsenic |
-| 3 | Deciat · Farseer Inc | unlock Farseer, roll PD to G5, roll FSD to G5, apply Mass Manager |
-| 4 | Shinrarta Dezhra · Jameson Memorial | buy Shield Booster 0A (0.3M), retrieve stored Shield Booster, transfer Power Plant (0.1M), buy Shield Generator 6A (18.9M), sell AFM Unit |
-| 5 | Kuwemaki · Elvira Martuuk | roll thrusters Dirty Drives to G5, roll shield generator Reinforced to G5 |
-| 6 | Laksak · Didi Vatermann | roll 2 Shield Boosters Heavy Duty to G5 |
+| 2 | HIP 36601 · C 3 b (collect) | collect 1 Arsenic, collect 4 Selenium |
+| 3 | Deciat · Farseer Inc | unlock Farseer, roll FSD Increased Range to G5, apply Mass Manager |
+| 4 | Shinrarta Dezhra · Jameson Memorial | buy Shield Booster 0A (247k), retrieve stored Shield Booster (Heavy Duty G5), transfer Power Plant 6A (100k), buy Enhanced Performance Thrusters 5A (5.1M), sell AFM Unit 2A |
+| 5 | Arque · Abel Laboratory (Professor Palin) | roll thrusters Dirty to G5 |
+| 6 | Leesti · Vatermann LLC (Didi Vatermann) | roll 2 Shield Boosters Heavy Duty to G5 |
 
-Credits to spend are the open purchases and transfers: 19.3M until the 0A booster is bought.
+Credits to spend are the open purchases and transfers: 5.4M until the 0A booster is bought.
 
 ```
-BUILD · Python Mk II · stop 3/6                      4/16 actions
+BUILD · Python MkII · stop 3/6                       3/15 actions
 ● Deciat · Farseer Inc                        engineer · docked
   ✓ Unlock Felicity Farseer
-  ✓ Roll Power Distributor Charge Enhanced to G5
   Roll FSD Increased Range to G5            G3 64% → G5 · ~7 rolls
-    short 5 Arsenic (have 7/12) · collect at stop 2
+    short 1 Arsenic (have 0/1) · collect at stop 2
   Apply Mass Manager to FSD                     after FSD G5
 ▸ Shinrarta Dezhra · Jameson Memorial
     buy 2 · retrieve 1 · transfer 1 · sell 1
-1 open before · 3 after · 19.3M to spend · 1.2B held
-Target: FSD G5 · PD G5 · shields Reinforced G5 · boosters HD G5
+1 open before · 3 after · 5.4M to spend · 1.2B held
+Target: FSD G5 · thrusters Dirty G5 · boosters HD G5
 ```
+
+The FSD at G3 64% needs about 7 rolls at rolls 1, 2, 3, 4, 5: 2 of G3 (Chemical Processors,
+Phosphorus, Strange Wake Solutions), 4 of G4 (Chemical Distillery, Eccentric Hyperspace
+Trajectories, Manganese) and 1 of G5 (Arsenic, Chemical Manipulators, Datamined Wake
+Exceptions), so the one Arsenic of the G5 roll is what is short.
 
 Here the player docked at Farseer before collecting the Arsenic, so stop 3 is current (docked,
 with work to do) and stop 2 is still open before it.
@@ -395,7 +406,7 @@ with work to do) and stop 2 is still open before it.
   current stop's place in the route, and the actions done out of all.
 - **The current stop (●):** the plan stop the ship is docked at (or landed at, for a collect
   stop) while it has actions to do; otherwise `currentStop()`, the first stop to do in visit
-  order, as the route rows and keys have it on `origin/t3/trade-panel`. So the panel's current
+  order, as the route rows and keys have it. So the panel's current
   stop differs from `currentStop()` only while docked at a later stop with work to do, and then
   the footer says how many stops before it are still open. Its kind is on the right, with the jumps left on the plotted route when away
   from it. Then its actions in order:
@@ -403,7 +414,7 @@ with work to do) and stop 2 is still open before it.
   - Ones to do, with their key need on the right or on a dim line below: the grade reached and
     quality and rolls left for an engineer action ("G3 64% → G5 · ~7 rolls"), the price for a purchase, the
     first material short against the inventory, with the stop that collects or trades for it
-    ("short 5 Arsenic (have 7/12) · collect at stop 2"), the credits short in amber, or "ready"
+    ("short 1 Arsenic (have 0/1) · collect at stop 2"), the credits short in amber, or "ready"
     when everything is in hand.
   - An action blocked by another one at the same stop (an experimental before its blueprint is
     rolled) shows after it, with "after <the action>" in place of a need ("after FSD G5").
@@ -429,20 +440,21 @@ with work to do) and stop 2 is still open before it.
 ### At an outfitting station
 
 ```
-BUILD · Python Mk II · stop 4/6                      8/16 actions
+BUILD · Python MkII · stop 4/6                       8/15 actions
 ● Shinrarta Dezhra · Jameson Memorial                  docked
-  ✓ Buy Shield Booster 0A                              0.3M
+  ✓ Buy Shield Booster 0A
   Retrieve stored Shield Booster (Heavy Duty G5)       here
-  Transfer Power Plant 6A from Belach        0.1M · ~25 min
-  Buy Shield Generator 6A                            18.9M
+  Transfer Power Plant 6A                       100k · ~25 min
+  Buy Enhanced Performance Thrusters 5A               5.1M
     not sold here
   Sell AFM Unit 2A
-▸ Kuwemaki · Elvira Martuuk                         roll 2
-2 after · 19.0M to spend · 1.2B held
+▸ Arque · Abel Laboratory                           roll 1
+2 after · 5.2M to spend · 1.2B held
 ```
 
 - While docked at the stop, `Outfitting.json` (written when the outfitting screen opens) shows
-  "not sold here" in amber for a module it does not list, so the player can ask Claude for
+  "not sold here" in amber for a module it does not list (Jameson Memorial's lists 6A shield
+  generators but no Enhanced Performance Thrusters, in a file of November 2026), so the player can ask Claude for
   another station. The file is used only when its `MarketID` is the docked station's and its
   `timestamp` is after this docking; an older file, or one for another station, shows nothing. The panel does not search Spansh: `build_plan` chose the station.
 - A retrieve shows "here" when `stored_modules` has the module with this station's `MarketID`,
@@ -452,29 +464,31 @@ BUILD · Python Mk II · stop 4/6                      8/16 actions
 ### At a material trader
 
 ```
-BUILD · Python Mk II · stop 1/6                      0/16 actions
-● Jotunheim · Gaspar de Lemos Ring            trader · encoded
-  Trade 18 Eccentric Hyperspace Trajectories → 3 Datamined Wake
+BUILD · Python MkII · stop 1/6                       0/15 actions
+● Jotunheim · Gaspar de Lemos Ring                      trader
+  Trade 12 Strange Wake Solutions → 2 Eccentric Hyperspace Trajectories
                                                          ready
-  Trade 12 Security Firmware Patch → 2 Modified Embedded Firmware
-    have 8/12 Security Firmware Patch
-▸ HIP 36601 · C 3 b                                  collect 1
-5 after · 19.3M to spend · 1.2B held
+  Trade 6 Eccentric Hyperspace Trajectories → 1 Datamined Wake Exceptions
+    have 2/6 Eccentric Hyperspace Trajectories
+▸ HIP 36601 · C 3 b                                  collect 2
+5 after · 5.4M to spend · 1.2B held
 ```
 
-Both trades are one grade up within a trade group (Wake Scans grade 4 to 5, Encoded Firmware
-grade 4 to 5), so 6 for 1, the rate ed-mcp's `tradeRate()` gives; `build_plan` writes the
-counts from it.
+Both trades are one grade up within the Wake Scans trade group (grade 3 to 4, then 4 to 5), so
+6 for 1, the rate ed-mcp's `tradeRate()` gives; `build_plan` writes the counts from it.
 
 ### At a collect stop
 
 ```
-BUILD · Python Mk II · stop 2/6                      2/16 actions
-● HIP 36601 · C 3 b                                     collect
-  Collect 12 Arsenic                                      7/12
-    Outcrop field near 12.4, -60.1 · mine with SRV
-▸ Deciat · Farseer Inc              unlock 1 · roll 2 · apply 1
-4 after · 19.3M to spend · 1.2B held
+BUILD · Python MkII · stop 2/6                       2/15 actions
+● HIP 36601 · C 3 b                            collect · landed
+  Collect 1 Arsenic                                       0/1
+    mine with SRV
+  Collect 4 Selenium                                      1/4
+    mine with SRV
+▸ Deciat · Farseer Inc
+    unlock 1 · roll 1 · apply 1
+4 after · 5.4M to spend · 1.2B held
 ```
 
 - The count held against the count to hold, from journal state `materials` (the ship locker on
@@ -486,16 +500,16 @@ BUILD · Python Mk II · stop 2/6                      2/16 actions
 The same panel with a shorter route. The header says UPGRADE when the plan's `build.scope` is
 `upgrade`. Here the route is three stops and four actions: a trade at a material trader (stop 1,
 not done yet, since the player went to the engineer first), the unlock and the FSD at Farseer
-(stop 2), and the thrusters at Martuuk (stop 3). The player is docked at Farseer with work to do
-there, so stop 2 is current although stop 1 is the first stop to do:
+(stop 2), and the thrusters at Professor Palin (stop 3). The player is docked at Farseer with
+work to do there, so stop 2 is current although stop 1 is the first stop to do:
 
 ```
-UPGRADE · Krait Mk II · stop 2/3                      1/4 actions
+UPGRADE · Krait MkII · stop 2/3                       1/4 actions
 ● Deciat · Farseer Inc                        engineer · docked
   ✓ Unlock Felicity Farseer
   Roll FSD Increased Range to G5          G3 100% → G5 · ~5 rolls
-    short 4 Chemical Manipulators · trade at stop 1
-▸ Kuwemaki · Elvira Martuuk                               roll 1
+    short 1 Datamined Wake Exceptions (have 0/1) · trade at stop 1
+▸ Arque · Abel Laboratory                                 roll 1
 1 open before · 1 after
 Target: FSD G5 · thrusters Dirty G5
 ```
@@ -556,7 +570,8 @@ Target: Dominator G5 · Karma AR-50 G5 · Extra Ammo · Faster Handling
   costs to check them against; a wrong figure is corrected by telling Claude.
 - Bartender trades are at the station's offer, not fixed rates, so the panel shows only what is
   short.
-- With a ship plan open too, the panel shows the plan of the stop the ship is docked at, else the
+- With a ship plan open too, the panel shows the plan of the stop the ship is docked or landed
+  at (the note's plan when both have a stop there, else the one acted on most recently), else the
   plan with the newest done action, else the note's plan (see Decisions). Whether the player is
   on foot or in the ship does not matter, to the choice or to judging an action.
 - In the journals read for this spec (2021 to November 2026), every `TradeMicroResources` (71),
@@ -837,7 +852,16 @@ for on foot. ED Chat pins each.
 2. **ED Chat: build panel for ship plans.** Pins the release. Mode rules, the panel, the judge,
    `BuildFinisher`, the ship-swap note rule, `Balance` from `Status.json`. Usable at once with
    plans Claude writes with `plan_upsert`, with `ship_id` from journal state or matched by ship
-   type.
+   type. **Built** (ed-mcp 0.10.0). As built:
+   - The judge is in `src/core/hud/buildJudge.ts`, the choice of plan and the panel in
+     `build.ts`, `BuildFinisher` in `buildStops.ts`.
+   - A plan with no `build.ship` and no `ship_id` binds to the first ship an action is done on.
+   - Of the open build plans, one for the ship flown with work to do shows when nothing else
+     chooses (no note, nothing acted on yet), so docking at its stop or a matching event turns
+     the mode on.
+   - The header shows the ship type, not its `ShipName`. The trader stop shows "trader", not its
+     type: the stop has no field for it.
+   - A done row shows no price. `hud.build.outfittingVisit` comes with step 4.
 3. **ed-mcp: `build_plan`.** The diff, needs, trades, engineers and route, `save_to_plan`.
    Tested against SLEF from Coriolis and EDSY and real `Loadout` events. Release.
 4. **ED Chat: the no-plan outfitting visit.** Needs no ed-mcp change; can go at any point.
