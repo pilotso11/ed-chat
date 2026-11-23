@@ -343,6 +343,20 @@
               "grade": 5
             },
             {
+              "id": "radiolic",
+              "kind": "trade_material",
+              "label": "Trade 12 Proto Light Alloys → 2 Proto Radiolic Alloys",
+              "status": "todo",
+              "paid": {
+                "material": "Proto Light Alloys",
+                "count": 12
+              },
+              "received": {
+                "material": "Proto Radiolic Alloys",
+                "count": 2
+              }
+            },
+            {
               "id": "sensors",
               "kind": "engineer",
               "label": "Roll sensors Light Weight to G5",
