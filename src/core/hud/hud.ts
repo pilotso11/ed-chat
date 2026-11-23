@@ -335,9 +335,15 @@ function bookmarkBio(input: HudInput, system: string | null): ExobiologyBody[] |
   const bio = plan.stops.some(
     (b) => b.status === "todo" && b.kind === "exobiology" && same(b.system, system),
   );
-  const address = bio ? systemAddress(j.events, system) : null;
-  return address === null ? null : exobiology(j.events, address, { system }).bodies;
+  if (!bio) return null;
+  // The panel redraws far more often than the journal changes: kept for the same events.
+  if (bioMemo?.events === j.events && bioMemo.system === system) return bioMemo.bodies;
+  const address = systemAddress(j.events, system);
+  const bodies = address === null ? null : exobiology(j.events, address, { system }).bodies;
+  bioMemo = { events: j.events, system, bodies };
+  return bodies;
 }
+let bioMemo: { events: unknown[]; system: string; bodies: ExobiologyBody[] | null } | null = null;
 
 export function buildHud(input: HudInput, moving: string | null): HudView {
   const s = input.settings;

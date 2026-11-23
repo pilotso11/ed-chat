@@ -105,6 +105,12 @@ describe("tray menu", () => {
       bookmarks: { here: { stops: [0, 2], whole: true }, all: 3 },
     });
     expect(JSON.stringify(system)).toContain("Clear 2 bookmarks in this system");
+    // Bookmarks on the body with no saved position: all of them, after asking.
+    const body = trayItems({
+      ...base,
+      bookmarks: { here: { stops: [0, 1], whole: false, unsure: "bookmarks" }, all: 3 },
+    });
+    expect(JSON.stringify(body)).toContain("Clear 2 bookmarks on this body…");
     const menu = trayItems({
       ...base,
       bookmarks: { here: { stops: [1], whole: false }, all: 3 },

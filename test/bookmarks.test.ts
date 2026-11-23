@@ -22,6 +22,7 @@ import {
   bookmarksToClear,
   isKeyRepeat,
   keyClearStops,
+  alikeLeft,
   finishedBioBookmarks,
   isPlanNotFound,
   keepSavedBookmarks,
@@ -488,6 +489,18 @@ describe("a bookmark saved during a poll", () => {
   });
 });
 
+describe("bookmarks like the one cleared", () => {
+  it("counts the others still to do on its body that read the same", () => {
+    const a = { body: BODY, label: "Spot" };
+    const p = plan([a, a, { ...a, label: "Other" }, { ...a, body: `${SYSTEM} 5` }, a]);
+    // The plan as written: the one cleared and an older one are skipped.
+    p.stops[0]!.status = "skipped";
+    p.stops[4]!.status = "skipped";
+    expect(alikeLeft(p, p.stops[0]!, null, null)).toBe(1);
+    expect(alikeLeft(p, { ...p.stops[0]!, body: undefined }, null, null)).toBe(0);
+  });
+});
+
 describe("clearing bookmarks", () => {
   const near = { body: BODY, label: "Near", position: { latitude: 54.14287, longitude: -51.7435 } };
   const far = { body: BODY, label: "Far", position: { latitude: 54.16, longitude: -51.74 } };
@@ -502,16 +515,24 @@ describe("clearing bookmarks", () => {
     });
   });
 
-  it("clears the first on the body when positions are not known", () => {
+  it("offers every bookmark on the body when they have no saved position", () => {
     const p = plan([other, { body: BODY, label: "A" }, { body: BODY, label: "B" }]);
     expect(bookmarksToClear({ plan: p, system: SYSTEM, status: status() })).toEqual({
-      stops: [1],
+      stops: [1, 2],
       whole: false,
-      unsure: true,
+      unsure: "bookmarks",
     });
-    // The key will not guess.
-    expect(keyClearStops({ stops: [1], whole: false, unsure: true })).toEqual({
-      reason: expect.stringContaining("position not known"),
+    // The key will not guess, and says the tray can clear them.
+    expect(keyClearStops({ stops: [1, 2], whole: false, unsure: "bookmarks" })).toEqual({
+      reason: expect.stringContaining("no saved position"),
+    });
+    // With no position for the player, which is nearest is not known yet.
+    const q0 = plan([far, near]);
+    expect(
+      bookmarksToClear({ plan: q0, system: SYSTEM, status: status({ latitude: null }) }),
+    ).toEqual({ stops: [0], whole: false, unsure: "you" });
+    expect(keyClearStops({ stops: [0], whole: false, unsure: "you" })).toEqual({
+      reason: expect.stringContaining("your position"),
     });
     // One bookmark on the body is no guess.
     expect(
@@ -675,7 +696,9 @@ describe("bio bookmark rows", () => {
     const stop = plan([mark]).stops[0]!;
     expect(bookmarkShown(stop, journal, null)).toBe("Bio: Concha");
     expect(bookmarkShown(stop, null, null)).toBe(mark.label);
-    expect(bookmarkShown({ ...stop, notes: undefined }, journal, null)).toBe(mark.label);
+    // Made before the note: still the key's label.
+    expect(bookmarkShown({ ...stop, notes: undefined }, journal, null)).toBe("Bio: Concha");
+    expect(bookmarkShown({ ...stop, notes: "by the crater" }, journal, null)).toBe(mark.label);
   });
 
   it("keeps a label the player or Claude chose, and the saved one without the journal", () => {
@@ -683,8 +706,9 @@ describe("bio bookmark rows", () => {
     expect(rows([now], [{ ...mark, label: "Concha by the crater" }])[0]!.text).toBe(
       "📍 Concha by the crater",
     );
-    // A "Bio: " label without the key's note is someone's own, and kept.
-    expect(rows([now], [{ ...mark, notes: undefined }])[0]!.text).toBe(`📍 ${mark.label}`);
+    // A bookmark made before the note is redrawn; one with other notes is someone's own.
+    expect(rows([now], [{ ...mark, notes: undefined }])[0]!.text).toBe("📍 Bio: Concha");
+    expect(rows([now], [{ ...mark, notes: "mine" }])[0]!.text).toBe(`📍 ${mark.label}`);
     expect(rows([now], [{ ...mark, kind: "other" }])[0]!.text).toBe(`📍 ${mark.label}`);
     expect(rows([])[0]!.text).toBe(`📍 ${mark.label}`);
     expect(

@@ -79,10 +79,18 @@ export function bioLeft(bio: ExobiologyBody, knownCount?: number | null): string
 
 /**
  * The note on a bio bookmark the key made: while its label still starts "Bio: ", the panel
- * redraws it. A label the player or Claude wrote, even one starting "Bio: ", has no such note,
- * and a renamed one no longer starts so; both are kept.
+ * redraws it. A renamed one no longer starts so, and a label with other notes is kept.
  */
 export const BIO_NOTE = "ED Chat keeps this label up to date from the journal.";
+
+/**
+ * Whether the panel redraws this bio bookmark's label: the key made it and it was not renamed.
+ * Bookmarks made before the note have no notes at all; their "Bio: " label is the key's too.
+ */
+export const ownBioLabel = (s: Stop): boolean =>
+  s.kind === "exobiology" &&
+  (s.notes === BIO_NOTE || !s.notes) &&
+  (s.label ?? s.purpose).startsWith("Bio: ");
 
 /**
  * What a bookmark's row says. A bio bookmark that the key made shows what is still to sample on
@@ -96,9 +104,7 @@ function bookmarkText(
   system: string,
 ): string {
   const label = s.label ?? s.purpose;
-  // The key's own label, not renamed since: it has the note and still starts "Bio: ".
-  const own = s.notes === BIO_NOTE && label.startsWith("Bio: ");
-  if (s.kind !== "exobiology" || !own || !bio || !s.body) return label;
+  if (!ownBioLabel(s) || !bio || !s.body) return label;
   const key = bodyKey(s.body, system);
   const body = bio.find((b) => bodyKey(b.body, system) === key);
   if (!body) return label;
@@ -126,7 +132,7 @@ export function bookmarkShown(
   known: KnownBody[] | null,
 ): string {
   const label = s.label ?? s.purpose;
-  if (s.kind !== "exobiology" || s.notes !== BIO_NOTE || !journal) return label;
+  if (!ownBioLabel(s) || !journal) return label;
   const address = systemAddress(journal.events, s.system);
   if (address === null) return label;
   const bio = exobiology(journal.events, address, { system: s.system }).bodies;
@@ -316,8 +322,10 @@ export const todoBookmarks = (plan: Plan | null): number[] =>
 
 /**
  * The bookmarks that the clear key clears, as indexes in the plan. On a body, the nearest
- * bookmark on it; when there are several and which is nearest is not known (no position for the
- * player or the bookmark), the first, with unsure: true, so the key refuses. Elsewhere in
+ * bookmark on it. When there are several and which is nearest is not known: with no position
+ * for the player, the first, with unsure: "you", so the key refuses until there is one; with
+ * none saved for the bookmarks, all of them, with unsure: "bookmarks", for the tray to ask
+ * about (the key refuses). Elsewhere in
  * the system, every bookmark in the system (whole: true: the tray asks first, the key refuses). Only
  * bookmarks with a body, as the panel shows. Empty when the system has none.
  */
@@ -325,7 +333,7 @@ export function bookmarksToClear(input: {
   plan: Plan | null;
   system: string | null;
   status: ShipStatus | null;
-}): { stops: number[]; whole: boolean; unsure?: true } {
+}): { stops: number[]; whole: boolean; unsure?: "you" | "bookmarks" } {
   const { plan, system, status } = input;
   if (!plan || !system) return { stops: [], whole: false };
   const here = todoBookmarks(plan).filter((i) => same(plan.stops[i]!.system, system));
@@ -342,8 +350,12 @@ export function bookmarksToClear(input: {
   };
   // The first of the nearest: a stable sort keeps the plan's order among equals.
   const nearest = [...body].sort((a, b) => far(a) - far(b))[0]!;
-  const unsure = body.length > 1 && far(nearest) === Infinity;
-  return { stops: [nearest], whole: false, ...(unsure ? { unsure: true as const } : {}) };
+  if (body.length > 1 && far(nearest) === Infinity) {
+    return at
+      ? { stops: body, whole: false, unsure: "bookmarks" }
+      : { stops: [nearest], whole: false, unsure: "you" };
+  }
+  return { stops: [nearest], whole: false };
 }
 
 /**
@@ -364,15 +376,47 @@ export const isKeyRepeat = (at: number, last: number) => at - last < KEY_REPEAT_
 export function keyClearStops(pick: {
   stops: number[];
   whole: boolean;
-  unsure?: true;
+  unsure?: "you" | "bookmarks";
 }): { stops: number[] } | { reason: string } {
   if (pick.whole) {
     return { reason: "not on a bookmarked body: clear this system's bookmarks from the tray menu" };
   }
-  if (pick.unsure) {
-    return { reason: "position not known, so not which bookmark is nearest: land and try again" };
+  if (pick.unsure === "you") {
+    return {
+      reason: "your position on the body is not known yet: get closer to the surface and try again",
+    };
+  }
+  if (pick.unsure === "bookmarks") {
+    return {
+      reason:
+        "these bookmarks have no saved position, so not which is nearest: clear them from the tray menu",
+    };
   }
   return { stops: pick.stops };
+}
+
+/**
+ * How many bookmarks still to do in the plan (as written after clearing this one) read the same
+ * as this one on its body: the panel shows them as one row with " (n)", so a note about clearing
+ * one says how many are left.
+ */
+export function alikeLeft(
+  plan: Plan,
+  stop: Stop,
+  journal: (JournalState & { events: JournalEvent[] }) | null,
+  known: KnownBody[] | null,
+): number {
+  if (!stop.body) return 0;
+  const text = bookmarkShown(stop, journal, known);
+  const key = bodyKey(stop.body, stop.system);
+  return todoBookmarks(plan).filter((i) => {
+    const t = plan.stops[i]!;
+    return (
+      same(t.system, stop.system) &&
+      bodyKey(t.body!, t.system) === key &&
+      bookmarkShown(t, journal, known) === text
+    );
+  }).length;
 }
 
 /** Whether an ed-mcp plan store error says the plan does not exist. */
