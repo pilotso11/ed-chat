@@ -360,6 +360,39 @@ describe("the build panel on foot", () => {
     });
   });
 
+  it("counts needs in the ship locker only, and shows what a bartender trade pays", () => {
+    const owned = loadout();
+    owned.stops[0]!.actions![0]!.status = "done";
+    owned.stops[0]!.actions![1]!.suit_id = 77;
+    owned.stops[1]!.actions![0]!.paid = { material: "Graphene", count: 10 };
+    const at = (station: string) =>
+      journal([docked(1, "Kuwemaki", "Mitchell Ring")], {
+        location: {
+          system: "Kuwemaki",
+          station,
+          station_type: null,
+          docked: true,
+          dist_from_star_ls: null,
+        },
+        // Two in the backpack: they are not spent until moved to the locker on boarding.
+        locker: box([
+          ["healthmonitor", 1],
+          ["graphene", 3],
+        ]),
+        backpack: box([["healthmonitor", 2]]),
+      });
+    const rows = panel(owned, at("Mitchell Ring")).rows;
+    expect(rows).toContainEqual(
+      expect.objectContaining({ detail: "short 1 Health Monitor (have 1/2) · trade at stop 2" }),
+    );
+    owned.stops[0]!.status = "done";
+    for (const x of owned.stops[0]!.actions!) x.status = "done";
+    expect(panel(owned, at("Mitchell Ring")).rows).toContainEqual({
+      text: "  Trade for 2 Health Monitor",
+      detail: "have 3/10 Graphene",
+    });
+  });
+
   it("says to equip the suit to check a modification after a visit to its engineer", () => {
     const p = loadout();
     for (const a of p.stops[0]!.actions!) a.status = "done";
@@ -431,11 +464,31 @@ describe("ActionFinisher on foot", () => {
     await f.finish({ note: p, plans: [], journal: j, activity: null });
     await f.finish({ note: store.get(p.id)!, plans: [], journal: j, activity: null });
     expect(gear).toEqual([["dom", { suit_id: 77 }]]);
-    // A buy marked done by hand takes the newest such buy's ID.
+    // A buy marked done by hand takes the newest such buy of gear still owned, that no other
+    // gear key has.
     const hand = loadout();
     hand.stops[0]!.actions![0]!.status = "done";
-    expect(judgeBuild(hand, journal([buySuit(-100, 3, 55)])).gearIds).toEqual([
+    const dom = (id: number) => ({
+      id,
+      type: "tacticalsuit",
+      name: "Dominator",
+      grade: 3,
+      mods: [],
+    });
+    const buys = [buySuit(-200, 3, 54), buySuit(-100, 3, 55)];
+    expect(judgeBuild(hand, journal(buys, { suits: [dom(54), dom(55)] })).gearIds).toEqual([
       { gear: "dom", suit_id: 55 },
+    ]);
+    // 55 sold since: the older one, still owned.
+    hand.id = `${hand.id}-sold`;
+    expect(judgeBuild(hand, journal(buys, { suits: [dom(54)] })).gearIds).toEqual([
+      { gear: "dom", suit_id: 54 },
+    ]);
+    // 55 is another gear key's already: not this one's too.
+    hand.id = `${hand.id}-taken`;
+    hand.stops[1]!.actions!.push(act({ id: "other", kind: "upgrade_suit", suit_id: 55, grade: 5 }));
+    expect(judgeBuild(hand, journal(buys, { suits: [dom(54), dom(55)] })).gearIds).toEqual([
+      { gear: "dom", suit_id: 54 },
     ]);
     expect(store.get(p.id)!.stops[2]!.actions![0]!.suit_id).toBe(77);
   });

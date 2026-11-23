@@ -791,7 +791,8 @@ export function gearIdOf(a: Action, plan: Plan, journal: Journal): number | null
     const type = suitOf(a.suit)?.type ?? null;
     if (loadout?.suit_id != null) {
       const ls = journal.suits?.find((x) => x.id === loadout.suit_id);
-      if (!type || !ls || ls.type === type) return loadout.suit_id;
+      // A loadout suit the state does not list is taken only when the action names no type.
+      if (ls ? !type || ls.type === type : !type) return loadout.suit_id;
     }
     return type ? only((journal.suits ?? []).filter((x) => x.type === type)) : null;
   }
@@ -1011,6 +1012,7 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
 
   const matched = new Set<JournalEvent>();
   const visited = new Set<number>();
+  const order = visitOrder(plan);
   let lastMatch = -1;
   let actedAt = 0;
   const count = new Map<string, number>();
@@ -1042,14 +1044,14 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     if (f) flying = f;
     const moving = moved(e, place);
     if (moving !== undefined) place = moving;
-    // Docked at a stop since the plan started (or there when it started), or come to a
-    // settlement stop's landing area.
+    // Docked at a stop since the plan (or this lap) started, or come to a settlement stop's
+    // landing area.
     const here =
       e.event === "ApproachSettlement"
         ? { system: str(e.StarSystem) ?? place?.system ?? null, station: str(e.Name) }
         : place;
     if (here?.station && t > started && visited.size < plan.stops.length)
-      for (const si of visitOrder(plan))
+      for (const si of order)
         if (!visited.has(si) && atStop(plan.stops[si]!, here)) visited.add(si);
     if (e.event === "Docked" || (e.event === "Location" && e.Docked === true)) {
       const station = str(e.StationName);
@@ -1224,13 +1226,28 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
   // A bought suit's or weapon's ID, for the actions sharing its gear key that have none. A buy
   // marked done with no event (by hand, or bought before the plan) takes the newest such buy.
   const gearIds: BuildJudgement["gearIds"] = [];
+  // IDs a gear key has already: another buy cannot take them. Gear still owned only, when the
+  // journal state lists it (a suit sold since is not the plan's).
+  const taken = new Set<number>();
+  for (const x of list)
+    for (const v of [x.action.suit_id, x.action.weapon_id, x.gotId]) if (v != null) taken.add(v);
+  const owned = (kind: Action["kind"], id: number) => {
+    const have = kind === "buy_suit" ? journal.suits : journal.weapons;
+    return !have || have.some((g) => g.id === id);
+  };
   for (const entry of list) {
     const a = entry.action;
     if (!a.gear || !entry.done) continue;
     if (entry.gotId === null && (a.kind === "buy_suit" || a.kind === "buy_weapon")) {
       for (let i = events.length - 1; i >= 0 && entry.gotId === null; i--) {
         for (const r of rolesOf(events[i]!, flying, null)) {
-          if (r.gearId != null && matches(a, r, plan, plan.stops[entry.stop]!, boundId)) {
+          if (
+            r.gearId != null &&
+            !taken.has(r.gearId) &&
+            owned(a.kind, r.gearId) &&
+            matches(a, r, plan, plan.stops[entry.stop]!, boundId)
+          ) {
+            taken.add(r.gearId);
             entry.gotId = r.gearId;
             break;
           }

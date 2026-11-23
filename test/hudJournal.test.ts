@@ -890,6 +890,7 @@ describe("builds from the real ed-mcp journal reader", () => {
       }),
       ev("Synthesis", { Name: "FSD Basic", Materials: [] }),
       ev("Undocked", { StationName: "Port" }),
+      ev("ApproachSettlement", { Name: "Base", StarSystem: SYSTEM, BodyName: `${SYSTEM} 3` }),
       ev("Touchdown", { ...body, OnPlanet: true, PlayerControlled: true }),
       ev("Disembark", { ...body, SRV: true, OnPlanet: true }),
       ev("Liftoff", { ...body, OnPlanet: true, PlayerControlled: true }),

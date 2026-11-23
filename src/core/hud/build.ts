@@ -66,7 +66,8 @@ export const BUILD_EVENTS = [
   "Undocked",
   "Location",
   "FSDJump",
-  // Landing at a gather stop, and leaving it.
+  // Landing at a gather stop, and leaving it; coming to a settlement stop.
+  "ApproachSettlement",
   "Touchdown",
   "Liftoff",
   "Disembark",
@@ -631,14 +632,15 @@ function need(
   if ((a.kind === "trade_material" || a.kind === "trade_resource") && x.taken > 0)
     right.push(`${x.taken}/${a.received?.count ?? 1} received`);
   if (a.kind === "buy_resource" && x.taken > 0) right.push(`${x.taken}/${a.count ?? 1} bought`);
-  // Resources on foot, materials for a ship.
+  // Resources on foot, materials for a ship. Upgrades and trades spend from the ship locker only:
+  // the backpack's go to it on boarding.
   const have = (name: string, symbol?: string) =>
     FOOT.has(a.kind)
-      ? resourceCount(ctx.journal, name, symbol)
+      ? resourceCount({ locker: ctx.journal.locker }, name, symbol)
       : materialCount(ctx.journal.materials, name, symbol);
   // The first material short, with the stop that collects or trades for it.
   const mats =
-    a.kind === "trade_material" && a.paid
+    (a.kind === "trade_material" || a.kind === "trade_resource") && a.paid
       ? [{ name: a.paid.material, count: a.paid.count }]
       : a.kind === "collect_material" || a.kind === "collect_resource"
         ? []
@@ -648,7 +650,8 @@ function need(
     const got = have(m.name, "symbol" in m && m.symbol !== m.name ? m.symbol : undefined);
     if (got >= m.count) continue;
     short = true;
-    if (a.kind === "trade_material") out.detail = `have ${got}/${m.count} ${m.name}`;
+    if (a.kind === "trade_material" || a.kind === "trade_resource")
+      out.detail = `have ${got}/${m.count} ${m.name}`;
     else {
       const from = sourceOf(plan, c.judged, m.name, "symbol" in m ? m.symbol : undefined);
       // "(have 0/1)" only repeats the count short.

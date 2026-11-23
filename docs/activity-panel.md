@@ -241,9 +241,10 @@ journal state and events:
   (`suit_increasedammoreserves`).
 - Gear still to buy has a `gear` key in the plan. Its upgrades and modifications show "after
   buy"; once it is bought, the panel writes its ID into every action with that key.
-- Resources a step needs are counted in the ship locker and backpack: "short 1 Health Monitor
+- Resources a step needs are counted in the ship locker, which upgrades and trades spend from (the
+  backpack's go there when you board): "short 1 Health Monitor
   (have 1/2) · trade at stop 2". A bartender's offer varies, so a trade shows only what was
-  received.
+  received; what it pays shows when you are short ("have 3/10 Graphene").
 - None of these events says where you were, so they count wherever you do them.
 
 **With no build plan.** When you are docked where no build plan has work (not at one of its
