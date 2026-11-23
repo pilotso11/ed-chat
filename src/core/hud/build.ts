@@ -833,7 +833,8 @@ export function moduleName(symbol: unknown, localised?: unknown): string {
   // "int_hyperdrive_size5_class5", "hpt_pulselaser_gimbal_medium", "python_nx_armour_grade3".
   const first = words[0] === "int" || words[0] === "hpt" ? (words[1] ?? "") : "";
   const rest = first ? words.slice(2) : [];
-  // Only size, class and mount: a variant (a bi-weave shield, "_strong") keeps the game's name.
+  // Only size, class and mount: a variant (a bi-weave shield, "_fast"; a prismatic, "_strong") keeps
+  // the game's name.
   const plain = rest.every((w) => /^(size\d+|class\d|tiny)$/.test(w) || w in SIZES || w in MOUNTS);
   const name = str(localised);
   const game = name && !name.startsWith("$") ? name : null;
