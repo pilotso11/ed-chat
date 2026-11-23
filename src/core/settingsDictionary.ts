@@ -222,6 +222,12 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   "hud.build.doneShown": {
     text: 'Done actions listed at the current stop before they fold into one "✓ N done" row.',
   },
+  "hud.build.outfittingVisit": {
+    text:
+      "With no build plan that has work at the station, show what you did this visit while " +
+      "docked: modules bought, sold and stored, ships, engineering rolls and materials used. " +
+      "Undocking ends it.",
+  },
   "hud.mining": { text: "The mining panel." },
   "hud.mining.targets": {
     text:

@@ -210,8 +210,35 @@ shows (the note's, when both have one), else the one you acted on last. That pla
 the route keys and the arrival copy, and Claude is told it differs from the note. Swapping to a
 ship with its own build plan points the note at that plan.
 
-Known limits: an action done while ED Chat was not running is ticked off on the next start,
-but its stop waits for a route key. Without a build plan for the ship, nothing shows yet.
+**With no build plan.** When you are docked where no build plan has work (not at one of its
+stops with an action to do, and nothing done here is one of its actions), buying, selling,
+storing or moving a module, using the shipyard (a ship bought, sold, redeemed or transferred),
+or an engineer's roll shows what you did this visit:
+
+```
+OUTFITTING · Farseer Inc                              this visit
+Bought FSD 5A 5.1M · sold AFM Unit 2A 1.3M · stored 1
+FSD Increased Range G3 → G5 · 100%                     6 rolls
+Traded 2 · used 41 materials
+Ask Claude to plan a build to track what is left.
+```
+
+The modules bought and sold with their credits (more than two kinds by name only, or as a count
+and a total when the names do not fit two rows; a weapon with its size and mount, as "Pulse
+Laser 2G" for a medium gimballed one),
+and how many were stored, retrieved, transferred or moved; the ships; for each module
+engineered, its blueprint from the grade before the visit to the grade and quality of the last
+roll, and the number of rolls; an experimental applied; and the material trades and the
+materials the rolls and syntheses used. There is no target, so nothing is left to do. A
+synthesis, a material trade or a ship swap alone does not turn it on, though once it shows they
+are listed ("took out Krait MkII"). It ends when you undock, and the activity before it (a trade
+run, say) comes back; `hud.build.outfittingVisit` turns it off. The route rows still show under
+it. Choosing build mode with the hotkey, an engineering activity note, or swapping to a ship
+whose build plan has work, shows that plan instead while it has work to do.
+
+Known limits: an action done while ED Chat was not running is ticked off on the next start, and
+when that finishes its stop, the stop is marked done too. A stop whose actions were all marked
+done already when ED Chat started waits for a route key.
 
 ## Route
 
@@ -253,7 +280,9 @@ leaving the body goes back to exploration, when that mode is on. Launching a
 prospector limpet, prospecting, refining or cracking a rock turns on mining, and
 taking a passenger or delivery mission turns on passenger mode. Buying at a market
 (not limpets), or docking at a stop of the trade plan, turns on trade. Docking at a stop of a
-build plan, or doing one of its actions, turns on build. A jump alone starts nothing.
+build plan, or doing one of its actions, turns on build; with no build plan that has work at
+the station, so does using outfitting, the shipyard or an engineer while docked, until you
+undock. A jump alone starts nothing.
 
 Telling Claude what you are doing ("I'm doing massacres") sets the ed-mcp activity
 note, which the panel follows. Ctrl+Alt+Shift+P chooses a mode yourself: automatic,

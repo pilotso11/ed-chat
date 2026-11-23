@@ -136,6 +136,9 @@ const HudSchema = z.strictObject({
     .strictObject({
       // Done actions listed at the current stop before they fold into one "✓ N done" row.
       doneShown: z.number().int().min(0).max(20).default(3),
+      // With no build plan with work at the station, outfitting, the shipyard or an engineer used
+      // while docked shows what was done this visit, until undocking.
+      outfittingVisit: z.boolean().default(true),
     })
     .prefault({}),
   // The ed-mcp sync folder, for the activity note and plans. null: read it from the ed-mcp
