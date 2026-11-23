@@ -297,7 +297,7 @@
   {
     "name": "hud-build",
     "file": "Journal.2026-11-08T232641.01.log",
-    "until": "2026-11-08T23:58:45Z",
+    "until": "2026-11-08T23:48:30Z",
     "plan": {
       "title": "Explorer upgrade",
       "kind": "engineering",
@@ -325,6 +325,29 @@
               "blueprint": "Engine_Tuned",
               "grade": 5
             }
+          ],
+          "status": "done"
+        },
+        {
+          "system": "Wulganda",
+          "station": "Cassidy Orbital",
+          "purpose": "Alloys for the sensors",
+          "kind": "trader",
+          "actions": [
+            {
+              "id": "radiolic",
+              "kind": "trade_material",
+              "label": "Trade 12 Proto Light Alloys → 2 Proto Radiolic Alloys",
+              "status": "todo",
+              "paid": {
+                "material": "Proto Light Alloys",
+                "count": 12
+              },
+              "received": {
+                "material": "Proto Radiolic Alloys",
+                "count": 2
+              }
+            }
           ]
         },
         {
@@ -341,20 +364,6 @@
               "slot": "Slot05_Size5",
               "blueprint": "ShieldGenerator_Optimised",
               "grade": 5
-            },
-            {
-              "id": "radiolic",
-              "kind": "trade_material",
-              "label": "Trade 12 Proto Light Alloys → 2 Proto Radiolic Alloys",
-              "status": "todo",
-              "paid": {
-                "material": "Proto Light Alloys",
-                "count": 12
-              },
-              "received": {
-                "material": "Proto Radiolic Alloys",
-                "count": 2
-              }
             },
             {
               "id": "sensors",

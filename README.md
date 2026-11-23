@@ -35,7 +35,7 @@ The activity panel, built by ED Chat's own code from a commander's journals:
 
 | | |
 | --- | --- |
-| ![Upgrade panel at an engineer, with a material trade, rolls to go and the next stop](docs/images/hud-build.png) | **Builds and upgrades.** The plan's current stop with each step to take there (rolls, material trades, purchases), what each still needs, and the next stop. |
+| ![Upgrade panel on the way to a material trader, with the engineer stop after it](docs/images/hud-build.png) | **Builds and upgrades.** The plan's current stop with each step to take there (rolls, material trades, purchases), what each still needs, and the next stop. |
 | ![Exploration panel after scanning: a terraformable HMC and a water world in green, bio planets with their likely species](docs/images/hud-explore-scanned.png) | **Exploration.** The bodies worth scanning and mapping, with their values, and your credits an hour. |
 | ![Exobiology panel while sampling, with a bookmark back to the ship](docs/images/hud-exobiology.png) | **Exobiology.** Each species' samples and value, the likely species still to find, and whether this planet earns as well as your session. A bookmark (Ctrl+Alt+B) shows the way back to the ship. |
 | ![Massacre panel partway through a stack](docs/images/hud-massacre.png) | **Massacre.** Each giver's progress, and what each target still pays for each kill left, with ⚠ when it is time to take more missions. |
