@@ -399,8 +399,8 @@ export function keyClearStops(pick: {
 
 /**
  * How many bookmarks still to do in the plan (as written after clearing this one) read the same
- * as this one on its body: the panel shows them as one row with " (n)", so a note about clearing
- * one says how many are left.
+ * as this one on its body: the panel tells such rows apart with " (2)", " (3)", so a note about
+ * clearing one says how many are left.
  */
 export function alikeLeft(
   plan: Plan,
