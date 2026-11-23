@@ -121,8 +121,8 @@ describe("buys and sales", () => {
         market(2, "MarketBuy", "gold", 10),
       ]),
     ).toEqual([true]);
-    // Where the ship is is not in the events: the trade counts.
-    expect(done(p, [market(2, "MarketBuy", "gold", 10)])).toEqual([true]);
+    // Where the ship is is not in the events yet: it is no stop.
+    expect(done(p, [market(2, "MarketBuy", "gold", 10)])).toEqual([false]);
   });
 
   it("knows a game restarted while docked from its Location", () => {
@@ -172,6 +172,69 @@ describe("buys and sales", () => {
     ]);
     // Nothing bought or sold yet: an empty hold does not finish a sale.
     expect(done(p, [docked(1)], { ship, cargo: [] })).toEqual([false, false]);
+  });
+});
+
+describe("the hold, only while still docked where it was bought or sold", () => {
+  const ship = { id: 1, type: "python", cargo_capacity: 100 };
+  const p = () =>
+    plan([stop([act({ id: "buy", kind: "buy_commodity", commodity: "Gold", count: 100 })])]);
+  const bought = [docked(1), market(2, "MarketBuy", "gold", 96)];
+  const full = { ship, cargo: [cargo("Gold", 96), cargo("drones", 4)] };
+
+  it("finishes a short buy while docked there", () => {
+    expect(done(p(), bought, full)).toEqual([true]);
+  });
+
+  it("does not finish it once the ship left, though the hold is full", () => {
+    const left = [...bought, ev(3, "Undocked", { StationName: "Abraham Lincoln" })];
+    expect(done(p(), left, full)).toEqual([false]);
+    // Docked there again: another docking, and its buys are not the hold that filled.
+    expect(done(p(), [...left, docked(4)], full)).toEqual([false]);
+    // A relog while docked is the same docking.
+    const relog = ev(3, "Location", {
+      StarSystem: "Sol",
+      StationName: "Abraham Lincoln",
+      Docked: true,
+    });
+    expect(done(p(), [...bought, relog], full)).toEqual([true]);
+  });
+});
+
+describe("a loop's lap", () => {
+  it("counts the events after the lap began, not the one at its start", () => {
+    // Lap 1 ended with a sale at 10, and ed-mcp started lap 2 at that sale's time.
+    const lap2 = plan(
+      [
+        stop([act({ id: "sell", kind: "sell_commodity", commodity: "Gold", count: 10 })]),
+        stop([act({ id: "buy", kind: "buy_commodity", commodity: "Silver", count: 10 })], {
+          station: "Other",
+        }),
+      ],
+      { repeat: true, lap: 2, started_at: iso(10) },
+    );
+    const events = [
+      docked(5, "Other"),
+      market(10, "MarketBuy", "silver", 10),
+      docked(20),
+      market(21, "MarketSell", "gold", 10),
+    ];
+    // The buy at 10 was lap 1's, not lap 2's.
+    expect(done(lap2, events)).toEqual([true, false]);
+  });
+
+  it("writes a hand mark again on the next lap", () => {
+    const at = (lap: number, started: number) => {
+      const p = plan([stop([act({ id: "f", kind: "refuel", status: "done" })])], {
+        id: "laps",
+        repeat: true,
+        lap,
+        started_at: iso(started),
+        updated_at: iso(100),
+      });
+      return judgeBuild(p, journal([docked(1), ev(50, "RefuelAll")])).actions[0]!.write?.key;
+    };
+    expect(at(1, 0)).not.toEqual(at(2, 30));
   });
 });
 

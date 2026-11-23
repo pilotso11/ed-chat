@@ -537,9 +537,12 @@ function needOf(a: Action): number {
   return 1;
 }
 
-/** Whether an event where the ship was (null: unknown) is at a stop. */
+/**
+ * Whether an event where the ship was is at a stop. Where the events do not say yet (null), it is
+ * no stop: nothing counts until a Docked, Location or jump gives the place.
+ */
 function atStop(s: Stop, place: Place | null): boolean {
-  if (!place) return true;
+  if (!place) return false;
   if (!same(s.system, place.system)) return false;
   return !s.station || same(s.station, place.station);
 }
@@ -581,7 +584,8 @@ export interface BuildJudgement {
 }
 
 /**
- * When an action counts journal events from: its own started_at (a lap or a mission save sets
+ * When an action counts journal events after (ed-mcp's schema: events after started_at, not at
+ * it; a new lap starts at the time of the event that finished the last one): its own started_at (a lap or a mission save sets
  * it), else the build's, else the plan's (a trade or mission save sets it), else when the plan
  * was made. With no action, the plan's.
  */
@@ -657,6 +661,8 @@ const planKey = (plan: Plan) =>
     plan.id,
     plan.updated_at,
     plan.build?.ship_id ?? "",
+    plan.lap ?? "",
+    plan.started_at ?? "",
     ...plan.stops.map(
       (s) =>
         s.status +
@@ -721,6 +727,8 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     need: number;
     /** A CargoDepot showed all of its mission's cargo collected or delivered. */
     full: boolean;
+    /** The docking (dock.id) of its newest claim, or null. */
+    claimDock: number | null;
   };
   const list: Entry[] = [];
   for (const si of visitOrder(plan)) {
@@ -749,6 +757,7 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
         start: startOf(plan, a),
         need: needOf(a),
         full: false,
+        claimDock: null,
       });
     }
   }
@@ -773,6 +782,10 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
   let flying: ShipOf = { id: null, type: null };
   // Where the ship is docked, for the actions done at a stop's station: unknown until an event says.
   let place: Place | null = null;
+  // The docking the ship is in, numbered, or null when not docked: a relog while docked (Location,
+  // Docked true, at the same station) is the same docking.
+  let dock: { id: number; station: string | null } | null = null;
+  let docks = 0;
   // The earliest any action counts from: an event before it is no action's.
   const earliest = Math.min(started, ...list.map((x) => x.start));
   // The modules fitted, by ShipID and slot; and the index of each ship's newest Loadout.
@@ -794,6 +807,18 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     if (f) flying = f;
     const moving = moved(e, place);
     if (moving !== undefined) place = moving;
+    if (e.event === "Docked" || (e.event === "Location" && e.Docked === true)) {
+      const station = str(e.StationName);
+      if (!(e.event === "Location" && dock && same(dock.station, station)))
+        dock = { id: ++docks, station };
+    } else if (
+      e.event === "Undocked" ||
+      e.event === "FSDJump" ||
+      e.event === "Died" ||
+      (e.event === "CarrierJump" && e.Docked !== true) ||
+      (e.event === "Location" && e.Docked !== true)
+    )
+      dock = null;
     if (e.event === "Loadout" && f?.id != null) {
       const slots = new Map<string, Fitted>();
       for (const m of objs(e.Modules)) {
@@ -837,7 +862,7 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
       e.event === "EngineerProgress" &&
       !Array.isArray(e.Engineers) &&
       e.Progress === "Unlocked" &&
-      t >= started &&
+      t > started &&
       list.some(
         (x) => x.action.kind === "unlock_engineer" && same(x.action.engineer, str(e.Engineer)),
       )
@@ -862,13 +887,13 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
         mark(i, e);
         if (!Number.isNaN(t)) actedAt = Math.max(actedAt, t);
       }
-      if (left <= 0 || Number.isNaN(t) || t < earliest || !shipOk(r.ship)) continue;
+      if (left <= 0 || Number.isNaN(t) || t <= earliest || !shipOk(r.ship)) continue;
       // Actions marked done by hand take the events before they were marked first; then the
       // open actions, in plan order.
       const order = t <= updated ? adoptThenOpen : opens;
       for (const entry of order) {
         const need = entry.need;
-        if (entry.full || entry.taken >= need || t < entry.start) continue;
+        if (entry.full || entry.taken >= need || t <= entry.start) continue;
         if (!matches(entry.action, r, plan, plan.stops[entry.stop]!, boundId)) continue;
         const take = Math.min(left, need - entry.taken);
         if (r.all) entry.full = true;
@@ -879,6 +904,7 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
           ...(BY_SUM.has(entry.action.kind) ? { amount: take } : {}),
         });
         entry.lastClaim = i;
+        entry.claimDock = dock?.id ?? null;
         left -= take;
         mark(i, e);
         actedAt = Math.max(actedAt, t);
@@ -891,7 +917,7 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
       }
     }
     // A craft at a lower grade than an open engineer action asks for: its progress, for the mode.
-    if (e.event === "EngineerCraft" && !matched.has(e) && t >= started && shipOk(flying)) {
+    if (e.event === "EngineerCraft" && !matched.has(e) && t > started && shipOk(flying)) {
       const slot = str(e.Slot);
       const bp = str(e.BlueprintName);
       if (
@@ -908,6 +934,9 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
   }
 
   const fittedNow = boundId !== null ? fittedBy.get(boundId) : undefined;
+  // The plan and its lap (and start), for a write that names no event: an action marked by hand on
+  // lap 2 is not lap 1's, which was written already.
+  const lapKey = `${plan.id}|${plan.lap ?? 1}|${plan.started_at ?? ""}`;
   for (const entry of list) {
     const a = entry.action;
     const slot = lower(a.slot);
@@ -920,8 +949,13 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
           a.kind === "collect_material"
             ? materialCount(journal.materials, a.material) >= (a.count ?? 1)
             : UNLOCKED(journal, a.engineer);
-        if (doneNow) entry.write = { status: "done", key: `${plan.id}|${a.id}` };
-      } else if (entry.full || entry.taken >= entry.need || holdDone(entry, journal)) {
+        if (doneNow) entry.write = { status: "done", key: `${lapKey}|${a.id}` };
+      } else if (
+        entry.full ||
+        entry.taken >= entry.need ||
+        // The hold as it is now says what was done at the stop only in the docking of the claims.
+        (entry.claimDock !== null && entry.claimDock === dock?.id && holdDone(entry, journal))
+      ) {
         doneNow = true;
         const lastRef = entry.claims.at(-1)!;
         entry.write = {
@@ -933,14 +967,14 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
       entry.done = doneNow;
     } else if (entry.mode === "adopt") {
       // Written once, even empty, so the real event is not counted again for the next action.
-      entry.write = { done_by: entry.claims, key: `${plan.id}|${a.id}|adopt` };
+      entry.write = { done_by: entry.claims, key: `${lapKey}|${a.id}|adopt` };
     }
     if (entry.done && boundId !== null)
       entry.notFitted = notFitted(entry, fittedNow, loadoutAt.get(boundId));
   }
   return {
     plan,
-    actions: list.map(({ mode: _mode, start: _start, need: _need, full: _full, ...x }) => x),
+    actions: list.map(({ mode: _m, start: _s, need: _n, full: _f, claimDock: _d, ...x }) => x),
     boundId: !fromPlan && boundId !== null ? boundId : null,
     shipId: boundId,
     matched,
@@ -952,7 +986,8 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
 /**
  * A buy or sale under its count, done as the hold shows: a buy that filled the hold (the plan's
  * tons did not fit, with limpets aboard, say) and a sale that left none of it aboard (less was
- * bought than planned). Only once some of it was bought or sold.
+ * bought than planned). Only once some of it was bought or sold, and (the caller checks) while
+ * still docked where it was: the hold now says nothing about a stop left behind.
  */
 function holdDone(x: ActionJudgement, journal: Journal): boolean {
   const a = x.action;

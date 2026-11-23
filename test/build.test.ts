@@ -497,7 +497,7 @@ describe("the build panel", () => {
     };
     expect(judgeBuild(plan, full).actions[0]).toMatchObject({
       done: true,
-      write: { status: "done", key: "krait|c1" },
+      write: { status: "done", key: "krait|1||c1" },
     });
     expect(landedAt([land, ev(6, "Liftoff")])).toBeNull();
     // The ship sent away while in the SRV is not leaving; disembarking is the same landing.
@@ -797,7 +797,7 @@ describe("judging ship actions", () => {
     const j = judgeBuild(plan, journal([buy(1)]));
     expect(j.actions[0]!.write).toEqual({
       done_by: [{ at: iso(1), event: "ModuleBuy", n: 0, role: "bought" }],
-      key: "krait|b0|adopt",
+      key: "krait|1||b0|adopt",
     });
     // So the next identical action stays open.
     expect(j.actions[1]!.done).toBe(false);
