@@ -6,6 +6,7 @@ import {
   type Plan,
 } from "ed-mcp/journal";
 import { num, objs, same, str } from "./json.js";
+import { held, tradable, used } from "./hold.js";
 import { commodityKey } from "./mining.js";
 import { isRun } from "./passenger.js";
 import {
@@ -571,18 +572,6 @@ const fromVisit = (m: Market, dock: Dock) => {
 const atStop = (s: Stop, dock: Dock | null) =>
   dock !== null && stopAt(s, dock.system, dock.station);
 
-/** Cargo the ship may trade: not limpets, not a mission's, not stolen (a black market's). */
-const tradable = (c: JournalState["cargo"][number]) =>
-  c.count > 0 && c.mission_id === null && !c.stolen && commodityKey(c.name) !== "drones";
-
-/** Tons of a commodity aboard that the ship may trade. */
-function held(cargo: JournalState["cargo"], commodity: string): number {
-  const key = commodityKey(commodity);
-  return cargo
-    .filter((c) => tradable(c) && commodityKey(c.name) === key)
-    .reduce((n, c) => n + c.count, 0);
-}
-
 /** Cargo aboard that was bought as trade (the replay's tons): not mined ore or salvage. */
 const traded = (c: JournalState["cargo"][number], journal: TradeJournal) =>
   tradable(c) && (journal.tons.get(commodityKey(c.name)) ?? 0) > 0;
@@ -614,8 +603,7 @@ function actionDone(c: Cargo, hold: Hold, events: JournalEvent[], dock: Dock): b
     );
   if (c.action === "sell") return aboard === 0 && here.some((e) => e.event === "MarketSell");
   if (!here.some((e) => e.event === "MarketBuy") || aboard === 0) return false;
-  const used = hold.cargo.reduce((n, x) => n + x.count, 0);
-  return aboard >= c.amount || (hold.capacity !== null && used >= hold.capacity);
+  return aboard >= c.amount || (hold.capacity !== null && used(hold.cargo) >= hold.capacity);
 }
 
 /**

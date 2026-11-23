@@ -428,6 +428,17 @@ const VERB: Partial<Record<Action["kind"], string>> = {
   trade_material: "trade",
   collect_material: "collect",
   synthesis: "synthesise",
+  buy_commodity: "buy goods",
+  sell_commodity: "sell goods",
+  accept_mission: "take mission",
+  complete_mission: "hand in",
+  collect_cargo: "collect cargo",
+  deliver_cargo: "deliver",
+  sell_data: "sell data",
+  redeem_vouchers: "redeem",
+  refuel: "refuel",
+  repair: "repair",
+  restock: "restock",
 };
 
 /** Short names of the core slots, for "after FSD G5". */

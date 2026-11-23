@@ -1,4 +1,5 @@
 import {
+  ACTION_EVENTS,
   normaliseModule,
   visitOrder,
   type DoneBy,
@@ -6,16 +7,19 @@ import {
   type JournalState,
   type Plan,
 } from "ed-mcp/journal";
+import { held, used } from "./hold.js";
 import { num, objs, same, str, type Obj } from "./json.js";
+import { commodityKey } from "./mining.js";
 
-// Judging a build plan's actions from the journal: which events did which action, what is done,
-// and how far an engineer action has got. The panel (build.ts) shows it; BuildFinisher
-// (buildStops.ts) writes it to the plan.
+// Judging a plan's stop actions from the journal: which events did which action, what is done,
+// and how far an engineer action has got. Every plan with actions is judged here: builds, trade
+// routes and mission runs. The panels (build.ts, trade.ts) show it; ActionFinisher
+// (actionStops.ts) writes it to the plan.
 
 export type Stop = Plan["stops"][number];
 export type Action = NonNullable<Stop["actions"]>[number];
 
-/** The ship action kinds the panel judges. On-foot kinds wait for a later phase. */
+/** The action kinds judged by one event each. On-foot kinds wait for a later phase. */
 const BY_EVENT = new Set<Action["kind"]>([
   "buy_module",
   "retrieve_module",
@@ -30,19 +34,59 @@ const BY_EVENT = new Set<Action["kind"]>([
   "engineer",
   "experimental",
   "synthesis",
+  "complete_mission",
+  "sell_data",
+  "redeem_vouchers",
+  "refuel",
+  "repair",
+  "restock",
 ]);
-const BY_SUM = new Set<Action["kind"]>(["trade_material"]);
+/** The kinds whose events add up to a count: the tons, items or materials received. */
+const BY_SUM = new Set<Action["kind"]>([
+  "trade_material",
+  "buy_commodity",
+  "sell_commodity",
+  "collect_cargo",
+  "deliver_cargo",
+]);
 const BY_STATE = new Set<Action["kind"]>(["collect_material", "unlock_engineer"]);
+/**
+ * The kinds done at the stop's own station (or in its system, for a stop with none): a sale or a
+ * refuel elsewhere is not this stop's. A mission is known by its ID wherever it is handed in.
+ */
+const AT_STOP = new Set<Action["kind"]>([
+  "buy_commodity",
+  "sell_commodity",
+  "sell_data",
+  "redeem_vouchers",
+  "refuel",
+  "repair",
+  "restock",
+]);
 
-/** Whether the panel judges an action of this kind from the journal. */
+/** Whether the judge judges an action of this kind from the journal. */
 export const judged = (a: Action) =>
   BY_EVENT.has(a.kind) || BY_SUM.has(a.kind) || BY_STATE.has(a.kind);
 
-/** A plan with stop actions for a ship (not a suit loadout): the build panel follows it. */
+/**
+ * The kinds any plan's stops can have (ed-mcp's ACTION_EVENTS): trade, missions and the station's
+ * services. Every other kind is a build's.
+ */
+const STOP_KINDS = new Set<string>(Object.keys(ACTION_EVENTS));
+
+/** Whether a plan has stop actions. */
+export const hasActions = (plan: Plan | null | undefined): plan is Plan =>
+  !!plan && plan.stops.some((s) => (s.actions?.length ?? 0) > 0);
+
+/**
+ * A build plan for a ship (not a suit loadout): the build panel follows it. A plan with a build,
+ * or with stop actions of a build's kinds; a trade route or a mission run, whose actions are only
+ * buys, sales, missions and services, is not one.
+ */
 export const isBuildPlan = (plan: Plan | null | undefined): plan is Plan =>
-  !!plan &&
+  hasActions(plan) &&
   plan.build?.target !== "suit_loadout" &&
-  plan.stops.some((s) => (s.actions?.length ?? 0) > 0);
+  (!!plan.build || plan.stops.some((s) => s.actions?.some((a) => !STOP_KINDS.has(a.kind))));
 
 /** An engineer action's target grade: G5 when the plan gives none. */
 export const targetGrade = (a: Pick<Action, "grade">) => a.grade ?? 5;
@@ -80,7 +124,17 @@ interface Role {
     | "experimental"
     | "received"
     | "synthesised"
-    | "unlocked";
+    | "unlocked"
+    | "goods_bought"
+    | "goods_sold"
+    | "completed"
+    | "collected"
+    | "delivered"
+    | "data_sold"
+    | "redeemed"
+    | "refuelled"
+    | "repaired"
+    | "restocked";
   /** The module, material, ship type, recipe or technology, compared lower case. */
   item: string | null;
   /** The game's name for a material, beside its symbol. */
@@ -95,6 +149,15 @@ interface Role {
   broker?: string | null;
   /** 1, or a trade's quantity received. */
   amount: number;
+  /** A market trade's commodity, by every name the event gives (commodityKey()). */
+  goods?: string[];
+  missionId?: number | null;
+  /** A CargoDepot that shows all of the mission's cargo collected or delivered. */
+  all?: boolean;
+  /** Data sold: "exploration" or "organic". A voucher redeemed: "bounty", "combat_bond", ... */
+  sort?: string | null;
+  /** Where the ship was docked (the station null in space), or null when the events do not say. */
+  place?: Place | null;
   /** The ship the event is for; null for one that is not for a ship (materials, remote storage). */
   ship: ShipOf | null;
 }
@@ -103,8 +166,48 @@ function shipOf(e: JournalEvent): ShipOf {
   return { id: num(e.ShipID), type: lower(e.Ship) };
 }
 
+/** Where the ship is, from the events: docked at a station, or in a system. */
+interface Place {
+  system: string | null;
+  station: string | null;
+}
+
+/** Where the ship is after an event, or undefined when the event does not move it. */
+function moved(e: JournalEvent, was: Place | null): Place | null | undefined {
+  switch (e.event) {
+    case "Docked":
+      return { system: str(e.StarSystem) ?? was?.system ?? null, station: str(e.StationName) };
+    case "Location":
+    case "CarrierJump":
+      return {
+        system: str(e.StarSystem),
+        station: e.Docked === true ? str(e.StationName) : null,
+      };
+    case "FSDJump":
+      return { system: str(e.StarSystem), station: null };
+    case "Undocked":
+      return was ? { system: was.system, station: null } : null;
+    case "Died":
+    case "LoadGame":
+      // Somewhere the next Location says.
+      return null;
+    default:
+      return undefined;
+  }
+}
+
+/** The kind of a voucher in a plan, from RedeemVoucher's Type. */
+const voucherOf = (type: unknown) => {
+  const t = lower(type);
+  return t === "combatbond" ? "combat_bond" : t;
+};
+
+/** Every key a commodity goes by in an event: its internal and its game name. */
+const goodsOf = (...names: unknown[]) =>
+  names.filter((x): x is string => typeof x === "string" && x !== "").map(commodityKey);
+
 /** The roles an event plays. `flying` is the ship flown at the time, for EngineerCraft. */
-function rolesOf(e: JournalEvent, flying: ShipOf): Role[] {
+function rolesOf(e: JournalEvent, flying: ShipOf, place: Place | null): Role[] {
   const one = (r: Omit<Role, "name" | "amount"> & { name?: string; amount?: number }): Role => ({
     name: r.kind,
     amount: 1,
@@ -229,6 +332,63 @@ function rolesOf(e: JournalEvent, flying: ShipOf): Role[] {
     }
     case "Synthesis":
       return [one({ kind: "synthesised", item: lower(e.Name), ship: null })];
+    case "MarketBuy":
+    case "MarketSell": {
+      const q = num(e.Count) ?? 0;
+      if (q <= 0) return [];
+      return [
+        one({
+          kind: e.event === "MarketBuy" ? "goods_bought" : "goods_sold",
+          item: null,
+          goods: goodsOf(e.Type, e.Type_Localised),
+          amount: q,
+          place,
+          ship: null,
+        }),
+      ];
+    }
+    case "MissionCompleted":
+      return [one({ kind: "completed", item: null, missionId: num(e.MissionID), ship: null })];
+    case "CargoDepot": {
+      const collect = e.UpdateType === "Collect";
+      if (!collect && e.UpdateType !== "Deliver") return [];
+      const q = num(e.Count) ?? 0;
+      if (q <= 0) return [];
+      const total = num(e.TotalItemsToDeliver);
+      const so = num(collect ? e.ItemsCollected : e.ItemsDelivered);
+      return [
+        one({
+          kind: collect ? "collected" : "delivered",
+          item: null,
+          missionId: num(e.MissionID),
+          amount: q,
+          all: total !== null && so !== null && so >= total,
+          ship: null,
+        }),
+      ];
+    }
+    case "MultiSellExplorationData":
+    case "SellExplorationData":
+    case "SellOrganicData":
+      return [
+        one({
+          kind: "data_sold",
+          item: null,
+          sort: e.event === "SellOrganicData" ? "organic" : "exploration",
+          place,
+          ship: null,
+        }),
+      ];
+    case "RedeemVoucher":
+      return [one({ kind: "redeemed", item: null, sort: voucherOf(e.Type), place, ship: null })];
+    case "RefuelAll":
+    case "RefuelPartial":
+      return [one({ kind: "refuelled", item: null, place, ship: null })];
+    case "RepairAll":
+    case "Repair":
+      return [one({ kind: "repaired", item: null, place, ship: null })];
+    case "BuyAmmo":
+      return [one({ kind: "restocked", item: null, place, ship: null })];
     case "TechnologyBroker":
       return objs(e.ItemsUnlocked).map((x, i) =>
         one({
@@ -280,9 +440,32 @@ function fittedOf(m: Obj): Fitted {
 }
 
 /** Whether an event of a kind finishes an action, for the plan's ship. */
-function matches(a: Action, r: Role, plan: Plan, boundId: number | null): boolean {
+function matches(a: Action, r: Role, plan: Plan, stop: Stop, boundId: number | null): boolean {
   const sameMod = () => !!a.module && mod(a.module) === r.item;
+  if (AT_STOP.has(a.kind) && !atStop(stop, r.place ?? null)) return false;
+  const sameGoods = () => !!a.commodity && !!r.goods?.includes(commodityKey(a.commodity));
+  const sameMission = () => a.mission_id !== undefined && r.missionId === a.mission_id;
   switch (a.kind) {
+    case "buy_commodity":
+      return r.kind === "goods_bought" && sameGoods();
+    case "sell_commodity":
+      return r.kind === "goods_sold" && sameGoods();
+    case "complete_mission":
+      return r.kind === "completed" && sameMission();
+    case "collect_cargo":
+      return r.kind === "collected" && sameMission();
+    case "deliver_cargo":
+      return r.kind === "delivered" && sameMission();
+    case "sell_data":
+      return r.kind === "data_sold" && (!a.data || a.data === r.sort);
+    case "redeem_vouchers":
+      return r.kind === "redeemed" && (!a.voucher || a.voucher === r.sort);
+    case "refuel":
+      return r.kind === "refuelled";
+    case "repair":
+      return r.kind === "repaired";
+    case "restock":
+      return r.kind === "restocked";
     case "buy_module":
       if (r.kind !== "bought" || !sameMod()) return false;
       // Bought straight into storage counts only for a buy that names no slot.
@@ -341,7 +524,25 @@ function matches(a: Action, r: Role, plan: Plan, boundId: number | null): boolea
 }
 
 /** How much of an action's role it takes to be done: a trade's count, else one event. */
-const needOf = (a: Action) => (BY_SUM.has(a.kind) ? Math.max(1, a.received?.count ?? 1) : 1);
+/**
+ * How much of an action's role it takes to be done: a trade's count, the tons to buy or sell, the
+ * cargo to collect or deliver, else one event. A collect or deliver with no count is done only by
+ * the CargoDepot that shows all of it (Infinity here).
+ */
+function needOf(a: Action): number {
+  if (a.kind === "trade_material") return Math.max(1, a.received?.count ?? 1);
+  if (a.kind === "collect_cargo" || a.kind === "deliver_cargo")
+    return a.count !== undefined ? Math.max(1, a.count) : Infinity;
+  if (BY_SUM.has(a.kind)) return Math.max(1, a.count ?? 1);
+  return 1;
+}
+
+/** Whether an event where the ship was (null: unknown) is at a stop. */
+function atStop(s: Stop, place: Place | null): boolean {
+  if (!place) return true;
+  if (!same(s.system, place.system)) return false;
+  return !s.station || same(s.station, place.station);
+}
 
 /** What the journal says about one action. */
 export interface ActionJudgement {
@@ -379,8 +580,13 @@ export interface BuildJudgement {
   actedAt: number;
 }
 
-/** When the plan's actions count from: build.started_at, else when the plan was made. */
-const startOf = (plan: Plan) => Date.parse(plan.build?.started_at ?? plan.created_at) || 0;
+/**
+ * When an action counts journal events from: its own started_at (a lap or a mission save sets
+ * it), else the build's, else the plan's (a trade or mission save sets it), else when the plan
+ * was made. With no action, the plan's.
+ */
+const startOf = (plan: Plan, a?: Action) =>
+  Date.parse(a?.started_at ?? plan.build?.started_at ?? plan.started_at ?? plan.created_at) || 0;
 
 /** The material count in the inventory, by symbol or name, whatever the case. */
 export function materialCount(
@@ -408,8 +614,13 @@ const UNLOCKED = (journal: Pick<JournalState, "engineers">, name: string | undef
 
 type Journal = Pick<JournalState, "materials" | "engineers"> & {
   events: JournalEvent[];
-  /** The ship flown now: a bought hull whose delivery is before the journal's window. */
-  ship?: Pick<JournalState["ship"], "id" | "type">;
+  /**
+   * The ship flown now: a bought hull whose delivery is before the journal's window; and its
+   * hold's size, for a buy that fills it.
+   */
+  ship?: Pick<JournalState["ship"], "id" | "type"> & { cargo_capacity?: number | null };
+  /** The hold now, for a buy that fills it and a sale that empties it. */
+  cargo?: JournalState["cargo"];
 };
 
 /** The newest judgement of each plan, by plan ID. */
@@ -432,6 +643,8 @@ function journalKey(journal: Journal): string {
     unlocked,
     journal.ship?.id ?? "",
     journal.ship?.type ?? "",
+    journal.ship?.cargo_capacity ?? "",
+    (journal.cargo ?? []).map((c) => `${c.name}:${c.count}:${c.mission_id}:${c.stolen}`).join(","),
   ].join("|");
 }
 
@@ -501,7 +714,15 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     return !shipType || ship.type === shipType;
   };
 
-  const list: (ActionJudgement & { mode: "reserved" | "adopt" | "open" | "skip" })[] = [];
+  type Entry = ActionJudgement & {
+    mode: "reserved" | "adopt" | "open" | "skip";
+    /** When it counts events from (startOf()), and how much it takes (needOf()). */
+    start: number;
+    need: number;
+    /** A CargoDepot showed all of its mission's cargo collected or delivered. */
+    full: boolean;
+  };
+  const list: Entry[] = [];
   for (const si of visitOrder(plan)) {
     for (const a of plan.stops[si]!.actions ?? []) {
       const mode =
@@ -525,6 +746,9 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
         fitted: null,
         notFitted: false,
         mode,
+        start: startOf(plan, a),
+        need: needOf(a),
+        full: false,
       });
     }
   }
@@ -547,6 +771,10 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
   let actedAt = 0;
   const count = new Map<string, number>();
   let flying: ShipOf = { id: null, type: null };
+  // Where the ship is docked, for the actions done at a stop's station: unknown until an event says.
+  let place: Place | null = null;
+  // The earliest any action counts from: an event before it is no action's.
+  const earliest = Math.min(started, ...list.map((x) => x.start));
   // The modules fitted, by ShipID and slot; and the index of each ship's newest Loadout.
   const fittedBy = new Map<number, Map<string, Fitted>>();
   const loadoutAt = new Map<number, number>();
@@ -564,6 +792,8 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     const t = Date.parse(e.timestamp);
     const f = flown(e);
     if (f) flying = f;
+    const moving = moved(e, place);
+    if (moving !== undefined) place = moving;
     if (e.event === "Loadout" && f?.id != null) {
       const slots = new Map<string, Fitted>();
       for (const m of objs(e.Modules)) {
@@ -614,7 +844,7 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     )
       mark(i, e);
 
-    for (const r of rolesOf(e, flying)) {
+    for (const r of rolesOf(e, flying, place)) {
       let left = r.amount;
       for (const res of reserved.get(`${refKey(ref)}|${r.name}`) ?? []) {
         left -= res.amount;
@@ -632,14 +862,16 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
         mark(i, e);
         if (!Number.isNaN(t)) actedAt = Math.max(actedAt, t);
       }
-      if (left <= 0 || Number.isNaN(t) || t < started || !shipOk(r.ship)) continue;
+      if (left <= 0 || Number.isNaN(t) || t < earliest || !shipOk(r.ship)) continue;
       // Actions marked done by hand take the events before they were marked first; then the
       // open actions, in plan order.
       const order = t <= updated ? adoptThenOpen : opens;
       for (const entry of order) {
-        const need = needOf(entry.action);
-        if (entry.taken >= need || !matches(entry.action, r, plan, boundId)) continue;
+        const need = entry.need;
+        if (entry.full || entry.taken >= need || t < entry.start) continue;
+        if (!matches(entry.action, r, plan, plan.stops[entry.stop]!, boundId)) continue;
         const take = Math.min(left, need - entry.taken);
+        if (r.all) entry.full = true;
         entry.taken += take;
         entry.claims.push({
           ...ref,
@@ -654,6 +886,8 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
         if (entry.action.kind === "buy_ship" && entry.taken >= need && boundId === null)
           armed = armFor(entry.action);
         if (left <= 0 || !BY_SUM.has(entry.action.kind)) break;
+        // The rest of a CargoDepot's count is that mission's: no other action's.
+        if (r.all) break;
       }
     }
     // A craft at a lower grade than an open engineer action asks for: its progress, for the mode.
@@ -687,7 +921,7 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
             ? materialCount(journal.materials, a.material) >= (a.count ?? 1)
             : UNLOCKED(journal, a.engineer);
         if (doneNow) entry.write = { status: "done", key: `${plan.id}|${a.id}` };
-      } else if (entry.taken >= needOf(a)) {
+      } else if (entry.full || entry.taken >= entry.need || holdDone(entry, journal)) {
         doneNow = true;
         const lastRef = entry.claims.at(-1)!;
         entry.write = {
@@ -706,13 +940,30 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
   }
   return {
     plan,
-    actions: list.map(({ mode: _mode, ...x }) => x),
+    actions: list.map(({ mode: _mode, start: _start, need: _need, full: _full, ...x }) => x),
     boundId: !fromPlan && boundId !== null ? boundId : null,
     shipId: boundId,
     matched,
     lastMatch,
     actedAt,
   };
+}
+
+/**
+ * A buy or sale under its count, done as the hold shows: a buy that filled the hold (the plan's
+ * tons did not fit, with limpets aboard, say) and a sale that left none of it aboard (less was
+ * bought than planned). Only once some of it was bought or sold.
+ */
+function holdDone(x: ActionJudgement, journal: Journal): boolean {
+  const a = x.action;
+  const cargo = journal.cargo;
+  if (x.taken <= 0 || !cargo) return false;
+  if (a.kind === "buy_commodity") {
+    const capacity = journal.ship?.cargo_capacity ?? null;
+    return capacity !== null && used(cargo) >= capacity;
+  }
+  if (a.kind === "sell_commodity") return !!a.commodity && held(cargo, a.commodity) === 0;
+  return false;
 }
 
 /**
