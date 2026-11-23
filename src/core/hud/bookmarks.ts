@@ -85,12 +85,23 @@ export const BIO_NOTE = "ED Chat keeps this label up to date from the journal.";
 
 /**
  * Whether the panel redraws this bio bookmark's label: the key made it and it was not renamed.
- * Bookmarks made before the note have no notes at all; their "Bio: " label is the key's too.
+ * Bookmarks made before the note have no notes; their label is the key's only when it is a list
+ * of names ("Bio: Frutexa Acus, Bacterium"), not words someone wrote.
  */
-export const ownBioLabel = (s: Stop): boolean =>
-  s.kind === "exobiology" &&
-  (s.notes === BIO_NOTE || !s.notes) &&
-  (s.label ?? s.purpose).startsWith("Bio: ");
+export function ownBioLabel(s: Stop): boolean {
+  const label = s.label ?? s.purpose;
+  if (s.kind !== "exobiology" || !label.startsWith("Bio: ")) return false;
+  if (s.notes === BIO_NOTE) return true;
+  return (
+    !s.notes &&
+    label
+      .slice(5)
+      .split(", ")
+      .every((n) => KEY_NAME.test(n))
+  );
+}
+/** A genus or species name, as the key listed them: one to three capitalised words. */
+const KEY_NAME = /^[A-Z][a-z]+( [A-Z][a-z]+){0,2}$/;
 
 /**
  * What a bookmark's row says. A bio bookmark that the key made shows what is still to sample on
@@ -353,7 +364,9 @@ export function bookmarksToClear(input: {
   // The first of the nearest: a stable sort keeps the plan's order among equals.
   const nearest = [...body].sort((a, b) => far(a) - far(b))[0]!;
   if (body.length > 1 && far(nearest) === Infinity) {
-    return at
+    // With a saved position for some, the player's would tell; with none saved, it never can.
+    const saved = body.some((i) => stopPosition(plan.stops[i]!));
+    return at || !saved
       ? { stops: body, whole: false, unsure: "bookmarks" }
       : { stops: [nearest], whole: false, unsure: "you" };
   }

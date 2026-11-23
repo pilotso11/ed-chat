@@ -531,10 +531,14 @@ describe("clearing bookmarks", () => {
       reason: expect.stringContaining("no saved position"),
     });
     // With no position for the player, which is nearest is not known yet.
-    const q0 = plan([far, near]);
+    const q0 = plan([far, { body: BODY, label: "No position" }]);
     expect(
       bookmarksToClear({ plan: q0, system: SYSTEM, status: status({ latitude: null }) }),
     ).toEqual({ stops: [0], whole: false, unsure: "you" });
+    // None saved: the player's position would not help, so the tray offers them in orbit too.
+    expect(
+      bookmarksToClear({ plan: p, system: SYSTEM, status: status({ latitude: null }) }).unsure,
+    ).toBe("bookmarks");
     expect(keyClearStops({ stops: [0], whole: false, unsure: "you" })).toEqual({
       reason: expect.stringContaining("your position"),
     });
@@ -703,6 +707,9 @@ describe("bio bookmark rows", () => {
     // Made before the note: still the key's label.
     expect(bookmarkShown({ ...stop, notes: undefined }, journal, null)).toBe("Bio: Concha");
     expect(bookmarkShown({ ...stop, notes: "by the crater" }, journal, null)).toBe(mark.label);
+    // With no notes, only a list of names is the key's: words someone wrote are kept.
+    const theirs = { ...stop, notes: undefined, label: "Bio: Stratum by the canyon rim" };
+    expect(bookmarkShown(theirs, journal, null)).toBe(theirs.label);
   });
 
   it("keeps a label the player or Claude chose, and the saved one without the journal", () => {

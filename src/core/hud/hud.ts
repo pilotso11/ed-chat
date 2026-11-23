@@ -335,7 +335,11 @@ function bookmarkBio(input: HudInput, system: string | null): ExobiologyBody[] |
   const bio = plan.stops.some(
     (b) => b.status === "todo" && b.kind === "exobiology" && same(b.system, system),
   );
-  if (!bio) return null;
+  if (!bio) {
+    // Not kept past the system: the old journal can be let go.
+    bioMemo = null;
+    return null;
+  }
   // The panel redraws far more often than the journal changes: kept for the same events.
   if (bioMemo?.events === j.events && bioMemo.system === system) return bioMemo.bodies;
   const address = systemAddress(j.events, system);
