@@ -11,6 +11,7 @@ import { chooseBuild } from "./build.js";
 import { hasActions, isBuildPlan, judgeBuild } from "./buildJudge.js";
 import { same } from "./json.js";
 import { currentStop } from "./panels.js";
+import { isTradePlan } from "./trade.js";
 
 // Marking stop actions and stops done as the journal shows them, for every plan with actions:
 // builds, trade routes and mission runs. Main gives the plan store, the activity note, the
@@ -79,6 +80,26 @@ export function nextSystem(plan: Plan, done: number, here: string | null): strin
   return system && !same(system, here) ? system : null;
 }
 
+/** Action kinds of a mission run: a plan with any of them is the route's, whatever its stops. */
+const MISSION_ACTIONS = new Set([
+  "accept_mission",
+  "complete_mission",
+  "collect_cargo",
+  "deliver_cargo",
+]);
+
+/**
+ * The panel whose setting decides whether the finisher writes a plan: "build" for a plan with a
+ * build (a suit loadout's too, which the finisher leaves alone anyway), "trade" for a trade plan,
+ * else null (a mission run is the route's, even with trade stops: always on).
+ */
+export function finisherPanel(plan: Plan): "build" | "trade" | null {
+  // Read before isBuildPlan(), whose type guard leaves nothing to read after it.
+  const mission = plan.stops.some((s) => s.actions?.some((a) => MISSION_ACTIONS.has(a.kind)));
+  if (plan.build || isBuildPlan(plan)) return "build";
+  return !mission && isTradePlan(plan) ? "trade" : null;
+}
+
 export class ActionFinisher {
   /** Writes made or being made, by key ("Writing once" in the spec). */
   private readonly done = new Set<string>();
@@ -132,7 +153,7 @@ export class ActionFinisher {
         failed ??= message(err);
       }
     };
-    // The newest event's time, read once a poll and only when a stop is marked.
+    // The newest event's time, read once a poll and only when a stop with no claim is marked.
     let lap: Promise<string | null> | null = null;
     const lapStart = () => (lap ??= this.lapStart(journal));
     for (const plan of all.values()) {
@@ -238,10 +259,15 @@ export class ActionFinisher {
     lapStart: () => Promise<string | null>,
   ): Promise<void> {
     let now = plan;
+    // The events each stop's actions claimed, judged before any write resets a lap.
+    const judged = judgeBuild(plan, journal).actions;
     for (const i of stops) {
       const s = now.stops[i]!;
-      // Given with every stop: the store uses it only when the stop ends a loop's lap.
-      const start = await lapStart();
+      // Given with every stop: the store uses it only when the stop ends a loop's lap. The lap
+      // starts at the event that finished the stop, so what was done after it (before this write)
+      // counts for the next lap; with no claim, the newest event.
+      const last = Math.max(-1, ...judged.filter((x) => x.stop === i).map((x) => x.lastClaim));
+      const start = journal.events[last]?.timestamp ?? (await lapStart());
       const updated = await plans.updateStop(
         now.id,
         { index: i },

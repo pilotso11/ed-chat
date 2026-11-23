@@ -77,6 +77,18 @@ describe("buys and sales", () => {
     ).toEqual([true]);
   });
 
+  it("does not count stolen goods sold", () => {
+    const p = plan([
+      stop([act({ id: "sell", kind: "sell_commodity", commodity: "Gold", count: 10 })]),
+    ]);
+    expect(
+      done(p, [docked(1), market(2, "MarketSell", "gold", 10, { StolenGoods: true })]),
+    ).toEqual([false]);
+    expect(
+      done(p, [docked(1), market(2, "MarketSell", "gold", 10, { StolenGoods: false })]),
+    ).toEqual([true]);
+  });
+
   it("writes the tons each event gave, in done_by", () => {
     const p = plan([stop([buy(20)])]);
     const j = judgeBuild(

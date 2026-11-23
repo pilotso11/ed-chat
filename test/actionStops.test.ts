@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Activity, ActionPatch, JournalEvent, JournalState, Plan } from "ed-mcp/journal";
-import { ActionFinisher, nextSystem } from "../src/core/hud/actionStops.js";
+import { ActionFinisher, finisherPanel, nextSystem } from "../src/core/hud/actionStops.js";
 
 const T0 = Date.UTC(2026, 10, 22, 12, 0, 0);
 const iso = (s: number) => new Date(T0 + s * 1000).toISOString().replace(/\.\d+Z$/, "Z");
@@ -442,7 +442,31 @@ describe("ActionFinisher on trade and mission plans", () => {
     expect(t.log.laps).toEqual([iso(5)]);
   });
 
-  it("gives the store's newest event time as the lap start, read once a poll", async () => {
+  it("starts the next lap at the event that finished the stop, not at a newer one", async () => {
+    const t = setup(loop());
+    await t.poll(at("S", "Port", []));
+    // The buy finished the stop; the undock after it came before the write.
+    await t.poll(
+      at("S", "Port", [market(5, "MarketBuy", 10), ev(8, "Undocked", { StationName: "Port" })]),
+    );
+    expect(t.log.laps).toEqual([iso(5)]);
+  });
+
+  it("leaves a delivery run with trade stops to the route, not the trade setting", () => {
+    expect(finisherPanel(plan())).toBe("build");
+    expect(finisherPanel(loop())).toBe("trade");
+    const deliver = {
+      id: "d",
+      kind: "deliver_cargo",
+      label: "Deliver",
+      status: "todo",
+      mission_id: 1,
+    };
+    const run = loop({ stops: [tradeStop("Far", "Hub", [deliver as never])] });
+    expect(finisherPanel(run)).toBeNull();
+  });
+
+  it("gives the store's newest event time as the lap start of a stop with no claim, read once a poll", async () => {
     const t = setup(loop());
     let reads = 0;
     const f = new ActionFinisher({

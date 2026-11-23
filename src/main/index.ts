@@ -136,9 +136,7 @@ import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.j
 import { HUD_EVENTS } from "../core/hud/mode.js";
 import { shortBody, todoStops } from "../core/hud/panels.js";
 import { TradeStopFinisher } from "../core/hud/tradeStops.js";
-import { ActionFinisher } from "../core/hud/actionStops.js";
-import { isBuildPlan } from "../core/hud/buildJudge.js";
-import { isTradePlan } from "../core/hud/trade.js";
+import { ActionFinisher, finisherPanel } from "../core/hud/actionStops.js";
 import {
   ABOUT_URL,
   noticeMenuItems,
@@ -979,9 +977,11 @@ async function main(): Promise<void> {
       plans: data.actionPlans ?? [],
       journal: data.journal,
       activity: data.activity,
-      // A plan whose panel is off is left alone: any plan with a build (a suit loadout's too, which
-      // the finisher leaves alone anyway) under the build setting. A mission run is the route's.
-      on: (p) => (p.build || isBuildPlan(p) ? modes.build : isTradePlan(p) ? modes.trade : true),
+      // A plan whose panel is off is left alone (finisherPanel()).
+      on: (p) => {
+        const panel = finisherPanel(p);
+        return panel ? modes[panel] : true;
+      },
     });
   }
 

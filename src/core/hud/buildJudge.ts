@@ -335,7 +335,8 @@ function rolesOf(e: JournalEvent, flying: ShipOf, place: Place | null): Role[] {
     case "MarketBuy":
     case "MarketSell": {
       const q = num(e.Count) ?? 0;
-      if (q <= 0) return [];
+      // Stolen goods sold at a black market are not the plan's trade.
+      if (q <= 0 || e.StolenGoods === true) return [];
       return [
         one({
           kind: e.event === "MarketBuy" ? "goods_bought" : "goods_sold",
@@ -523,7 +524,6 @@ function matches(a: Action, r: Role, plan: Plan, stop: Stop, boundId: number | n
   }
 }
 
-/** How much of an action's role it takes to be done: a trade's count, else one event. */
 /**
  * How much of an action's role it takes to be done: a trade's count, the tons to buy or sell, the
  * cargo to collect or deliver, else one event. A collect or deliver with no count is done only by
