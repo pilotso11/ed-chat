@@ -870,25 +870,34 @@ for on foot. ED Chat pins each.
      events that turn it on, which `journalMode()` treats as build events.
    - "No build plan" means no build plan with work here: the view shows while docked unless the
      plan shown has a stop at this station still to do with an action to do, or an event of this
-     docking did one of its actions (which also keeps "Build complete"). So with a plan whose stops are elsewhere,
-     buying at another station shows the visit, and the plan comes back on undocking. The route
-     rows show under the visit, as under other panels, and the route keys follow the note's plan.
-     The visit shows only when the journal chose the mode: build mode asked for with the hotkey
-     or an engineering note shows the plan while it has an action to do (the visit when there is
-     none).
+     docking did one of its actions (which also keeps "Build complete"). So with a plan whose
+     stops are elsewhere, buying at another station shows the visit, and the plan comes back on
+     undocking. The route rows show under the visit, as under other panels, and the route keys
+     follow the note's plan. The visit shows only when the journal chose the mode: build mode
+     asked for with the hotkey or an engineering note shows the plan while it has an action to do
+     (the visit when there is none). A `ShipyardSwap` to the ship of the plan shown, while it has
+     an action to do, asks for that plan too: only outfitting after the swap shows the visit
+     again.
+   - The visit replaces the activity before it only while docked: the mode is worked out from the
+     whole journal on every poll, and after undocking the visit's events are not build events, so
+     trade, mining or exploration comes back as it was.
    - Turned on by the module events and `EngineerCraft` (as the spec has it) and also by the
      shipyard: `ShipyardBuy`, `ShipyardRedeem`, `ShipyardSell` (added to `BUILD_EVENTS`) and
      `ShipyardTransfer`. A `ShipyardSwap` alone does not turn it on (as the mode rules say for a
-     swap), nor do `Synthesis` and `MaterialTrade`; once it shows, all of these are listed.
-   - Rows: the modules (bought and sold with their credits, each list one part that starts with
-     its verb, so a row never lacks one; more than two kinds of either as a count and a total; stored, retrieved, transferred and moved as counts), then the ships, then
-     one row per module engineered (one blueprint in one slot) with the rolls on the right, one
+     swap), nor do `Synthesis` and `MaterialTrade`; once it shows, all of these are listed
+     ("took out Krait MkII").
+   - Rows: the modules (bought and sold with their credits, each list starting with its verb, so
+     a row never lacks one; more than two kinds of either by name without prices on up to two
+     rows, each starting with the verb, else as a count and a total; stored, retrieved,
+     transferred and moved as counts), then the ships, then one row per module engineered (one blueprint in one slot) with the rolls on the right, one
      row per experimental applied, then the trades and the materials used. Parts are packed into
      rows of up to 56 characters. The invitation to plan a build is a dim footer line.
    - Module names are a short name from a table for a plain module ("FSD", even where the game
      says "Frame Shift Drive"), else the event's `_Localised` name (a variant such as a bi-weave
      shield keeps it), with the class and rating from the symbol ("FSD 5A"), or for a weapon its
-     size and mount ("Pulse Laser 2G"). Core slots use the build panel's short names. Blueprint
+     size and mount ("Pulse Laser 2G"). Limpet controllers are told apart by their symbol
+     ("Prospector Limpet Controller 3A"). Core slots use the build panel's short names, in title
+     case ("Power Plant"). Blueprint
      names come from a table of every blueprint whose name in ed-mcp's catalog (coriolis-data's
      `blueprints.json`) differs from its symbol's words ("FSD_LongRange" is Increased Range,
      "ShieldBooster_Kinetic" Kinetic Resistant), copied since the panel makes no catalog
