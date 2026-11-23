@@ -111,6 +111,7 @@ import {
   bookmarkShown,
   bookmarksToClear,
   isKeyRepeat,
+  alikeLeft,
   keyClearStops,
   sameStop,
   todoBookmarks,
@@ -742,14 +743,30 @@ async function main(): Promise<void> {
     if ("reason" in made) return flash("bookmark", `ⓘ ${made.reason}`, 3_000);
     const saved = await plans.addStop(BOOKMARKS_PLAN, "Bookmarks", made.stop);
     flash("bookmark", `📍 bookmarked ${made.stop.purpose} on ${made.stop.body}`, 4_000);
-    // Shown at once, not after the next poll, which may have read the plan before the save.
-    savedBookmarks = { plan: saved, afterPoll: pollsStarted };
-    if (hudData) hudData = { ...hudData, bookmarks: saved };
+    showBookmarks(saved);
+  }
+
+  // Shows a bookmarks plan just written at once, not after the next poll, which may have read the
+  // plan before the write.
+  function showBookmarks(plan: Plan): void {
+    savedBookmarks = { plan, afterPoll: pollsStarted };
+    if (hudData) hudData = { ...hudData, bookmarks: plan };
     renderHud();
   }
 
+  // The plan store and journal feed for clearing bookmarks, or null, with a note, when bookmarks
+  // are off or the panel has neither.
+  function bookmarkStores(): { plans: NonNullable<typeof hudPlans>; feed: HudFeed } | null {
+    if (settings.hud.enabled && settings.hud.bookmarks && hudPlans && hudFeed) {
+      return { plans: hudPlans, feed: hudFeed };
+    }
+    flash("bookmark", "ⓘ bookmarks are off or the panel could not open ed-mcp", 3_000);
+    return null;
+  }
+
   // Clears bookmarks: those here (the key clears one bookmark on the body you are on and refuses
-  // a whole system; the tray clears the nearest one in one click and asks before a whole system),
+  // a whole system; the tray clears the nearest one in one click and asks before a whole body or
+  // system),
   // or all of them after asking. The writes run in turn with the bookmark key, so the two do not
   // race; the question does not hold up that queue.
   function clearBookmarks(scope: "here" | "all", from: "key" | "tray"): Promise<void> {
@@ -758,8 +775,8 @@ async function main(): Promise<void> {
     // finds: the player may have lifted off or jumped since.
     if (from === "tray") {
       const named = trayHere;
-      // Every bookmark in the system asks first, as Clear all does.
-      if (trayHereWhole) return askClearListed(named, "in this system");
+      // Every bookmark in the system, or on the body, asks first, as Clear all does.
+      if (trayHereAsk) return askClearListed(named, trayHereAsk);
       return queueBookmarks(() => unmarkBookmarks("listed", named));
     }
     // One key-down clears one bookmark: a held key's repeats are ignored.
@@ -774,10 +791,10 @@ async function main(): Promise<void> {
   }
   let lastClearPress = 0;
 
-  // The bookmarks the tray's "here" item names, as the menu was built, and whether they are the
-  // whole system's.
+  // The bookmarks the tray's "here" item names, as the menu was built, and where they are when
+  // the item asks first ("in this system", "on this body").
   let trayHere: Stop[] = [];
-  let trayHereWhole = false;
+  let trayHereAsk: string | null = null;
 
   function queueBookmarks(run: () => Promise<void>): Promise<void> {
     bookmarking = bookmarking.then(run, run);
@@ -789,10 +806,9 @@ async function main(): Promise<void> {
     // One question at a time: a second click while it is open, or while the plan is read, does
     // nothing.
     if (askingClearAll) return;
-    const plans = hudPlans;
-    if (!settings.hud.enabled || !settings.hud.bookmarks || !plans || !hudFeed) {
-      return flash("bookmark", "ⓘ bookmarks are off or the panel could not open ed-mcp", 3_000);
-    }
+    const stores = bookmarkStores();
+    if (!stores) return;
+    const { plans } = stores;
     askingClearAll = true;
     try {
       // The bookmarks in the plan as it is now, not as the last poll read it. Only these are
@@ -811,7 +827,7 @@ async function main(): Promise<void> {
     }
   }
 
-  // The tray's whole-system item: asks first, one question at a time.
+  // The tray's whole-body or whole-system item: asks first, one question at a time.
   async function askClearListed(listed: Stop[], where: string): Promise<void> {
     if (askingClearAll || !listed.length) return;
     askingClearAll = true;
@@ -842,10 +858,9 @@ async function main(): Promise<void> {
   // Clears the bookmark here (the key), or the listed ones that are still to do (the tray, after
   // naming or asking about them).
   async function unmarkBookmarks(scope: "here" | "listed", listed: Stop[] = []): Promise<void> {
-    const plans = hudPlans;
-    if (!settings.hud.enabled || !settings.hud.bookmarks || !plans || !hudFeed) {
-      return flash("bookmark", "ⓘ bookmarks are off or the panel could not open ed-mcp", 3_000);
-    }
+    const stores = bookmarkStores();
+    if (!stores) return;
+    const { plans, feed } = stores;
     let plan: Plan;
     try {
       // Read now, after any question: Claude may have changed the plan meanwhile.
@@ -861,7 +876,7 @@ async function main(): Promise<void> {
       picked = todoBookmarks(plan).filter((i) => named(plan.stops[i]!));
     } else {
       // The system and position read now: the last poll may be from before a jump.
-      const [system, status] = await Promise.all([hudFeed.readSystem(), hudFeed.readStatus()]);
+      const [system, status] = await Promise.all([feed.readSystem(), feed.readStatus()]);
       // Not knowing where the player is is not the same as being away from the body.
       if (!status) return flash("bookmark", "ⓘ could not read where you are: try again", 3_000);
       // The key clears one bookmark, on the body you are on; a whole system is the tray's.
@@ -896,11 +911,7 @@ async function main(): Promise<void> {
       );
     } finally {
       // Shown at once, as for a new bookmark, with those cleared before any failed write.
-      if (cleared.length) {
-        savedBookmarks = { plan, afterPoll: pollsStarted };
-        if (hudData) hudData = { ...hudData, bookmarks: plan };
-        renderHud();
-      }
+      if (cleared.length) showBookmarks(plan);
     }
     if (!cleared.length) {
       return flash(
@@ -910,10 +921,14 @@ async function main(): Promise<void> {
       );
     }
     const one = cleared[0]!;
+    const journal = hudData?.journal ?? null;
+    const known = hudData?.known ?? null;
+    // One of a row shown with " (n)": how many like it are left.
+    const left = cleared.length === 1 ? alikeLeft(plan, one, journal, known) : 0;
     flash(
       "bookmark",
       cleared.length === 1
-        ? `📍 cleared ${bookmarkShown(one, hudData?.journal ?? null, hudData?.known ?? null)} on ${shortBody(one.body ?? one.system, one.system)}`
+        ? `📍 cleared ${bookmarkShown(one, journal, known)} on ${shortBody(one.body ?? one.system, one.system)}${left ? ` (${left} more like it)` : ""}`
         : `📍 cleared ${cleared.length} bookmarks`,
       4_000,
     );
@@ -992,10 +1007,7 @@ async function main(): Promise<void> {
             `📍 done: ${bookmarkShown(stop, hudData?.journal ?? null, hudData?.known ?? null)}`,
             4_000,
           );
-          // Shown at once, as for a new or cleared bookmark.
-          savedBookmarks = { plan, afterPoll: pollsStarted };
-          if (hudData) hudData = { ...hudData, bookmarks: plan };
-          renderHud();
+          showBookmarks(plan);
         });
       } catch (err) {
         // Tried again on the next poll; the other bookmarks are still marked.
@@ -1911,10 +1923,14 @@ async function main(): Promise<void> {
           status: hudData.status,
         })
       : { stops: [], whole: false };
-    // Not a guess at which is nearest: with no position for that, no "here" item.
-    if (here.unsure) here.stops = [];
+    // Not a guess at which is nearest: with no position for the player yet, no "here" item.
+    if (here.unsure === "you") here.stops = [];
     trayHere = here.stops.map((i) => hudData!.bookmarks!.stops[i]!);
-    trayHereWhole = here.whole;
+    trayHereAsk = here.whole
+      ? "in this system"
+      : here.unsure === "bookmarks"
+        ? "on this body"
+        : null;
     const items = trayItems({
       chips: withTargets(currentChips(state), chipStops),
       agentId,

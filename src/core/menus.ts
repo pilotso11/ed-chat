@@ -54,15 +54,22 @@ export function trayItems(s: {
    * Surface bookmarks still to do, in this system and in all; the Bookmarks menu shows when
    * there are any, and its "here" item when this system has some.
    */
-  bookmarks?: { here: { stops: number[]; whole: boolean }; all: number };
+  bookmarks?: {
+    here: { stops: number[]; whole: boolean; unsure?: "you" | "bookmarks" };
+    all: number;
+  };
 }): TrayItem[] {
   const bookmarks = s.bookmarks?.all ?? 0;
   const here = s.bookmarks?.here ?? { stops: [], whole: false };
   const n = here.stops.length;
-  // What the item clears: the nearest bookmark on this body, or every one in the system.
+  // What the item clears: the nearest bookmark on this body, every one on it when none has a
+  // saved position, or every one in the system.
+  const many = `${n} bookmark${n === 1 ? "" : "s"}`;
   const hereLabel = here.whole
-    ? `Clear ${n} bookmark${n === 1 ? "" : "s"} in this system…`
-    : "Clear the nearest bookmark here";
+    ? `Clear ${many} in this system…`
+    : here.unsure === "bookmarks"
+      ? `Clear ${many} on this body…`
+      : "Clear the nearest bookmark here";
   return [
     ...s.chips.map((c): TrayItem => ({
       label: menuLabel(`Copy ${c.n}: ${chipLabel(c)}`),
