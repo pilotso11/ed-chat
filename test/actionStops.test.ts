@@ -522,6 +522,16 @@ describe("ActionFinisher on trade and mission plans", () => {
     expect(reads).toBe(1);
   });
 
+  it("marks a stop whose only open action is one the judge cannot see done", async () => {
+    const accept = { id: "take", kind: "accept_mission", label: "Take", status: "todo" };
+    const p = loop();
+    p.stops[0]!.actions!.unshift(accept as never);
+    const t = setup(p);
+    await t.poll(at("S", "Port", []));
+    await t.poll(at("S", "Port", [market(5, "MarketBuy", 10)]));
+    expect(t.log.writes).toContain("loop:stop 0:done");
+  });
+
   it("leaves a suit loadout's plan alone, and writes no ship for a plan that is not a ship build", async () => {
     const suit = loop({
       id: "suit",

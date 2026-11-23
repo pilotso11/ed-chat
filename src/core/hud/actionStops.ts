@@ -8,7 +8,7 @@ import {
   type PlanStore,
 } from "ed-mcp/journal";
 import { chooseBuild } from "./build.js";
-import { hasActions, isBuildPlan, judgeBuild } from "./buildJudge.js";
+import { hasActions, isBuildPlan, judgeBuild, judged } from "./buildJudge.js";
 import { same } from "./json.js";
 import { currentStop } from "./panels.js";
 import { isTradePlan } from "./trade.js";
@@ -58,11 +58,15 @@ const stopId = (plan: Plan, i: number) => {
   return `${i}|${s.system}|${s.station ?? s.body ?? ""}`;
 };
 
-/** The stops with an action still to do in the plan. */
+/**
+ * The stops with an action still to do in the plan, of a kind the judge judges: an action it
+ * cannot see done (accept_mission) does not hold its stop open; a stop of only such actions waits
+ * for a route key or Claude.
+ */
 const openStops = (plan: Plan) =>
   new Set(
     plan.stops.flatMap((s, i) =>
-      s.actions?.some((a) => a.status === "todo") ? [stopId(plan, i)] : [],
+      s.actions?.some((a) => a.status === "todo" && judged(a)) ? [stopId(plan, i)] : [],
     ),
   );
 

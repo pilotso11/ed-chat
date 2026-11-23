@@ -943,7 +943,8 @@ moved onto them in one PR. **Built.** As built:
 - **On foot left out.** A `suit_loadout` plan is not judged or finished yet, and
   `setBuildShip()` is called only for a ship build. Any plan with a `build` follows
   `hud.modes.build`.
-- **Not judged:** `accept_mission` (no field ties it to an event before the mission exists).
+- **Not judged:** `accept_mission` (no field ties it to an event before the mission exists). It
+  does not hold its stop open (`openStops()`), so the stop's other actions finish it.
 - **Which plans are builds.** `isBuildPlan()` needs a `build`, or an action of a kind not in
   `ACTION_EVENTS`: a trade route or mission run is not one, so the build panel and mode leave
   them alone. The feed's open plans with actions are `actionPlans`.

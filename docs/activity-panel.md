@@ -294,8 +294,8 @@ and writes each one done into the plan, with the events that did it, so Claude s
 - The panel finishes the activity note's plan and every open build plan. Another plan with
   actions, such as an old trade loop left open, is left alone, or it would take this run's
   trades. A plan whose panel is turned off in `hud.modes` is left alone too.
-- `accept_mission` is not judged yet: ask Claude to mark it done, or mark its stop with a route
-  key.
+- `accept_mission` is not judged yet, and does not hold its stop open: the stop is done when its
+  other actions are. A stop with only `accept_mission` needs Claude or a route key.
 
 ## Route
 
