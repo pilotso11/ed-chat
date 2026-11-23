@@ -648,8 +648,8 @@ describe("commodity names", () => {
       ["ComercialSamples", "Commercial Samples"],
       ["EncriptedDataStorage", "Encrypted Data Storage"],
       ["OccupiedCryoPod", "Occupied Escape Pod"],
-      ["LargeExplorationDataCash", "Survey Data Cache"],
-      ["SmallExplorationDataCash", "Survey Data Cache"],
+      ["LargeExplorationDataCash", "Large Survey Data Cache"],
+      ["SmallExplorationDataCash", "Small Survey Data Cache"],
       ["USSCargoBlackBox", "Black Box"],
       ["USSCargoTradeData", "Trade Data"],
       ["USSCargoRebelTransmissions", "Rebel Transmissions"],
@@ -1283,6 +1283,13 @@ describe("the trade panel with stop actions", () => {
     const rows = tradePanel(input(p))!.rows;
     expect(rows.at(-2)).toEqual({ text: "  Refuel" });
     expect(rows.at(-1)!.right).toBe("SELL 720 t Gold · BUY 720 t Silver");
+  });
+
+  it("shows a stop's only action done when it has no status text", () => {
+    const p = withActions(loop({ lap: 2, id: "fuelonly" }));
+    p.stops[0]!.actions = [{ id: "fuel", kind: "refuel", label: "Refuel", status: "done" }];
+    const rows = tradePanel(input(p))!.rows;
+    expect(rows).toContainEqual({ text: "  ✓ done", tone: "good" });
   });
 });
 

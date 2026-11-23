@@ -816,6 +816,8 @@ export function tradePanel(input: {
       const s = line(trades[0]!);
       rows.push({ text: `● ${place(cur)}`, right: withJumps(tradeText(trades[0]!), "current") });
       if (s.text) rows.push({ text: `  ${s.text}`, tone: s.tone });
+      // Another kind of action has no status text: its done shows as a row of its own.
+      else if (s.tone) rows.push({ text: "  ✓ done", tone: s.tone });
     } else if (trades.length) {
       const right = withJumps(undefined, "current");
       rows.push(right ? { text: `● ${place(cur)}`, right } : { text: `● ${place(cur)}` });
