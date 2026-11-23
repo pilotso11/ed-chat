@@ -223,13 +223,16 @@ Traded 2 · used 41 materials
 Ask Claude to plan a build to track what is left.
 ```
 
-The modules bought and sold with their credits (more than two kinds as a count and a total),
+The modules bought and sold with their credits (more than two kinds as a count and a total;
+a weapon with its size and mount, as "Pulse Laser 2G" for a medium gimballed one),
 and how many were stored, retrieved, transferred or moved; the ships; for each module
 engineered, its blueprint from the grade before the visit to the grade and quality of the last
 roll, and the number of rolls; an experimental applied; and the material trades and the
 materials the rolls and syntheses used. There is no target, so nothing is left to do. A synthesis,
 a material trade or a ship swap alone does not turn it on. It ends when you undock, and
-`hud.build.outfittingVisit` turns it off. The route rows still show under it.
+`hud.build.outfittingVisit` turns it off. The route rows still show under it. Choosing build
+mode with the hotkey, or an engineering activity note, shows the build plan instead while it has
+work to do.
 
 Known limits: an action done while ED Chat was not running is ticked off on the next start, and
 when that finishes its stop, the stop is marked done too. A stop whose actions were all marked

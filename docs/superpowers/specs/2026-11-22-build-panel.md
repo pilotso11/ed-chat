@@ -869,23 +869,30 @@ for on foot. ED Chat pins each.
    - `outfittingVisit()` and `visitPanel()` in `src/core/hud/build.ts`; `BuildNow.visit` holds the
      events that turn it on, which `journalMode()` treats as build events.
    - "No build plan" means no build plan with work here: the view shows while docked unless the
-     plan shown is docked at its stop with an action to do, or an event of this docking did one
-     of its actions (which also keeps "Build complete"). So with a plan whose stops are elsewhere,
+     plan shown has a stop at this station still to do with an action to do, or an event of this
+     docking did one of its actions (which also keeps "Build complete"). So with a plan whose stops are elsewhere,
      buying at another station shows the visit, and the plan comes back on undocking. The route
      rows show under the visit, as under other panels, and the route keys follow the note's plan.
+     The visit shows only when the journal chose the mode: build mode asked for with the hotkey
+     or an engineering note shows the plan while it has an action to do (the visit when there is
+     none).
    - Turned on by the module events and `EngineerCraft` (as the spec has it) and also by the
      shipyard: `ShipyardBuy`, `ShipyardRedeem`, `ShipyardSell` (added to `BUILD_EVENTS`) and
      `ShipyardTransfer`. A `ShipyardSwap` alone does not turn it on (as the mode rules say for a
      swap), nor do `Synthesis` and `MaterialTrade`; once it shows, all of these are listed.
-   - Rows: the modules (bought and sold with their credits, more than two kinds of either as a
-     count and a total; stored, retrieved, transferred and moved as counts), then the ships, then
+   - Rows: the modules (bought and sold with their credits, each list one part that starts with
+     its verb, so a row never lacks one; more than two kinds of either as a count and a total; stored, retrieved, transferred and moved as counts), then the ships, then
      one row per module engineered (one blueprint in one slot) with the rolls on the right, one
      row per experimental applied, then the trades and the materials used. Parts are packed into
      rows of up to 56 characters. The invitation to plan a build is a dim footer line.
-   - Module names are the event's `_Localised` name (else a name from the symbol) with the
-     class and rating from the symbol ("FSD 5A"); core slots use the build panel's short names.
-     Blueprint names come from a short table of those whose game name differs from the symbol
-     ("FSD_LongRange" is Increased Range), else the symbol's words ("Heavy Duty").
+   - Module names are a short name from a table for a plain module ("FSD", even where the game
+     says "Frame Shift Drive"), else the event's `_Localised` name (a variant such as a bi-weave
+     shield keeps it), with the class and rating from the symbol ("FSD 5A"), or for a weapon its
+     size and mount ("Pulse Laser 2G"). Core slots use the build panel's short names. Blueprint
+     names come from a table of every blueprint whose name in ed-mcp's catalog (coriolis-data's
+     `blueprints.json`) differs from its symbol's words ("FSD_LongRange" is Increased Range,
+     "ShieldBooster_Kinetic" Kinetic Resistant), copied since the panel makes no catalog
+     downloads; else the symbol's words ("Heavy Duty").
    - The grade before a module's first roll comes from the newest `Loadout` before it, G0 when
      that shows another blueprint or none. Only docking counts: landing has no outfitting.
 5. **ed-mcp: on foot.** The on-foot action kinds' journal state (`suits`, `locker`, `backpack`), kept
