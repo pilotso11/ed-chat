@@ -63,6 +63,22 @@ const ALIASES: Record<string, string> = {
   voidopals: "opal",
   limpet: "drones",
   limpets: "drones",
+  // Internal names (MarketBuy's Type, CargoTransfer's Type) that are not the English name the
+  // market, Spansh and the plans use, so a non-English client's events still match a plan.
+  agriculturalmedicines: "agrimedicines",
+  atmosphericextractors: "atmosphericprocessors",
+  basicnarcotics: "narcotics",
+  coolinghoses: "microweavecoolinghoses",
+  diagnosticsensor: "hardwarediagnosticsensor",
+  hazardousenvironmentsuits: "hesuits",
+  heliostaticfurnaces: "microbialfurnaces",
+  marinesupplies: "marineequipment",
+  mutomimager: "muonimager",
+  powergridassembly: "energygridassembly",
+  powertransferconduits: "powertransferbus",
+  skimercomponents: "skimmercomponents",
+  terrainenrichmentsystems: "landenrichmentsystems",
+  trinketsoffortune: "trinketsofhiddenfortune",
 };
 
 /** One key for each way the journal names a commodity: "$platinum_name;" and "Platinum" match. */

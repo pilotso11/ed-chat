@@ -635,6 +635,14 @@ describe("commodity names", () => {
     );
     expect([...m!.items.keys()]).toEqual(["gold"]);
   });
+
+  it("gives an internal name that differs from the English name's key", () => {
+    expect(commodityKey("agriculturalmedicines")).toBe(commodityKey("Agri-Medicines"));
+    expect(commodityKey("$terrainenrichmentsystems_name;")).toBe(
+      commodityKey("Land Enrichment Systems"),
+    );
+    expect(commodityKey("hazardousenvironmentsuits")).toBe(commodityKey("H.E. Suits"));
+  });
 });
 
 describe("trade auto-advance", () => {
