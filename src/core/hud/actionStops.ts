@@ -8,15 +8,24 @@ import {
   type PlanStore,
 } from "ed-mcp/journal";
 import { chooseBuild } from "./build.js";
-import { isBuildPlan, judgeBuild } from "./buildJudge.js";
+import { hasActions, isBuildPlan, judgeBuild, judged } from "./buildJudge.js";
 import { same } from "./json.js";
+import { currentStop } from "./panels.js";
+import { isTradePlan } from "./trade.js";
 
-// Marking build actions and stops done as the journal shows them: main gives the plan store, the
-// activity note, the clipboard and the notices; the deciding is in build.ts and buildJudge.ts.
+// Marking stop actions and stops done as the journal shows them, for every plan with actions:
+// builds, trade routes and mission runs. Main gives the plan store, the activity note, the
+// clipboard and the notices; the deciding is in buildJudge.ts (and build.ts for the build shown).
 
-export interface BuildStopDeps {
+export interface ActionStopDeps {
   /** The plan store, or null before the panel's stores are open. */
   plans: () => Pick<PlanStore, "get" | "updateAction" | "updateStop" | "setBuildShip"> | null;
+  /**
+   * The newest journal event's time (JournalService.newestEventAt()), given to the store as the
+   * next lap's start with a stop marked done when the lap claimed no event (else its newest claim
+   * goes). Without it, the poll's newest event.
+   */
+  newestEventAt?: () => Promise<string | null>;
   /** The activity note's store, for pointing the note at the new ship's plan on a ship swap. */
   activity: () => Pick<ActivityStore, "get" | "set"> | null;
   /** Copies a system for the galaxy map, with a note for the chat strip. */
@@ -27,6 +36,20 @@ export interface BuildStopDeps {
 
 type Journal = JournalState & { events: JournalEvent[] };
 
+/** A suit loadout's plan: on foot, judged in a later phase. */
+const onFoot = (plan: Plan) => plan.build?.target === "suit_loadout";
+
+export interface FinishInput {
+  /** The activity note's plan. */
+  note: Plan | null;
+  /** The open plans with stop actions: the build plans among them are finished too. */
+  plans: Plan[];
+  journal: Journal | null;
+  activity: Activity | null;
+  /** Whether a plan's panel is on; every plan when not given. */
+  on?: (plan: Plan) => boolean;
+}
+
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /** A stop's name for the plan's stop list: its place, so a rewritten plan does not match it. */
@@ -35,11 +58,15 @@ const stopId = (plan: Plan, i: number) => {
   return `${i}|${s.system}|${s.station ?? s.body ?? ""}`;
 };
 
-/** The stops with an action still to do in the plan. */
+/**
+ * The stops with an action still to do in the plan, of a kind the judge judges: an action it
+ * cannot see done (accept_mission) does not hold its stop open; a stop of only such actions waits
+ * for a route key or Claude.
+ */
 const openStops = (plan: Plan) =>
   new Set(
     plan.stops.flatMap((s, i) =>
-      s.actions?.some((a) => a.status === "todo") ? [stopId(plan, i)] : [],
+      s.actions?.some((a) => a.status === "todo" && judged(a)) ? [stopId(plan, i)] : [],
     ),
   );
 
@@ -57,7 +84,27 @@ export function nextSystem(plan: Plan, done: number, here: string | null): strin
   return system && !same(system, here) ? system : null;
 }
 
-export class BuildFinisher {
+/** Action kinds of a mission run: a plan with any of them is the route's, whatever its stops. */
+const MISSION_ACTIONS = new Set([
+  "accept_mission",
+  "complete_mission",
+  "collect_cargo",
+  "deliver_cargo",
+]);
+
+/**
+ * The panel whose setting decides whether the finisher writes a plan: "build" for a plan with a
+ * build (a suit loadout's too, which the finisher leaves alone anyway), "trade" for a trade plan,
+ * else null (a mission run is the route's, even with trade stops: always on).
+ */
+export function finisherPanel(plan: Plan): "build" | "trade" | null {
+  // Read before isBuildPlan(), whose type guard leaves nothing to read after it.
+  const mission = plan.stops.some((s) => s.actions?.some((a) => MISSION_ACTIONS.has(a.kind)));
+  if (plan.build || isBuildPlan(plan)) return "build";
+  return !mission && isTradePlan(plan) ? "trade" : null;
+}
+
+export class ActionFinisher {
   /** Writes made or being made, by key ("Writing once" in the spec). */
   private readonly done = new Set<string>();
   /** For each plan, the stops with open actions after the last poll: a stop is marked on the change. */
@@ -68,20 +115,19 @@ export class BuildFinisher {
   /** The finish() running now: polls come each second, and a write can take longer. */
   private running: Promise<void> | null = null;
 
-  constructor(private readonly deps: BuildStopDeps) {}
+  constructor(private readonly deps: ActionStopDeps) {}
 
   /**
    * After a poll: marks the actions the journal shows done (each judged again on the plan as it is
    * now), marks a stop done when its last open action becomes done, writes a found ShipID, and on
    * a ship swap points the note at the new ship's build plan. A call while one is running does
    * nothing: the next poll judges again, so no action is written twice and no copy repeats.
+   *
+   * The plans finished are the open build plans and the note's plan (a trade route, a mission
+   * run): an old trade plan left open is not the run being flown, and its actions would take this
+   * run's trades. `on` leaves out a plan whose panel is turned off.
    */
-  finish(input: {
-    note: Plan | null;
-    plans: Plan[];
-    journal: Journal | null;
-    activity: Activity | null;
-  }): Promise<void> {
+  finish(input: FinishInput): Promise<void> {
     if (this.running) return Promise.resolve();
     const run = this.run(input).finally(() => {
       this.running = null;
@@ -90,17 +136,16 @@ export class BuildFinisher {
     return run;
   }
 
-  private async run(input: {
-    note: Plan | null;
-    plans: Plan[];
-    journal: Journal | null;
-    activity: Activity | null;
-  }): Promise<void> {
+  private async run(input: FinishInput): Promise<void> {
     const plans = this.deps.plans();
     const journal = input.journal;
     if (!plans || !journal) return;
+    const on = input.on ?? (() => true);
     const all = new Map<string, Plan>();
-    for (const p of [input.note, ...input.plans]) if (isBuildPlan(p)) all.set(p.id, p);
+    // A suit loadout's plan is on foot, a later phase: not judged or written yet.
+    if (hasActions(input.note) && !onFoot(input.note) && on(input.note))
+      all.set(input.note.id, input.note);
+    for (const p of input.plans) if (isBuildPlan(p) && on(p) && !all.has(p.id)) all.set(p.id, p);
     // The stop shown as current, before this poll's writes: finishing it copies the next one.
     const shown = chooseBuild({ note: input.note, plans: input.plans, journal });
     // Each plan on its own: one that fails is tried again on the next poll, the others go on.
@@ -112,9 +157,19 @@ export class BuildFinisher {
         failed ??= message(err);
       }
     };
+    // The newest event's time, read once a poll and only when a stop with no claim is marked.
+    let lap: Promise<string | null> | null = null;
+    const lapStart = () => (lap ??= this.lapStart(journal));
     for (const plan of all.values()) {
-      const current = shown?.plan.id === plan.id && shown.current !== null ? shown.current : null;
-      await attempt(() => this.finishPlan(plans, plan, journal, current));
+      // The stop shown as current: the build panel's for the build it shows, else the plan's own
+      // for the note's plan (the trade panel and the route rows show that one).
+      const current =
+        shown?.plan.id === plan.id
+          ? shown.current
+          : plan.id === input.note?.id && !isBuildPlan(plan)
+            ? currentStop(plan)
+            : null;
+      await attempt(() => this.finishPlan(plans, plan, journal, current, lapStart));
     }
     await attempt(() => this.swapNote(input, journal));
     if (failed !== null && failed !== this.lastError) this.deps.warn(failed);
@@ -122,10 +177,11 @@ export class BuildFinisher {
   }
 
   private async finishPlan(
-    plans: NonNullable<ReturnType<BuildStopDeps["plans"]>>,
+    plans: NonNullable<ReturnType<ActionStopDeps["plans"]>>,
     plan: Plan,
     journal: Journal,
     current: number | null,
+    lapStart: () => Promise<string | null>,
   ): Promise<void> {
     let now = plan;
     const writes = judgeBuild(plan, journal).actions.filter(
@@ -160,7 +216,8 @@ export class BuildFinisher {
     }
     // A ShipID found from the journal, written once.
     const bound = judgeBuild(now, journal).boundId;
-    if (bound !== null && now.build && now.build.ship_id === undefined) {
+    // Only a ship build has a ship to write.
+    if (bound !== null && now.build?.target === "ship" && now.build.ship_id === undefined) {
       const key = `${now.id}|ship|${bound}`;
       if (!this.done.has(key)) {
         this.done.add(key);
@@ -187,7 +244,7 @@ export class BuildFinisher {
     // as open, so the next poll sees the change again and tries once more.
     const marked = new Set<number>();
     try {
-      await this.markStops(plans, now, toMark, marked, journal, current);
+      await this.markStops(plans, now, toMark, marked, journal, current, lapStart);
     } catch (err) {
       const left = toMark.filter((i) => !marked.has(i)).map((i) => stopId(now, i));
       this.open.set(now.id, new Set([...open, ...left]));
@@ -197,19 +254,33 @@ export class BuildFinisher {
   }
 
   private async markStops(
-    plans: NonNullable<ReturnType<BuildStopDeps["plans"]>>,
+    plans: NonNullable<ReturnType<ActionStopDeps["plans"]>>,
     plan: Plan,
     stops: number[],
     marked: Set<number>,
     journal: Journal,
     current: number | null,
+    lapStart: () => Promise<string | null>,
   ): Promise<void> {
     let now = plan;
+    // The lap's newest claim, judged before any write resets the lap: the next lap starts at it,
+    // so what was done after it (before this write) counts for the next lap, and nothing this lap
+    // claimed, at any of its stops, counts again. With no claim, the newest event.
+    const last = Math.max(-1, ...judgeBuild(plan, journal).actions.map((x) => x.lastClaim));
     for (const i of stops) {
       const s = now.stops[i]!;
-      const updated = await plans.updateStop(now.id, { index: i }, { status: "done" });
+      // Given with every stop: the store uses it only when the stop ends a loop's lap.
+      const start = journal.events[last]?.timestamp ?? (await lapStart());
+      const updated = await plans.updateStop(
+        now.id,
+        { index: i },
+        { status: "done" },
+        start ? { lapStart: start } : undefined,
+      );
       marked.add(i);
-      const name = s.label ?? (s.station ? `${s.system} · ${s.station}` : s.system);
+      const name =
+        s.label ??
+        (s.kind === "trade" ? s.purpose : s.station ? `${s.system} · ${s.station}` : s.system);
       if (i === current) {
         const next = nextSystem(updated, i, journal.location.system);
         if (next) this.deps.copy(next, `${name}: done. Next stop copied: ${next}`);
@@ -219,14 +290,17 @@ export class BuildFinisher {
     }
   }
 
+  /** The newest journal event's time: the store's, else the poll's newest event. */
+  private async lapStart(journal: Journal): Promise<string | null> {
+    const newest = await this.deps.newestEventAt?.().catch(() => null);
+    return newest ?? journal.events.at(-1)?.timestamp ?? null;
+  }
+
   /**
    * On a ship swap to a ship with a build plan, while the note names another ship's build plan,
    * the note is pointed at the new ship's plan: the only time the panel changes the note.
    */
-  private async swapNote(
-    input: { note: Plan | null; plans: Plan[]; activity: Activity | null },
-    journal: Journal,
-  ): Promise<void> {
+  private async swapNote(input: FinishInput, journal: Journal): Promise<void> {
     const ship = journal.ship.id;
     const was = this.ship;
     if (ship === null || ship === was) return;
@@ -237,7 +311,8 @@ export class BuildFinisher {
     };
     if (was === undefined) return seen();
     const note = input.note;
-    if (!isBuildPlan(note)) return seen();
+    // A build plan whose panel is off is left alone, as when it is not one.
+    if (!isBuildPlan(note) || !(input.on?.(note) ?? true)) return seen();
     const noteShip = judgeBuild(note, journal).shipId;
     if (noteShip === null || noteShip === ship) return seen();
     const mine = input.plans.find(

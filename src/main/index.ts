@@ -136,7 +136,7 @@ import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.j
 import { HUD_EVENTS } from "../core/hud/mode.js";
 import { shortBody, todoStops } from "../core/hud/panels.js";
 import { TradeStopFinisher } from "../core/hud/tradeStops.js";
-import { BuildFinisher } from "../core/hud/buildStops.js";
+import { ActionFinisher, finisherPanel } from "../core/hud/actionStops.js";
 import {
   ABOUT_URL,
   noticeMenuItems,
@@ -616,6 +616,7 @@ async function main(): Promise<void> {
   });
   let hudPlans: ReturnType<typeof openStores>["plans"] | null = null;
   let hudActivity: ReturnType<typeof openStores>["activity"] | null = null;
+  let hudJournal: ReturnType<typeof openStores>["journal"] | null = null;
   async function openHudFeed(): Promise<void> {
     let syncDir = settings.hud.edMcpDataDir;
     if (!syncDir) syncDir = syncDirOf(agentConfigs, agentId, workspace);
@@ -629,6 +630,7 @@ async function main(): Promise<void> {
     });
     hudPlans = stores.plans;
     hudActivity = stores.activity;
+    hudJournal = stores.journal;
     log.log("info", `panel data: ${syncDir ? "ed-mcp sync folder" : "ed-mcp config folder"}`);
   }
 
@@ -661,8 +663,8 @@ async function main(): Promise<void> {
       void finishTradeStop(hudData).catch((err: unknown) =>
         log.log("warn", `panel trade stop: ${message(err)}`),
       );
-      void finishBuild(hudData).catch((err: unknown) =>
-        log.log("warn", `panel build: ${message(err)}`),
+      void finishActions(hudData).catch((err: unknown) =>
+        log.log("warn", `panel stop actions: ${message(err)}`),
       );
       lastSystem = system;
       renderHud();
@@ -691,7 +693,9 @@ async function main(): Promise<void> {
     // routeStep gives an update only for a plan, and there is a plan only with its store.
     if (!plans || !plan) return;
     const { index, status } = change.update;
-    await plans.updateStop(plan.id, { index }, { status });
+    // The newest journal event's time: when this ends a loop's lap, the next counts from it.
+    const lapStart = await hudJournal?.newestEventAt().catch(() => null);
+    await plans.updateStop(plan.id, { index }, { status }, lapStart ? { lapStart } : undefined);
     // Read the plan back rather than through pollHud(), which skips while the timer's poll runs
     // and would leave the plan from before the change.
     const now = await plans.get(plan.id).catch(() => null);
@@ -934,8 +938,10 @@ async function main(): Promise<void> {
     );
   }
 
-  // A trade stop whose buys and sales are done is marked done, once per docking, and the next
-  // stop's system is copied for the galaxy map.
+  // A trade stop with no actions (a plan from before ed-mcp wrote them, a stop that only passes
+  // through, or a loop's first stop on its first lap when it only sells: ed-mcp leaves out only
+  // those sales) whose buys and sales are done is marked done, once per docking, and the next
+  // stop's system is copied for the galaxy map. Stops with actions are ActionFinisher's.
   const tradeStops = new TradeStopFinisher({
     plans: () => hudPlans,
     copy: (system, note) => {
@@ -950,25 +956,32 @@ async function main(): Promise<void> {
     return tradeStops.finish(data.plan, data.journal);
   }
 
-  // Build actions the journal shows done are marked done once each, a stop when its last action is,
-  // and on a ship swap the note follows the new ship's build plan.
-  const buildStops = new BuildFinisher({
+  // Stop actions the journal shows done (the note's plan and every open build plan) are marked
+  // done once each, a stop when its last action is, and on a ship swap the note follows the new
+  // ship's build plan.
+  const actionStops = new ActionFinisher({
     plans: () => hudPlans,
     activity: () => hudActivity,
+    newestEventAt: () => hudJournal?.newestEventAt() ?? Promise.resolve(null),
     copy: (system, note) => {
       clipboard.writeText(system);
       flash("copy", `📋 ${note}`, 6_000);
     },
     notice: (text) => flash("route", text, 4_000),
-    warn: (m) => log.log("warn", `panel build: ${m}`),
+    warn: (m) => log.log("warn", `panel stop actions: ${m}`),
   });
-  function finishBuild(data: FeedData): Promise<void> {
-    if (!settings.hud.modes.build) return Promise.resolve();
-    return buildStops.finish({
+  function finishActions(data: FeedData): Promise<void> {
+    const modes = settings.hud.modes;
+    return actionStops.finish({
       note: data.plan,
-      plans: data.buildPlans ?? [],
+      plans: data.actionPlans ?? [],
       journal: data.journal,
       activity: data.activity,
+      // A plan whose panel is off is left alone (finisherPanel()).
+      on: (p) => {
+        const panel = finisherPanel(p);
+        return panel ? modes[panel] : true;
+      },
     });
   }
 
@@ -978,7 +991,7 @@ async function main(): Promise<void> {
     const id = lastHudView?.follow?.planId;
     if (!id || !hudData) return hudData?.plan ?? null;
     if (hudData.plan?.id === id) return hudData.plan;
-    return hudData.buildPlans?.find((p) => p.id === id) ?? hudData.plan;
+    return hudData.actionPlans?.find((p) => p.id === id) ?? hudData.plan;
   }
 
   // Bio bookmarks whose species are all analysed are marked done, once each.

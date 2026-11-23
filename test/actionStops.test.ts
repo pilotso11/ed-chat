@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Activity, ActionPatch, JournalEvent, JournalState, Plan } from "ed-mcp/journal";
-import { BuildFinisher, nextSystem } from "../src/core/hud/buildStops.js";
+import { ActionFinisher, finisherPanel, nextSystem } from "../src/core/hud/actionStops.js";
 
 const T0 = Date.UTC(2026, 10, 22, 12, 0, 0);
 const iso = (s: number) => new Date(T0 + s * 1000).toISOString().replace(/\.\d+Z$/, "Z");
@@ -98,6 +98,8 @@ function setup(start = plan(), o: { activity?: Activity | null; fail?: boolean }
     warnings: [] as string[],
     writes: [] as string[],
     notes: [] as unknown[],
+    /** The lapStart given with each stop marked. */
+    laps: [] as (string | undefined)[],
   };
   const store = new Map<string, Plan>([[start.id, start]]);
   let stopFails = false;
@@ -125,8 +127,10 @@ function setup(start = plan(), o: { activity?: Activity | null; fail?: boolean }
       id: string,
       ref: { index?: number },
       patch: { status?: Plan["stops"][number]["status"] },
+      opts?: { lapStart?: string },
     ) => {
       if (stopFails) throw new Error("stop locked");
+      log.laps.push(opts?.lapStart);
       log.writes.push(`${id}:stop ${ref.index}:${patch.status}`);
       const p = structuredClone(store.get(id)!);
       Object.assign(p.stops[ref.index!]!, patch);
@@ -151,19 +155,20 @@ function setup(start = plan(), o: { activity?: Activity | null; fail?: boolean }
       return note;
     },
   };
-  const finisher = new BuildFinisher({
+  const finisher = new ActionFinisher({
     plans: () => plans as never,
     activity: () => (notesClosed ? null : (activity as never)),
     copy: (system, n) => log.copies.push(`${system}: ${n}`),
     notice: (t) => log.notices.push(t),
     warn: (m) => log.warnings.push(m),
   });
-  const poll = (j: Journal, others: Plan[] = []) =>
+  const poll = (j: Journal, others: Plan[] = [], on?: (p: Plan) => boolean) =>
     finisher.finish({
       note: store.get(start.id)!,
       plans: others.map((p) => store.get(p.id) ?? p),
       journal: j,
       activity: note,
+      ...(on ? { on } : {}),
     });
   return {
     log,
@@ -193,7 +198,7 @@ describe("the stop copied after one is done", () => {
   });
 });
 
-describe("BuildFinisher", () => {
+describe("ActionFinisher", () => {
   it("marks each action once with its done_by, and the stop on the change, copying the next", async () => {
     const t = setup();
     await t.poll(journal([]));
@@ -328,7 +333,7 @@ describe("BuildFinisher", () => {
     p.stops[0]!.actions![0]!.status = "skipped";
     const stale = t.store.get("krait")!;
     t.add(p);
-    await (t.finisher as BuildFinisher).finish({
+    await (t.finisher as ActionFinisher).finish({
       note: stale,
       plans: [],
       journal: journal([buy(5)]),
@@ -366,7 +371,7 @@ describe("BuildFinisher", () => {
   });
 
   it("does nothing before the stores are open", async () => {
-    const f = new BuildFinisher({
+    const f = new ActionFinisher({
       plans: () => null,
       activity: () => null,
       copy: () => {},
@@ -376,5 +381,218 @@ describe("BuildFinisher", () => {
     await expect(
       f.finish({ note: plan(), plans: [], journal: journal([]), activity: null }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("ActionFinisher on trade and mission plans", () => {
+  type Stop = Plan["stops"][number];
+  const tradeStop = (system: string, station: string, actions: Stop["actions"]): Stop =>
+    ({
+      system,
+      station,
+      purpose: `Trade at ${station}`,
+      label: `Trade at ${station}`,
+      kind: "trade",
+      status: "todo",
+      actions,
+    }) as Stop;
+  const goods = (kind: "buy_commodity" | "sell_commodity", count: number) => ({
+    id: `${kind}-gold`,
+    kind,
+    label: `${kind} ${count} t Gold`,
+    status: "todo" as const,
+    commodity: "Gold",
+    count,
+  });
+  /** A loop: buy gold at Port, sell it at Hub. */
+  const loop = (o: Partial<Plan> = {}): Plan =>
+    ({
+      id: "loop",
+      name: "Trade loop: S ⇄ Far",
+      items: [],
+      repeat: true,
+      lap: 2,
+      started_at: iso(0),
+      stops: [
+        tradeStop("S", "Port", [goods("buy_commodity", 10)]),
+        tradeStop("Far", "Hub", [goods("sell_commodity", 10)]),
+      ],
+      created_at: iso(-60),
+      updated_at: iso(-60),
+      ...o,
+    }) as Plan;
+  const at = (system: string, station: string, events: JournalEvent[]): Journal => ({
+    ...journal([]),
+    location: { system, station, station_type: null, docked: true, dist_from_star_ls: null },
+    events: [ev(1, "Docked", { StarSystem: system, StationName: station, MarketID: 1 }), ...events],
+  });
+  const market = (s: number, event: string, count: number) =>
+    ev(s, event, { Type: "gold", Count: count, MarketID: 1 });
+
+  it("ticks off the note's trade stop and copies the next, as the trade finisher did", async () => {
+    const t = setup(loop());
+    await t.poll(at("S", "Port", []));
+    await t.poll(at("S", "Port", [market(5, "MarketBuy", 10)]));
+    expect(t.log.writes).toEqual([
+      `loop:0:buy_commodity-gold:${JSON.stringify({ status: "done", done_by: [{ at: iso(5), event: "MarketBuy", n: 0, role: "goods_bought", amount: 10 }] })}`,
+      "loop:stop 0:done",
+    ]);
+    expect(t.log.copies).toEqual(["Far: Trade at Port: done. Next stop copied: Far"]);
+    // The newest event's time goes with the stop, for the lap the last stop starts.
+    expect(t.log.laps).toEqual([iso(5)]);
+  });
+
+  it("starts the next lap at the event that finished the stop, not at a newer one", async () => {
+    const t = setup(loop());
+    await t.poll(at("S", "Port", []));
+    // The buy finished the stop; the undock after it came before the write.
+    await t.poll(
+      at("S", "Port", [market(5, "MarketBuy", 10), ev(8, "Undocked", { StationName: "Port" })]),
+    );
+    expect(t.log.laps).toEqual([iso(5)]);
+  });
+
+  it("starts the next lap at the lap's newest claim, at whichever stop it was", async () => {
+    const t = setup(loop());
+    await t.poll(at("Far", "Hub", []));
+    // Sold at Far first, then bought at Port: both stops are marked in one poll.
+    await t.poll(
+      at("Far", "Hub", [
+        market(5, "MarketSell", 10),
+        ev(7, "Docked", { StarSystem: "S", StationName: "Port", MarketID: 1 }),
+        market(8, "MarketBuy", 10),
+      ]),
+    );
+    expect(t.log.laps).toEqual([iso(8), iso(8)]);
+  });
+
+  it("leaves a delivery run with trade stops to the route, not the trade setting", () => {
+    expect(finisherPanel(plan())).toBe("build");
+    expect(finisherPanel(loop())).toBe("trade");
+    const deliver = {
+      id: "d",
+      kind: "deliver_cargo",
+      label: "Deliver",
+      status: "todo",
+      mission_id: 1,
+    };
+    const run = loop({ stops: [tradeStop("Far", "Hub", [deliver as never])] });
+    expect(finisherPanel(run)).toBeNull();
+  });
+
+  it("gives the store's newest event time as the lap start of a stop with no claim, read once a poll", async () => {
+    const t = setup(loop());
+    let reads = 0;
+    const f = new ActionFinisher({
+      plans: () =>
+        ({
+          get: async () => loop(),
+          // The buy and the sale written: neither stop has anything left to do.
+          updateAction: async () => {
+            const p = loop();
+            for (const s of p.stops) s.actions![0]!.status = "done";
+            return p;
+          },
+          updateStop: async (
+            _id: string,
+            _ref: unknown,
+            _p: unknown,
+            o?: { lapStart?: string },
+          ) => {
+            t.log.laps.push(o?.lapStart);
+            return loop({ stops: loop().stops.map((s) => ({ ...s, status: "done" })) });
+          },
+          setBuildShip: async () => loop(),
+        }) as never,
+      activity: () => null,
+      newestEventAt: async () => (reads++, iso(99)),
+      copy: () => {},
+      notice: () => {},
+      warn: () => {},
+    });
+    // Bought at Port, then sold at Hub: both stops are marked in one poll.
+    const j = at("Far", "Hub", [
+      ev(2, "Docked", { StarSystem: "S", StationName: "Port", MarketID: 1 }),
+      market(5, "MarketBuy", 10),
+      ev(6, "Docked", { StarSystem: "Far", StationName: "Hub", MarketID: 1 }),
+      market(7, "MarketSell", 10),
+    ]);
+    await f.finish({ note: loop(), plans: [], journal: j, activity: null });
+    expect(t.log.laps).toEqual([iso(99), iso(99)]);
+    expect(reads).toBe(1);
+  });
+
+  it("marks a stop whose only open action is one the judge cannot see done", async () => {
+    const accept = { id: "take", kind: "accept_mission", label: "Take", status: "todo" };
+    const p = loop();
+    p.stops[0]!.actions!.unshift(accept as never);
+    const t = setup(p);
+    await t.poll(at("S", "Port", []));
+    await t.poll(at("S", "Port", [market(5, "MarketBuy", 10)]));
+    expect(t.log.writes).toContain("loop:stop 0:done");
+  });
+
+  it("leaves a suit loadout's plan alone, and writes no ship for a plan that is not a ship build", async () => {
+    const suit = loop({
+      id: "suit",
+      build: { target: "suit_loadout", scope: "upgrade" },
+    } as Partial<Plan>);
+    const t = setup(suit);
+    await t.poll(at("S", "Port", []));
+    await t.poll(at("S", "Port", [market(5, "MarketBuy", 10)]));
+    expect(t.log.writes).toEqual([]);
+  });
+
+  it("leaves an open trade plan alone unless it is the note's", async () => {
+    const t = setup(plan());
+    const old = loop({ id: "old" });
+    t.add(old);
+    await t.poll(at("S", "Port", []), [old]);
+    await t.poll(at("S", "Port", [market(5, "MarketBuy", 10)]), [old]);
+    expect(t.log.writes.filter((w) => w.startsWith("old"))).toEqual([]);
+  });
+
+  it("leaves a plan whose panel is off alone", async () => {
+    const t = setup(loop());
+    const off = () => false;
+    await t.poll(at("S", "Port", []), [], off);
+    await t.poll(at("S", "Port", [market(5, "MarketBuy", 10)]), [], off);
+    expect(t.log.writes).toEqual([]);
+  });
+
+  it("marks a mission stop done when its missions are handed in", async () => {
+    const run = {
+      id: "run",
+      name: "Mission run",
+      items: [],
+      started_at: iso(0),
+      stops: [
+        {
+          system: "S",
+          station: "Port",
+          purpose: "Hand in",
+          kind: "mission",
+          status: "todo",
+          missions: [7, 8],
+          actions: [7, 8].map((id) => ({
+            id: `complete-${id}`,
+            kind: "complete_mission",
+            label: `Hand in ${id}`,
+            status: "todo",
+            mission_id: id,
+          })),
+        },
+        { system: "Far", station: "Hub", purpose: "Next", kind: "mission", status: "todo" },
+      ],
+      created_at: iso(-60),
+      updated_at: iso(-60),
+    } as unknown as Plan;
+    const t = setup(run);
+    const done = (s: number, id: number) => ev(s, "MissionCompleted", { MissionID: id });
+    await t.poll(at("S", "Port", [done(5, 7)]));
+    expect(t.log.writes.filter((w) => w.includes("stop"))).toEqual([]);
+    await t.poll(at("S", "Port", [done(5, 7), done(6, 8)]));
+    expect(t.log.writes.filter((w) => w.includes("stop"))).toEqual(["run:stop 0:done"]);
+    expect(t.log.copies).toEqual(["Far: S · Port: done. Next stop copied: Far"]);
   });
 });

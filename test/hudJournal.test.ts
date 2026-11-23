@@ -1,11 +1,11 @@
 import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { openStores } from "ed-mcp/journal";
+import { ACTION_EVENTS, openStores } from "ed-mcp/journal";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HudFeed } from "../src/core/hud/feed.js";
 import { BUILD_EVENTS } from "../src/core/hud/build.js";
-import { BuildFinisher } from "../src/core/hud/buildStops.js";
+import { ActionFinisher } from "../src/core/hud/actionStops.js";
 import { buildHud, type HudView } from "../src/core/hud/hud.js";
 import { HUD_EVENTS } from "../src/core/hud/mode.js";
 import { footerText, footerTone } from "../src/core/hud/footer.js";
@@ -908,6 +908,45 @@ describe("builds from the real ed-mcp journal reader", () => {
     expect(BUILD_EVENTS.filter((e) => !kept.has(e))).toEqual([]);
   });
 
+  it("keeps every event that finishes a stop action", async () => {
+    // A reader that stopped keeping one would never tick a trade, mission or station action off.
+    const g = game();
+    g.add(
+      ...arrive(),
+      ev("Docked", { StationName: "Port", StarSystem: SYSTEM, MarketID: 7 }),
+      ev("MarketBuy", { MarketID: 7, Type: "gold", Count: 1, BuyPrice: 1, TotalCost: 1 }),
+      ev("MarketSell", { MarketID: 7, Type: "gold", Count: 1, SellPrice: 2, TotalSale: 2 }),
+      ev("MissionAccepted", {
+        MissionID: 1,
+        Name: "Mission_Delivery",
+        Commodity: "$Gold_Name;",
+        Count: 1,
+        DestinationSystem: SYSTEM,
+      }),
+      ev("CargoDepot", { MissionID: 1, UpdateType: "Collect", Count: 1 }),
+      ev("CargoDepot", { MissionID: 1, UpdateType: "Deliver", Count: 1 }),
+      ev("MissionCompleted", { MissionID: 1, Name: "Mission_Delivery" }),
+      ev("MultiSellExplorationData", { Discovered: [], BaseValue: 1, Bonus: 0, TotalEarnings: 1 }),
+      ev("SellExplorationData", {
+        Systems: [],
+        Discovered: [],
+        BaseValue: 1,
+        Bonus: 0,
+        TotalEarnings: 1,
+      }),
+      ev("SellOrganicData", { MarketID: 7, BioData: [] }),
+      ev("RedeemVoucher", { Type: "bounty", Amount: 1 }),
+      ev("RefuelAll", { Cost: 1, Amount: 1 }),
+      ev("RefuelPartial", { Cost: 1, Amount: 1 }),
+      ev("RepairAll", { Cost: 1 }),
+      ev("Repair", { Items: ["Hull"], Cost: 1 }),
+      ev("BuyAmmo", { Cost: 1 }),
+    );
+    const kept = new Set((await g.events()).map((e) => e.event));
+    const all = [...new Set(Object.values(ACTION_EVENTS).flat())];
+    expect(all.filter((e) => !kept.has(e))).toEqual([]);
+  });
+
   it("follows a saved build plan: docked at the engineer, rolls to G5, and marks it done", async () => {
     const stores = openStores({ ED_JOURNAL_DIR: dir, ED_MCP_SYNC_DIR: syncDir });
     // As Claude writes it with plan_upsert: the ship from journal state, the FSD's materials per
@@ -1064,7 +1103,7 @@ describe("builds from the real ed-mcp journal reader", () => {
     );
     const data = await new HudFeed(fresh, dir).poll();
     const notices: string[] = [];
-    const finisher = new BuildFinisher({
+    const finisher = new ActionFinisher({
       plans: () => fresh.plans,
       activity: () => fresh.activity,
       copy: (_s, n) => notices.push(n),
@@ -1073,7 +1112,7 @@ describe("builds from the real ed-mcp journal reader", () => {
     });
     await finisher.finish({
       note: null,
-      plans: data.buildPlans ?? [],
+      plans: data.actionPlans ?? [],
       journal: data.journal,
       activity: null,
     });

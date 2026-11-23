@@ -428,6 +428,17 @@ const VERB: Partial<Record<Action["kind"], string>> = {
   trade_material: "trade",
   collect_material: "collect",
   synthesis: "synthesise",
+  buy_commodity: "buy goods",
+  sell_commodity: "sell goods",
+  accept_mission: "take mission",
+  complete_mission: "hand in",
+  collect_cargo: "collect cargo",
+  deliver_cargo: "deliver",
+  sell_data: "sell data",
+  redeem_vouchers: "redeem",
+  refuel: "refuel",
+  repair: "repair",
+  restock: "restock",
 };
 
 /** Short names of the core slots, for "after FSD G5". */
@@ -833,7 +844,8 @@ export function moduleName(symbol: unknown, localised?: unknown): string {
   // "int_hyperdrive_size5_class5", "hpt_pulselaser_gimbal_medium", "python_nx_armour_grade3".
   const first = words[0] === "int" || words[0] === "hpt" ? (words[1] ?? "") : "";
   const rest = first ? words.slice(2) : [];
-  // Only size, class and mount: a variant (a bi-weave shield, "_strong") keeps the game's name.
+  // Only size, class and mount: a variant (a bi-weave shield, "_fast"; a prismatic, "_strong") keeps
+  // the game's name.
   const plain = rest.every((w) => /^(size\d+|class\d|tiny)$/.test(w) || w in SIZES || w in MOUNTS);
   const name = str(localised);
   const game = name && !name.startsWith("$") ? name : null;

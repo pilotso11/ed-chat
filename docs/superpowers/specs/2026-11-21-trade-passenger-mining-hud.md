@@ -1,7 +1,9 @@
 # Activity HUD: passenger, trade and mining panels
 
 Date: 2026-11-21
-Status: mining, passengers and trade implemented. Follows the activity HUD spec
+Status: mining, passengers and trade implemented. Since ed-mcp 0.11.0, trade and mission stops
+have stop actions, which the build panel's judge and finisher handle for every plan: see "Stop
+actions for every plan" in the build panel spec (2026-11-22). Follows the activity HUD spec
 (2026-11-15), which lists mining as a follow-on.
 
 ## Purpose

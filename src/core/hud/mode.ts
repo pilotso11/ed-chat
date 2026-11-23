@@ -1,4 +1,4 @@
-import type { JournalEvent } from "ed-mcp/journal";
+import { ACTION_EVENTS, type JournalEvent } from "ed-mcp/journal";
 import type { HudModeId } from "../settings.js";
 import { num, objs, type Obj } from "./json.js";
 import { atBuildStop, BUILD_EVENTS, NO_BUILD, type BuildNow } from "./build.js";
@@ -57,6 +57,9 @@ export const HUD_EVENTS = [
   "ColonisationConstructionDepot",
   // The build panel's: module, shipyard and engineering events, and landing at a gather stop.
   ...BUILD_EVENTS,
+  // The events that finish a stop's trade, mission and station actions: ed-mcp keeps them, but
+  // the judge does not rely on that.
+  ...Object.values(ACTION_EVENTS).flat(),
 ] as const;
 
 /** What the trade rules need to know now: see journalMode(). */

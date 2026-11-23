@@ -38,7 +38,7 @@ import {
   type BuildVisit,
   type Outfitting,
 } from "./build.js";
-import { isBuildPlan } from "./buildJudge.js";
+import { hasActions, isBuildPlan, judgeBuild } from "./buildJudge.js";
 import {
   exobiologyPanel,
   explorationPanel,
@@ -129,8 +129,8 @@ export interface HudInput {
   look?: Record<string, string>;
   /** Market.json: the market of the last commodity screen opened, for the trade panel. */
   market?: Market | null;
-  /** The open build plans (with stop actions), besides the note's plan. */
-  buildPlans?: Plan[];
+  /** The open plans with stop actions, besides the note's plan: the build panel shows a build among them. */
+  actionPlans?: Plan[];
   /** Outfitting.json: the modules of the last outfitting screen opened, for the build panel. */
   outfitting?: Outfitting | null;
 }
@@ -138,7 +138,7 @@ export interface HudInput {
 /** The build plan the panel would show now, with the journal read and the mode on. */
 export function buildChoice(input: HudInput): BuildChoice | null {
   if (!input.settings.modes.build || !input.journal) return null;
-  return chooseBuild({ note: input.plan, plans: input.buildPlans ?? [], journal: input.journal });
+  return chooseBuild({ note: input.plan, plans: input.actionPlans ?? [], journal: input.journal });
 }
 
 /** The outfitting visit the build panel would show now (outfittingVisit()), when it is on. */
@@ -189,7 +189,7 @@ export function modeNow(
   };
   const build =
     j && input.settings.modes.build
-      ? buildNow({ note: input.plan, plans: input.buildPlans ?? [], journal: j }, choice, visit)
+      ? buildNow({ note: input.plan, plans: input.actionPlans ?? [], journal: j }, choice, visit)
       : undefined;
   const fromJournal = j
     ? journalMode(
@@ -267,6 +267,8 @@ function panelFor(
       now: input.now,
       missionsNow: missionsNow(j, input.plan),
       nav: input.nav,
+      // Judged with the whole journal, as ActionFinisher judges it, so both share one judgement.
+      judged: hasActions(input.plan) ? judgeBuild(input.plan, j) : null,
     });
   }
   if (mode === "build") {

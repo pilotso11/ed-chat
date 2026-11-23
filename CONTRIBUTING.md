@@ -52,7 +52,14 @@ the latest release, so CI commits and publishes nothing for it.
 The README's panel pictures are the app's own panel, built from moments in real journals.
 `scripts/hud-scenes.ts` replays each scene in `docs/images/hud-scenes.json` through
 ed-mcp's journal reader and builds the panel, and `scripts/hud-screenshots.cjs` renders
-it in the panel's own page. The usage is at the top of each script.
+it in the panel's own page. The usage is at the top of each script. Not every scene is a README
+picture: some (a build plan, plans with stop actions) are there to check a change.
+
+To show that a change does not change how the panels look, render the scenes from `main` (in
+another worktree) and from the branch at about the same time, since the scenes read Spansh's live
+data and the time, then compare them with `scripts/hud-compare.cjs`. It compares each scene's
+view and pixels, and can compare a scene with another, such as a plan with stop actions with the
+same plan with cargo only (`hud-trade-actions=hud-trade`).
 
 ## Releases
 

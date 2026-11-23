@@ -144,5 +144,389 @@
         }
       ]
     }
+  },
+  {
+    "name": "hud-trade-actions",
+    "file": "Journal.210915182810.01.log",
+    "until": "2021-09-15T18:30:20Z",
+    "plan": {
+      "title": "Trade loop: Dvorsi ⇄ Ys",
+      "kind": "trading",
+      "repeat": true,
+      "lap": 2,
+      "stops": [
+        {
+          "system": "Dvorsi",
+          "station": "Chernykh Ring",
+          "purpose": "Sell 642 t Uranium, then buy 656 t Agronomic Treatment",
+          "label": "Sell 642 t Uranium, then buy 656 t Agronomic Treatment at Chernykh Ring",
+          "kind": "trade",
+          "cargo": [
+            {
+              "commodity": "Uranium",
+              "action": "sell",
+              "amount": 642,
+              "price": 3177
+            },
+            {
+              "commodity": "Agronomic Treatment",
+              "action": "buy",
+              "amount": 656,
+              "price": 2618
+            }
+          ]
+        },
+        {
+          "system": "Ys",
+          "station": "Ender's Dream",
+          "purpose": "Sell 656 t Agronomic Treatment, then buy 642 t Uranium",
+          "label": "Sell 656 t Agronomic Treatment, then buy 642 t Uranium at Ender's Dream",
+          "kind": "trade",
+          "cargo": [
+            {
+              "commodity": "Agronomic Treatment",
+              "action": "sell",
+              "amount": 656,
+              "price": 29658
+            },
+            {
+              "commodity": "Uranium",
+              "action": "buy",
+              "amount": 642,
+              "price": 2972
+            }
+          ]
+        }
+      ],
+      "started_at": "2021-09-15T18:22:30Z",
+      "tradeActions": true
+    }
+  },
+  {
+    "name": "hud-passenger-actions",
+    "file": "Journal.2022-04-03T145042.01.log",
+    "until": "2022-04-03T14:18:40Z",
+    "plan": {
+      "title": "Passenger run from Warnates",
+      "started_at": "2022-04-03T13:00:00Z",
+      "stops": [
+        {
+          "system": "LTT 10918",
+          "station": "Fujimori City",
+          "purpose": "Drop tourists and aid workers",
+          "kind": "mission",
+          "actions": [
+            {
+              "id": "complete-858029009",
+              "kind": "complete_mission",
+              "label": "Hand in mission 858029009",
+              "status": "todo",
+              "mission_id": 858029009
+            },
+            {
+              "id": "complete-858029085",
+              "kind": "complete_mission",
+              "label": "Hand in mission 858029085",
+              "status": "todo",
+              "mission_id": 858029085
+            }
+          ]
+        },
+        {
+          "system": "Itza",
+          "station": "Ellison Station",
+          "purpose": "Drop VIPs",
+          "kind": "mission",
+          "actions": [
+            {
+              "id": "complete-858029335",
+              "kind": "complete_mission",
+              "label": "Hand in mission 858029335",
+              "status": "todo",
+              "mission_id": 858029335
+            }
+          ]
+        },
+        {
+          "system": "Itza",
+          "station": "Ore Terminal",
+          "purpose": "Drop VIPs",
+          "kind": "mission",
+          "actions": [
+            {
+              "id": "complete-858029420",
+              "kind": "complete_mission",
+              "label": "Hand in mission 858029420",
+              "status": "todo",
+              "mission_id": 858029420
+            }
+          ]
+        },
+        {
+          "system": "LHS 1612",
+          "station": "Frobenius Station",
+          "purpose": "Drop VIPs",
+          "kind": "mission",
+          "actions": [
+            {
+              "id": "complete-858029523",
+              "kind": "complete_mission",
+              "label": "Hand in mission 858029523",
+              "status": "todo",
+              "mission_id": 858029523
+            }
+          ]
+        },
+        {
+          "system": "Phekda",
+          "purpose": "Sightseeing",
+          "kind": "mission",
+          "actions": [
+            {
+              "id": "complete-858029568",
+              "kind": "complete_mission",
+              "label": "Hand in mission 858029568",
+              "status": "todo",
+              "mission_id": 858029568
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "hud-build",
+    "file": "Journal.2026-11-08T232641.01.log",
+    "until": "2026-11-08T23:48:30Z",
+    "plan": {
+      "title": "Explorer upgrade",
+      "kind": "engineering",
+      "build": {
+        "target": "ship",
+        "scope": "upgrade",
+        "ship": "explorer_nx",
+        "ship_id": 82,
+        "started_at": "2026-11-08T23:30:00Z",
+        "summary": "Thrusters, shields and sensors G5"
+      },
+      "stops": [
+        {
+          "system": "Arque",
+          "station": "Abel Laboratory",
+          "purpose": "Thrusters",
+          "kind": "engineer",
+          "actions": [
+            {
+              "id": "thrusters",
+              "kind": "engineer",
+              "label": "Roll thrusters Clean Tuning to G5",
+              "status": "todo",
+              "slot": "MainEngines",
+              "blueprint": "Engine_Tuned",
+              "grade": 5
+            }
+          ],
+          "status": "done"
+        },
+        {
+          "system": "Wulganda",
+          "station": "Cassidy Orbital",
+          "purpose": "Alloys for the sensors",
+          "kind": "trader",
+          "actions": [
+            {
+              "id": "radiolic",
+              "kind": "trade_material",
+              "label": "Trade 12 Proto Light Alloys → 2 Proto Radiolic Alloys",
+              "status": "todo",
+              "paid": {
+                "material": "Proto Light Alloys",
+                "count": 12
+              },
+              "received": {
+                "material": "Proto Radiolic Alloys",
+                "count": 2
+              }
+            }
+          ]
+        },
+        {
+          "system": "Laksak",
+          "station": "Trader's Rest",
+          "purpose": "Shields and sensors",
+          "kind": "engineer",
+          "actions": [
+            {
+              "id": "shields",
+              "kind": "engineer",
+              "label": "Roll shields Enhanced Low Power to G5",
+              "status": "todo",
+              "slot": "Slot05_Size5",
+              "blueprint": "ShieldGenerator_Optimised",
+              "grade": 5
+            },
+            {
+              "id": "sensors",
+              "kind": "engineer",
+              "label": "Roll sensors Light Weight to G5",
+              "status": "todo",
+              "slot": "Radar",
+              "blueprint": "Sensor_LightWeight",
+              "grade": 5
+            },
+            {
+              "id": "scanner",
+              "kind": "engineer",
+              "label": "Roll surface scanner Expanded Radius to G5",
+              "status": "todo",
+              "slot": "Slot12_Size1",
+              "blueprint": "Sensor_Expanded",
+              "grade": 5
+            },
+            {
+              "id": "refuel",
+              "kind": "refuel",
+              "label": "Refuel",
+              "status": "todo"
+            }
+          ]
+        },
+        {
+          "system": "Shinrarta Dezhra",
+          "station": "Jameson Base",
+          "purpose": "Life support",
+          "kind": "engineer",
+          "actions": [
+            {
+              "id": "life",
+              "kind": "engineer",
+              "label": "Roll life support Light Weight to G5",
+              "status": "todo",
+              "slot": "LifeSupport",
+              "blueprint": "Misc_LightWeight",
+              "grade": 5
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "hud-build-engineer",
+    "file": "Journal.2026-11-08T232641.01.log",
+    "until": "2026-11-08T23:58:45Z",
+    "plan": {
+      "title": "Explorer upgrade",
+      "kind": "engineering",
+      "build": {
+        "target": "ship",
+        "scope": "upgrade",
+        "ship": "explorer_nx",
+        "ship_id": 82,
+        "started_at": "2026-11-08T23:30:00Z",
+        "summary": "Thrusters, shields and sensors G5"
+      },
+      "stops": [
+        {
+          "system": "Arque",
+          "station": "Abel Laboratory",
+          "purpose": "Thrusters",
+          "kind": "engineer",
+          "actions": [
+            {
+              "id": "thrusters",
+              "kind": "engineer",
+              "label": "Roll thrusters Clean Tuning to G5",
+              "status": "todo",
+              "slot": "MainEngines",
+              "blueprint": "Engine_Tuned",
+              "grade": 5
+            }
+          ],
+          "status": "done"
+        },
+        {
+          "system": "Wulganda",
+          "station": "Cassidy Orbital",
+          "purpose": "Alloys for the sensors",
+          "kind": "trader",
+          "actions": [
+            {
+              "id": "radiolic",
+              "kind": "trade_material",
+              "label": "Trade 12 Proto Light Alloys → 2 Proto Radiolic Alloys",
+              "status": "done",
+              "paid": {
+                "material": "Proto Light Alloys",
+                "count": 12
+              },
+              "received": {
+                "material": "Proto Radiolic Alloys",
+                "count": 2
+              }
+            }
+          ],
+          "status": "done"
+        },
+        {
+          "system": "Laksak",
+          "station": "Trader's Rest",
+          "purpose": "Shields and sensors",
+          "kind": "engineer",
+          "actions": [
+            {
+              "id": "shields",
+              "kind": "engineer",
+              "label": "Roll shields Enhanced Low Power to G5",
+              "status": "todo",
+              "slot": "Slot05_Size5",
+              "blueprint": "ShieldGenerator_Optimised",
+              "grade": 5
+            },
+            {
+              "id": "sensors",
+              "kind": "engineer",
+              "label": "Roll sensors Light Weight to G5",
+              "status": "todo",
+              "slot": "Radar",
+              "blueprint": "Sensor_LightWeight",
+              "grade": 5
+            },
+            {
+              "id": "scanner",
+              "kind": "engineer",
+              "label": "Roll surface scanner Expanded Radius to G5",
+              "status": "todo",
+              "slot": "Slot12_Size1",
+              "blueprint": "Sensor_Expanded",
+              "grade": 5
+            },
+            {
+              "id": "refuel",
+              "kind": "refuel",
+              "label": "Refuel",
+              "status": "todo"
+            }
+          ]
+        },
+        {
+          "system": "Shinrarta Dezhra",
+          "station": "Jameson Base",
+          "purpose": "Life support",
+          "kind": "engineer",
+          "actions": [
+            {
+              "id": "life",
+              "kind": "engineer",
+              "label": "Roll life support Light Weight to G5",
+              "status": "todo",
+              "slot": "LifeSupport",
+              "blueprint": "Misc_LightWeight",
+              "grade": 5
+            }
+          ]
+        }
+      ]
+    }
   }
 ]

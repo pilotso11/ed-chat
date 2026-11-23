@@ -635,6 +635,36 @@ describe("commodity names", () => {
     );
     expect([...m!.items.keys()]).toEqual(["gold"]);
   });
+
+  it("gives an internal name that differs from the English name's key", () => {
+    expect(commodityKey("agriculturalmedicines")).toBe(commodityKey("Agri-Medicines"));
+    expect(commodityKey("$terrainenrichmentsystems_name;")).toBe(
+      commodityKey("Land Enrichment Systems"),
+    );
+    expect(commodityKey("hazardousenvironmentsuits")).toBe(commodityKey("H.E. Suits"));
+    for (const [internal, english] of <[string, string][]>[
+      ["AlyaBodilySoap", "Alya Body Soap"],
+      ["KachiriginLeaches", "Kachirigin Filter Leeches"],
+      ["ComercialSamples", "Commercial Samples"],
+      ["EncriptedDataStorage", "Encrypted Data Storage"],
+      ["OccupiedCryoPod", "Occupied Escape Pod"],
+      ["LargeExplorationDataCash", "Large Survey Data Cache"],
+      ["SmallExplorationDataCash", "Small Survey Data Cache"],
+      ["USSCargoBlackBox", "Black Box"],
+      ["USSCargoTradeData", "Trade Data"],
+      ["USSCargoRebelTransmissions", "Rebel Transmissions"],
+      ["USSCargoAncientArtefact", "Ancient Artefact"],
+      ["AncientCasket", "Guardian Casket"],
+      ["AncientOrb", "Guardian Orb"],
+      ["AncientRelic", "Guardian Relic"],
+      ["AncientTablet", "Guardian Tablet"],
+      ["AncientTotem", "Guardian Totem"],
+      ["AncientUrn", "Guardian Urn"],
+      ["PlatinumAloy", "Platinum Alloy"],
+      ["TransgenicOnionHead", "Lucan Onionhead"],
+    ])
+      expect(commodityKey(internal), internal).toBe(commodityKey(english));
+  });
 });
 
 describe("trade auto-advance", () => {
@@ -673,6 +703,14 @@ describe("trade auto-advance", () => {
         }),
       ),
     ).toBeNull();
+  });
+
+  it("leaves a stop with actions to ActionFinisher", () => {
+    const actions = [
+      { id: "buy-gold", kind: "buy_commodity", label: "Buy", status: "todo", commodity: "Gold" },
+    ] as Plan["stops"][number]["actions"];
+    const plan = loop({ stops: loop().stops.map((s, i) => (i === 0 ? { ...s, actions } : s)) });
+    expect(tradeAdvance(input({ plan }))).toBeNull();
   });
 
   it("does not count cargo brought from an earlier stop as bought here", () => {
@@ -1169,6 +1207,89 @@ describe("the trade panel", () => {
     expect(
       tradePanel({ ...base, missions: [m(3, { commodity: "Gold", count: 5 })] })!.footer,
     ).toEqual(["Deliveries: 1 mission"]);
+  });
+});
+
+describe("the trade panel with stop actions", () => {
+  /** The plan as ed-mcp 0.11.0 writes it: each cargo row also a buy or sale action. */
+  const withActions = (p: Plan, firstLap = false): Plan => ({
+    ...p,
+    started_at: new Date(NOW - 60 * MIN).toISOString(),
+    stops: p.stops.map((s, i) => ({
+      ...s,
+      actions: (s.cargo ?? [])
+        .filter((c) => !(firstLap && i === 0 && c.action === "sell"))
+        .map((c) => ({
+          id: `${c.action}-${c.commodity.toLowerCase()}`,
+          kind: c.action === "buy" ? ("buy_commodity" as const) : ("sell_commodity" as const),
+          label: `${c.action === "buy" ? "Buy" : "Sell"} ${c.amount} t ${c.commodity}`,
+          status: "todo" as const,
+          commodity: c.commodity,
+          count: c.amount,
+          ...(c.price !== undefined ? { price: c.price } : {}),
+        })),
+    })),
+  });
+  const input = (plan: Plan, o: Partial<Parameters<typeof tradePanel>[0]> = {}) => ({
+    plan,
+    events: [
+      docked(10, "Kremainn", "Wohler Terminal", 7),
+      sell(8, "Silver", 720, 4_100, {}, 7),
+      buy(5, "Gold", 700, 9_400, 7),
+    ],
+    cargo: hold({ Gold: 700 }),
+    capacity: 720,
+    location: where("Kremainn", "Wohler Terminal"),
+    market: market(7, { Gold: [9_400, 9_000], Silver: [3_900, 4_100] }),
+    missions: [] as Mission[],
+    now: NOW,
+    ...o,
+  });
+
+  it("shows a stop's actions as its cargo rows were shown", () => {
+    for (const lap of [1, 2]) {
+      const cargo = loop({ lap });
+      const actions = withActions(loop({ lap, id: `actions-${lap}` }), lap === 1);
+      expect(tradePanel(input(actions))).toEqual(tradePanel(input(cargo)));
+    }
+    // Bought short with room left: open on both. The hold full: done on both.
+    const short = { cargo: hold({ Gold: 700 }), capacity: 800 };
+    const a = withActions(loop({ lap: 2, id: "short" }));
+    expect(tradePanel(input(a, short))).toEqual(tradePanel(input(loop({ lap: 2 }), short)));
+    expect(tradePanel(input(a, short))!.rows[2]!.tone).toBeUndefined();
+  });
+
+  it("shows an action done as the plan has it, docked here or not", () => {
+    const p = withActions(loop({ lap: 2, id: "marked" }));
+    p.stops[0]!.actions![0]!.status = "done";
+    const away = input(p, { events: [], location: where("Kremainn", null), cargo: [] });
+    const rows = tradePanel(away)!.rows;
+    expect(rows[1]).toMatchObject({ text: "  SELL 720 t Silver", tone: "good" });
+    expect(rows[2]!.tone).toBeUndefined();
+  });
+
+  it("shows a buy with no tons by its label, not as 0 t", () => {
+    const p = withActions(loop({ lap: 2, id: "no-count" }));
+    const { count: _count, ...buy } = p.stops[0]!.actions![1]!;
+    p.stops[0]!.actions![1] = { ...buy, label: "Buy Gold" };
+    const rows = tradePanel(input(p))!.rows;
+    expect(rows[2]!.text).toBe("  Buy Gold");
+    expect(rows.some((r) => /(^|s)0 t/.test(r.text))).toBe(false);
+  });
+
+  it("shows another kind of action by its label", () => {
+    const p = withActions(loop({ lap: 2, id: "refuel" }));
+    p.stops[0]!.actions!.push({ id: "fuel", kind: "refuel", label: "Refuel", status: "todo" });
+    const rows = tradePanel(input(p))!.rows;
+    expect(rows.at(-2)).toEqual({ text: "  Refuel" });
+    expect(rows.at(-1)!.right).toBe("SELL 720 t Gold · BUY 720 t Silver");
+  });
+
+  it("shows a stop's only action done when it has no status text", () => {
+    const p = withActions(loop({ lap: 2, id: "fuelonly" }));
+    p.stops[0]!.actions = [{ id: "fuel", kind: "refuel", label: "Refuel", status: "done" }];
+    const rows = tradePanel(input(p))!.rows;
+    expect(rows).toContainEqual({ text: "  ✓ done", tone: "good" });
   });
 });
 

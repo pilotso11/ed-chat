@@ -1002,13 +1002,13 @@ describe("HudFeed bookmarks and a fresh Status.json", () => {
       "J",
       { read: async () => "{}" },
     );
-    expect((await feed.poll()).buildPlans).toHaveLength(1);
+    expect((await feed.poll()).actionPlans).toHaveLength(1);
     // Read once while unchanged.
-    expect((await feed.poll()).buildPlans).toHaveLength(1);
+    expect((await feed.poll()).actionPlans).toHaveLength(1);
     expect(gets).toEqual(["b"]);
     // Finished at this docking: kept, for "Build complete".
     list = summary(1);
-    expect((await feed.poll()).buildPlans).toHaveLength(1);
+    expect((await feed.poll()).actionPlans).toHaveLength(1);
     // Undocked: gone.
     events = [
       ...events,
@@ -1020,7 +1020,7 @@ describe("HudFeed bookmarks and a fresh Status.json", () => {
       },
     ];
     location = { system: "S", station: null, docked: false };
-    expect((await feed.poll()).buildPlans).toEqual([]);
+    expect((await feed.poll()).actionPlans).toEqual([]);
   });
 
   it("takes no bookmarks plan as none, not as an error", async () => {

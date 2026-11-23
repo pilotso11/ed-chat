@@ -104,7 +104,11 @@ header shows berths used against the cabins fitted, and the total reward.
 Ask Claude to plan the route (ed-mcp's `missions_route`): the stops then follow its
 order, the route below shows the next stop, and arriving copies the next system.
 When you take a mission the route does not cover, the panel says the route is
-stale.
+stale. The route's stops name the missions they serve in their [stop actions](#stop-actions)
+(ed-mcp 0.11.0 and later) or, in an older plan, in a missions list. Each stop's deliveries
+to the station's cargo depot and hand-ins are ticked off from the journal, and when the last is
+done the stop is marked done and the next stop's system is copied. The rows are the missions
+in the journal, as before.
 
 ## Trade
 
@@ -143,20 +147,33 @@ no half-hour rate and no amber. In the first half hour the session rate alone de
 so a loop whose first sale comes late can read amber until it settles. Before your first
 rate it shows the planned rate alone; a finished route shows no planned rate. Traded
 cargo that leaves without a sale (to a depot, a mission or your carrier, or ejected) takes
-its cost with it. When a stop's
-buys are bought there and in the hold, and its sales are sold there, the stop is marked done and the next
-stop's system is copied for the galaxy map. Undocking first leaves the stop open;
-the route keys still work. Passengers taken on a trade run show on a footer line;
+its cost with it.
+
+A plan saved by ed-mcp 0.11.0 or later gives each stop a buy or sale [action](#stop-actions)
+for each row of its cargo, and the panel shows those rows as it showed the cargo. Each is
+ticked off from the market's buys and sales at that station since the lap began, added up to
+the tons; a buy that filled the hold, or a sale that left none of it aboard, counts as done
+short of the tons while you are still docked there. When the stop's last action is done, the stop is marked done and the next
+stop's system is copied for the galaxy map. A stop with no actions (a plan saved before, a stop
+that only passes through, and a loop's first stop on its first lap when it only sells, since
+the first lap has nothing to sell there yet and ed-mcp leaves out only those sales) is marked
+done as before: when its buys are bought there and in the hold, and its sales
+are sold there; undocking first leaves it open. The route keys still work.
+
+Passengers taken on a trade run show on a footer line;
 a passenger or delivery mission taken after your last trade shows the passenger
 panel until you trade again. Trade ends when no traded cargo is aboard (mined ore
 and salvage do not count) and no trade stop is left, or after five jumps with no
 trade buy or sale of traded cargo, unless traded cargo is aboard on the way to a
-trade stop. Auto-advance follows the plan's current stop, only when it is a trade
-stop; a relog while docked is the same visit.
+trade stop. A stop with no actions is marked done only as the plan's current stop, when it is
+a trade stop; a relog while docked is the same visit. A stop with actions is marked done when
+its last action is, even before its turn, quietly.
 
-Known limit: goods are matched by the names the game gives them, which match the
-plan's English names only on an English game client. On another language, auto-advance
-and the market's price do not work, as for mining.
+Known limit: the hold and the market name goods as the game does, which matches the plan's
+English names only on an English game client. On another language, the hold, the market's
+price and a stop with no actions do not work, as for mining. A stop's actions are ticked off
+from the journal's internal names too, which for most goods are the English name (those that
+differ, such as Agri-Medicines, are known).
 
 ## Build
 
@@ -236,9 +253,49 @@ run, say) comes back; `hud.build.outfittingVisit` turns it off. The route rows s
 it. Choosing build mode with the hotkey, an engineering activity note, or swapping to a ship
 whose build plan has work, shows that plan instead while it has work to do.
 
+A build's stops can also have the station's [actions](#stop-actions), such as a refuel or a
+data sale, which are ticked off at that station. A plan with only those, or only trade and
+mission actions, is not a build: the build panel follows a plan with a build, or with an action
+of a build's kind.
+
 Known limits: an action done while ED Chat was not running is ticked off on the next start, and
 when that finishes its stop, the stop is marked done too. A stop whose actions were all marked
 done already when ED Chat started waits for a route key.
+
+## Stop actions
+
+ed-mcp 0.11.0 and later writes what to do at each stop of any plan as the stop's actions: a
+trade route's buys and sales, a mission run's deliveries and hand-ins, a build's purchases and
+rolls, and the station's services. The panel judges them all the same way, from the journal,
+and writes each one done into the plan, with the events that did it, so Claude sees it too.
+
+| Action | Done by |
+|---|---|
+| `buy_commodity`, `sell_commodity` | `MarketBuy`, `MarketSell` of the commodity, added up to the tons |
+| `complete_mission` | `MissionCompleted` of the mission |
+| `collect_cargo`, `deliver_cargo` | `CargoDepot` collecting or delivering the mission's cargo, added up to the count, or showing all of it |
+| `sell_data` | `MultiSellExplorationData`, `SellExplorationData` (exploration), `SellOrganicData` (organic) |
+| `redeem_vouchers` | `RedeemVoucher` of the kind asked for (bounty, combat bond) |
+| `refuel`, `repair`, `restock` | `RefuelAll` or `RefuelPartial`, `RepairAll` or `Repair`, `BuyAmmo` |
+| the build's kinds | see [Build](#build) |
+
+- Trades and services count only at the stop's own station (in its system, for a stop with no
+  station), once the journal shows where you are. A mission counts wherever it is handed in: its
+  ID says which it is.
+- An action counts the events after its own start, not one at that very time (ed-mcp sets one
+  on a mission's actions, and on each action when a loop's lap starts), else the build's, else
+  the plan's (a trade or mission save sets it), else when the plan was made.
+- One event finishes one action of each kind it matches, the first still to do in the plan's
+  order; tons and counts are shared out in that order.
+- When a stop's last action is done, the stop is marked done and, when it is the stop shown, the
+  next stop's system is copied. The lap's newest claimed event goes with it as the next lap's
+  start, so a loop's next lap counts what comes after it, and nothing the last lap claimed; with
+  no claim, the newest journal event. The route keys give the newest journal event.
+- The panel finishes the activity note's plan and every open build plan. Another plan with
+  actions, such as an old trade loop left open, is left alone, or it would take this run's
+  trades. A plan whose panel is turned off in `hud.modes` is left alone too.
+- `accept_mission` is not judged yet, and does not hold its stop open: the stop is done when its
+  other actions are. A stop with only `accept_mission` needs Claude or a route key.
 
 ## Route
 

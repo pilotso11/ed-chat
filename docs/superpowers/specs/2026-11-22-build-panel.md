@@ -57,7 +57,9 @@ events; anything on foot (journal state skips suits and has no ship locker).
 **In ED Chat** (on main since PR #83): the trade panel judges each action of the current stop
 (`actionDone()`), and `TradeStopFinisher` (`tradeStops.ts`) marks the stop done once, keyed by
 plan, lap, stop and docking, after judging it again on the plan as it is now, then copies the
-next stop's system. The build panel follows the same pattern with more kinds of action.
+next stop's system. The build panel follows the same pattern with more kinds of action. (Since
+ed-mcp 0.11.0 every plan's stops have actions, and one judge and one finisher serve them all:
+see "Stop actions for every plan" in the order of work.)
 
 ## The journal, as the game writes it
 
@@ -616,7 +618,8 @@ The mode is `build`. `hud.modes.build` turns it off.
 
 ## Auto-advance
 
-As `TradeStopFinisher` does, after each poll (`BuildFinisher`, in `src/core/hud/buildStops.ts`):
+As `TradeStopFinisher` does, after each poll (`ActionFinisher`, in `src/core/hud/actionStops.ts`;
+`BuildFinisher` in `buildStops.ts` until stop actions came to every plan):
 
 - Each action the journal shows done, whose plan status is `todo`, is marked done through
   `PlanStore.updateAction()`, with its `done_by`, once per key (see "Writing once" in Actions). The plan is
@@ -907,6 +910,60 @@ for on foot. ED Chat pins each.
 5. **ed-mcp: on foot.** The on-foot action kinds' journal state (`suits`, `locker`, `backpack`), kept
    events, `build_plan` for a suit loadout with needs given by Claude. Release.
 6. **ED Chat: on-foot actions.** Their judges, the choice between two open plans, "equip to check".
+
+**Stop actions for every plan.** ed-mcp 0.11.0 gives the stops of trade routes, mission runs and
+any plan their own actions (`buy_commodity`, `sell_commodity`, `accept_mission`,
+`complete_mission`, `collect_cargo`, `deliver_cargo`, `sell_data`, `redeem_vouchers`,
+`refuel`, `repair`, `restock`, with the events that finish each in `ACTION_EVENTS`), a plan
+`started_at` and an action's own `started_at`, and `updateStop(..., { lapStart })`. ED Chat
+moved onto them in one PR. **Built.** As built:
+
+- **One judge** (`buildJudge.ts`, `judgeBuild()`) for every plan's actions, with the build's
+  rules: one event per action per role, `done_by`, sums shared out in plan order. The new roles:
+  a market buy or sale (by `Type` and `Type_Localised` through `commodityKey()`, which maps the
+  internal names that are not the English one, such as `agriculturalmedicines`, and adds up
+  `Count`); a mission completed (`MissionID`); a depot collect or delivery (`UpdateType`,
+  `MissionID`, `Count`, and whether `ItemsCollected` or `ItemsDelivered` reached
+  `TotalItemsToDeliver`, which finishes it whatever its count, and the only way for one with no
+  count); data sold (exploration or organic); a voucher redeemed (`bounty`, `combat_bond`); a
+  refuel, a repair, a restock.
+- **At the stop.** Trades and services count only where the ship was docked at the stop's
+  station (its system, for a stop with none), as the events since the last `Docked`, `Location`,
+  `Undocked`, `FSDJump` or `CarrierJump` show; until the events say, nothing counts.
+  Missions count anywhere: the ID says which.
+- **From when.** Each action counts events after (not at) its own `started_at`, then
+  `build.started_at`, then the plan's `started_at`, then `created_at`: ed-mcp starts a lap at the
+  time of the event that finished the last, which must not count again.
+- **Writing once, per lap.** The keys of a write that names no event (an action marked by hand,
+  one done by state) carry the plan's lap and `started_at`, so the next lap writes them again.
+- **The hold.** A buy that some event bought and that filled the hold, or a sale that left none
+  of it aboard, is done short of its count, only while the ship is still in the docking of the
+  action's claims (a relog while docked is the same docking): the trade panel's rule before
+  actions, for a hold smaller than planned or a buy that came up short.
+- **On foot left out.** A `suit_loadout` plan is not judged or finished yet, and
+  `setBuildShip()` is called only for a ship build. Any plan with a `build` follows
+  `hud.modes.build`.
+- **Not judged:** `accept_mission` (no field ties it to an event before the mission exists). It
+  does not hold its stop open (`openStops()`), so the stop's other actions finish it.
+- **Which plans are builds.** `isBuildPlan()` needs a `build`, or an action of a kind not in
+  `ACTION_EVENTS`: a trade route or mission run is not one, so the build panel and mode leave
+  them alone. The feed's open plans with actions are `actionPlans`.
+- **One finisher** (`ActionFinisher`, `actionStops.ts`, from `BuildFinisher`, with its guards):
+  the open build plans and the note's plan, whatever its kind; an old trade plan left open is not
+  finished, or it would take the run's trades. `on` leaves out a plan whose panel is off. The
+  stop shown is the build panel's for the build it shows, else `currentStop()` for the note's
+  plan. Every stop marked passes `lapStart` (`JournalService.newestEventAt()`, else the poll's
+  newest event); the route keys pass it too.
+- **Fallback.** `TradeStopFinisher` and `tradeAdvance()` stay for a trade stop with no actions:
+  a plan saved before 0.11.0, a stop that only passes through, and a loop's first stop on its first
+  lap when it only sells (ed-mcp leaves out only that stop's sales on lap 1; its buys have
+  actions). They do nothing for a stop with actions.
+- **The panels.** The trade panel's stop rows come from a stop's actions (`stopTrades()`): a buy
+  or sale shows as its cargo row did, done as the judge says; another action by its label. The
+  passenger panel reads the missions a stop serves from its actions' `mission_id` as well as the
+  `missions` list. Headers and footers are unchanged. `scripts/hud-compare.cjs` showed the six
+  README scenes the same as main, view and pixels, and the trade and passenger scenes with
+  actions the same as the ones without.
 
 Each is its own PR.
 
