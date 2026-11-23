@@ -9,7 +9,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import os from "node:os";
 import path from "node:path";
-import { openStores, type PlanStopInput } from "ed-mcp/journal";
+import { openStores, type ActionInput, type Plan, type PlanStopInput } from "ed-mcp/journal";
 import { HudFeed } from "../src/core/hud/feed.js";
 import { buildHud, type HudView } from "../src/core/hud/hud.js";
 import { KnownBodies, fetchSpansh } from "../src/core/hud/known.js";
@@ -32,14 +32,28 @@ export interface Scene {
   status?: Record<string, unknown>;
   /** Cargo.json: the hold, by journal name and tons. Older journals' Cargo events have no list. */
   cargo?: Record<string, number>;
-  /** A route plan, set as the activity note's plan. */
+  /**
+   * A route plan, set as the activity note's plan. Its stops can carry actions, as ed-mcp 0.11.0
+   * writes them. Times in it (started_at, a build's, an action's) are journal times, moved as the
+   * journal's are.
+   */
   plan?: {
     title: string;
     stops: PlanStopInput[];
-    /** The activity note's kind; missions unless given. */
-    kind?: "missions" | "trading";
+    /** The activity note's kind: missions unless given; engineering for a build. */
+    kind?: "missions" | "trading" | "engineering";
     repeat?: boolean;
     lap?: number;
+    /** When the plan's actions count journal events from. */
+    started_at?: string;
+    /** A build plan's build. */
+    build?: Plan["build"];
+    /**
+     * Gives each trade stop a buy or sale action for each cargo row, as trade_route and
+     * trade_loops write them beside the cargo: on a loop's first lap, the first stop's sales get
+     * none.
+     */
+    tradeActions?: boolean;
   };
   /** Surface bookmarks. */
   bookmarks?: PlanStopInput[];
@@ -83,12 +97,49 @@ async function journals(dir: string): Promise<{ file: string; start: number }[]>
 
 const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** A lower-case id part from a name, as ed-mcp's slug(): "Agri-Medicines" gives "agri-medicines". */
+const slug = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "x";
+
+/** The buy and sale actions ed-mcp's trade tools write for a stop's cargo (cargoAction()). */
+function tradeActions(stop: PlanStopInput, firstLap: boolean): ActionInput[] {
+  return (stop.cargo ?? [])
+    .filter((c) => !(firstLap && c.action === "sell"))
+    .map((c) => ({
+      id: `${c.action}-${slug(c.commodity)}`,
+      kind: c.action === "buy" ? "buy_commodity" : "sell_commodity",
+      label: `${c.action === "buy" ? "Buy" : "Sell"} ${c.amount} t ${c.commodity}`,
+      status: "todo",
+      commodity: c.commodity,
+      count: c.amount,
+      ...(c.price !== undefined ? { price: c.price } : {}),
+    }));
+}
+
+/** The scene's plan as it is saved: its times moved, and the trade actions added. */
+function planStops(plan: NonNullable<Scene["plan"]>, move: (t: string) => string) {
+  const firstLap = !!plan.repeat && (plan.lap ?? 1) === 1;
+  return plan.stops.map((stop, i) => {
+    const actions = [
+      ...(plan.tradeActions && stop.kind === "trade"
+        ? tradeActions(stop, firstLap && i === 0)
+        : []),
+      ...(stop.actions ?? []),
+    ].map((a) => (a.started_at ? { ...a, started_at: move(a.started_at) } : a));
+    return actions.length ? { ...stop, actions } : stop;
+  });
+}
+
 async function scene(s: Scene, journalDir: string, all: { file: string; start: number }[]) {
   const at = all.findIndex((j) => j.file === s.file);
   if (at < 0) throw new Error(`${s.name}: no journal ${s.file}`);
   const cut = Date.parse(s.until);
   // A minute ago, so ed-mcp reads the journal as current.
   const shift = Date.now() - 60_000 - cut;
+  const move = (t: string) => (JOURNAL_TIME.test(t) ? iso(Date.parse(t) + shift) : t);
   const dir = await mkdtemp(path.join(os.tmpdir(), "edchat-scene-"));
   const sync = await mkdtemp(path.join(os.tmpdir(), "edchat-scene-sync-"));
   try {
@@ -135,11 +186,21 @@ async function scene(s: Scene, journalDir: string, all: { file: string; start: n
       );
     const stores = openStores({ ED_JOURNAL_DIR: dir, ED_MCP_SYNC_DIR: sync }, { keep: HUD_EVENTS });
     if (s.plan) {
+      const build = s.plan.build;
       const plan = await stores.plans.upsert({
         id: "route",
         name: s.plan.title,
-        stops: s.plan.stops,
+        stops: planStops(s.plan, move),
         ...(s.plan.repeat ? { repeat: true, lap: s.plan.lap ?? 1 } : {}),
+        ...(s.plan.started_at ? { started_at: move(s.plan.started_at) } : {}),
+        ...(build
+          ? {
+              build: {
+                ...build,
+                ...(build.started_at ? { started_at: move(build.started_at) } : {}),
+              },
+            }
+          : {}),
       });
       await stores.activity.set({
         kind: s.plan.kind ?? "missions",
