@@ -585,9 +585,9 @@ export interface BuildJudgement {
 
 /**
  * When an action counts journal events after (ed-mcp's schema: events after started_at, not at
- * it; a new lap starts at the time of the event that finished the last one): its own started_at (a lap or a mission save sets
- * it), else the build's, else the plan's (a trade or mission save sets it), else when the plan
- * was made. With no action, the plan's.
+ * it; a new lap starts at the last lap's newest claim): its own started_at (a lap or a mission
+ * save sets it), else the build's, else the plan's (a trade or mission save sets it), else when
+ * the plan was made. With no action, the plan's.
  */
 const startOf = (plan: Plan, a?: Action) =>
   Date.parse(a?.started_at ?? plan.build?.started_at ?? plan.started_at ?? plan.created_at) || 0;
@@ -995,7 +995,8 @@ function holdDone(x: ActionJudgement, journal: Journal): boolean {
   if (x.taken <= 0 || !cargo) return false;
   if (a.kind === "buy_commodity") {
     const capacity = journal.ship?.cargo_capacity ?? null;
-    return capacity !== null && used(cargo) >= capacity;
+    // A hold of 0 (no Loadout read yet, or no racks) is not a full one.
+    return capacity !== null && capacity > 0 && used(cargo) >= capacity;
   }
   if (a.kind === "sell_commodity") return !!a.commodity && held(cargo, a.commodity) === 0;
   return false;

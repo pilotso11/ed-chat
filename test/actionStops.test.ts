@@ -452,6 +452,20 @@ describe("ActionFinisher on trade and mission plans", () => {
     expect(t.log.laps).toEqual([iso(5)]);
   });
 
+  it("starts the next lap at the lap's newest claim, at whichever stop it was", async () => {
+    const t = setup(loop());
+    await t.poll(at("Far", "Hub", []));
+    // Sold at Far first, then bought at Port: both stops are marked in one poll.
+    await t.poll(
+      at("Far", "Hub", [
+        market(5, "MarketSell", 10),
+        ev(7, "Docked", { StarSystem: "S", StationName: "Port", MarketID: 1 }),
+        market(8, "MarketBuy", 10),
+      ]),
+    );
+    expect(t.log.laps).toEqual([iso(8), iso(8)]);
+  });
+
   it("leaves a delivery run with trade stops to the route, not the trade setting", () => {
     expect(finisherPanel(plan())).toBe("build");
     expect(finisherPanel(loop())).toBe("trade");

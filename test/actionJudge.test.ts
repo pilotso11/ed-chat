@@ -198,6 +198,11 @@ describe("the hold, only while still docked where it was bought or sold", () => 
     expect(done(p(), bought, full)).toEqual([true]);
   });
 
+  it("does not take a hold of 0 t as full", () => {
+    const none = { ship: { ...ship, cargo_capacity: 0 }, cargo: [cargo("Gold", 1)] };
+    expect(done(p(), [docked(1), market(2, "MarketBuy", "gold", 1)], none)).toEqual([false]);
+  });
+
   it("does not finish it once the ship left, though the hold is full", () => {
     const left = [...bought, ev(3, "Undocked", { StationName: "Abraham Lincoln" })];
     expect(done(p(), left, full)).toEqual([false]);

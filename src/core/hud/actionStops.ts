@@ -259,14 +259,13 @@ export class ActionFinisher {
     lapStart: () => Promise<string | null>,
   ): Promise<void> {
     let now = plan;
-    // The events each stop's actions claimed, judged before any write resets a lap.
-    const judged = judgeBuild(plan, journal).actions;
+    // The lap's newest claim, judged before any write resets the lap: the next lap starts at it,
+    // so what was done after it (before this write) counts for the next lap, and nothing this lap
+    // claimed, at any of its stops, counts again. With no claim, the newest event.
+    const last = Math.max(-1, ...judgeBuild(plan, journal).actions.map((x) => x.lastClaim));
     for (const i of stops) {
       const s = now.stops[i]!;
-      // Given with every stop: the store uses it only when the stop ends a loop's lap. The lap
-      // starts at the event that finished the stop, so what was done after it (before this write)
-      // counts for the next lap; with no claim, the newest event.
-      const last = Math.max(-1, ...judged.filter((x) => x.stop === i).map((x) => x.lastClaim));
+      // Given with every stop: the store uses it only when the stop ends a loop's lap.
       const start = journal.events[last]?.timestamp ?? (await lapStart());
       const updated = await plans.updateStop(
         now.id,
