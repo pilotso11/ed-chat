@@ -607,8 +607,11 @@ function actionDone(c: Cargo, hold: Hold, events: JournalEvent[], dock: Dock): b
 }
 
 /**
- * The trade stop to mark done now, if any: the plan's current stop, a trade stop, docked there, with every
- * action done (a stop with nothing to buy or sell is done on docking). `key` names this stop,
+ * The trade stop to mark done now, if any: the plan's current stop, a trade stop with no stop
+ * actions (ActionFinisher marks those), docked there, with every cargo row done (a stop with
+ * nothing to buy or sell is done on docking). Stops with no actions are those of a plan saved
+ * before ed-mcp wrote them, a stop that only passes through, and a loop's first stop on its
+ * first lap, which has nothing to sell yet. `key` names this stop,
  * lap and docking, so it is marked once. Undocking first leaves the stop open: it is only judged
  * while docked.
  */
@@ -622,7 +625,8 @@ export function tradeAdvance(input: {
   const plan = input.plan;
   // The plan's current stop, as the route rows and keys have it, when it is a trade stop.
   const index = plan ? currentStop(plan) : null;
-  if (!plan || index === null || plan.stops[index]!.kind !== "trade") return null;
+  const stop = plan && index !== null ? plan.stops[index]! : null;
+  if (!plan || index === null || stop?.kind !== "trade" || stop.actions?.length) return null;
   const dock = dockedAt(input.events, input.location);
   if (!dock || !atStop(plan.stops[index]!, dock)) return null;
   const hold = { cargo: input.cargo, capacity: input.capacity };

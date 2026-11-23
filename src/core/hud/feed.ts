@@ -27,7 +27,7 @@ export type FeedData = Pick<
   | "known"
   | "bookmarks"
   | "market"
-  | "buildPlans"
+  | "actionPlans"
   | "outfitting"
 >;
 
@@ -46,7 +46,7 @@ export class HudFeed {
   /** Market.json as last parsed: it changes only when a market screen opens. */
   private market: { text: string; parsed: Market | null } | null = null;
   private outfitting: { text: string; parsed: Outfitting | null } | null = null;
-  /** Build plans as last read, by ID: read again only when the plan list says one changed. */
+  /** Plans with actions as last read, by ID: read again only when the plan list says one changed. */
   private builds = new Map<string, { updated: string; plan: Plan; openAt: string | null }>();
 
   constructor(
@@ -100,7 +100,7 @@ export class HudFeed {
     ]);
     const status = statusText ? parseShipStatus(statusText) : null;
     // Read together; no bookmarks plan is the usual case, not an error.
-    const [plan, bookmarks, buildPlans] = await Promise.all([
+    const [plan, bookmarks, actionPlans] = await Promise.all([
       activity?.plan_id
         ? this.stores.plans
             .get(activity.plan_id)
@@ -111,7 +111,9 @@ export class HudFeed {
         .catch((err: unknown) =>
           isPlanNotFound(err) ? null : (this.error("bookmarks", err), null),
         ),
-      this.buildPlans(journal).catch((err: unknown) => (this.error("build plans", err), [])),
+      this.actionPlans(journal).catch(
+        (err: unknown) => (this.error("plans with actions", err), []),
+      ),
     ]);
     if (journal) this.noteSamples(journal.events, status);
     const system = journal?.location.system ?? null;
@@ -127,18 +129,19 @@ export class HudFeed {
       known,
       bookmarks,
       market: marketText ? this.parseMarket(marketText) : null,
-      buildPlans,
+      actionPlans,
       outfitting: outfittingText ? this.parseOutfitting(outfittingText) : null,
     };
   }
 
   /**
-   * The build plans with an action still to do: docking at one of their stops or acting on one
-   * shows it, whatever plan the note names. A plan finished while docked or landed where it was
+   * The plans with a stop action still to do (builds, and trade and mission plans the panels judge
+   * the same way): docking at a build's stop or acting on one shows it, whatever plan the note
+   * names. A plan finished while docked or landed where it was
    * last open stays until the ship leaves, for "Build complete". A plan is read again only when it
    * changed. (PlanStore has no call that reads every plan at once: list() then get() each.)
    */
-  private async buildPlans(
+  private async actionPlans(
     journal: (JournalState & { events: JournalEvent[] }) | null,
   ): Promise<Plan[]> {
     const list = await this.stores.plans.list();
@@ -165,7 +168,7 @@ export class HudFeed {
         }
         const plan = await this.stores.plans.get(p.id).catch((err: unknown) => {
           // Deleted since the list: not an error.
-          if (!isPlanNotFound(err)) this.error("build plan", err);
+          if (!isPlanNotFound(err)) this.error("plan with actions", err);
           return null;
         });
         if (!plan) return null;

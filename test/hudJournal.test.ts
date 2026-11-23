@@ -5,7 +5,7 @@ import { openStores } from "ed-mcp/journal";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HudFeed } from "../src/core/hud/feed.js";
 import { BUILD_EVENTS } from "../src/core/hud/build.js";
-import { BuildFinisher } from "../src/core/hud/buildStops.js";
+import { ActionFinisher } from "../src/core/hud/actionStops.js";
 import { buildHud, type HudView } from "../src/core/hud/hud.js";
 import { HUD_EVENTS } from "../src/core/hud/mode.js";
 import { footerText, footerTone } from "../src/core/hud/footer.js";
@@ -1064,7 +1064,7 @@ describe("builds from the real ed-mcp journal reader", () => {
     );
     const data = await new HudFeed(fresh, dir).poll();
     const notices: string[] = [];
-    const finisher = new BuildFinisher({
+    const finisher = new ActionFinisher({
       plans: () => fresh.plans,
       activity: () => fresh.activity,
       copy: (_s, n) => notices.push(n),
@@ -1073,7 +1073,7 @@ describe("builds from the real ed-mcp journal reader", () => {
     });
     await finisher.finish({
       note: null,
-      plans: data.buildPlans ?? [],
+      plans: data.actionPlans ?? [],
       journal: data.journal,
       activity: null,
     });

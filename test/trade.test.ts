@@ -683,6 +683,14 @@ describe("trade auto-advance", () => {
     ).toBeNull();
   });
 
+  it("leaves a stop with actions to ActionFinisher", () => {
+    const actions = [
+      { id: "buy-gold", kind: "buy_commodity", label: "Buy", status: "todo", commodity: "Gold" },
+    ] as Plan["stops"][number]["actions"];
+    const plan = loop({ stops: loop().stops.map((s, i) => (i === 0 ? { ...s, actions } : s)) });
+    expect(tradeAdvance(input({ plan }))).toBeNull();
+  });
+
   it("does not count cargo brought from an earlier stop as bought here", () => {
     expect(
       tradeAdvance(input({ events: [docked(10, "Kremainn", "Wohler Terminal", 7)] })),

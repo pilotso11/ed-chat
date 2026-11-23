@@ -1304,7 +1304,7 @@ describe("the build mode", () => {
       plan_id: "other",
       updated_at: iso(0),
     };
-    const v = buildHud(hudInput({ activity, plan: note, buildPlans: [upgrade()] }), null);
+    const v = buildHud(hudInput({ activity, plan: note, actionPlans: [upgrade()] }), null);
     expect(v.panel?.subtitle).toBe("Krait MkII · stop 2/3");
     expect(v.follow).toEqual({ planId: "krait", stop: 1 });
     expect(v.route).toBeNull();
@@ -1588,11 +1588,11 @@ describe("the outfitting visit, with no build plan", () => {
       ...KRAIT_SHIP,
     });
     // Docked at the plan's stop with an action to do: the plan shows.
-    const atStop = buildHud(input(atFarseer([buy]), { buildPlans: [upgrade()] }), null);
+    const atStop = buildHud(input(atFarseer([buy]), { actionPlans: [upgrade()] }), null);
     expect(atStop.panel?.title).toBe("UPGRADE");
     // The plan's work is elsewhere: this visit shows, and the plan's route rows under it.
     const elsewhere = upgrade({}, upgrade().stops.slice(2));
-    const v = buildHud(input(visit([buy]), { buildPlans: [elsewhere], plan: elsewhere }), null);
+    const v = buildHud(input(visit([buy]), { actionPlans: [elsewhere], plan: elsewhere }), null);
     expect(v.panel?.title).toBe("OUTFITTING");
     expect(v.follow).toBeUndefined();
     expect(v.route?.length).toBeGreaterThan(0);
@@ -1605,7 +1605,7 @@ describe("the outfitting visit, with no build plan", () => {
       Quality: 0.2,
     });
     expect(
-      buildHud(input(visit([buy, thrusters]), { buildPlans: [elsewhere] }), null).panel?.title,
+      buildHud(input(visit([buy, thrusters]), { actionPlans: [elsewhere] }), null).panel?.title,
     ).toBe("UPGRADE");
     // A stop here with no action to do is no work here, though it is the plan's first stop.
     const passing = upgrade({}, [
@@ -1614,7 +1614,7 @@ describe("the outfitting visit, with no build plan", () => {
     ]);
     const j = visit([buy]);
     expect(chooseBuild({ note: null, plans: [passing], journal: j })?.here).toBe("docked");
-    expect(buildHud(input(j, { buildPlans: [passing] }), null).panel?.title).toBe("OUTFITTING");
+    expect(buildHud(input(j, { actionPlans: [passing] }), null).panel?.title).toBe("OUTFITTING");
   });
 
   it("gives the trade panel back after undocking from a visit", () => {
@@ -1656,11 +1656,11 @@ describe("the outfitting visit, with no build plan", () => {
     const swap = ev(12, "ShipyardSwap", { ShipType: "python_nx", ShipID: PYTHON });
     const ship = { ...journal([]).ship, type: "python_nx", id: PYTHON };
     const j = visit([buy, swap], { ship });
-    const v = buildHud(input(j, { buildPlans: [python] }), null);
+    const v = buildHud(input(j, { actionPlans: [python] }), null);
     expect(v.panel?.title).toBe("BUILD");
     // Outfitting after the swap shows the visit again.
     const again = visit([buy, swap, { ...buy, timestamp: iso(13) }], { ship });
-    expect(buildHud(input(again, { buildPlans: [python] }), null).panel?.title).toBe("OUTFITTING");
+    expect(buildHud(input(again, { actionPlans: [python] }), null).panel?.title).toBe("OUTFITTING");
   });
 
   it("lists module names before a count, and names core slots in title case", () => {
@@ -1703,10 +1703,10 @@ describe("the outfitting visit, with no build plan", () => {
     const elsewhere = upgrade({}, upgrade().stops.slice(2));
     const j = visit([buy]);
     // The visit's own event chose the mode: the visit.
-    expect(buildHud(input(j, { buildPlans: [elsewhere] }), null).panel?.title).toBe("OUTFITTING");
+    expect(buildHud(input(j, { actionPlans: [elsewhere] }), null).panel?.title).toBe("OUTFITTING");
     // Asked for by the hotkey after it: the plan, with its work elsewhere.
     const hotkey = { mode: "build" as const, at: T0 + 40_000 };
-    const asked = buildHud(input(j, { buildPlans: [elsewhere], hotkey }), null);
+    const asked = buildHud(input(j, { actionPlans: [elsewhere], hotkey }), null);
     expect(asked.panel?.title).toBe("UPGRADE");
     expect(asked.route).toBeNull();
     // The engineering note naming the plan, newer than the visit: the plan.
