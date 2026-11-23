@@ -238,9 +238,10 @@ Ctrl+Alt+- clears the nearest bookmark on the body you are on, one per press.
 With several on the body and no position to tell which is nearest, it clears
 none: get closer to the surface, or, for bookmarks saved with no position, use
 the tray. The tray menu's
-Bookmarks item clears the nearest one here in one click. When which is nearest
-cannot be told, it offers every bookmark on the body; away from a bookmarked
-body, every bookmark in the system; both ask first. It can also
+Bookmarks item clears the nearest one here in one click. When several on the
+body have no saved position, it offers all of them; away from a bookmarked
+body, every bookmark in the system; both ask first. In orbit over bookmarks
+that do have positions, it offers none here until you get closer. It can also
 clear every bookmark, after asking. A cleared bookmark
 is marked skipped in the plan. Bookmarks are an ed-mcp plan, so Claude can see
 and change them too. `hud.bookmarks` turns them off.
