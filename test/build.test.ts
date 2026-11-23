@@ -1470,8 +1470,9 @@ describe("the outfitting visit, with no build plan", () => {
       null,
     );
     expect(v.panel?.rows).toEqual([
-      { text: "Bought 4 modules 524k · sold Thrusters 5D · stored 3" },
-      { text: "Retrieved 1 · transferred 1 · moved 1" },
+      { text: "Bought 2 Shield Booster 0A, Cargo Rack 4E, Armour" },
+      { text: "Sold Thrusters 5D · stored 3 · retrieved 1" },
+      { text: "Transferred 1 · moved 1" },
       { text: "Bought Python MkII 56.0M · sold Adder 74k" },
       { text: "Took out Krait MkII · transfer Cobra MkIII ~40 min" },
       { text: "Redeemed Sidewinder · sold Viper MkIII 1.2M" },
@@ -1495,6 +1496,9 @@ describe("the outfitting visit, with no build plan", () => {
     expect(moduleName("hpt_heatsinklauncher_turret_tiny", "Heatsink")).toBe("Heat Sink Launcher");
     expect(moduleName("Int_Newthing_Size2_Class3")).toBe("newthing 2C");
     expect(moduleName(undefined)).toBe("module");
+    expect(moduleName("int_dronecontrol_resourcesiphon_size1_class1", "Hatch Breaker")).toBe(
+      "Hatch Breaker Limpet Controller 1E",
+    );
     expect(blueprintName("FSD_LongRange")).toBe("Increased Range");
     expect(blueprintName("ShieldBooster_HeavyDuty")).toBe("Heavy Duty");
     expect(blueprintName("Odd")).toBe("Odd");
@@ -1611,6 +1615,87 @@ describe("the outfitting visit, with no build plan", () => {
     const j = visit([buy]);
     expect(chooseBuild({ note: null, plans: [passing], journal: j })?.here).toBe("docked");
     expect(buildHud(input(j, { buildPlans: [passing] }), null).panel?.title).toBe("OUTFITTING");
+  });
+
+  it("gives the trade panel back after undocking from a visit", () => {
+    const j = journal(
+      [
+        dock(1, "Sol", "Abraham Lincoln", 9),
+        ev(2, "MarketBuy", { MarketID: 9, Type: "gold", Type_Localised: "Gold", Count: 10 }),
+        ev(3, "Undocked", { StationName: "Abraham Lincoln" }),
+        dock(10, "Deciat", "Farseer Inc"),
+        ev(11, "ModuleBuy", { BuyItem: "$int_dronecontrol_collection_size1_class1_name;" }),
+      ],
+      {
+        ...docked("Deciat", "Farseer Inc"),
+        cargo: [{ name: "gold", count: 10, stolen: false, mission_id: null }],
+      },
+    );
+    expect(currentMode(input(j))).toBe("build");
+    expect(buildHud(input(j), null).panel?.rows[0]?.text).toBe(
+      "Bought Collector Limpet Controller 1E",
+    );
+    expect(currentMode(input(undocked(j)))).toBe("trade");
+  });
+
+  it("shows the plan of a ship swapped to over the visit before the swap", () => {
+    const python = upgrade(
+      { id: "py", build: { target: "ship", scope: "full", ship_id: PYTHON } },
+      [
+        {
+          system: "Far",
+          station: "Away",
+          purpose: "x",
+          kind: "shop",
+          status: "todo",
+          actions: [act({ id: "b", kind: "buy_module", label: "Buy FSD", module: "x" })],
+        },
+      ],
+    );
+    const buy = ev(11, "ModuleBuy", { BuyItem: "$int_cargorack_size5_class1_name;", BuyPrice: 1 });
+    const swap = ev(12, "ShipyardSwap", { ShipType: "python_nx", ShipID: PYTHON });
+    const ship = { ...journal([]).ship, type: "python_nx", id: PYTHON };
+    const j = visit([buy, swap], { ship });
+    const v = buildHud(input(j, { buildPlans: [python] }), null);
+    expect(v.panel?.title).toBe("BUILD");
+    // Outfitting after the swap shows the visit again.
+    const again = visit([buy, swap, { ...buy, timestamp: iso(13) }], { ship });
+    expect(buildHud(input(again, { buildPlans: [python] }), null).panel?.title).toBe("OUTFITTING");
+  });
+
+  it("lists module names before a count, and names core slots in title case", () => {
+    const b = (s: number, item: string) => ev(s, "ModuleBuy", { BuyItem: item, BuyPrice: 1000 });
+    const names = buildHud(
+      input(
+        visit([
+          b(11, "$int_dronecontrol_prospector_size3_class5_name;"),
+          b(12, "$int_multidronecontrol_mining_size3_class3_name;"),
+          b(14, "$int_fuelscoop_size5_class5_name;"),
+          ev(20, "EngineerCraft", {
+            Slot: "PowerPlant",
+            Module: "int_powerplant_size6_class5",
+            BlueprintName: "PowerPlant_Stealth",
+            Level: 1,
+            Quality: 1,
+          }),
+        ]),
+      ),
+      null,
+    ).panel!.rows;
+    expect(names.slice(0, 3)).toEqual([
+      { text: "Bought Prospector Limpet Controller 3A" },
+      { text: "Bought Mining Multi Limpet Controller 3C, Fuel Scoop 5A" },
+      { text: "Power Plant Low Emissions G0 → G1 · 100%", right: "1 roll" },
+    ]);
+    // Too many names for two rows: the count and the total.
+    const many = visit(
+      ["collection", "prospector", "fueltransfer", "repair", "decontamination", "recon"].map(
+        (m, i) => b(11 + i, `$int_dronecontrol_${m}_size1_class1_name;`),
+      ),
+    );
+    expect(buildHud(input(many), null).panel!.rows[0]).toEqual({
+      text: "Bought 6 modules 6k",
+    });
   });
 
   it("shows the plan when the hotkey or the activity note asks for build mode", () => {

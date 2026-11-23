@@ -732,7 +732,8 @@ export interface BuildVisit {
  * The outfitting visit to show: docked, with outfitting, the shipyard or an engineer used since
  * docking, and no build plan with work here. A plan has work here when a stop of it at this
  * station is still to do and has an action to do, or an event of this docking did one of its
- * actions (so "Build complete" too): its panel shows instead. Undocking ends it. `choice` is the
+ * actions (so "Build complete" too): its panel shows instead, as it does after a swap to the
+ * ship of a plan with work, until outfitting is used again. Undocking ends it. `choice` is the
  * plan shown (chooseBuild()).
  */
 export function outfittingVisit(journal: Journal, choice: BuildChoice | null): BuildVisit | null {
@@ -746,7 +747,15 @@ export function outfittingVisit(journal: Journal, choice: BuildChoice | null): B
     );
     if (work || choice.judged.lastMatch > dock.index) return null;
   }
-  const on = new Set(journal.events.slice(dock.index + 1).filter((e) => VISIT_ON.has(e.event)));
+  const after = journal.events.slice(dock.index + 1);
+  // Swapping to a ship whose plan has work asks for that plan: only outfitting after the swap
+  // shows the visit again.
+  const ship = choice?.judged.actions.some((x) => !x.done) ? choice.judged.shipId : null;
+  const swap =
+    ship === null
+      ? -1
+      : after.findLastIndex((e) => e.event === "ShipyardSwap" && num(e.ShipID) === ship);
+  const on = new Set(after.filter((e, k) => k > swap && VISIT_ON.has(e.event)));
   return on.size ? { station: dock.station, index: dock.index, on } : null;
 }
 
@@ -771,7 +780,6 @@ const MODULES: Record<string, string> = {
   cargorack: "Cargo Rack",
   repairer: "AFM Unit",
   refinery: "Refinery",
-  dronecontrol: "Limpet Controller",
   pulselaser: "Pulse Laser",
   pulselaserburst: "Burst Laser",
   beamlaser: "Beam Laser",
@@ -793,6 +801,23 @@ const MODULES: Record<string, string> = {
 /** Class 1 to 5 is rating E to A. */
 const RATINGS = "EDCBA";
 
+/** Limpet controllers, by the symbol's first two words: "int_dronecontrol_prospector_size1_class1". */
+const LIMPETS: Record<string, string> = {
+  dronecontrol_collection: "Collector Limpet Controller",
+  dronecontrol_prospector: "Prospector Limpet Controller",
+  dronecontrol_fueltransfer: "Fuel Transfer Limpet Controller",
+  dronecontrol_repair: "Repair Limpet Controller",
+  dronecontrol_resourcesiphon: "Hatch Breaker Limpet Controller",
+  dronecontrol_decontamination: "Decontamination Limpet Controller",
+  dronecontrol_recon: "Recon Limpet Controller",
+  dronecontrol_unkvesselresearch: "Research Limpet Controller",
+  multidronecontrol_mining: "Mining Multi Limpet Controller",
+  multidronecontrol_operations: "Operations Multi Limpet Controller",
+  multidronecontrol_rescue: "Rescue Multi Limpet Controller",
+  multidronecontrol_xeno: "Xeno Multi Limpet Controller",
+  multidronecontrol_universal: "Universal Multi Limpet Controller",
+};
+
 /** A hardpoint's size, as the outfitting screen numbers it, and its mount. */
 const SIZES: Record<string, string> = { small: "1", medium: "2", large: "3", huge: "4" };
 const MOUNTS: Record<string, string> = { fixed: "F", gimbal: "G", turret: "T" };
@@ -812,9 +837,15 @@ export function moduleName(symbol: unknown, localised?: unknown): string {
   const plain = rest.every((w) => /^(size\d+|class\d|tiny)$/.test(w) || w in SIZES || w in MOUNTS);
   const name = str(localised);
   const game = name && !name.startsWith("$") ? name : null;
+  const limpet = LIMPETS[`${first}_${rest[0] ?? ""}`];
   const base = words.includes("armour")
     ? "Armour"
-    : ((plain ? MODULES[first] : undefined) ?? game ?? MODULES[first] ?? (first || m || "module"));
+    : limpet
+      ? limpet
+      : ((plain ? MODULES[first] : undefined) ??
+        game ??
+        MODULES[first] ??
+        (first || m || "module"));
   const sc = /_size(\d+)_class(\d)/.exec(m);
   const rating = sc ? RATINGS[Number(sc[2]) - 1] : undefined;
   if (sc && rating) return `${base} ${sc[1]}${rating}`;
@@ -883,6 +914,8 @@ export function blueprintName(name: string): string {
 }
 
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** "power plant" is "Power Plant". */
+const titled = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
 
 /** Past this, the visit's parts go on another row. */
 const VISIT_WIDTH = 56;
@@ -905,8 +938,19 @@ type Tally = Map<string, { n: number; credits: number }>;
 function priced(verb: string, items: Tally): string[] {
   const text = (name: string, n: number, c: number) =>
     `${n > 1 ? `${n} ` : ""}${name}${c ? ` ${credits(c)}` : ""}`;
-  // More than two kinds would not fit a row: the count and the total.
+  if (!items.size) return [];
+  // More than two kinds: the names without prices, on at most two rows, each starting with the
+  // verb; when they do not fit, the count and the total.
   if (items.size > 2) {
+    const rows: string[] = [];
+    for (const [name, v] of items) {
+      const one = text(name, v.n, 0);
+      const last = rows.at(-1);
+      if (last !== undefined && last.length + 2 + one.length <= VISIT_WIDTH)
+        rows[rows.length - 1] = `${last}, ${one}`;
+      else rows.push(`${verb} ${one}`);
+    }
+    if (rows.length <= 2) return rows;
     const all = [...items.values()];
     const n = all.reduce((t, v) => t + v.n, 0);
     return [
@@ -917,7 +961,6 @@ function priced(verb: string, items: Tally): string[] {
       )}`,
     ];
   }
-  if (!items.size) return [];
   // One part, so it never splits across rows: each row starts with its verb.
   return [`${verb} ${[...items].map(([name, v]) => text(name, v.n, v.credits)).join(", ")}`];
 }
@@ -1021,7 +1064,7 @@ export function visitPanel(input: { visit: BuildVisit; events: JournalEvent[] })
       case "EngineerCraft": {
         used += sum(e.Ingredients);
         const slot = str(e.Slot) ?? "";
-        const name = capital(
+        const name = titled(
           SLOTS[slot.toLowerCase()] ? slotName(slot) : moduleName(e.Module, e.Module_Localised),
         );
         const effect = str(e.ApplyExperimentalEffect);
