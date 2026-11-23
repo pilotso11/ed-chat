@@ -541,7 +541,14 @@ function fittedOf(m: Obj): Fitted {
 }
 
 /** Whether an event of a kind finishes an action, for the plan's ship. */
-function matches(a: Action, r: Role, plan: Plan, stop: Stop, boundId: number | null): boolean {
+function matches(
+  a: Action,
+  r: Role,
+  plan: Plan,
+  stop: Stop,
+  boundId: number | null,
+  gearId: number | null = null,
+): boolean {
   const sameMod = () => !!a.module && mod(a.module) === r.item;
   if (AT_STOP.has(a.kind) && !atStop(stop, r.place ?? null)) return false;
   const sameGoods = () => !!a.commodity && !!r.goods?.includes(commodityKey(a.commodity));
@@ -637,15 +644,15 @@ function matches(a: Action, r: Role, plan: Plan, stop: Stop, boundId: number | n
     case "upgrade_suit":
       return (
         r.kind === "suit_upgraded" &&
-        a.suit_id !== undefined &&
-        r.gearId === a.suit_id &&
+        gearId !== null &&
+        r.gearId === gearId &&
         (r.level ?? 0) >= targetGrade(a)
       );
     case "upgrade_weapon":
       return (
         r.kind === "weapon_upgraded" &&
-        a.weapon_id !== undefined &&
-        r.gearId === a.weapon_id &&
+        gearId !== null &&
+        r.gearId === gearId &&
         (r.level ?? 0) >= targetGrade(a)
       );
     case "trade_resource":
@@ -766,24 +773,51 @@ const UNLOCKED = (journal: Pick<JournalState, "engineers">, name: string | undef
 const SUIT_KINDS = new Set<string>(["buy_suit", "upgrade_suit", "modify_suit"]);
 const WEAPON_KINDS = new Set<string>(["buy_weapon", "upgrade_weapon", "modify_weapon"]);
 
+/**
+ * The ID of the suit or weapon an on-foot action is for: its suit_id or weapon_id; else, for gear
+ * the player owns (no gear key, which is gear still to buy), the plan's loadout's suit, or the one
+ * owned suit of its type, or weapon of its name (in the loadout first). Null when it is not known.
+ */
+export function gearIdOf(a: Action, plan: Plan, journal: Journal): number | null {
+  const suit = SUIT_KINDS.has(a.kind);
+  if (!suit && !WEAPON_KINDS.has(a.kind)) return null;
+  const own = suit ? a.suit_id : a.weapon_id;
+  if (own !== undefined) return own;
+  if (a.gear || a.kind === "buy_suit" || a.kind === "buy_weapon") return null;
+  const lid = plan.build?.loadout_id;
+  const loadout = lid !== undefined ? journal.suit_loadouts?.find((l) => l.id === lid) : undefined;
+  const only = <T extends { id: number }>(list: T[]) => (list.length === 1 ? list[0]!.id : null);
+  if (suit) {
+    const type = suitOf(a.suit)?.type ?? null;
+    if (loadout?.suit_id != null) {
+      const ls = journal.suits?.find((x) => x.id === loadout.suit_id);
+      if (!type || !ls || ls.type === type) return loadout.suit_id;
+    }
+    return type ? only((journal.suits ?? []).filter((x) => x.type === type)) : null;
+  }
+  const named = (journal.weapons ?? []).filter((w) => sameWeapon(w.type, w.name, a.weapon));
+  const inLoadout = named.filter((w) => loadout?.weapons.some((x) => x.id === w.id));
+  return only(inLoadout) ?? only(named);
+}
+
 /** The suit or weapon an on-foot action is for, as the journal state has it now. */
-function gearOf(a: Action, journal: Journal) {
-  if (a.suit_id !== undefined && SUIT_KINDS.has(a.kind))
-    return journal.suits?.find((x) => x.id === a.suit_id) ?? null;
-  if (a.weapon_id !== undefined && WEAPON_KINDS.has(a.kind))
-    return journal.weapons?.find((x) => x.id === a.weapon_id) ?? null;
-  return null;
+function gearOf(a: Action, plan: Plan, journal: Journal) {
+  const id = gearIdOf(a, plan, journal);
+  if (id === null) return null;
+  return SUIT_KINDS.has(a.kind)
+    ? (journal.suits?.find((x) => x.id === id) ?? null)
+    : (journal.weapons?.find((x) => x.id === id) ?? null);
 }
 
 /** An upgrade the suit or weapon shows already, in the newest loadout or upgrade event. */
-function gearAt(a: Action, journal: Journal): boolean {
+function gearAt(a: Action, plan: Plan, journal: Journal): boolean {
   if (a.kind !== "upgrade_suit" && a.kind !== "upgrade_weapon") return false;
-  const g = gearOf(a, journal);
+  const g = gearOf(a, plan, journal);
   return !!g && (g.grade ?? 0) >= targetGrade(a);
 }
 
 /** Whether an action judged from the journal state (BY_STATE) is done now. */
-function stateDone(a: Action, journal: Journal): boolean {
+function stateDone(a: Action, plan: Plan, journal: Journal): boolean {
   switch (a.kind) {
     case "collect_material":
       return materialCount(journal.materials, a.material) >= (a.count ?? 1);
@@ -791,7 +825,7 @@ function stateDone(a: Action, journal: Journal): boolean {
       return UNLOCKED(journal, a.engineer);
     case "modify_suit":
     case "modify_weapon":
-      return !!gearOf(a, journal)?.mods.some((m) => sameMod(m, a.modification));
+      return !!gearOf(a, plan, journal)?.mods.some((m) => sameMod(m, a.modification));
     case "collect_resource":
       return resourceCount(journal, a.resource) >= (a.count ?? 1);
     default:
@@ -811,6 +845,7 @@ type Journal = Pick<JournalState, "materials" | "engineers"> & {
   /** On foot: the suits and weapons (grades and modifications), the locker and the backpack. */
   suits?: JournalState["suits"];
   weapons?: JournalState["weapons"];
+  suit_loadouts?: JournalState["suit_loadouts"];
   locker?: JournalState["locker"];
   backpack?: JournalState["backpack"];
 };
@@ -924,6 +959,8 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     claimDock: number | null;
     /** A buy_suit or buy_weapon: the SuitID or SuitModuleID its claim bought. */
     gotId: number | null;
+    /** An upgrade or modification: the ID of its suit or weapon (gearIdOf()), or null. */
+    gearId: number | null;
   };
   const list: Entry[] = [];
   for (const si of visitOrder(plan)) {
@@ -954,6 +991,7 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
         full: false,
         claimDock: null,
         gotId: null,
+        gearId: gearIdOf(a, plan, journal),
       });
     }
   }
@@ -1004,9 +1042,15 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     if (f) flying = f;
     const moving = moved(e, place);
     if (moving !== undefined) place = moving;
-    if (moving && moving.station && t > started)
+    // Docked at a stop since the plan started (or there when it started), or come to a
+    // settlement stop's landing area.
+    const here =
+      e.event === "ApproachSettlement"
+        ? { system: str(e.StarSystem) ?? place?.system ?? null, station: str(e.Name) }
+        : place;
+    if (here?.station && t > started && visited.size < plan.stops.length)
       for (const si of visitOrder(plan))
-        if (!visited.has(si) && atStop(plan.stops[si]!, moving)) visited.add(si);
+        if (!visited.has(si) && atStop(plan.stops[si]!, here)) visited.add(si);
     if (e.event === "Docked" || (e.event === "Location" && e.Docked === true)) {
       const station = str(e.StationName);
       if (!(e.event === "Location" && dock && same(dock.station, station)))
@@ -1095,7 +1139,8 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
       for (const entry of order) {
         const need = entry.need;
         if (entry.full || entry.taken >= need || t <= entry.start) continue;
-        if (!matches(entry.action, r, plan, plan.stops[entry.stop]!, boundId)) continue;
+        if (!matches(entry.action, r, plan, plan.stops[entry.stop]!, boundId, entry.gearId))
+          continue;
         const take = Math.min(left, need - entry.taken);
         if (r.all) entry.full = true;
         entry.taken += take;
@@ -1147,7 +1192,7 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     if (entry.mode === "open") {
       let doneNow = false;
       if (BY_STATE.has(a.kind)) {
-        doneNow = stateDone(a, journal);
+        doneNow = stateDone(a, plan, journal);
         if (doneNow) entry.write = { status: "done", key: `${lapKey}|${a.id}` };
       } else if (
         entry.full ||
@@ -1162,7 +1207,7 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
           done_by: entry.claims,
           key: `${plan.id}|${a.id}|${refKey(lastRef)}`,
         };
-      } else if (gearAt(a, journal)) {
+      } else if (gearAt(a, plan, journal)) {
         // On foot the loadout is the record: an upgrade the suit or weapon shows already is done,
         // with no event to name (its UpgradeSuit before the plan, say).
         doneNow = true;
@@ -1176,11 +1221,23 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     if (entry.done && boundId !== null)
       entry.notFitted = notFitted(entry, fittedNow, loadoutAt.get(boundId));
   }
-  // A bought suit's or weapon's ID, for the actions sharing its gear key that have none.
+  // A bought suit's or weapon's ID, for the actions sharing its gear key that have none. A buy
+  // marked done with no event (by hand, or bought before the plan) takes the newest such buy.
   const gearIds: BuildJudgement["gearIds"] = [];
   for (const entry of list) {
     const a = entry.action;
-    if (!a.gear || entry.gotId === null || !entry.done) continue;
+    if (!a.gear || !entry.done) continue;
+    if (entry.gotId === null && (a.kind === "buy_suit" || a.kind === "buy_weapon")) {
+      for (let i = events.length - 1; i >= 0 && entry.gotId === null; i--) {
+        for (const r of rolesOf(events[i]!, flying, null)) {
+          if (r.gearId != null && matches(a, r, plan, plan.stops[entry.stop]!, boundId)) {
+            entry.gotId = r.gearId;
+            break;
+          }
+        }
+      }
+    }
+    if (entry.gotId === null) continue;
     const field = a.kind === "buy_suit" ? "suit_id" : a.kind === "buy_weapon" ? "weapon_id" : null;
     if (!field) continue;
     const kinds = field === "suit_id" ? SUIT_KINDS : WEAPON_KINDS;
@@ -1194,7 +1251,8 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     gearIds,
     visited,
     actions: list.map(
-      ({ mode: _m, start: _s, need: _n, full: _f, claimDock: _d, gotId: _g, ...x }) => x,
+      ({ mode: _m, start: _s, need: _n, full: _f, claimDock: _d, gotId: _g, gearId: _i, ...x }) =>
+        x,
     ),
     boundId: !fromPlan && boundId !== null ? boundId : null,
     shipId: boundId,

@@ -12,6 +12,7 @@ const SUITS: Record<string, string> = {
   maverick: "utilitysuit",
   artemis: "explorationsuit",
   flightsuit: "flightsuit",
+  flight: "flightsuit",
   remlok: "flightsuit",
 };
 
@@ -25,13 +26,18 @@ export const SUIT_NAMES: Record<string, string> = {
 
 /**
  * A suit as a plan names it, as its journal type and the grade in the name, if any: "Dominator",
- * "tacticalsuit", "TacticalSuit_Class3" or "Dominator G3".
+ * "Dominator Suit", "tacticalsuit", "TacticalSuit_Class3" or "Dominator G3".
  */
 export function suitOf(name: string | undefined): { type: string; grade: number | null } | null {
-  if (!name) return null;
-  const cls = /_class(\d)$/i.exec(name);
-  const g = cls ?? /\bg(\d)$/i.exec(name.trim());
-  const base = squash(name.replace(/_class\d$/i, "").replace(/\bg\d$/i, ""));
+  const n = name?.trim();
+  if (!n) return null;
+  const g = /_class(\d)$/i.exec(n) ?? /\bg(\d)$/i.exec(n);
+  // The game's own name has " Suit" after the type's: "Dominator Suit".
+  const bare = n
+    .replace(/_class\d$/i, "")
+    .replace(/\s*\bg\d$/i, "")
+    .replace(/\s+suit$/i, "");
+  const base = squash(bare);
   return { type: SUITS[base] ?? base, grade: g ? Number(g[1]) : null };
 }
 
@@ -89,16 +95,17 @@ export function sameWeapon(type: string | null, name: string | null, planned: st
  */
 export function resourceCount(
   journal: { locker?: JournalState["locker"]; backpack?: JournalState["backpack"] },
-  name: string | undefined,
+  ...names: (string | undefined)[]
 ): number {
-  if (!name) return 0;
-  const want = squash(name);
+  // Each entry counted once, whichever of the names it matches.
+  const want = new Set(names.filter((x): x is string => !!x).map(squash));
+  if (!want.size) return 0;
   let n = 0;
   for (const box of [journal.locker, journal.backpack]) {
     if (!box) continue;
     for (const list of [box.items, box.components, box.consumables, box.data]) {
       for (const r of list) {
-        if (squash(r.name) === want || (r.name_localised && squash(r.name_localised) === want))
+        if (want.has(squash(r.name)) || (r.name_localised && want.has(squash(r.name_localised))))
           n += r.count;
       }
     }

@@ -145,6 +145,10 @@ describe("on-foot names", () => {
     expect(suitOf("Dominator G3")).toEqual({ type: "tacticalsuit", grade: 3 });
     expect(suitOf("TacticalSuit_Class2")).toEqual({ type: "tacticalsuit", grade: 2 });
     expect(suitOf("Maverick")?.type).toBe("utilitysuit");
+    // The game's own name, and stray spaces.
+    expect(suitOf("Dominator Suit")).toEqual({ type: "tacticalsuit", grade: null });
+    expect(suitOf(" Dominator G3 ")).toEqual({ type: "tacticalsuit", grade: 3 });
+    expect(suitOf("Flight Suit")?.type).toBe("flightsuit");
   });
 
   it("matches a modification by its game name or its symbol", () => {
@@ -167,6 +171,8 @@ describe("on-foot names", () => {
     expect(resourceCount(j, "Health Monitor")).toBe(3);
     expect(resourceCount(j, "healthmonitor")).toBe(3);
     expect(resourceCount({ locker: null, backpack: null }, "healthmonitor")).toBe(0);
+    // Two names for one resource count it once.
+    expect(resourceCount(j, "Health Monitor", "healthmonitor")).toBe(3);
   });
 });
 
@@ -262,6 +268,69 @@ const panel = (p: Plan, j: Journal) => {
   return buildPanel({ choice, journal: j, settings: DEFAULT_SETTINGS.hud.build });
 };
 
+describe("owned gear the plan does not name by ID", () => {
+  const owned = (kind: "upgrade_suit" | "modify_suit", o: Partial<Action> = {}) =>
+    loadout({
+      stops: [
+        {
+          system: "S",
+          station: "P",
+          purpose: "x",
+          status: "todo",
+          actions: [
+            act({ id: "a", kind, grade: 4, suit: "Dominator", modification: "Night Vision", ...o }),
+          ],
+        },
+      ],
+    });
+  const suit = (id: number, type: string, grade: number, mods: string[] = []) => ({
+    id,
+    type,
+    name: null,
+    grade,
+    mods,
+  });
+
+  it("is the one owned suit of its type", () => {
+    const suits = [suit(1, "tacticalsuit", 4), suit(2, "utilitysuit", 1)] as never;
+    expect(done(owned("upgrade_suit"), journal([], { suits }))).toEqual([["a", true]]);
+    const mods = [suit(1, "tacticalsuit", 3, ["suit_nightvision"])] as never;
+    expect(done(owned("modify_suit"), journal([], { suits: mods }))).toEqual([["a", true]]);
+  });
+
+  it("is the plan's loadout's suit, when there are two of its type", () => {
+    const suits = [suit(1, "tacticalsuit", 2), suit(2, "tacticalsuit", 4)] as never;
+    const p = owned("upgrade_suit");
+    expect(done(p, journal([], { suits }))).toEqual([["a", false]]);
+    p.build!.loadout_id = 9;
+    p.id = `${p.id}-l`;
+    const suit_loadouts = [
+      { id: 9, name: "Combat", suit_id: 2, weapons: [], complete: true },
+    ] as never;
+    expect(done(p, journal([], { suits, suit_loadouts }))).toEqual([["a", true]]);
+  });
+
+  it("asks which suit when it cannot tell", () => {
+    const suits = [suit(1, "tacticalsuit", 2), suit(2, "tacticalsuit", 3)] as never;
+    const j = journal([docked(1, "S", "P")], {
+      location: {
+        system: "S",
+        station: "P",
+        station_type: null,
+        docked: true,
+        dist_from_star_ls: null,
+      },
+      suits,
+    });
+    expect(panel(owned("upgrade_suit", { label: "Up" }), j).rows).toContainEqual({
+      text: "  Up",
+      right: "which suit?",
+      detail: "ask Claude to set its suit_id (journal_on_foot)",
+      tone: "warn",
+    });
+  });
+});
+
 describe("the build panel on foot", () => {
   it("names the loadout's suit, waits on gear to buy, and says what is short and where to get it", () => {
     const locker = box([["healthmonitor", 1]]);
@@ -311,6 +380,9 @@ describe("the build panel on foot", () => {
       text: "  Apply Extra Ammo Capacity",
       right: "equip to check",
     });
+    // Come to the settlement, not docked there: a visit too.
+    const near = ev(5, "ApproachSettlement", { Name: "The Jackrabbit", StarSystem: "Orishis" });
+    expect(judgeBuild(p, journal([near])).visited.has(2)).toBe(true);
   });
 });
 
@@ -359,6 +431,12 @@ describe("ActionFinisher on foot", () => {
     await f.finish({ note: p, plans: [], journal: j, activity: null });
     await f.finish({ note: store.get(p.id)!, plans: [], journal: j, activity: null });
     expect(gear).toEqual([["dom", { suit_id: 77 }]]);
+    // A buy marked done by hand takes the newest such buy's ID.
+    const hand = loadout();
+    hand.stops[0]!.actions![0]!.status = "done";
+    expect(judgeBuild(hand, journal([buySuit(-100, 3, 55)])).gearIds).toEqual([
+      { gear: "dom", suit_id: 55 },
+    ]);
     expect(store.get(p.id)!.stops[2]!.actions![0]!.suit_id).toBe(77);
   });
 });

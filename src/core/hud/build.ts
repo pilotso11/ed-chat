@@ -1,6 +1,7 @@
 import { visitOrder, type JournalEvent, type JournalState, type Plan } from "ed-mcp/journal";
 import type { Settings } from "../settings.js";
 import {
+  gearIdOf,
   isBuildPlan,
   judgeBuild,
   materialCount,
@@ -577,6 +578,22 @@ function need(
     return { right: `after ${slotName(b.slot)} G${targetGrade(b)}` };
   }
   if (waitsForBuy(a)) return { right: "after buy" };
+  // Owned gear the plan does not name by ID, with more than one that could be it.
+  if (
+    !a.gear &&
+    (a.kind === "upgrade_suit" ||
+      a.kind === "modify_suit" ||
+      a.kind === "upgrade_weapon" ||
+      a.kind === "modify_weapon") &&
+    gearIdOf(a, plan, ctx.journal) === null
+  ) {
+    const suit = a.kind.endsWith("_suit");
+    return {
+      right: suit ? "which suit?" : "which weapon?",
+      detail: `ask Claude to set its ${suit ? "suit_id" : "weapon_id"} (journal_on_foot)`,
+      tone: "warn",
+    };
+  }
   const out: Need = {};
   const right: string[] = [];
   if (a.kind === "engineer") right.push(rollText(x, plan.build?.rolls_per_grade));
@@ -617,7 +634,7 @@ function need(
   // Resources on foot, materials for a ship.
   const have = (name: string, symbol?: string) =>
     FOOT.has(a.kind)
-      ? resourceCount(ctx.journal, name) + (symbol ? resourceCount(ctx.journal, symbol) : 0)
+      ? resourceCount(ctx.journal, name, symbol)
       : materialCount(ctx.journal.materials, name, symbol);
   // The first material short, with the stop that collects or trades for it.
   const mats =
