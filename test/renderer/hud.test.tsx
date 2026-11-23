@@ -71,6 +71,7 @@ describe("activity panel", () => {
     overlay.hud({
       ...base,
       fontSize: 30,
+      look: { "--accent": "#47b3ff" },
       panel: {
         mode: "exobiology",
         title: "EXOBIOLOGY",
@@ -91,6 +92,7 @@ describe("activity panel", () => {
     });
     expect(hud.style.getPropertyValue("--font")).toBe("30px");
     expect(hud.style.getPropertyValue("--bg-alpha")).toBe("0.5");
+    expect(hud.style.getPropertyValue("--accent")).toBe("#47b3ff");
     // The width scales with the font: 300 at 15 px is 600 at 30 px.
     expect(hud.style.getPropertyValue("--min-width")).toBe("600px");
     expect(hud.querySelector(".head .title")?.textContent).toBe("EXOBIOLOGY");

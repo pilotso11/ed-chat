@@ -135,6 +135,7 @@ import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.j
 import { HUD_EVENTS } from "../core/hud/mode.js";
 import { shortBody, todoStops } from "../core/hud/panels.js";
 import { TradeStopFinisher } from "../core/hud/tradeStops.js";
+import { BuildFinisher } from "../core/hud/buildStops.js";
 import {
   ABOUT_URL,
   noticeMenuItems,
@@ -162,6 +163,7 @@ import { displaySetting, hudWindowSize, onNextDisplay, overlaySize } from "../co
 import { PlayerOnlyGuard } from "../core/playerOnlyGuard.js";
 import { PLAYER_ONLY_PATHS_V0_5 } from "../core/settingsDictionary.js";
 import { buildView, pickNotice, shortTool } from "../core/view.js";
+import { gameMatrixFrom, graphicsOverrideFile, lookVars, type Matrix } from "../core/theme.js";
 import { fetchLatestEdMcp, freshLatest, versionText, type Versions } from "../core/version.js";
 import { IPC } from "../shared/ipc.js";
 import {
@@ -279,6 +281,28 @@ async function main(): Promise<void> {
   if (!history.fileName) history.newSession();
   state = { ...state, agent: agentId, history: resumedTurns, resumedTurns: resumedTurns.length };
 
+  // The game's HUD colour, for style.theme "game". It is read before either window is made, so
+  // a blue or green overlay does not draw orange first; it is read again when the player
+  // changes it. null when the game has none.
+  const colourXml = graphicsOverrideFile(process.env.LOCALAPPDATA, os.homedir());
+  // The read in progress, so a folder that hangs gets one read, not one more each tick.
+  let colourRead: Promise<string | null | undefined> | null = null;
+  const readColourXml = () => {
+    const read = (colourRead ??= readFile(colourXml, "utf8")
+      .catch((err: NodeJS.ErrnoException) => (err.code === "ENOENT" ? undefined : null))
+      .finally(() => {
+        colourRead = null;
+      }));
+    // A folder that stalls must not hold anything back, neither the overlay's start nor the
+    // timer below: the read is given up after a moment, which keeps the colour already shown.
+    let timer: NodeJS.Timeout | undefined;
+    const stalled = new Promise<null>((resolve) => {
+      timer = setTimeout(resolve, 1_500, null);
+    });
+    return Promise.race([read, stalled]).finally(() => clearTimeout(timer));
+  };
+  let gameMatrix: Matrix | null = gameMatrixFrom(await readColourXml(), null);
+
   const win: BrowserWindow = createOverlayWindow(
     path.join(import.meta.dirname, "../preload/index.cjs"),
     process.env.ELECTRON_RENDERER_URL,
@@ -309,7 +333,7 @@ async function main(): Promise<void> {
     const props = windowProps(state);
     applyWindow(win, props, prevProps);
     prevProps = props;
-    const view = buildView(state, viewSettings());
+    const view = buildView(state, viewSettings(), gameMatrix);
     const t = (c: Chip[]) => withTargets(c, chipStops);
     win.webContents.send(IPC.view, {
       ...view,
@@ -559,6 +583,7 @@ async function main(): Promise<void> {
     const visible = hudCanShow(settings.hud, saved, focus?.current ?? null);
     const input = {
       ...hudInput(hudData, saved, settings.hud, Date.now()),
+      look: lookVars(settings.style, gameMatrix),
       sell: settings.hud.spansh && visible ? (q: SellQuery) => sellPrices.get(q) : undefined,
     };
     const view = buildHud(input, hudMoving ? moveHint(settings.hotkeys) : null);
@@ -589,6 +614,7 @@ async function main(): Promise<void> {
     onError: (m) => log.log("warn", `panel spansh: ${m}`),
   });
   let hudPlans: ReturnType<typeof openStores>["plans"] | null = null;
+  let hudActivity: ReturnType<typeof openStores>["activity"] | null = null;
   async function openHudFeed(): Promise<void> {
     let syncDir = settings.hud.edMcpDataDir;
     if (!syncDir) syncDir = syncDirOf(agentConfigs, agentId, workspace);
@@ -601,6 +627,7 @@ async function main(): Promise<void> {
       known: settings.hud.spansh ? knownBodies : undefined,
     });
     hudPlans = stores.plans;
+    hudActivity = stores.activity;
     log.log("info", `panel data: ${syncDir ? "ed-mcp sync folder" : "ed-mcp config folder"}`);
   }
 
@@ -633,6 +660,9 @@ async function main(): Promise<void> {
       void finishTradeStop(hudData).catch((err: unknown) =>
         log.log("warn", `panel trade stop: ${message(err)}`),
       );
+      void finishBuild(hudData).catch((err: unknown) =>
+        log.log("warn", `panel build: ${message(err)}`),
+      );
       lastSystem = system;
       renderHud();
     } catch (err) {
@@ -644,7 +674,7 @@ async function main(): Promise<void> {
 
   // Arriving in the current stop's system copies the next stop's system for the galaxy map.
   function onArrival(system: string): void {
-    const next = arrivalCopy(hudData?.plan, system);
+    const next = arrivalCopy(followedPlan(), system);
     if (!next) return;
     clipboard.writeText(next);
     flash("copy", `📋 next stop copied: ${next}`, 4_000);
@@ -652,8 +682,10 @@ async function main(): Promise<void> {
 
   async function stepRoute(dir: 1 | -1): Promise<void> {
     const plans = hudPlans;
-    const plan = plans ? hudData?.plan : null;
-    const change = routeStep(plan, dir);
+    const plan = plans ? followedPlan() : null;
+    // The stop the build panel shows as current, when it is not the plan's first stop to do.
+    const follow = lastHudView?.follow;
+    const change = routeStep(plan, dir, follow?.planId === plan?.id ? follow?.stop : undefined);
     if ("notice" in change) return flash("route", change.notice, 3_000);
     // routeStep gives an update only for a plan, and there is a plan only with its store.
     if (!plans || !plan) return;
@@ -901,6 +933,37 @@ async function main(): Promise<void> {
   function finishTradeStop(data: FeedData): Promise<void> {
     if (!settings.hud.modes.trade) return Promise.resolve();
     return tradeStops.finish(data.plan, data.journal);
+  }
+
+  // Build actions the journal shows done are marked done once each, a stop when its last action is,
+  // and on a ship swap the note follows the new ship's build plan.
+  const buildStops = new BuildFinisher({
+    plans: () => hudPlans,
+    activity: () => hudActivity,
+    copy: (system, note) => {
+      clipboard.writeText(system);
+      flash("copy", `📋 ${note}`, 6_000);
+    },
+    notice: (text) => flash("route", text, 4_000),
+    warn: (m) => log.log("warn", `panel build: ${m}`),
+  });
+  function finishBuild(data: FeedData): Promise<void> {
+    if (!settings.hud.modes.build) return Promise.resolve();
+    return buildStops.finish({
+      note: data.plan,
+      plans: data.buildPlans ?? [],
+      journal: data.journal,
+      activity: data.activity,
+    });
+  }
+
+  // The plan the route keys and the arrival copy follow: the build plan the panel shows, when it
+  // is not the note's, else the note's.
+  function followedPlan(): Plan | null {
+    const id = lastHudView?.follow?.planId;
+    if (!id || !hudData) return hudData?.plan ?? null;
+    if (hudData.plan?.id === id) return hudData.plan;
+    return hudData.buildPlans?.find((p) => p.id === id) ?? hudData.plan;
   }
 
   // Bio bookmarks whose species are all analysed are marked done, once each.
@@ -1636,6 +1699,29 @@ async function main(): Promise<void> {
   );
   status.start();
 
+  // One read at a time: a slow folder must not stack reads that finish out of order.
+  let colourReading = false;
+  const readGameMatrix = async () => {
+    if (colourReading) return;
+    colourReading = true;
+    try {
+      const next = gameMatrixFrom(await readColourXml(), gameMatrix);
+      if (JSON.stringify(next) === JSON.stringify(gameMatrix)) return;
+      gameMatrix = next;
+      if (settings.style.theme === "game") {
+        render();
+        renderHud();
+      }
+    } catch (err) {
+      log.log("warn", `colour: could not redraw: ${message(err)}`);
+    } finally {
+      colourReading = false;
+    }
+  };
+  // A timer, not a file watch: a read that failed for now, as with the file locked at start, is
+  // tried again even though the file has not changed.
+  const colourTimer = setInterval(() => void readGameMatrix(), 5_000);
+
   await openHudFeed().catch((err) => log.log("warn", `panel: ${message(err)}`));
   const hudTimer = setInterval(() => void pollHud(), 1_000);
   void pollHud();
@@ -1882,6 +1968,7 @@ async function main(): Promise<void> {
     focus?.stop();
     status.stop();
     clearInterval(hudTimer);
+    clearInterval(colourTimer);
     settingsStore.unwatch();
     session?.stop();
     void approval.stop();

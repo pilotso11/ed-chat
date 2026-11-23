@@ -28,6 +28,8 @@ import {
   type Market,
 } from "./trade.js";
 import { journalMode, noteMode, pickMode, type Choice } from "./mode.js";
+import { buildNow, buildPanel, chooseBuild, type BuildChoice, type Outfitting } from "./build.js";
+import { isBuildPlan } from "./buildJudge.js";
 import {
   exobiologyPanel,
   explorationPanel,
@@ -43,6 +45,7 @@ import {
   wasFootfalled,
   knownSignals,
   liveMassacre,
+  currentStop,
 } from "./panels.js";
 
 /** What the panel window shows. */
@@ -58,6 +61,14 @@ export interface HudView {
   fontSize: number;
   backgroundOpacity: number;
   width: number;
+  /** CSS variables for the colours and fonts; none uses the defaults. */
+  look?: Record<string, string>;
+  /**
+   * The plan the route rows, the arrival copy and the route keys follow, when it is not the
+   * note's (a build plan shown because the ship is docked at its stop), and the stop the build
+   * panel shows as current when it is not currentStop().
+   */
+  follow?: { planId: string; stop: number | null };
 }
 
 export interface ShipStatus {
@@ -67,6 +78,8 @@ export interface ShipStatus {
   radius: number | null;
   /** Degrees, where the ship or commander faces; for turning toward a bookmark. */
   heading?: number | null;
+  /** Credits held (Balance): the journal's credits change only at LoadGame. */
+  balance?: number | null;
 }
 
 export function parseShipStatus(text: string): ShipStatus | null {
@@ -79,6 +92,7 @@ export function parseShipStatus(text: string): ShipStatus | null {
       longitude: n(j.Longitude),
       radius: n(j.PlanetRadius),
       heading: n(j.Heading),
+      balance: n(j.Balance),
     };
   } catch {
     return null;
@@ -102,12 +116,28 @@ export interface HudInput {
   sell?: (q: SellQuery) => SellLookup;
   /** The surface bookmarks plan, read each poll; null when there is none. */
   bookmarks?: Plan | null;
+  /** CSS variables for the colours and fonts: the overlay's look. */
+  look?: Record<string, string>;
   /** Market.json: the market of the last commodity screen opened, for the trade panel. */
   market?: Market | null;
+  /** The open build plans (with stop actions), besides the note's plan. */
+  buildPlans?: Plan[];
+  /** Outfitting.json: the modules of the last outfitting screen opened, for the build panel. */
+  outfitting?: Outfitting | null;
+}
+
+/** The build plan the panel would show now, with the journal read and the mode on. */
+export function buildChoice(input: HudInput): BuildChoice | null {
+  if (!input.settings.modes.build || !input.journal) return null;
+  return chooseBuild({ note: input.plan, plans: input.buildPlans ?? [], journal: input.journal });
 }
 
 /** The mode now: off by hotkey, else the newest of the journal, the note and the hotkey. */
-export function currentMode(input: HudInput): HudModeId | "off" | null {
+export function currentMode(
+  input: HudInput,
+  /** The build plan shown (buildChoice()), when the caller has it already. */
+  choice: BuildChoice | null = buildChoice(input),
+): HudModeId | "off" | null {
   if (input.hotkey?.mode === "off") return "off";
   const j = input.journal;
   // Expired on the panel's clock, and a stack whose missions all expired is not open.
@@ -130,6 +160,10 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
     ...missions,
     stops: tradeStops.map((i) => input.plan!.stops[i]!),
   };
+  const build =
+    j && input.settings.modes.build
+      ? buildNow({ note: input.plan, plans: input.buildPlans ?? [], journal: j }, choice)
+      : undefined;
   const fromJournal = j
     ? journalMode(
         j.events,
@@ -138,6 +172,7 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
         (m) => input.settings.modes[m],
         runActive,
         trade,
+        build,
       )
     : null;
   const m = noteMode(input.activity?.kind);
@@ -151,6 +186,8 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
     !(m === "passenger" && !runActive) &&
     // A trading note shows the panel only with a trade plan to follow.
     !(m === "trade" && !tradeStops.length) &&
+    // An engineering note shows the panel only with a build plan that has something to show.
+    !(m === "build" && !(isBuildPlan(input.plan) && build?.active)) &&
     // With the journal read: before then there is no stack to judge by.
     !(m === "massacre" && j && !groups.length)
       ? { mode: m, at: Date.parse(input.activity.updated_at) }
@@ -161,7 +198,7 @@ export function currentMode(input: HudInput): HudModeId | "off" | null {
   return chosen;
 }
 
-function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
+function panelFor(mode: HudModeId, input: HudInput, choice: BuildChoice | null): PanelView | null {
   const j = input.journal;
   if (!j || mode === "route") return null;
   if (mode === "massacre")
@@ -191,6 +228,18 @@ function panelFor(mode: HudModeId, input: HudInput): PanelView | null {
       missionsNow: missionsNow(j, input.plan),
       nav: input.nav,
     });
+  }
+  if (mode === "build") {
+    return choice
+      ? buildPanel({
+          choice,
+          journal: j,
+          nav: input.nav,
+          outfitting: input.outfitting ?? null,
+          balance: input.status?.balance ?? null,
+          settings: input.settings.build,
+        })
+      : null;
   }
   const system = j.location.system;
   if (mode === "mining") {
@@ -297,10 +346,13 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
     fontSize: s.fontSize,
     backgroundOpacity: s.backgroundOpacity,
     width: s.width,
+    look: input.look ?? {},
   };
-  const mode = currentMode(input);
+  // The build plan to show, chosen once for the mode, the panel and the route keys.
+  const choice = buildChoice(input);
+  const mode = currentMode(input, choice);
   if (mode === "off") return { ...base, mode, panel: null, route: null };
-  let panel = mode ? panelFor(mode, input) : null;
+  let panel = mode ? panelFor(mode, input, choice) : null;
   // Bookmarks in this system, from the bookmarks plan.
   const system = input.journal?.location.system ?? null;
   const marks = !s.bookmarks
@@ -330,13 +382,20 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
     input.plan.stops.every((x) => x.kind === "trade") &&
     tradeTodo(input.plan).length > 0 &&
     navLeadsTo(input.plan, input.nav, system) !== "other";
+  // The build panel is the route: its stops are not repeated below. The plan it shows leads the
+  // route keys and the arrival copy, which follow the note's plan otherwise.
+  const shown = panel?.mode === "build" ? choice : null;
+  const follow =
+    shown && (shown.plan.id !== input.plan?.id || shown.current !== currentStop(shown.plan))
+      ? { planId: shown.plan.id, stop: shown.current }
+      : undefined;
   const route =
-    s.modes.route && !tradePlan
+    s.modes.route && !tradePlan && !shown
       ? routeRows({
           plan: input.plan,
           nav: input.nav,
           system: input.journal?.location.system ?? null,
         })
       : null;
-  return { ...base, mode, panel, route };
+  return { ...base, mode, panel, route, ...(follow ? { follow } : {}) };
 }

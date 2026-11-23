@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DEFAULT_MINING_TARGETS } from "./miningTargets.js";
+import { FONT_NAMES, THEME_NAMES } from "./theme.js";
 import { annotateSchema, type JsonSchemaNode } from "./settingsDictionary.js";
 
 export { DEFAULT_MINING_TARGETS };
@@ -72,6 +73,7 @@ export const HUD_MODES = [
   "mining",
   "passenger",
   "trade",
+  "build",
   "route",
 ] as const;
 export type HudModeId = (typeof HUD_MODES)[number];
@@ -90,6 +92,7 @@ const HudSchema = z.strictObject({
       mining: z.boolean().default(true),
       passenger: z.boolean().default(true),
       trade: z.boolean().default(true),
+      build: z.boolean().default(true),
       route: z.boolean().default(true),
     })
     .prefault({}),
@@ -129,6 +132,12 @@ const HudSchema = z.strictObject({
       maxPriceAgeDays: z.number().positive().max(90).default(7),
     })
     .prefault({}),
+  build: z
+    .strictObject({
+      // Done actions listed at the current stop before they fold into one "✓ N done" row.
+      doneShown: z.number().int().min(0).max(20).default(3),
+    })
+    .prefault({}),
   // The ed-mcp sync folder, for the activity note and plans. null: read it from the ed-mcp
   // that the assistant runs (edMcp.ts), else ed-mcp's own config folder.
   edMcpDataDir: z.string().min(1).nullable().default(null),
@@ -165,6 +174,11 @@ export const SettingsSchema = z.strictObject({
     .strictObject({
       fontSize: z.number().min(8).max(48).default(14),
       backgroundOpacity: z.number().min(0).max(1).default(0.78),
+      // standard: Segoe UI. compact: a narrower face, for more text in the same width.
+      font: z.enum(FONT_NAMES).default("standard"),
+      // The overlay's colour. game follows the HUD colour in the game's own settings, and is
+      // orange, the game's default, when there is none.
+      theme: z.enum(THEME_NAMES).default("game"),
     })
     .prefault({}),
   position: PositionSchema.prefault({}),

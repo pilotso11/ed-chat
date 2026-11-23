@@ -1,6 +1,7 @@
 import type { JournalEvent } from "ed-mcp/journal";
 import type { HudModeId } from "../settings.js";
 import { num, objs, type Obj } from "./json.js";
+import { atBuildStop, BUILD_EVENTS, NO_BUILD, type BuildNow } from "./build.js";
 import { isDocking, stopAt, tradeJournal, type MissionsNow } from "./trade.js";
 
 /** Journal events the mode rules and panels read, besides the ones ed-mcp keeps. */
@@ -54,6 +55,8 @@ export const HUD_EVENTS = [
   "CargoDepot",
   "ColonisationContribution",
   "ColonisationConstructionDepot",
+  // The build panel's: module, shipyard and engineering events, and landing at a gather stop.
+  ...BUILD_EVENTS,
 ] as const;
 
 /** What the trade rules need to know now: see journalMode(). */
@@ -73,6 +76,9 @@ const NO_TRADE: TradeNow = {
   wanted: [],
   stops: [],
 };
+
+/** The modes the journal's own events choose, besides massacre and passengers. */
+type Journaled = "exploration" | "exobiology" | "mining" | "trade" | "build";
 
 export interface Choice {
   mode: HudModeId | "off";
@@ -119,6 +125,11 @@ export const LAPSE_JUMPS = 5;
  * aboard) and until a newer activity. LAPSE_JUMPS jumps with no market trade end it, unless trade
  * cargo is aboard on the way to a trade stop. A passenger or delivery mission taken after the
  * last trade shows the passenger panel; taken before, it shows on the trade panel's footer.
+ * `build` is the build plans now (BuildNow): docking at an open build stop (landing, for a gather
+ * stop), or an event that matched an open action of a build plan, turns on build mode, which lasts
+ * while the panel has something to show and until a newer activity. A jump never ends it. A
+ * Synthesis or MaterialTrade the plan does not ask for changes nothing; a ShipyardSwap turns it on
+ * when it does a swap_ship action or the ship swapped to has an open build plan.
  */
 export function journalMode(
   events: JournalEvent[],
@@ -127,19 +138,20 @@ export function journalMode(
   on: (m: HudModeId) => boolean = () => true,
   runActive = false,
   trade: TradeNow = NO_TRADE,
+  build: BuildNow = NO_BUILD,
 ): Choice | null {
   const bio = new Set<string>();
   // Exploration and exobiology, followed through every event, before and during a stack.
   // Massacre is kept apart: while a stack is open it wins, and once it is handed in this mode is
   // current, as if there had been no missions.
-  let mode: "exploration" | "exobiology" | "mining" | "trade" | null = null;
+  let mode: Journaled | null = null;
   let at = 0;
   let massacreAt: number | null = null;
   // The newest passenger or delivery mission taken, which shows those missions while any is left.
   let runAt: number | null = null;
   // Whether the ship left the system after the last mining event.
   let leftMining = false;
-  const set = (m: "exploration" | "exobiology" | "mining" | "trade") => {
+  const set = (m: Journaled) => {
     if (!on(m)) return;
     jumps = 0;
     leftMining = false;
@@ -158,6 +170,13 @@ export function journalMode(
   for (const e of events) {
     last = Date.parse(e.timestamp) || last;
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
+    // A build event the plan asked for, docking or landing at a build stop, or swapping to a ship
+    // with a build plan. Set after the rules below, so landing at a build's gather stop on a body
+    // with biological signals is the build.
+    const building =
+      build.matched.has(e) ||
+      atBuildStop(e, build.stops) ||
+      (e.event === "ShipyardSwap" && build.ships.includes(num(e.ShipID) ?? NaN));
     switch (e.event) {
       case "FSDJump":
       case "CarrierJump":
@@ -221,12 +240,14 @@ export function journalMode(
         }
         break;
     }
+    if (building) set("build");
   }
   if (massacreActive && massacreAt !== null && on("massacre"))
     return { mode: "massacre", at: massacreAt };
   if (mode === "mining" && leftMining && !minedAboard) mode = null;
   // Trade ends once the hold is empty with no trade stop to do: an empty panel never wins.
   if (mode === "trade" && !trade.active) mode = null;
+  if (mode === "build" && !build.active) mode = null;
   // Passengers and deliveries show from when they were taken until another activity is newer,
   // trade too: taken before the run's last trade, they show on the trade panel.
   if (runActive && runAt !== null && (mode === null || runAt >= at)) {
@@ -262,6 +283,8 @@ export function noteMode(kind: string | undefined): HudModeId | null {
       return kind;
     case "trading":
       return "trade";
+    case "engineering":
+      return "build";
     case "missions":
     case "hauling":
       return "passenger";

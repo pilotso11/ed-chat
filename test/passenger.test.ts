@@ -287,6 +287,7 @@ describe("passenger mode", () => {
         },
         ship: {
           type: "python",
+          id: null,
           name: null,
           ident: null,
           max_jump_range: null,
@@ -297,6 +298,7 @@ describe("passenger mode", () => {
         materials: { raw: [], manufactured: [], encoded: [] },
         missions: [mission(1, { passengers: 4 })],
         engineers: [],
+        stored_modules: null,
         as_of: null,
         events,
       },

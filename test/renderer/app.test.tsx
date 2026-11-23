@@ -70,9 +70,12 @@ describe("status strip", () => {
         maxLines: 4,
         chatLines: 9,
         growsUp: true,
+        look: { "--accent": "#47b3ff", "--font-ui": "Consolas" },
       },
     });
     const root = $(".overlay")!;
+    expect(root.style.getPropertyValue("--accent")).toBe("#47b3ff");
+    expect(root.style.getPropertyValue("--font-ui")).toBe("Consolas");
     expect(root.style.getPropertyValue("--font")).toBe("18px");
     expect(root.style.getPropertyValue("--bg-alpha")).toBe("0.3");
     expect(root.style.getPropertyValue("--max-lines")).toBe("4");

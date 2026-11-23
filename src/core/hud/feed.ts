@@ -1,6 +1,14 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { systemAddress, type JournalEvent, type Stores } from "ed-mcp/journal";
+import {
+  systemAddress,
+  type JournalEvent,
+  type JournalState,
+  type Plan,
+  type Stores,
+} from "ed-mcp/journal";
+import { landedAt, parseOutfitting, type Outfitting } from "./build.js";
+import { dockedAt } from "./trade.js";
 import type { HudInput } from "./hud.js";
 import { parseShipStatus, type ShipStatus } from "./hud.js";
 import { BOOKMARKS_PLAN, isPlanNotFound } from "./bookmarks.js";
@@ -10,7 +18,17 @@ import { parseMarket, type Market } from "./trade.js";
 
 export type FeedData = Pick<
   HudInput,
-  "journal" | "status" | "nav" | "activity" | "plan" | "samples" | "known" | "bookmarks" | "market"
+  | "journal"
+  | "status"
+  | "nav"
+  | "activity"
+  | "plan"
+  | "samples"
+  | "known"
+  | "bookmarks"
+  | "market"
+  | "buildPlans"
+  | "outfitting"
 >;
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -27,6 +45,9 @@ export class HudFeed {
   private lastError: string | null = null;
   /** Market.json as last parsed: it changes only when a market screen opens. */
   private market: { text: string; parsed: Market | null } | null = null;
+  private outfitting: { text: string; parsed: Outfitting | null } | null = null;
+  /** Build plans as last read, by ID: read again only when the plan list says one changed. */
+  private builds = new Map<string, { updated: string; plan: Plan; openAt: string | null }>();
 
   constructor(
     private readonly stores: Pick<Stores, "journal" | "activity" | "plans">,
@@ -69,16 +90,17 @@ export class HudFeed {
   }
 
   async poll(): Promise<FeedData> {
-    const [journal, statusText, navText, marketText, activity] = await Promise.all([
+    const [journal, statusText, navText, marketText, outfittingText, activity] = await Promise.all([
       this.stores.journal.state().catch((err: unknown) => (this.error("journal", err), null)),
       this.read("Status.json"),
       this.read("NavRoute.json"),
       this.read("Market.json"),
+      this.read("Outfitting.json"),
       this.stores.activity.get().catch((err: unknown) => (this.error("activity", err), null)),
     ]);
     const status = statusText ? parseShipStatus(statusText) : null;
     // Read together; no bookmarks plan is the usual case, not an error.
-    const [plan, bookmarks] = await Promise.all([
+    const [plan, bookmarks, buildPlans] = await Promise.all([
       activity?.plan_id
         ? this.stores.plans
             .get(activity.plan_id)
@@ -89,6 +111,7 @@ export class HudFeed {
         .catch((err: unknown) =>
           isPlanNotFound(err) ? null : (this.error("bookmarks", err), null),
         ),
+      this.buildPlans(journal).catch((err: unknown) => (this.error("build plans", err), [])),
     ]);
     if (journal) this.noteSamples(journal.events, status);
     const system = journal?.location.system ?? null;
@@ -104,7 +127,63 @@ export class HudFeed {
       known,
       bookmarks,
       market: marketText ? this.parseMarket(marketText) : null,
+      buildPlans,
+      outfitting: outfittingText ? this.parseOutfitting(outfittingText) : null,
     };
+  }
+
+  /**
+   * The build plans with an action still to do: docking at one of their stops or acting on one
+   * shows it, whatever plan the note names. A plan finished while docked or landed where it was
+   * last open stays until the ship leaves, for "Build complete". A plan is read again only when it
+   * changed. (PlanStore has no call that reads every plan at once: list() then get() each.)
+   */
+  private async buildPlans(
+    journal: (JournalState & { events: JournalEvent[] }) | null,
+  ): Promise<Plan[]> {
+    const list = await this.stores.plans.list();
+    // Where the ship is: this docking or landing, named by its event.
+    const dock = journal ? dockedAt(journal.events, journal.location) : null;
+    const landed = journal && !dock ? landedAt(journal.events) : null;
+    const place = dock
+      ? `dock|${dock.at}`
+      : landed
+        ? `land|${journal!.events[landed.index]!.timestamp}`
+        : null;
+    const keep = new Set<string>();
+    // Changed plans are read together.
+    const plans = await Promise.all(
+      list.map(async (p): Promise<Plan | null> => {
+        if (!p.actions) return null;
+        const open = p.actions > (p.actions_done ?? 0);
+        const kept = this.builds.get(p.id);
+        if (!open && !(kept && place !== null && kept.openAt === place)) return null;
+        keep.add(p.id);
+        if (kept && kept.updated === p.updated_at) {
+          if (open) kept.openAt = place;
+          return kept.plan;
+        }
+        const plan = await this.stores.plans.get(p.id).catch((err: unknown) => {
+          // Deleted since the list: not an error.
+          if (!isPlanNotFound(err)) this.error("build plan", err);
+          return null;
+        });
+        if (!plan) return null;
+        this.builds.set(p.id, {
+          updated: plan.updated_at,
+          plan,
+          openAt: open ? place : (kept?.openAt ?? null),
+        });
+        return plan;
+      }),
+    );
+    for (const id of this.builds.keys()) if (!keep.has(id)) this.builds.delete(id);
+    return plans.filter((p): p is Plan => p !== null);
+  }
+
+  private parseOutfitting(text: string): Outfitting | null {
+    if (this.outfitting?.text !== text) this.outfitting = { text, parsed: parseOutfitting(text) };
+    return this.outfitting.parsed;
   }
 
   private parseMarket(text: string): Market | null {

@@ -1,3 +1,5 @@
+@import "./fonts.css";
+
 html,
 body {
   margin: 0;
@@ -11,6 +13,8 @@ body {
   /* As wide as the longest line, so names are not cut: main sizes the window to fit. */
   width: max-content;
   min-width: var(--min-width, 380px);
+  font-family: var(--font-ui, "Segoe UI", system-ui, sans-serif);
+  color: var(--ink, #f2e6d0);
   font-size: var(--font, 15px);
   line-height: 1.35;
   /* The less background, the stronger the outline, so text stays readable over bright stars. */
@@ -21,15 +25,15 @@ body {
 }
 .panel {
   background: rgba(10, 12, 16, var(--bg-alpha, 0.55));
-  border: 1px solid rgba(255, 140, 0, 0.45);
+  border: 1px solid rgba(var(--strong-rgb, 255, 140, 0), 0.45);
   border-radius: 4px;
   padding: 4px 8px;
 }
 .panel.moving {
-  border: 2px dashed #ffb347;
+  border: 2px dashed var(--accent, #ffb347);
 }
 .hint {
-  color: #ffb347;
+  color: var(--accent, #ffb347);
   font-size: 0.8em;
 }
 .head,
@@ -39,7 +43,7 @@ body {
   white-space: nowrap;
 }
 .title {
-  color: #ff8c00;
+  color: var(--strong, #ff8c00);
   font-weight: 600;
   letter-spacing: 0.06em;
 }
@@ -61,19 +65,22 @@ body {
 /* A row's tone, and a footer line's. */
 .row.accent,
 .footer.accent {
-  color: #ffd08a;
+  color: var(--light, #ffd08a);
 }
 .row.good,
-.footer.good {
+.footer.good,
+.head.good .title,
+.head.good .right {
   color: #8fe388;
 }
+/* A warning stays amber in every theme: in green or white it would not stand apart. */
 .row.warn,
 .footer.warn {
   color: #ffb347;
 }
 .row.dim,
 .footer {
-  color: rgba(242, 230, 208, 0.6);
+  color: rgba(var(--ink-rgb, 242, 230, 208), 0.6);
 }
 .footer {
   font-size: 0.85em;
@@ -82,22 +89,22 @@ body {
   text-overflow: ellipsis;
 }
 .route.under {
-  border-top: 1px solid rgba(255, 140, 0, 0.25);
+  border-top: 1px solid rgba(var(--strong-rgb, 255, 140, 0), 0.25);
   margin-top: 3px;
   padding-top: 2px;
 }
 .stop .mark {
   width: 0.9em;
   flex: none;
-  color: #ff8c00;
+  color: var(--strong, #ff8c00);
 }
 .stop.current {
-  color: #ffd08a;
+  color: var(--light, #ffd08a);
 }
 .stop.label,
 .stop.next,
 .stop.more {
-  color: rgba(242, 230, 208, 0.65);
+  color: rgba(var(--ink-rgb, 242, 230, 208), 0.65);
   font-size: 0.9em;
 }
 .stop.label {
@@ -110,7 +117,7 @@ body {
 }
 .bar > div {
   height: 100%;
-  background: #ff8c00;
+  background: var(--strong, #ff8c00);
 }
 .row.good .bar > div {
   background: #8fe388;
