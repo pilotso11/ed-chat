@@ -28,7 +28,16 @@ import {
   type Market,
 } from "./trade.js";
 import { journalMode, noteMode, pickMode, type Choice } from "./mode.js";
-import { buildNow, buildPanel, chooseBuild, type BuildChoice, type Outfitting } from "./build.js";
+import {
+  buildNow,
+  buildPanel,
+  chooseBuild,
+  outfittingVisit,
+  visitPanel,
+  type BuildChoice,
+  type BuildVisit,
+  type Outfitting,
+} from "./build.js";
 import { isBuildPlan } from "./buildJudge.js";
 import {
   exobiologyPanel,
@@ -132,13 +141,31 @@ export function buildChoice(input: HudInput): BuildChoice | null {
   return chooseBuild({ note: input.plan, plans: input.buildPlans ?? [], journal: input.journal });
 }
 
+/** The outfitting visit the build panel would show now (outfittingVisit()), when it is on. */
+export function buildVisit(input: HudInput, choice: BuildChoice | null): BuildVisit | null {
+  const s = input.settings;
+  if (!s.modes.build || !s.build.outfittingVisit || !input.journal) return null;
+  return outfittingVisit(input.journal, choice);
+}
+
 /** The mode now: off by hotkey, else the newest of the journal, the note and the hotkey. */
 export function currentMode(
   input: HudInput,
   /** The build plan shown (buildChoice()), when the caller has it already. */
   choice: BuildChoice | null = buildChoice(input),
+  /** The outfitting visit (buildVisit()), when the caller has it already. */
+  visit: BuildVisit | null = buildVisit(input, choice),
 ): HudModeId | "off" | null {
-  if (input.hotkey?.mode === "off") return "off";
+  return modeNow(input, choice, visit).mode;
+}
+
+/** The mode now (currentMode()), and what chose it: the journal, the activity note or the hotkey. */
+export function modeNow(
+  input: HudInput,
+  choice: BuildChoice | null,
+  visit: BuildVisit | null,
+): { mode: HudModeId | "off" | null; by: "journal" | "note" | "hotkey" | null } {
+  if (input.hotkey?.mode === "off") return { mode: "off", by: "hotkey" };
   const j = input.journal;
   // Expired on the panel's clock, and a stack whose missions all expired is not open.
   const groups = j ? liveMassacre(massacre(j.missions, j.events, input.now).groups) : [];
@@ -162,7 +189,7 @@ export function currentMode(
   };
   const build =
     j && input.settings.modes.build
-      ? buildNow({ note: input.plan, plans: input.buildPlans ?? [], journal: j }, choice)
+      ? buildNow({ note: input.plan, plans: input.buildPlans ?? [], journal: j }, choice, visit)
       : undefined;
   const fromJournal = j
     ? journalMode(
@@ -193,12 +220,25 @@ export function currentMode(
       ? { mode: m, at: Date.parse(input.activity.updated_at) }
       : null;
   // journalMode skips modes that are off itself, so the run or an older mode still shows.
-  const chosen = pickMode(fromJournal, fromNote, input.hotkey)?.mode ?? null;
-  if (chosen && chosen !== "off" && !input.settings.modes[chosen]) return null;
-  return chosen;
+  const best = pickMode(fromJournal, fromNote, input.hotkey);
+  const chosen = best?.mode ?? null;
+  const by = !best
+    ? null
+    : best === fromJournal
+      ? "journal"
+      : best === fromNote
+        ? "note"
+        : "hotkey";
+  if (chosen && chosen !== "off" && !input.settings.modes[chosen]) return { mode: null, by: null };
+  return { mode: chosen, by };
 }
 
-function panelFor(mode: HudModeId, input: HudInput, choice: BuildChoice | null): PanelView | null {
+function panelFor(
+  mode: HudModeId,
+  input: HudInput,
+  choice: BuildChoice | null,
+  visit: BuildVisit | null,
+): PanelView | null {
   const j = input.journal;
   if (!j || mode === "route") return null;
   if (mode === "massacre")
@@ -230,6 +270,8 @@ function panelFor(mode: HudModeId, input: HudInput, choice: BuildChoice | null):
     });
   }
   if (mode === "build") {
+    // With no plan with work here, this docking's outfitting.
+    if (visit) return visitPanel({ visit, events: j.events });
     return choice
       ? buildPanel({
           choice,
@@ -360,9 +402,14 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
   };
   // The build plan to show, chosen once for the mode, the panel and the route keys.
   const choice = buildChoice(input);
-  const mode = currentMode(input, choice);
+  const found = buildVisit(input, choice);
+  const { mode, by } = modeNow(input, choice, found);
   if (mode === "off") return { ...base, mode, panel: null, route: null };
-  let panel = mode ? panelFor(mode, input, choice) : null;
+  // The visit shows when its own events chose the mode. Build mode asked for by the hotkey or the
+  // activity note shows the plan instead, while it has an action to do.
+  const asked = by === "hotkey" || by === "note";
+  const visit = found && !(asked && choice?.judged.actions.some((x) => !x.done)) ? found : null;
+  let panel = mode ? panelFor(mode, input, choice, visit) : null;
   // Bookmarks in this system, from the bookmarks plan.
   const system = input.journal?.location.system ?? null;
   const marks = !s.bookmarks
@@ -394,7 +441,8 @@ export function buildHud(input: HudInput, moving: string | null): HudView {
     navLeadsTo(input.plan, input.nav, system) !== "other";
   // The build panel is the route: its stops are not repeated below. The plan it shows leads the
   // route keys and the arrival copy, which follow the note's plan otherwise.
-  const shown = panel?.mode === "build" ? choice : null;
+  // The outfitting visit is not a plan: the route rows show under it as under other panels.
+  const shown = panel?.mode === "build" && !visit ? choice : null;
   const follow =
     shown && (shown.plan.id !== input.plan?.id || shown.current !== currentStop(shown.plan))
       ? { planId: shown.plan.id, stop: shown.current }

@@ -1,8 +1,8 @@
 # Activity panel: ship and on-foot builds
 
 Date: 2026-11-22
-Status: step 2 of the order of work (the ship build panel in ED Chat) is built; the others are
-to do. Issue #81, widened by its author's comment to take in purchases, full ship
+Status: steps 2 and 4 of the order of work (the ship build panel in ED Chat, and its outfitting
+visit with no plan) are built; the others are to do. Issue #81, widened by its author's comment to take in purchases, full ship
 builds, upgrades of the current ship (a subset of a full build), and suit and on-foot weapon
 upgrades. Follows the activity HUD spec (2026-11-15) and the trade, passenger and mining spec
 (2026-11-21).
@@ -861,10 +861,49 @@ for on foot. ED Chat pins each.
      the mode on.
    - The header shows the ship type, not its `ShipName`. The trader stop shows "trader", not its
      type: the stop has no field for it.
-   - A done row shows no price. `hud.build.outfittingVisit` comes with step 4.
+   - A done row shows no price. `hud.build.outfittingVisit` came with step 4.
 3. **ed-mcp: `build_plan`.** The diff, needs, trades, engineers and route, `save_to_plan`.
    Tested against SLEF from Coriolis and EDSY and real `Loadout` events. Release.
 4. **ED Chat: the no-plan outfitting visit.** Needs no ed-mcp change; can go at any point.
+   **Built.** As built:
+   - `outfittingVisit()` and `visitPanel()` in `src/core/hud/build.ts`; `BuildNow.visit` holds the
+     events that turn it on, which `journalMode()` treats as build events.
+   - "No build plan" means no build plan with work here: the view shows while docked unless the
+     plan shown has a stop at this station still to do with an action to do, or an event of this
+     docking did one of its actions (which also keeps "Build complete"). So with a plan whose
+     stops are elsewhere, buying at another station shows the visit, and the plan comes back on
+     undocking. The route rows show under the visit, as under other panels, and the route keys
+     follow the note's plan. The visit shows only when the journal chose the mode: build mode
+     asked for with the hotkey or an engineering note shows the plan while it has an action to do
+     (the visit when there is none). A `ShipyardSwap` to the ship of the plan shown, while it has
+     an action to do, asks for that plan too: only outfitting after the swap shows the visit
+     again.
+   - The visit replaces the activity before it only while docked: the mode is worked out from the
+     whole journal on every poll, and after undocking the visit's events are not build events, so
+     trade, mining or exploration comes back as it was.
+   - Turned on by the module events and `EngineerCraft` (as the spec has it) and also by the
+     shipyard: `ShipyardBuy`, `ShipyardRedeem`, `ShipyardSell` (added to `BUILD_EVENTS`) and
+     `ShipyardTransfer`. A `ShipyardSwap` alone does not turn it on (as the mode rules say for a
+     swap), nor do `Synthesis` and `MaterialTrade`; once it shows, all of these are listed
+     ("took out Krait MkII").
+   - Rows: the modules (bought and sold with their credits, each list starting with its verb, so
+     a row never lacks one; more than two kinds of either by name without prices on up to two
+     rows, each starting with the verb, else as a count and a total; stored, retrieved,
+     transferred and moved as counts), then the ships, then one row per module engineered (one blueprint in one slot) with the rolls on the right, one
+     row per experimental applied, then the trades and the materials used. Parts are packed into
+     rows of up to 56 characters. The invitation to plan a build is a dim footer line.
+   - Module names are a short name from a table for a plain module ("FSD", even where the game
+     says "Frame Shift Drive"), else the event's `_Localised` name (a variant such as a bi-weave
+     shield keeps it), with the class and rating from the symbol ("FSD 5A"), or for a weapon its
+     size and mount ("Pulse Laser 2G"). Limpet controllers are told apart by their symbol
+     ("Prospector Limpet Controller 3A"). Core slots use the build panel's short names, in title
+     case ("Power Plant"). Blueprint
+     names come from a table of every blueprint whose name in ed-mcp's catalog (coriolis-data's
+     `blueprints.json`) differs from its symbol's words ("FSD_LongRange" is Increased Range,
+     "ShieldBooster_Kinetic" Kinetic Resistant), copied since the panel makes no catalog
+     downloads; else the symbol's words ("Heavy Duty").
+   - The grade before a module's first roll comes from the newest `Loadout` before it, G0 when
+     that shows another blueprint or none. Only docking counts: landing has no outfitting.
 5. **ed-mcp: on foot.** The on-foot action kinds' journal state (`suits`, `locker`, `backpack`), kept
    events, `build_plan` for a suit loadout with needs given by Claude. Release.
 6. **ED Chat: on-foot actions.** Their judges, the choice between two open plans, "equip to check".
@@ -877,8 +916,11 @@ Each is its own PR.
   craft is always for the ship flown, so this holds.
 - The rolls left are an estimate from `build.rolls_per_grade` and the quality reached; a lucky
   roll finishes sooner.
-- A stop whose last action was done while ED Chat was not running is not marked done on the next
-  start (the first poll marks nothing); `routeNext` marks it.
+- A stop whose last action was done while ED Chat was not running is marked done on the next
+  start when the first poll writes that action (the journal shows it done and the plan does not
+  yet), quietly unless it is the stop shown. A stop whose actions were all marked done in the plan
+  already (by Claude while ED Chat was off, or by a poll whose stop write failed before ED Chat
+  closed) is not: the first poll only notes which stops are open. `routeNext` marks it.
 - A pinned blueprint and the remote workshop are not in the journal, so the panel always points
   to the engineer's base.
 - On foot, a modification shows only when the loadout is next written.
