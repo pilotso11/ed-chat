@@ -136,7 +136,9 @@ export function bookmarkShown(
   const address = systemAddress(journal.events, s.system);
   if (address === null) return label;
   const bio = exobiology(journal.events, address, { system: s.system }).bodies;
-  return bookmarkText(s, bio, known, s.system);
+  // Spansh's bodies are the current system's: a bookmark elsewhere does not use them.
+  const here = journal.location.system ?? null;
+  return bookmarkText(s, bio, here && same(s.system, here) ? known : null, s.system);
 }
 
 /** A bookmark as a plan stop. */
@@ -407,14 +409,15 @@ export function alikeLeft(
   known: KnownBody[] | null,
 ): number {
   if (!stop.body) return 0;
-  const text = bookmarkShown(stop, journal, known);
+  // Compared as the panel groups them, ignoring case.
+  const text = bookmarkShown(stop, journal, known).toLowerCase();
   const key = bodyKey(stop.body, stop.system);
   return todoBookmarks(plan).filter((i) => {
     const t = plan.stops[i]!;
     return (
       same(t.system, stop.system) &&
       bodyKey(t.body!, t.system) === key &&
-      bookmarkShown(t, journal, known) === text
+      bookmarkShown(t, journal, known).toLowerCase() === text
     );
   }).length;
 }

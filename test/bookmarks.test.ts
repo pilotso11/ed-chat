@@ -498,6 +498,10 @@ describe("bookmarks like the one cleared", () => {
     p.stops[4]!.status = "skipped";
     expect(alikeLeft(p, p.stops[0]!, null, null)).toBe(1);
     expect(alikeLeft(p, { ...p.stops[0]!, body: undefined }, null, null)).toBe(0);
+    // As the panel groups them, ignoring case.
+    const q = plan([a, { ...a, label: "SPOT" }]);
+    q.stops[0]!.status = "skipped";
+    expect(alikeLeft(q, q.stops[0]!, null, null)).toBe(1);
   });
 });
 
