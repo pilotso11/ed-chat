@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.9.0](https://github.com/pilotso11/ed-chat/compare/v0.8.1...v0.9.0) (2026-11-23)
+
+
+### Features
+
+* build panel for ship build and upgrade plans ([#93](https://github.com/pilotso11/ed-chat/issues/93)) ([7199a23](https://github.com/pilotso11/ed-chat/commit/7199a2300d0c2f405218dccc75de5f74920790f2))
+* compact font and colour themes, following the game's HUD colour ([#90](https://github.com/pilotso11/ed-chat/issues/90)) ([dee5efd](https://github.com/pilotso11/ed-chat/commit/dee5efd25b7e9b6d4b1d2fa521b19c14e4311b58))
+* **hud:** panels follow ed-mcp 0.11.0 stop actions ([#97](https://github.com/pilotso11/ed-chat/issues/97)) ([ecd4d88](https://github.com/pilotso11/ed-chat/commit/ecd4d88165c86ddbf38139d55ce93da0cd784644))
+* outfitting visit view when no build plan has work here ([#95](https://github.com/pilotso11/ed-chat/issues/95)) ([2906346](https://github.com/pilotso11/ed-chat/commit/2906346281b63537f4ea364b42e5bf648d54b9fd))
+
+
+### Bug Fixes
+
+* bookmark follow-ups from [#92](https://github.com/pilotso11/ed-chat/issues/92) ([#94](https://github.com/pilotso11/ed-chat/issues/94)) ([0b94c37](https://github.com/pilotso11/ed-chat/commit/0b94c3711d4ff2920ddda545b790662f0ecec808))
+* clear bookmarks, live bio bookmark labels, and done headers ([#92](https://github.com/pilotso11/ed-chat/issues/92)) ([63cdf34](https://github.com/pilotso11/ed-chat/commit/63cdf344112cea5bd45daa984ebae19efb0fc435))
+
 ## [0.8.1](https://github.com/pilotso11/ed-chat/compare/v0.8.0...v0.8.1) (2026-11-22)
 
 
