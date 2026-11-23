@@ -866,6 +866,7 @@ describe("builds from the real ed-mcp journal reader", () => {
         MarketID: 7,
       }),
       ev("ShipyardRedeem", { ShipType: "adder", MarketID: 7 }),
+      ev("ShipyardSell", { ShipType: "adder", SellShipID: 2, ShipPrice: 1, MarketID: 7 }),
       ev("ShipyardTransfer", {
         ShipType: "Adder",
         ShipID: 2,

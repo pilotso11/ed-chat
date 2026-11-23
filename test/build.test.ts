@@ -3,9 +3,12 @@ import type { JournalEvent, JournalState, Plan } from "ed-mcp/journal";
 import {
   atBuildStop,
   buildNow,
+  blueprintName,
   buildPanel,
   chooseBuild,
   landedAt,
+  moduleName,
+  outfittingVisit,
   parseOutfitting,
   shipName,
 } from "../src/core/hud/build.js";
@@ -1331,5 +1334,229 @@ describe("the build mode", () => {
     );
     expect(chooseBuild({ note: null, plans: [python], journal: atFarseer() })).toBeNull();
     expect(chooseBuild({ note: python, plans: [], journal: atFarseer() })?.plan.id).toBe("py");
+  });
+});
+
+describe("the outfitting visit, with no build plan", () => {
+  const KRAIT_SHIP = { Ship: "krait_mkii", ShipID: KRAIT };
+  const ingredients = (n: number) => [
+    { Name: "phosphorus", Name_Localised: "Phosphorus", Count: n },
+  ];
+  /** Docked at Farseer with the FSD at G3 64%: no plan. */
+  const visit = (extra: JournalEvent[], o: Partial<Journal> = {}) =>
+    journal(
+      [
+        loadout(1, "krait_mkii", KRAIT, [fsd(3, 0.64)]),
+        dock(10, "Deciat", "Farseer Inc"),
+        ...extra,
+      ],
+      { ...docked("Deciat", "Farseer Inc"), ...o },
+    );
+  const input = (j: Journal, o: Partial<HudInput> = {}): HudInput => ({
+    journal: j,
+    status: null,
+    nav: null,
+    activity: null,
+    plan: null,
+    hotkey: null,
+    samples: new Map(),
+    known: null,
+    settings: DEFAULT_SETTINGS.hud,
+    now: T0 + 600_000,
+    ...o,
+  });
+  const undocked = (j: Journal): Journal => ({
+    ...j,
+    events: [...j.events, ev(500, "Undocked", { StationName: "Farseer Inc" })],
+    location: { ...j.location, docked: false, station: null },
+  });
+
+  /** The spec's example: a buy, a sale, six rolls of the FSD from G3 to G5, two trades. */
+  const farseer = visit([
+    ev(12, "ModuleSell", {
+      Slot: "Slot03_Size2",
+      SellItem: "$int_repairer_size2_class5_name;",
+      SellItem_Localised: "AFM Unit",
+      SellPrice: 1_300_000,
+      ...KRAIT_SHIP,
+    }),
+    ev(14, "MaterialTrade", { TraderType: "encoded" }),
+    ev(15, "MaterialTrade", { TraderType: "encoded" }),
+    craft(20, 3, 0.9, { Ingredients: ingredients(3) }),
+    craft(21, 3, 1, { Ingredients: ingredients(3) }),
+    craft(22, 4, 0.5, { Ingredients: ingredients(3) }),
+    craft(23, 4, 1, { Ingredients: ingredients(3) }),
+    craft(24, 5, 0.4, { Ingredients: ingredients(3) }),
+    craft(25, 5, 1, { Ingredients: ingredients(3) }),
+    ev(26, "Synthesis", { Name: "FSD Premium", Materials: ingredients(23) }),
+    ev(30, "ModuleBuy", {
+      Slot: "Slot01_Size5",
+      BuyItem: "$int_hyperdrive_size5_class5_name;",
+      BuyItem_Localised: "FSD",
+      BuyPrice: 5_100_000,
+      StoredItem: "$int_fuelscoop_size5_class5_name;",
+      ...KRAIT_SHIP,
+    }),
+  ]);
+
+  it("shows what was bought, sold, stored and engineered this visit, and the materials", () => {
+    const v = buildHud(input(farseer), null);
+    expect(v.mode).toBe("build");
+    expect(v.panel).toEqual({
+      mode: "build",
+      title: "OUTFITTING",
+      subtitle: "Farseer Inc",
+      right: "this visit",
+      rows: [
+        { text: "Bought FSD 5A 5.1M · sold AFM Unit 2A 1.3M · stored 1" },
+        { text: "FSD Increased Range G3 → G5 · 100%", right: "6 rolls" },
+        { text: "Traded 2 · used 41 materials" },
+      ],
+      footer: [{ text: "Ask Claude to plan a build to track what is left.", tone: "dim" }],
+    });
+    // Not a plan: nothing for the route keys to follow.
+    expect(v.follow).toBeUndefined();
+    // Claude gets the rows with each message.
+    expect(gameContext(null, null, v)).toContain("FSD Increased Range G3 → G5 · 100%");
+  });
+
+  it("counts many kinds of module, ships, an experimental and a new blueprint", () => {
+    const booster = "$hpt_shieldbooster_size0_class5_name;";
+    const v = buildHud(
+      input(
+        visit([
+          ev(11, "ModuleBuy", { Slot: "TinyHardpoint1", BuyItem: booster, BuyPrice: 247_000 }),
+          ev(12, "ModuleBuy", { Slot: "TinyHardpoint2", BuyItem: booster, BuyPrice: 247_000 }),
+          ev(13, "ModuleBuyAndStore", {
+            BuyItem: "$int_cargorack_size4_class1_name;",
+            BuyPrice: 30_000,
+          }),
+          ev(14, "ModuleBuy", { Slot: "Armour", BuyItem: "krait_mkii_armour_grade3", BuyPrice: 0 }),
+          ev(15, "MassModuleStore", { Items: [{ Name: "a" }, { Name: "b" }] }),
+          ev(16, "ModuleRetrieve", { RetrievedItem: booster, SwapOutItem: booster }),
+          ev(17, "ModuleSwap", { FromSlot: "Slot01", ToSlot: "Slot02" }),
+          ev(18, "FetchRemoteModule", { StoredItem: booster, TransferTime: 600 }),
+          ev(19, "ModuleSellRemote", { SellItem: "$int_engine_size5_class2_name;", SellPrice: 0 }),
+          ev(20, "ShipyardBuy", {
+            ShipType: "python_nx",
+            ShipPrice: 56_000_000,
+            SellOldShip: "Adder",
+            SellPrice: 74_000,
+          }),
+          ev(21, "ShipyardSwap", { ShipType: "krait_mkii", ShipType_Localised: "Krait MkII" }),
+          ev(22, "ShipyardTransfer", { ShipType: "cobramkiii", TransferTime: 2400 }),
+          ev(23, "ShipyardRedeem", { ShipType: "sidewinder" }),
+          ev(24, "ShipyardSell", { ShipType: "viper", ShipPrice: 1_200_000 }),
+          ev(30, "EngineerCraft", {
+            Slot: "TinyHardpoint1",
+            Module: "hpt_shieldbooster_size0_class5",
+            BlueprintName: "ShieldBooster_HeavyDuty",
+            Level: 1,
+            Quality: 0.5,
+          }),
+          craft(31, 3, 1, {
+            ApplyExperimentalEffect: "special_fsd_lightweight",
+            ExperimentalEffect_Localised: "Mass Manager",
+          }),
+          ev(32, "EngineerCraft", {
+            Slot: "MainEngines",
+            Module: "int_engine_size5_class5",
+            BlueprintName: "Engine_Dirty",
+            Level: 1,
+            Quality: 1,
+          }),
+        ]),
+      ),
+      null,
+    );
+    expect(v.panel?.rows).toEqual([
+      { text: "Bought 4 modules 524k · sold Thrusters 5D · stored 3" },
+      { text: "Retrieved 1 · transferred 1 · moved 1" },
+      { text: "Bought Python MkII 56.0M · sold Adder 74k" },
+      { text: "Took out Krait MkII · transfer Cobra MkIII ~40 min" },
+      { text: "Redeemed Sidewinder · sold Viper MkIII 1.2M" },
+      { text: "Shield Booster 0A Heavy Duty G0 → G1 · 50%", right: "1 roll" },
+      { text: "Thrusters Dirty Drive G0 → G1 · 100%", right: "1 roll" },
+      { text: "FSD Mass Manager", right: "experimental" },
+    ]);
+  });
+
+  it("names modules and blueprints as the game does", () => {
+    expect(moduleName("$int_hyperdrive_size5_class5_name;")).toBe("FSD 5A");
+    expect(moduleName("$int_hyperdrive_size5_class5_name;", "$unresolved;")).toBe("FSD 5A");
+    expect(moduleName("hpt_pulselaser_gimbal_medium", "Pulse Laser")).toBe("Pulse Laser");
+    expect(moduleName("Int_Newthing_Size2_Class3")).toBe("newthing 2C");
+    expect(moduleName(undefined)).toBe("module");
+    expect(blueprintName("FSD_LongRange")).toBe("Increased Range");
+    expect(blueprintName("ShieldBooster_HeavyDuty")).toBe("Heavy Duty");
+    expect(blueprintName("Odd")).toBe("Odd");
+  });
+
+  it("ends on undocking, and keeps over a relog while docked", () => {
+    expect(currentMode(input(farseer))).toBe("build");
+    const away = undocked(farseer);
+    expect(currentMode(input(away))).toBeNull();
+    expect(buildHud(input(away), null).panel).toBeNull();
+    const relog = {
+      ...farseer,
+      events: [
+        ...farseer.events,
+        ev(100, "LoadGame"),
+        ev(101, "Location", { StarSystem: "Deciat", StationName: "Farseer Inc", Docked: true }),
+      ],
+    };
+    expect(buildHud(input(relog), null).panel?.title).toBe("OUTFITTING");
+  });
+
+  it("does not turn on for a synthesis, a material trade or a ship swap alone", () => {
+    const j = visit([
+      ev(11, "Synthesis", { Name: "FSD Basic", Materials: ingredients(3) }),
+      ev(12, "MaterialTrade", { TraderType: "raw" }),
+      ev(13, "ShipyardSwap", { ShipType: "python_nx", ShipID: PYTHON }),
+    ]);
+    expect(currentMode(input(j))).toBeNull();
+    expect(outfittingVisit(j, null)).toBeNull();
+  });
+
+  it("is turned off by hud.build.outfittingVisit, or with the build mode off", () => {
+    const hud = DEFAULT_SETTINGS.hud;
+    const off = { ...hud, build: { ...hud.build, outfittingVisit: false } };
+    expect(currentMode(input(farseer, { settings: off }))).toBeNull();
+    const noBuild = { ...hud, modes: { ...hud.modes, build: false } };
+    expect(currentMode(input(farseer, { settings: noBuild }))).toBeNull();
+  });
+
+  it("lets a newer activity take over, as for every mode", () => {
+    const j = visit([craft(20, 4, 0.5), ev(30, "FSSDiscoveryScan")]);
+    expect(currentMode(input(j))).toBe("exploration");
+  });
+
+  it("gives way to a build plan with work here", () => {
+    const buy = ev(30, "ModuleBuy", {
+      Slot: "Slot01_Size5",
+      BuyItem: "$int_cargorack_size5_class1_name;",
+      BuyPrice: 1_000,
+      ...KRAIT_SHIP,
+    });
+    // Docked at the plan's stop with an action to do: the plan shows.
+    const atStop = buildHud(input(atFarseer([buy]), { buildPlans: [upgrade()] }), null);
+    expect(atStop.panel?.title).toBe("UPGRADE");
+    // The plan's work is elsewhere: this visit shows, and the plan's route rows under it.
+    const elsewhere = upgrade({}, upgrade().stops.slice(2));
+    const v = buildHud(input(visit([buy]), { buildPlans: [elsewhere], plan: elsewhere }), null);
+    expect(v.panel?.title).toBe("OUTFITTING");
+    expect(v.follow).toBeUndefined();
+    expect(v.route?.length).toBeGreaterThan(0);
+    // An action of the plan done here, at a station that is not its stop: the plan shows.
+    const thrusters = ev(31, "EngineerCraft", {
+      Slot: "MainEngines",
+      Module: "int_engine_size5_class5",
+      BlueprintName: "Engine_Dirty",
+      Level: 5,
+      Quality: 0.2,
+    });
+    expect(
+      buildHud(input(visit([buy, thrusters]), { buildPlans: [elsewhere] }), null).panel?.title,
+    ).toBe("UPGRADE");
   });
 });

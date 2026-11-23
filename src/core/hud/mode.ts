@@ -129,7 +129,9 @@ export const LAPSE_JUMPS = 5;
  * stop), or an event that matched an open action of a build plan, turns on build mode, which lasts
  * while the panel has something to show and until a newer activity. A jump never ends it. A
  * Synthesis or MaterialTrade the plan does not ask for changes nothing; a ShipyardSwap turns it on
- * when it does a swap_ship action or the ship swapped to has an open build plan.
+ * when it does a swap_ship action or the ship swapped to has an open build plan. With no build
+ * plan with work where the ship is docked, outfitting, the shipyard or an engineer used this
+ * docking turns it on for the outfitting visit (build.visit), which undocking ends.
  */
 export function journalMode(
   events: JournalEvent[],
@@ -170,11 +172,12 @@ export function journalMode(
   for (const e of events) {
     last = Date.parse(e.timestamp) || last;
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
-    // A build event the plan asked for, docking or landing at a build stop, or swapping to a ship
-    // with a build plan. Set after the rules below, so landing at a build's gather stop on a body
+    // A build event the plan asked for, docking or landing at a build stop, swapping to a ship
+    // with a build plan, or with no plan with work here, outfitting used this docking. Set after the rules below, so landing at a build's gather stop on a body
     // with biological signals is the build.
     const building =
       build.matched.has(e) ||
+      build.visit.has(e) ||
       atBuildStop(e, build.stops) ||
       (e.event === "ShipyardSwap" && build.ships.includes(num(e.ShipID) ?? NaN));
     switch (e.event) {

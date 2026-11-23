@@ -50,6 +50,8 @@ export const BUILD_EVENTS = [
   "ShipyardNew",
   "ShipyardTransfer",
   "ShipyardSwap",
+  // A ship sold at the shipyard, for the outfitting visit.
+  "ShipyardSell",
   "EngineerCraft",
   "MaterialTrade",
   "Materials",
@@ -325,9 +327,17 @@ export interface BuildNow {
   matched: Set<JournalEvent>;
   /** Ships with an open build plan: swapping to one is building. */
   ships: number[];
+  /** This docking's events that turn the outfitting visit view on (outfittingVisit()). */
+  visit: Set<JournalEvent>;
 }
 
-export const NO_BUILD: BuildNow = { active: false, stops: [], matched: new Set(), ships: [] };
+export const NO_BUILD: BuildNow = {
+  active: false,
+  stops: [],
+  matched: new Set(),
+  ships: [],
+  visit: new Set(),
+};
 
 /** The BuildNow for the journal and the open build plans. */
 export function buildNow(
@@ -338,6 +348,8 @@ export function buildNow(
   },
   /** The plan shown, when the caller has chosen it already. */
   chosen?: BuildChoice | null,
+  /** The outfitting visit to show, if any (outfittingVisit()). */
+  visit: BuildVisit | null = null,
 ): BuildNow {
   const journal = input.journal;
   if (!journal) return NO_BUILD;
@@ -358,7 +370,13 @@ export function buildNow(
     if (j.shipId !== null && j.actions.some((x) => !x.done)) ships.push(j.shipId);
   }
   const choice = chosen === undefined ? chooseBuild(input) : chosen;
-  return { active: !!choice && buildActive(choice, journal), stops, matched, ships };
+  return {
+    active: (!!choice && buildActive(choice, journal)) || !!visit,
+    stops,
+    matched,
+    ships,
+    visit: visit?.on ?? new Set(),
+  };
 }
 
 /**
@@ -678,5 +696,330 @@ export function buildPanel(input: {
     rows,
     footer,
     ...(note ? { note } : {}),
+  };
+}
+
+// ---------- The outfitting visit, with no build plan ----------
+
+/** Using outfitting, the shipyard or an engineer: one of these while docked shows the visit. */
+const VISIT_ON = new Set([
+  "ModuleBuy",
+  "ModuleBuyAndStore",
+  "ModuleSell",
+  "ModuleSellRemote",
+  "ModuleSwap",
+  "ModuleStore",
+  "MassModuleStore",
+  "ModuleRetrieve",
+  "FetchRemoteModule",
+  "ShipyardBuy",
+  "ShipyardRedeem",
+  "ShipyardSell",
+  "ShipyardTransfer",
+  "EngineerCraft",
+]);
+
+/** This docking's outfitting, shipyard and engineering, for the view with no build plan. */
+export interface BuildVisit {
+  station: string;
+  /** Index in the journal's events of the docking: the visit is the events after it. */
+  index: number;
+  /** The events that turned the view on, for the mode. */
+  on: Set<JournalEvent>;
+}
+
+/**
+ * The outfitting visit to show: docked, with outfitting, the shipyard or an engineer used since
+ * docking, and no build plan with work here. A plan has work here when the ship is docked at its
+ * stop with an action to do, or an event of this docking did one of its actions (so "Build
+ * complete" too): its panel shows instead. Undocking ends it. `choice` is the plan shown
+ * (chooseBuild()).
+ */
+export function outfittingVisit(journal: Journal, choice: BuildChoice | null): BuildVisit | null {
+  const dock = dockedAt(journal.events, journal.location);
+  if (!dock) return null;
+  if (choice && (choice.here === "docked" || choice.judged.lastMatch > dock.index)) return null;
+  const on = new Set(journal.events.slice(dock.index + 1).filter((e) => VISIT_ON.has(e.event)));
+  return on.size ? { station: dock.station, index: dock.index, on } : null;
+}
+
+/** The game's names for modules, by the symbol's first word, for an event with no _Localised. */
+const MODULES: Record<string, string> = {
+  hyperdrive: "FSD",
+  engine: "Thrusters",
+  powerplant: "Power Plant",
+  powerdistributor: "Power Distributor",
+  lifesupport: "Life Support",
+  sensors: "Sensors",
+  fueltank: "Fuel Tank",
+  shieldgenerator: "Shield Generator",
+  shieldbooster: "Shield Booster",
+  shieldcellbank: "Shield Cell Bank",
+  hullreinforcement: "Hull Reinforcement",
+  modulereinforcement: "Module Reinforcement",
+  fuelscoop: "Fuel Scoop",
+  cargorack: "Cargo Rack",
+  repairer: "AFM Unit",
+  refinery: "Refinery",
+  dronecontrol: "Limpet Controller",
+  pulselaser: "Pulse Laser",
+  pulselaserburst: "Burst Laser",
+  beamlaser: "Beam Laser",
+  multicannon: "Multi-Cannon",
+  cannon: "Cannon",
+  slugshot: "Fragment Cannon",
+  railgun: "Rail Gun",
+  plasmaaccelerator: "Plasma Accelerator",
+  dumbfiremissilerack: "Missile Rack",
+  basicmissilerack: "Seeker Missile Rack",
+  minelauncher: "Mine Launcher",
+  mininglaser: "Mining Laser",
+  heatsinklauncher: "Heat Sink Launcher",
+  chafflauncher: "Chaff Launcher",
+  electroniccountermeasure: "ECM",
+  plasmapointdefence: "Point Defence",
+};
+
+/** Class 1 to 5 is rating E to A. */
+const RATINGS = "EDCBA";
+
+/**
+ * A module as the panel names it: the game's name, from the event's _Localised or else the
+ * symbol, with its class and rating when the symbol has them: "FSD 5A", "Shield Booster 0A".
+ */
+export function moduleName(symbol: unknown, localised?: unknown): string {
+  const m = mod(symbol) ?? "";
+  const words = m.split("_");
+  // "int_hyperdrive_size5_class5", "hpt_pulselaser_gimbal_medium", "python_nx_armour_grade3".
+  const first = words[0] === "int" || words[0] === "hpt" ? (words[1] ?? "") : "";
+  const name = str(localised);
+  const base =
+    name && !name.startsWith("$")
+      ? name
+      : words.includes("armour")
+        ? "Armour"
+        : (MODULES[first] ?? (first || m || "module"));
+  const sc = /_size(\d+)_class(\d)/.exec(m);
+  const rating = sc ? RATINGS[Number(sc[2]) - 1] : undefined;
+  return sc && rating ? `${base} ${sc[1]}${rating}` : base;
+}
+
+/** Blueprints whose game name is not their symbol's words. */
+const BLUEPRINTS: Record<string, string> = {
+  fsd_longrange: "Increased Range",
+  fsd_fastboot: "Faster Boot",
+  engine_dirty: "Dirty Drive",
+  engine_tuned: "Clean Drive",
+  engine_reinforced: "Drive Strengthening",
+  powerdistributor_highfrequency: "Charge Enhanced",
+  powerdistributor_highcapacity: "High Charge Capacity",
+  powerplant_boosted: "Overcharged",
+  misc_lightweight: "Lightweight",
+};
+
+/** "FSD_LongRange" is "Increased Range"; "ShieldBooster_HeavyDuty" is "Heavy Duty". */
+export function blueprintName(name: string): string {
+  const known = BLUEPRINTS[name.toLowerCase()];
+  if (known) return known;
+  const rest = name.includes("_") ? name.slice(name.indexOf("_") + 1) : name;
+  return rest.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Past this, the visit's parts go on another row. */
+const VISIT_WIDTH = 56;
+
+/** Parts joined with " · ", as many to a row as fit, each row capitalised. */
+function packed(parts: string[]): HudRow[] {
+  const rows: string[] = [];
+  for (const p of parts) {
+    const last = rows.at(-1);
+    if (last !== undefined && last.length + 3 + p.length <= VISIT_WIDTH)
+      rows[rows.length - 1] = `${last} · ${p}`;
+    else rows.push(p);
+  }
+  return rows.map((t) => ({ text: capital(t) }));
+}
+
+type Tally = Map<string, { n: number; credits: number }>;
+
+/** What was bought or sold, by name, with the count and the credits: "2 Shield Booster 0A 494k". */
+function priced(verb: string, items: Tally): string[] {
+  const text = (name: string, n: number, c: number) =>
+    `${n > 1 ? `${n} ` : ""}${name}${c ? ` ${credits(c)}` : ""}`;
+  // More than two kinds would not fit a row: the count and the total.
+  if (items.size > 2) {
+    const all = [...items.values()];
+    const n = all.reduce((t, v) => t + v.n, 0);
+    return [
+      `${verb} ${text(
+        "modules",
+        n,
+        all.reduce((t, v) => t + v.credits, 0),
+      )}`,
+    ];
+  }
+  return [...items].map(([name, v], i) => `${i ? "" : `${verb} `}${text(name, v.n, v.credits)}`);
+}
+
+/** The engineering of one module this visit: one blueprint in one slot. */
+interface Crafted {
+  name: string;
+  blueprint: string;
+  from: number;
+  level: number;
+  quality: number;
+  rolls: number;
+}
+
+/** "sold Adder 74k": a ship and, when it cost or paid something, the credits. */
+const shipText = (verb: string, type: string, price: unknown) => {
+  const c = num(price);
+  return `${verb} ${type}${c ? ` ${credits(c)}` : ""}`;
+};
+
+/**
+ * The view with no build plan: what this docking bought, sold, stored and engineered, and the
+ * materials traded and used. See "No build plan" in the build panel spec.
+ */
+export function visitPanel(input: { visit: BuildVisit; events: JournalEvent[] }): PanelView {
+  const all = input.events;
+  const bought: Tally = new Map();
+  const sold: Tally = new Map();
+  const add = (m: Tally, name: string, c: unknown) => {
+    const v = m.get(name) ?? { n: 0, credits: 0 };
+    m.set(name, { n: v.n + 1, credits: v.credits + (num(c) ?? 0) });
+  };
+  const ships: string[] = [];
+  let stored = 0;
+  let retrieved = 0;
+  let moved = 0;
+  let fetched = 0;
+  const crafted = new Map<string, Crafted>();
+  const applied: string[] = [];
+  let trades = 0;
+  let used = 0;
+  const ship = (e: JournalEvent) =>
+    str(e.ShipType_Localised) ?? shipName(str(e.ShipType)) ?? "a ship";
+  const sum = (list: unknown) => objs(list).reduce((n, x) => n + (num(x.Count) ?? 0), 0);
+  for (let i = input.visit.index + 1; i < all.length; i++) {
+    const e = all[i]!;
+    switch (e.event) {
+      case "ModuleBuy":
+        add(bought, moduleName(e.BuyItem, e.BuyItem_Localised), e.BuyPrice);
+        if (mod(e.SellItem)) add(sold, moduleName(e.SellItem, e.SellItem_Localised), e.SellPrice);
+        if (mod(e.StoredItem)) stored++;
+        break;
+      case "ModuleBuyAndStore":
+        add(bought, moduleName(e.BuyItem, e.BuyItem_Localised), e.BuyPrice);
+        break;
+      case "ModuleSell":
+      case "ModuleSellRemote":
+        add(sold, moduleName(e.SellItem, e.SellItem_Localised), e.SellPrice);
+        break;
+      case "ModuleStore":
+        stored++;
+        break;
+      case "MassModuleStore":
+        stored += objs(e.Items).length;
+        break;
+      case "ModuleRetrieve":
+        retrieved++;
+        if (mod(e.SwapOutItem)) stored++;
+        break;
+      case "ModuleSwap":
+        moved++;
+        break;
+      case "FetchRemoteModule":
+        fetched++;
+        break;
+      case "ShipyardBuy":
+        ships.push(shipText("bought", ship(e), e.ShipPrice));
+        if (str(e.SellOldShip))
+          ships.push(shipText("sold", shipName(str(e.SellOldShip))!, e.SellPrice));
+        break;
+      case "ShipyardRedeem":
+        ships.push(`redeemed ${ship(e)}`);
+        break;
+      case "ShipyardSell":
+        ships.push(shipText("sold", ship(e), e.ShipPrice));
+        break;
+      case "ShipyardSwap":
+        ships.push(`took out ${ship(e)}`);
+        break;
+      case "ShipyardTransfer": {
+        const t = num(e.TransferTime);
+        ships.push(`transfer ${ship(e)}${t ? ` ~${Math.max(1, Math.round(t / 60))} min` : ""}`);
+        break;
+      }
+      case "MaterialTrade":
+        trades++;
+        break;
+      case "Synthesis":
+        used += sum(e.Materials);
+        break;
+      case "EngineerCraft": {
+        used += sum(e.Ingredients);
+        const slot = str(e.Slot) ?? "";
+        const name = capital(
+          SLOTS[slot.toLowerCase()] ? slotName(slot) : moduleName(e.Module, e.Module_Localised),
+        );
+        const effect = str(e.ApplyExperimentalEffect);
+        if (effect) {
+          applied.push(`${name} ${str(e.ExperimentalEffect_Localised) ?? effect}`);
+          break;
+        }
+        const blueprint = str(e.BlueprintName) ?? "";
+        const key = `${slot}|${blueprint}`.toLowerCase();
+        const level = num(e.Level) ?? 0;
+        const quality = num(e.Quality) ?? 0;
+        const was = crafted.get(key);
+        if (was) {
+          crafted.set(key, { ...was, level, quality, rolls: was.rolls + 1 });
+          break;
+        }
+        // The grade before the visit's first roll: the Loadout before it, or G0 for a new
+        // blueprint.
+        const loadout = all.findLast((x, k) => k < i && x.event === "Loadout");
+        const fitted = objs(loadout?.Modules).find((m) => same(str(m.Slot), slot));
+        const eng = objs([fitted?.Engineering])[0];
+        const from = eng && same(str(eng.BlueprintName), blueprint) ? (num(eng.Level) ?? 0) : 0;
+        crafted.set(key, {
+          name,
+          blueprint: blueprintName(blueprint),
+          from,
+          level,
+          quality,
+          rolls: 1,
+        });
+        break;
+      }
+    }
+  }
+  const modules = [
+    ...priced("bought", bought),
+    ...priced("sold", sold),
+    stored ? `stored ${stored}` : null,
+    retrieved ? `retrieved ${retrieved}` : null,
+    fetched ? `transferred ${fetched}` : null,
+    moved ? `moved ${moved}` : null,
+  ];
+  const rows: HudRow[] = [...packed(modules.filter((x) => x !== null)), ...packed(ships)];
+  for (const c of crafted.values())
+    rows.push({
+      text: `${c.name} ${c.blueprint} G${c.from} → G${c.level} · ${pct(c.quality)}`,
+      right: `${c.rolls} roll${c.rolls === 1 ? "" : "s"}`,
+    });
+  for (const a of applied) rows.push({ text: a, right: "experimental" });
+  const materials = [trades ? `traded ${trades}` : null, used ? `used ${used} materials` : null];
+  rows.push(...packed(materials.filter((x) => x !== null)));
+  return {
+    mode: "build",
+    title: "OUTFITTING",
+    subtitle: input.visit.station,
+    right: "this visit",
+    rows,
+    footer: [{ text: "Ask Claude to plan a build to track what is left.", tone: "dim" }],
   };
 }
