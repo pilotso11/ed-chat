@@ -442,16 +442,17 @@ describe("ActionFinisher on trade and mission plans", () => {
     expect(t.log.laps).toEqual([iso(5)]);
   });
 
-  it("gives the store's newest event time as the lap start when it has one", async () => {
+  it("gives the store's newest event time as the lap start, read once a poll", async () => {
     const t = setup(loop());
+    let reads = 0;
     const f = new ActionFinisher({
       plans: () =>
         ({
           get: async () => loop(),
-          // The buy written: the stop has nothing left to do.
+          // The buy and the sale written: neither stop has anything left to do.
           updateAction: async () => {
             const p = loop();
-            p.stops[0]!.actions![0]!.status = "done";
+            for (const s of p.stops) s.actions![0]!.status = "done";
             return p;
           },
           updateStop: async (
@@ -466,14 +467,32 @@ describe("ActionFinisher on trade and mission plans", () => {
           setBuildShip: async () => loop(),
         }) as never,
       activity: () => null,
-      newestEventAt: async () => iso(99),
+      newestEventAt: async () => (reads++, iso(99)),
       copy: () => {},
       notice: () => {},
       warn: () => {},
     });
-    const j = at("S", "Port", [market(5, "MarketBuy", 10)]);
+    // Bought at Port, then sold at Hub: both stops are marked in one poll.
+    const j = at("Far", "Hub", [
+      ev(2, "Docked", { StarSystem: "S", StationName: "Port", MarketID: 1 }),
+      market(5, "MarketBuy", 10),
+      ev(6, "Docked", { StarSystem: "Far", StationName: "Hub", MarketID: 1 }),
+      market(7, "MarketSell", 10),
+    ]);
     await f.finish({ note: loop(), plans: [], journal: j, activity: null });
-    expect(t.log.laps).toEqual([iso(99)]);
+    expect(t.log.laps).toEqual([iso(99), iso(99)]);
+    expect(reads).toBe(1);
+  });
+
+  it("leaves a suit loadout's plan alone, and writes no ship for a plan that is not a ship build", async () => {
+    const suit = loop({
+      id: "suit",
+      build: { target: "suit_loadout", scope: "upgrade" },
+    } as Partial<Plan>);
+    const t = setup(suit);
+    await t.poll(at("S", "Port", []));
+    await t.poll(at("S", "Port", [market(5, "MarketBuy", 10)]));
+    expect(t.log.writes).toEqual([]);
   });
 
   it("leaves an open trade plan alone unless it is the note's", async () => {

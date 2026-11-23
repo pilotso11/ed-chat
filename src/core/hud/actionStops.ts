@@ -35,6 +35,9 @@ export interface ActionStopDeps {
 
 type Journal = JournalState & { events: JournalEvent[] };
 
+/** A suit loadout's plan: on foot, judged in a later phase. */
+const onFoot = (plan: Plan) => plan.build?.target === "suit_loadout";
+
 export interface FinishInput {
   /** The activity note's plan. */
   note: Plan | null;
@@ -114,7 +117,9 @@ export class ActionFinisher {
     if (!plans || !journal) return;
     const on = input.on ?? (() => true);
     const all = new Map<string, Plan>();
-    if (hasActions(input.note) && on(input.note)) all.set(input.note.id, input.note);
+    // A suit loadout's plan is on foot, a later phase: not judged or written yet.
+    if (hasActions(input.note) && !onFoot(input.note) && on(input.note))
+      all.set(input.note.id, input.note);
     for (const p of input.plans) if (isBuildPlan(p) && on(p) && !all.has(p.id)) all.set(p.id, p);
     // The stop shown as current, before this poll's writes: finishing it copies the next one.
     const shown = chooseBuild({ note: input.note, plans: input.plans, journal });
@@ -127,6 +132,9 @@ export class ActionFinisher {
         failed ??= message(err);
       }
     };
+    // The newest event's time, read once a poll and only when a stop is marked.
+    let lap: Promise<string | null> | null = null;
+    const lapStart = () => (lap ??= this.lapStart(journal));
     for (const plan of all.values()) {
       // The stop shown as current: the build panel's for the build it shows, else the plan's own
       // for the note's plan (the trade panel and the route rows show that one).
@@ -136,7 +144,7 @@ export class ActionFinisher {
           : plan.id === input.note?.id && !isBuildPlan(plan)
             ? currentStop(plan)
             : null;
-      await attempt(() => this.finishPlan(plans, plan, journal, current));
+      await attempt(() => this.finishPlan(plans, plan, journal, current, lapStart));
     }
     await attempt(() => this.swapNote(input, journal));
     if (failed !== null && failed !== this.lastError) this.deps.warn(failed);
@@ -148,6 +156,7 @@ export class ActionFinisher {
     plan: Plan,
     journal: Journal,
     current: number | null,
+    lapStart: () => Promise<string | null>,
   ): Promise<void> {
     let now = plan;
     const writes = judgeBuild(plan, journal).actions.filter(
@@ -182,7 +191,8 @@ export class ActionFinisher {
     }
     // A ShipID found from the journal, written once.
     const bound = judgeBuild(now, journal).boundId;
-    if (bound !== null && now.build && now.build.ship_id === undefined) {
+    // Only a ship build has a ship to write.
+    if (bound !== null && now.build?.target === "ship" && now.build.ship_id === undefined) {
       const key = `${now.id}|ship|${bound}`;
       if (!this.done.has(key)) {
         this.done.add(key);
@@ -209,7 +219,7 @@ export class ActionFinisher {
     // as open, so the next poll sees the change again and tries once more.
     const marked = new Set<number>();
     try {
-      await this.markStops(plans, now, toMark, marked, journal, current);
+      await this.markStops(plans, now, toMark, marked, journal, current, lapStart);
     } catch (err) {
       const left = toMark.filter((i) => !marked.has(i)).map((i) => stopId(now, i));
       this.open.set(now.id, new Set([...open, ...left]));
@@ -225,17 +235,18 @@ export class ActionFinisher {
     marked: Set<number>,
     journal: Journal,
     current: number | null,
+    lapStart: () => Promise<string | null>,
   ): Promise<void> {
     let now = plan;
     for (const i of stops) {
       const s = now.stops[i]!;
       // Given with every stop: the store uses it only when the stop ends a loop's lap.
-      const lapStart = await this.lapStart(journal);
+      const start = await lapStart();
       const updated = await plans.updateStop(
         now.id,
         { index: i },
         { status: "done" },
-        lapStart ? { lapStart } : undefined,
+        start ? { lapStart: start } : undefined,
       );
       marked.add(i);
       const name =

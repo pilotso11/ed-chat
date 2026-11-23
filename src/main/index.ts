@@ -940,8 +940,9 @@ async function main(): Promise<void> {
     );
   }
 
-  // A trade stop with no actions (a plan from before ed-mcp wrote them, or a loop's first stop on
-  // its first lap) whose buys and sales are done is marked done, once per docking, and the next
+  // A trade stop with no actions (a plan from before ed-mcp wrote them, a stop that only passes
+  // through, or a loop's first stop on its first lap when it only sells: ed-mcp leaves out only
+  // those sales) whose buys and sales are done is marked done, once per docking, and the next
   // stop's system is copied for the galaxy map. Stops with actions are ActionFinisher's.
   const tradeStops = new TradeStopFinisher({
     plans: () => hudPlans,
@@ -978,8 +979,9 @@ async function main(): Promise<void> {
       plans: data.actionPlans ?? [],
       journal: data.journal,
       activity: data.activity,
-      // A plan whose panel is off is left alone. A mission run is the route's.
-      on: (p) => (isBuildPlan(p) ? modes.build : isTradePlan(p) ? modes.trade : true),
+      // A plan whose panel is off is left alone: any plan with a build (a suit loadout's too, which
+      // the finisher leaves alone anyway) under the build setting. A mission run is the route's.
+      on: (p) => (p.build || isBuildPlan(p) ? modes.build : isTradePlan(p) ? modes.trade : true),
     });
   }
 
