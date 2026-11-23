@@ -92,16 +92,18 @@ export function ownBioLabel(s: Stop): boolean {
   const label = s.label ?? s.purpose;
   if (s.kind !== "exobiology" || !label.startsWith("Bio: ")) return false;
   if (s.notes === BIO_NOTE) return true;
-  return (
-    !s.notes &&
-    label
-      .slice(5)
-      .split(", ")
-      .every((n) => KEY_NAME.test(n))
-  );
+  // The key's labels may end " (2)" when taken, and list "2 signals" when no genus is known.
+  const names = label
+    .slice(5)
+    .replace(/ \(\d+\)$/, "")
+    .split(", ");
+  return !s.notes && names.every((n) => KEY_NAME.test(n));
 }
-/** A genus or species name, as the key listed them: one to three capitalised words. */
-const KEY_NAME = /^[A-Z][a-z]+( [A-Z][a-z]+){0,2}$/;
+/**
+ * A genus or species name as the key listed them, one to three capitalised words in any
+ * language, or the count of signals not yet named.
+ */
+const KEY_NAME = /^(\p{Lu}[\p{Ll}'-]+( \p{Lu}[\p{Ll}'-]+){0,2}|\d+ signals?)$/u;
 
 /**
  * What a bookmark's row says. A bio bookmark that the key made shows what is still to sample on
@@ -141,15 +143,25 @@ export function bookmarkShown(
   s: Stop,
   journal: (JournalState & { events: JournalEvent[] }) | null,
   known: KnownBody[] | null,
+  /** The system's exobiology, when already read. */
+  read?: ExobiologyBody[] | null,
 ): string {
   const label = s.label ?? s.purpose;
   if (!ownBioLabel(s) || !journal) return label;
-  const address = systemAddress(journal.events, s.system);
-  if (address === null) return label;
-  const bio = exobiology(journal.events, address, { system: s.system }).bodies;
+  const bio = read === undefined ? systemBio(journal, s.system) : read;
+  if (!bio) return label;
   // Spansh's bodies are the current system's: a bookmark elsewhere does not use them.
   const here = journal.location.system ?? null;
   return bookmarkText(s, bio, here && same(s.system, here) ? known : null, s.system);
+}
+
+/** A system's exobiology from the journal, or null when the journal has not been there. */
+function systemBio(
+  journal: JournalState & { events: JournalEvent[] },
+  system: string,
+): ExobiologyBody[] | null {
+  const address = systemAddress(journal.events, system);
+  return address === null ? null : exobiology(journal.events, address, { system }).bodies;
 }
 
 /** A bookmark as a plan stop. */
@@ -364,9 +376,10 @@ export function bookmarksToClear(input: {
   // The first of the nearest: a stable sort keeps the plan's order among equals.
   const nearest = [...body].sort((a, b) => far(a) - far(b))[0]!;
   if (body.length > 1 && far(nearest) === Infinity) {
-    // With a saved position for some, the player's would tell; with none saved, it never can.
+    // With a saved position for some, the player's would tell (here it is not known); with none
+    // saved, it never can.
     const saved = body.some((i) => stopPosition(plan.stops[i]!));
-    return at || !saved
+    return !saved
       ? { stops: body, whole: false, unsure: "bookmarks" }
       : { stops: [nearest], whole: false, unsure: "you" };
   }
@@ -422,15 +435,16 @@ export function alikeLeft(
   known: KnownBody[] | null,
 ): number {
   if (!stop.body) return 0;
-  // Compared as the panel groups them, ignoring case.
-  const text = bookmarkShown(stop, journal, known).toLowerCase();
+  // The journal read once for them all; compared as the panel groups them, ignoring case.
+  const bio = journal ? systemBio(journal, stop.system) : null;
+  const text = bookmarkShown(stop, journal, known, bio).toLowerCase();
   const key = bodyKey(stop.body, stop.system);
   return todoBookmarks(plan).filter((i) => {
     const t = plan.stops[i]!;
     return (
       same(t.system, stop.system) &&
       bodyKey(t.body!, t.system) === key &&
-      bookmarkShown(t, journal, known).toLowerCase() === text
+      bookmarkShown(t, journal, known, bio).toLowerCase() === text
     );
   }).length;
 }

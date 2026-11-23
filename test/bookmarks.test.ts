@@ -710,6 +710,11 @@ describe("bio bookmark rows", () => {
     // With no notes, only a list of names is the key's: words someone wrote are kept.
     const theirs = { ...stop, notes: undefined, label: "Bio: Stratum by the canyon rim" };
     expect(bookmarkShown(theirs, journal, null)).toBe(theirs.label);
+    for (const old of ["Bio: Bacterium, 2 signals", "Bio: Frutexa Acus (2)", "Bio: Bactérie"]) {
+      expect(bookmarkShown({ ...stop, notes: undefined, label: old }, journal, null)).toBe(
+        "Bio: Concha",
+      );
+    }
   });
 
   it("keeps a label the player or Claude chose, and the saved one without the journal", () => {
