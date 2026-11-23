@@ -3,7 +3,9 @@ import { tradeAdvance, tradeNextCopy } from "./trade.js";
 
 // Marking a trade stop with no stop actions done once its cargo rows' buys and sales are: the
 // fallback for a plan saved before ed-mcp wrote actions, a stop that only passes through, and a
-// loop's first stop on its first lap. A stop with actions is ActionFinisher's (actionStops.ts).
+// loop's first stop on its first lap when it only sells: ed-mcp leaves out only that stop's sales
+// on lap 1, so a first stop that also buys has actions. A stop with actions is ActionFinisher's
+// (actionStops.ts).
 // Main gives the plan store, the clipboard and the notices; the deciding is in tradeAdvance().
 
 export interface TradeStopDeps {

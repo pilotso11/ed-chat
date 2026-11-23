@@ -642,6 +642,28 @@ describe("commodity names", () => {
       commodityKey("Land Enrichment Systems"),
     );
     expect(commodityKey("hazardousenvironmentsuits")).toBe(commodityKey("H.E. Suits"));
+    for (const [internal, english] of <[string, string][]>[
+      ["AlyaBodilySoap", "Alya Body Soap"],
+      ["KachiriginLeaches", "Kachirigin Filter Leeches"],
+      ["ComercialSamples", "Commercial Samples"],
+      ["EncriptedDataStorage", "Encrypted Data Storage"],
+      ["OccupiedCryoPod", "Occupied Escape Pod"],
+      ["LargeExplorationDataCash", "Survey Data Cache"],
+      ["SmallExplorationDataCash", "Survey Data Cache"],
+      ["USSCargoBlackBox", "Black Box"],
+      ["USSCargoTradeData", "Trade Data"],
+      ["USSCargoRebelTransmissions", "Rebel Transmissions"],
+      ["USSCargoAncientArtefact", "Ancient Artefact"],
+      ["AncientCasket", "Guardian Casket"],
+      ["AncientOrb", "Guardian Orb"],
+      ["AncientRelic", "Guardian Relic"],
+      ["AncientTablet", "Guardian Tablet"],
+      ["AncientTotem", "Guardian Totem"],
+      ["AncientUrn", "Guardian Urn"],
+      ["PlatinumAloy", "Platinum Alloy"],
+      ["TransgenicOnionHead", "Lucan Onionhead"],
+    ])
+      expect(commodityKey(internal), internal).toBe(commodityKey(english));
   });
 });
 
@@ -1244,6 +1266,15 @@ describe("the trade panel with stop actions", () => {
     const rows = tradePanel(away)!.rows;
     expect(rows[1]).toMatchObject({ text: "  SELL 720 t Silver", tone: "good" });
     expect(rows[2]!.tone).toBeUndefined();
+  });
+
+  it("shows a buy with no tons by its label, not as 0 t", () => {
+    const p = withActions(loop({ lap: 2, id: "no-count" }));
+    const { count: _count, ...buy } = p.stops[0]!.actions![1]!;
+    p.stops[0]!.actions![1] = { ...buy, label: "Buy Gold" };
+    const rows = tradePanel(input(p))!.rows;
+    expect(rows[2]!.text).toBe("  Buy Gold");
+    expect(rows.some((r) => /(^|s)0 t/.test(r.text))).toBe(false);
   });
 
   it("shows another kind of action by its label", () => {

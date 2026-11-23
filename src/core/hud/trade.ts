@@ -528,11 +528,13 @@ export function stopTrades(plan: Plan, index: number): StopTrade[] {
 
 /** A buy or sale action as the cargo row it stands for. */
 function cargoOf(a: Action): Cargo | null {
-  if ((a.kind !== "buy_commodity" && a.kind !== "sell_commodity") || !a.commodity) return null;
+  // One with no tons is shown by its label: the judge takes any one trade as doing it.
+  if ((a.kind !== "buy_commodity" && a.kind !== "sell_commodity") || !a.commodity || !a.count)
+    return null;
   return {
     commodity: a.commodity,
     action: a.kind === "buy_commodity" ? "buy" : "sell",
-    amount: a.count ?? 0,
+    amount: a.count,
     ...(a.price !== undefined ? { price: a.price } : {}),
     ...(a.mission_id !== undefined ? { mission_id: a.mission_id } : {}),
   };
@@ -647,7 +649,8 @@ function actionDone(c: Cargo, hold: Hold, events: JournalEvent[], dock: Dock): b
  * actions (ActionFinisher marks those), docked there, with every cargo row done (a stop with
  * nothing to buy or sell is done on docking). Stops with no actions are those of a plan saved
  * before ed-mcp wrote them, a stop that only passes through, and a loop's first stop on its
- * first lap, which has nothing to sell yet. `key` names this stop,
+ * first lap when it only sells (ed-mcp leaves out only that stop's sales on lap 1, which has
+ * bought nothing yet; a first stop that also buys has actions for its buys). `key` names this stop,
  * lap and docking, so it is marked once. Undocking first leaves the stop open: it is only judged
  * while docked.
  */

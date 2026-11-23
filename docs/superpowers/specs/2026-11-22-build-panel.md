@@ -929,13 +929,20 @@ moved onto them in one PR. **Built.** As built:
   refuel, a repair, a restock.
 - **At the stop.** Trades and services count only where the ship was docked at the stop's
   station (its system, for a stop with none), as the events since the last `Docked`, `Location`,
-  `Undocked`, `FSDJump` or `CarrierJump` show; when the events do not say yet, they count.
+  `Undocked`, `FSDJump` or `CarrierJump` show; until the events say, nothing counts.
   Missions count anywhere: the ID says which.
-- **From when.** Each action counts events from its own `started_at`, then
-  `build.started_at`, then the plan's `started_at`, then `created_at`.
+- **From when.** Each action counts events after (not at) its own `started_at`, then
+  `build.started_at`, then the plan's `started_at`, then `created_at`: ed-mcp starts a lap at the
+  time of the event that finished the last, which must not count again.
+- **Writing once, per lap.** The keys of a write that names no event (an action marked by hand,
+  one done by state) carry the plan's lap and `started_at`, so the next lap writes them again.
 - **The hold.** A buy that some event bought and that filled the hold, or a sale that left none
-  of it aboard, is done short of its count: the trade panel's rule before actions, for a hold
-  smaller than planned or a buy that came up short.
+  of it aboard, is done short of its count, only while the ship is still in the docking of the
+  action's claims (a relog while docked is the same docking): the trade panel's rule before
+  actions, for a hold smaller than planned or a buy that came up short.
+- **On foot left out.** A `suit_loadout` plan is not judged or finished yet, and
+  `setBuildShip()` is called only for a ship build. Any plan with a `build` follows
+  `hud.modes.build`.
 - **Not judged:** `accept_mission` (no field ties it to an event before the mission exists).
 - **Which plans are builds.** `isBuildPlan()` needs a `build`, or an action of a kind not in
   `ACTION_EVENTS`: a trade route or mission run is not one, so the build panel and mode leave
@@ -948,7 +955,8 @@ moved onto them in one PR. **Built.** As built:
   newest event); the route keys pass it too.
 - **Fallback.** `TradeStopFinisher` and `tradeAdvance()` stay for a trade stop with no actions:
   a plan saved before 0.11.0, a stop that only passes through, and a loop's first stop on its first
-  lap (ed-mcp writes no actions for its sales then). They do nothing for a stop with actions.
+  lap when it only sells (ed-mcp leaves out only that stop's sales on lap 1; its buys have
+  actions). They do nothing for a stop with actions.
 - **The panels.** The trade panel's stop rows come from a stop's actions (`stopTrades()`): a buy
   or sale shows as its cargo row did, done as the judge says; another action by its label. The
   passenger panel reads the missions a stop serves from its actions' `mission_id` as well as the

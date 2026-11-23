@@ -153,10 +153,11 @@ A plan saved by ed-mcp 0.11.0 or later gives each stop a buy or sale [action](#s
 for each row of its cargo, and the panel shows those rows as it showed the cargo. Each is
 ticked off from the market's buys and sales at that station since the lap began, added up to
 the tons; a buy that filled the hold, or a sale that left none of it aboard, counts as done
-short of the tons. When the stop's last action is done, the stop is marked done and the next
+short of the tons while you are still docked there. When the stop's last action is done, the stop is marked done and the next
 stop's system is copied for the galaxy map. A stop with no actions (a plan saved before, a stop
-that only passes through, and a loop's first stop on its first lap, which has nothing to sell
-yet) is marked done as before: when its buys are bought there and in the hold, and its sales
+that only passes through, and a loop's first stop on its first lap when it only sells, since
+the first lap has nothing to sell there yet and ed-mcp leaves out only those sales) is marked
+done as before: when its buys are bought there and in the hold, and its sales
 are sold there; undocking first leaves it open. The route keys still work.
 
 Passengers taken on a trade run show on a footer line;
@@ -279,8 +280,10 @@ and writes each one done into the plan, with the events that did it, so Claude s
 | the build's kinds | see [Build](#build) |
 
 - Trades and services count only at the stop's own station (in its system, for a stop with no
-  station). A mission counts wherever it is handed in: its ID says which it is.
-- An action counts the events after its own start (ed-mcp sets one on a mission's actions),
+  station), once the journal shows where you are. A mission counts wherever it is handed in: its
+  ID says which it is.
+- An action counts the events after its own start, not one at that very time (a lap starts at
+  the time of the event that finished the last one) (ed-mcp sets one on a mission's actions),
   else the build's, else the plan's (a trade or mission save sets it, and each lap of a loop
   moves it on), else when the plan was made.
 - One event finishes one action of each kind it matches, the first still to do in the plan's
