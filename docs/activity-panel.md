@@ -237,19 +237,19 @@ keeps its label as saved.
 Ctrl+Alt+- clears the nearest bookmark on the body you are on, one per press.
 The tray menu's Bookmarks item clears bookmarks too:
 
-- **On a body with one bookmark, or with several and your position known:** the
-  key and the tray clear the nearest. A bookmark with no saved position counts
-  as farthest.
-- **Several on the body, none with a saved position:** the key clears none. The
-  tray offers all of them, and asks first.
-- **Several on the body, your position not known yet (in orbit):** neither
-  clears any. Get closer to the surface.
+- **Several on the body, none with a saved position (wherever you are):** the
+  key clears none. The tray offers all of them, and asks first.
+- **One on the body, or several with at least one saved position and your
+  position known:** the key and the tray clear the nearest. A bookmark with no
+  saved position counts as farthest.
+- **Several on the body, at least one with a saved position, your position not
+  known yet (in orbit):** neither clears any. Get closer to the surface.
 - **In a system with bookmarks, not on a bookmarked body:** the key clears none.
   The tray offers every bookmark in the system, and asks first.
 - **Anywhere:** the tray can clear every bookmark, after asking.
 
-A cleared bookmark is marked skipped in the plan. Bookmarks are an ed-mcp plan, so Claude can see
-and change them too. `hud.bookmarks` turns them off.
+A cleared bookmark is marked skipped in the plan. Bookmarks are an ed-mcp plan,
+so Claude can see and change them too. `hud.bookmarks` turns them off.
 
 ## How the mode is chosen
 

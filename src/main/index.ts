@@ -765,7 +765,8 @@ async function main(): Promise<void> {
   }
 
   // Clears bookmarks: those here (the key clears one bookmark on the body you are on and refuses
-  // a whole system; the tray clears the nearest one in one click and asks before a whole system),
+  // a whole system; the tray clears the nearest one in one click and asks before a whole body or
+  // system),
   // or all of them after asking. The writes run in turn with the bookmark key, so the two do not
   // race; the question does not hold up that queue.
   function clearBookmarks(scope: "here" | "all", from: "key" | "tray"): Promise<void> {
@@ -826,7 +827,7 @@ async function main(): Promise<void> {
     }
   }
 
-  // The tray's whole-system item: asks first, one question at a time.
+  // The tray's whole-body or whole-system item: asks first, one question at a time.
   async function askClearListed(listed: Stop[], where: string): Promise<void> {
     if (askingClearAll || !listed.length) return;
     askingClearAll = true;
