@@ -878,6 +878,9 @@ function journalKey(journal: Journal): string {
       .join(","),
     journal.locker?.as_of ?? "",
     journal.backpack?.as_of ?? "",
+    (journal.suit_loadouts ?? [])
+      .map((l) => `${l.id}:${l.suit_id}:${l.weapons.map((w) => w.id).join("+")}`)
+      .join(","),
   ].join("|");
 }
 
@@ -1046,13 +1049,20 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     if (moving !== undefined) place = moving;
     // Docked at a stop since the plan (or this lap) started, or come to a settlement stop's
     // landing area.
-    const here =
+    // A settlement's Name can be a $...; symbol: its Name_Localised is the name shown.
+    const heres: (Place | null)[] =
       e.event === "ApproachSettlement"
-        ? { system: str(e.StarSystem) ?? place?.system ?? null, station: str(e.Name) }
-        : place;
-    if (here?.station && t > started && visited.size < plan.stops.length)
-      for (const si of order)
-        if (!visited.has(si) && atStop(plan.stops[si]!, here)) visited.add(si);
+        ? [str(e.Name_Localised), str(e.Name)].map((station) => ({
+            system: str(e.StarSystem) ?? place?.system ?? null,
+            station,
+          }))
+        : [place];
+    if (t > started && visited.size < plan.stops.length)
+      for (const here of heres) {
+        if (!here?.station) continue;
+        for (const si of order)
+          if (!visited.has(si) && atStop(plan.stops[si]!, here)) visited.add(si);
+      }
     if (e.event === "Docked" || (e.event === "Location" && e.Docked === true)) {
       const station = str(e.StationName);
       if (!(e.event === "Location" && dock && same(dock.station, station)))
@@ -1237,7 +1247,12 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
   };
   for (const entry of list) {
     const a = entry.action;
-    if (!a.gear || !entry.done) continue;
+    // A skipped buy bought nothing: its gear's ID is not to be guessed.
+    if (!a.gear || !entry.done || a.status === "skipped") continue;
+    // A buy that has its ID in the plan already gives that one.
+    const ownId =
+      a.kind === "buy_suit" ? a.suit_id : a.kind === "buy_weapon" ? a.weapon_id : undefined;
+    if (entry.gotId === null && ownId !== undefined) entry.gotId = ownId;
     if (entry.gotId === null && (a.kind === "buy_suit" || a.kind === "buy_weapon")) {
       for (let i = events.length - 1; i >= 0 && entry.gotId === null; i--) {
         for (const r of rolesOf(events[i]!, flying, null)) {

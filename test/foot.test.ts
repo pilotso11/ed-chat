@@ -310,6 +310,24 @@ describe("owned gear the plan does not name by ID", () => {
     expect(done(p, journal([], { suits, suit_loadouts }))).toEqual([["a", true]]);
   });
 
+  it("says a suit not owned needs buying, rather than asking which", () => {
+    const j = journal([docked(1, "S", "P")], {
+      location: {
+        system: "S",
+        station: "P",
+        station_type: null,
+        docked: true,
+        dist_from_star_ls: null,
+      },
+    });
+    expect(panel(owned("upgrade_suit", { label: "Up" }), j).rows).toContainEqual({
+      text: "  Up",
+      right: "not owned",
+      detail: "buy it first (a buy step in the plan)",
+      tone: "warn",
+    });
+  });
+
   it("asks which suit when it cannot tell", () => {
     const suits = [suit(1, "tacticalsuit", 2), suit(2, "tacticalsuit", 3)] as never;
     const j = journal([docked(1, "S", "P")], {
@@ -414,7 +432,11 @@ describe("the build panel on foot", () => {
       right: "equip to check",
     });
     // Come to the settlement, not docked there: a visit too.
-    const near = ev(5, "ApproachSettlement", { Name: "The Jackrabbit", StarSystem: "Orishis" });
+    const near = ev(5, "ApproachSettlement", {
+      Name: "$Settlement:#index=1;",
+      Name_Localised: "The Jackrabbit",
+      StarSystem: "Orishis",
+    });
     expect(judgeBuild(p, journal([near])).visited.has(2)).toBe(true);
   });
 });
@@ -484,6 +506,18 @@ describe("ActionFinisher on foot", () => {
     expect(judgeBuild(hand, journal(buys, { suits: [dom(54)] })).gearIds).toEqual([
       { gear: "dom", suit_id: 54 },
     ]);
+    // A skipped buy bought nothing: no ID for its gear.
+    hand.id = `${hand.id}-skip`;
+    hand.stops[0]!.actions![0]!.status = "skipped";
+    expect(judgeBuild(hand, journal(buys, { suits: [dom(54), dom(55)] })).gearIds).toEqual([]);
+    // A buy with its ID in the plan gives that one, not another purchase's.
+    hand.id = `${hand.id}-own`;
+    hand.stops[0]!.actions![0]!.status = "done";
+    hand.stops[0]!.actions![0]!.suit_id = 54;
+    expect(judgeBuild(hand, journal(buys, { suits: [dom(54), dom(55)] })).gearIds).toEqual([
+      { gear: "dom", suit_id: 54 },
+    ]);
+    delete hand.stops[0]!.actions![0]!.suit_id;
     // 55 is another gear key's already: not this one's too.
     hand.id = `${hand.id}-taken`;
     hand.stops[1]!.actions!.push(act({ id: "other", kind: "upgrade_suit", suit_id: 55, grade: 5 }));

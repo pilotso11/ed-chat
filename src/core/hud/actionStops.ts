@@ -94,7 +94,7 @@ const MISSION_ACTIONS = new Set([
 
 /**
  * The panel whose setting decides whether the finisher writes a plan: "build" for a plan with a
- * build (a suit loadout's too, which the finisher leaves alone anyway), "trade" for a trade plan,
+ * build (a ship's or a suit loadout's), "trade" for a trade plan,
  * else null (a mission run is the route's, even with trade stops: always on).
  */
 export function finisherPanel(plan: Plan): "build" | "trade" | null {

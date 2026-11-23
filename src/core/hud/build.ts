@@ -14,7 +14,7 @@ import {
   type BuildJudgement,
   type Stop,
 } from "./buildJudge.js";
-import { resourceCount, SUIT_NAMES, suitOf } from "./foot.js";
+import { resourceCount, sameWeapon, SUIT_NAMES, suitOf } from "./foot.js";
 import { num, objs, same, str } from "./json.js";
 import {
   credits,
@@ -589,6 +589,13 @@ function need(
     gearIdOf(a, plan, ctx.journal) === null
   ) {
     const suit = a.kind.endsWith("_suit");
+    const type = suit ? suitOf(a.suit)?.type : null;
+    const owned = suit
+      ? (ctx.journal.suits ?? []).filter((x) => !type || x.type === type).length
+      : (ctx.journal.weapons ?? []).filter((w) => sameWeapon(w.type, w.name, a.weapon)).length;
+    // None owned: there is no ID to give; it needs buying first.
+    if (owned === 0)
+      return { right: "not owned", detail: "buy it first (a buy step in the plan)", tone: "warn" };
     return {
       right: suit ? "which suit?" : "which weapon?",
       detail: `ask Claude to set its ${suit ? "suit_id" : "weapon_id"} (journal_on_foot)`,
