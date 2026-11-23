@@ -62,8 +62,8 @@ export function trayItems(s: {
   const bookmarks = s.bookmarks?.all ?? 0;
   const here = s.bookmarks?.here ?? { stops: [], whole: false };
   const n = here.stops.length;
-  // What the item clears: the nearest bookmark on this body, every one on it when which is
-  // nearest cannot be told, or every one in the system.
+  // What the item clears: the nearest bookmark on this body, every one on it when none has a
+  // saved position, or every one in the system.
   const many = `${n} bookmark${n === 1 ? "" : "s"}`;
   const hereLabel = here.whole
     ? `Clear ${many} in this system…`

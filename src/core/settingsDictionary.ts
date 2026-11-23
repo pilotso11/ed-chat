@@ -78,8 +78,8 @@ export const SETTINGS_DICTIONARY: Record<string, SettingEntry> = {
   },
   "hotkeys.clearBookmark": {
     text:
-      "Clears the nearest bookmark on the body you are on. The tray menu clears a whole " +
-      "system's bookmarks, or all of them, after asking.",
+      "Clears the nearest bookmark on the body you are on. The tray menu clears a body's " +
+      "bookmarks that have no saved position, a whole system's, or all of them, after asking.",
   },
 
   strip: { text: "The status strip at rest." },
