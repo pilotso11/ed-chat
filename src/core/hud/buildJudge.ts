@@ -491,7 +491,9 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
   )
     boundId = journal.ship.id;
   const fromPlan = plan.build?.ship_id !== undefined;
-  let armed = false;
+  // The hull type a done buy_ship waits for ("" for any), until its ShipyardNew binds it.
+  let armed: string | null = null;
+  const armFor = (a: Action) => lower(a.ship ?? plan.build?.ship) ?? "";
   const shipOk = (ship: ShipOf | null) => {
     if (!ship) return true;
     if (boundId !== null) return ship.id === boundId;
@@ -593,12 +595,12 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
     // A bought hull is the plan's ship once delivered: another ship delivered meanwhile is not.
     if (
       e.event === "ShipyardNew" &&
-      armed &&
+      armed !== null &&
       boundId === null &&
-      (!hullType || lower(e.ShipType) === hullType)
+      (armed === "" || lower(e.ShipType) === armed)
     ) {
       boundId = num(e.NewShipID);
-      armed = false;
+      armed = null;
     }
     // A single engineer's progress unlocking an engineer the plan asks for turns the mode on.
     if (
@@ -625,7 +627,8 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
         res.entry.taken += res.amount;
         if (boundId === null && !hasBuyShip && r.ship?.id != null && shipOk(r.ship))
           boundId = r.ship.id;
-        if (res.entry.action.kind === "buy_ship" && boundId === null) armed = true;
+        if (res.entry.action.kind === "buy_ship" && boundId === null)
+          armed = armFor(res.entry.action);
         mark(i, e);
         if (!Number.isNaN(t)) actedAt = Math.max(actedAt, t);
       }
@@ -649,7 +652,7 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
         actedAt = Math.max(actedAt, t);
         if (boundId === null && !hasBuyShip && r.ship?.id != null) boundId = r.ship.id;
         if (entry.action.kind === "buy_ship" && entry.taken >= need && boundId === null)
-          armed = true;
+          armed = armFor(entry.action);
         if (left <= 0 || !BY_SUM.has(entry.action.kind)) break;
       }
     }

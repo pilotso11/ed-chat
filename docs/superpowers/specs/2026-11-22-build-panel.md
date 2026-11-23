@@ -279,7 +279,7 @@ not claimed by a done action are shared out to the open actions.
 | `store_module` | Store Fuel Scoop 6A | `module` | A `ModuleStore` with that `StoredItem`; a `MassModuleStore` item with that `Name` (each item counts for one action); or a `ModuleBuy` or `ModuleRetrieve` that stored it as the old module (`StoredItem`, `SwapOutItem`) |
 | `sell_module` | Sell AFM Unit 2A | `module` | A `ModuleSell` or `ModuleSellRemote` with that `SellItem`, or a `ModuleBuy` that sold it (`SellItem`) |
 | `move_module` | Move Shield Cell Bank to Slot05 | `module`, `slot` | A `ModuleSwap` with that item and `ToSlot` (or `FromSlot`, for the item moved the other way) |
-| `buy_ship` | Buy Python MkII | `ship` | A `ShipyardBuy` (or `ShipyardRedeem`) with that `ShipType`; the next `ShipyardNew` gives the plan its `ship_id` |
+| `buy_ship` | Buy Python MkII | `ship` | A `ShipyardBuy` (or `ShipyardRedeem`) with that `ShipType`; the next `ShipyardNew` of that type gives the plan its `ship_id` |
 | `transfer_ship` | Transfer the Python here (40 min) | `ship_id` | A `ShipyardTransfer` of that `ShipID` |
 | `swap_ship` | Take out the Python | `ship_id` | A `ShipyardSwap` (or `ShipyardBuy` / `ShipyardNew`) to that ship |
 | `unlock_tech` | Unlock Guardian FSD Booster | `broker`, `item` | A `TechnologyBroker` whose `ItemsUnlocked` has that `Name` |
