@@ -1,8 +1,8 @@
 # Activity panel: ship and on-foot builds
 
 Date: 2026-11-22
-Status: step 2 of the order of work (the ship build panel in ED Chat) is built; the others are
-to do. Issue #81, widened by its author's comment to take in purchases, full ship
+Status: steps 2 and 4 of the order of work (the ship build panel in ED Chat, and its outfitting
+visit with no plan) are built; the others are to do. Issue #81, widened by its author's comment to take in purchases, full ship
 builds, upgrades of the current ship (a subset of a full build), and suit and on-foot weapon
 upgrades. Follows the activity HUD spec (2026-11-15) and the trade, passenger and mining spec
 (2026-11-21).
@@ -861,10 +861,33 @@ for on foot. ED Chat pins each.
      the mode on.
    - The header shows the ship type, not its `ShipName`. The trader stop shows "trader", not its
      type: the stop has no field for it.
-   - A done row shows no price. `hud.build.outfittingVisit` comes with step 4.
+   - A done row shows no price. `hud.build.outfittingVisit` came with step 4.
 3. **ed-mcp: `build_plan`.** The diff, needs, trades, engineers and route, `save_to_plan`.
    Tested against SLEF from Coriolis and EDSY and real `Loadout` events. Release.
 4. **ED Chat: the no-plan outfitting visit.** Needs no ed-mcp change; can go at any point.
+   **Built.** As built:
+   - `outfittingVisit()` and `visitPanel()` in `src/core/hud/build.ts`; `BuildNow.visit` holds the
+     events that turn it on, which `journalMode()` treats as build events.
+   - "No build plan" means no build plan with work here: the view shows while docked unless the
+     plan shown is docked at its stop with an action to do, or an event of this docking did one
+     of its actions (which also keeps "Build complete"). So with a plan whose stops are elsewhere,
+     buying at another station shows the visit, and the plan comes back on undocking. The route
+     rows show under the visit, as under other panels, and the route keys follow the note's plan.
+   - Turned on by the module events and `EngineerCraft` (as the spec has it) and also by the
+     shipyard: `ShipyardBuy`, `ShipyardRedeem`, `ShipyardSell` (added to `BUILD_EVENTS`) and
+     `ShipyardTransfer`. A `ShipyardSwap` alone does not turn it on (as the mode rules say for a
+     swap), nor do `Synthesis` and `MaterialTrade`; once it shows, all of these are listed.
+   - Rows: the modules (bought and sold with their credits, more than two kinds of either as a
+     count and a total; stored, retrieved, transferred and moved as counts), then the ships, then
+     one row per module engineered (one blueprint in one slot) with the rolls on the right, one
+     row per experimental applied, then the trades and the materials used. Parts are packed into
+     rows of up to 56 characters. The invitation to plan a build is a dim footer line.
+   - Module names are the event's `_Localised` name (else a name from the symbol) with the
+     class and rating from the symbol ("FSD 5A"); core slots use the build panel's short names.
+     Blueprint names come from a short table of those whose game name differs from the symbol
+     ("FSD_LongRange" is Increased Range), else the symbol's words ("Heavy Duty").
+   - The grade before a module's first roll comes from the newest `Loadout` before it, G0 when
+     that shows another blueprint or none. Only docking counts: landing has no outfitting.
 5. **ed-mcp: on foot.** The on-foot action kinds' journal state (`suits`, `locker`, `backpack`), kept
    events, `build_plan` for a suit loadout with needs given by Claude. Release.
 6. **ED Chat: on-foot actions.** Their judges, the choice between two open plans, "equip to check".
