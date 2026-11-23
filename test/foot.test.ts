@@ -310,6 +310,22 @@ describe("owned gear the plan does not name by ID", () => {
     expect(done(p, journal([], { suits, suit_loadouts }))).toEqual([["a", true]]);
   });
 
+  it("takes the one suit owned when the step names no type", () => {
+    const suits = [suit(1, "utilitysuit", 4)] as never;
+    expect(done(owned("upgrade_suit", { suit: undefined }), journal([], { suits }))).toEqual([
+      ["a", true],
+    ]);
+  });
+
+  it("treats gear whose buy was skipped as owned gear", () => {
+    const p = loadout();
+    p.stops[0]!.actions![0]!.status = "skipped";
+    // The Dominator already owned: the upgrade of gear "dom" is judged against it.
+    const suits = [suit(5, "tacticalsuit", 4)] as never;
+    p.stops[0]!.actions![1]!.suit = "Dominator";
+    expect(judgeBuild(p, journal([], { suits })).actions[1]!.done).toBe(true);
+  });
+
   it("says a suit not owned needs buying, rather than asking which", () => {
     const j = journal([docked(1, "S", "P")], {
       location: {

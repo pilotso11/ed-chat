@@ -549,7 +549,7 @@ function matches(
   boundId: number | null,
   gearId: number | null = null,
 ): boolean {
-  const sameMod = () => !!a.module && mod(a.module) === r.item;
+  const sameModule = () => !!a.module && mod(a.module) === r.item;
   if (AT_STOP.has(a.kind) && !atStop(stop, r.place ?? null)) return false;
   const sameGoods = () => !!a.commodity && !!r.goods?.includes(commodityKey(a.commodity));
   const sameMission = () => a.mission_id !== undefined && r.missionId === a.mission_id;
@@ -575,27 +575,27 @@ function matches(
     case "restock":
       return r.kind === "restocked";
     case "buy_module":
-      if (r.kind !== "bought" || !sameMod()) return false;
+      if (r.kind !== "bought" || !sameModule()) return false;
       // Bought straight into storage counts only for a buy that names no slot.
       return r.stored ? !a.slot : !a.slot || same(a.slot, r.slot);
     case "retrieve_module":
       return (
         r.kind === "retrieved" &&
-        sameMod() &&
+        sameModule() &&
         (!a.blueprint || same(a.blueprint, r.blueprint)) &&
         (a.grade === undefined || (r.level ?? 0) >= a.grade)
       );
     case "fetch_module":
       return (
         r.kind === "fetched" &&
-        (sameMod() || (a.storage_slot !== undefined && a.storage_slot === r.storageSlot))
+        (sameModule() || (a.storage_slot !== undefined && a.storage_slot === r.storageSlot))
       );
     case "store_module":
-      return r.kind === "stored" && sameMod();
+      return r.kind === "stored" && sameModule();
     case "sell_module":
-      return r.kind === "sold" && sameMod();
+      return r.kind === "sold" && sameModule();
     case "move_module":
-      return r.kind === "moved" && sameMod() && same(a.slot, r.slot);
+      return r.kind === "moved" && sameModule() && same(a.slot, r.slot);
     case "buy_ship":
       return r.kind === "new_ship" && r.item === lower(a.ship ?? plan.build?.ship);
     case "swap_ship": {
@@ -773,6 +773,18 @@ const UNLOCKED = (journal: Pick<JournalState, "engineers">, name: string | undef
 const SUIT_KINDS = new Set<string>(["buy_suit", "upgrade_suit", "modify_suit"]);
 const WEAPON_KINDS = new Set<string>(["buy_weapon", "upgrade_weapon", "modify_weapon"]);
 
+/** Whether a gear key's buy is still to come: a buy action of that key not skipped. */
+export function gearToBuy(plan: Plan, gear: string): boolean {
+  return plan.stops.some((st) =>
+    (st.actions ?? []).some(
+      (a) =>
+        a.gear === gear &&
+        (a.kind === "buy_suit" || a.kind === "buy_weapon") &&
+        a.status !== "skipped",
+    ),
+  );
+}
+
 /**
  * The ID of the suit or weapon an on-foot action is for: its suit_id or weapon_id; else, for gear
  * the player owns (no gear key, which is gear still to buy), the plan's loadout's suit, or the one
@@ -783,7 +795,9 @@ export function gearIdOf(a: Action, plan: Plan, journal: Journal): number | null
   if (!suit && !WEAPON_KINDS.has(a.kind)) return null;
   const own = suit ? a.suit_id : a.weapon_id;
   if (own !== undefined) return own;
-  if (a.gear || a.kind === "buy_suit" || a.kind === "buy_weapon") return null;
+  if (a.kind === "buy_suit" || a.kind === "buy_weapon") return null;
+  // Gear still to buy waits for its buy's ID; with that buy skipped (or none), it is owned gear.
+  if (a.gear && gearToBuy(plan, a.gear)) return null;
   const lid = plan.build?.loadout_id;
   const loadout = lid !== undefined ? journal.suit_loadouts?.find((l) => l.id === lid) : undefined;
   const only = <T extends { id: number }>(list: T[]) => (list.length === 1 ? list[0]!.id : null);
@@ -794,9 +808,12 @@ export function gearIdOf(a: Action, plan: Plan, journal: Journal): number | null
       // A loadout suit the state does not list is taken only when the action names no type.
       if (ls ? !type || ls.type === type : !type) return loadout.suit_id;
     }
-    return type ? only((journal.suits ?? []).filter((x) => x.type === type)) : null;
+    // No type named: the one suit owned, if only one.
+    return only((journal.suits ?? []).filter((x) => !type || x.type === type));
   }
-  const named = (journal.weapons ?? []).filter((w) => sameWeapon(w.type, w.name, a.weapon));
+  const named = (journal.weapons ?? []).filter(
+    (w) => !a.weapon || sameWeapon(w.type, w.name, a.weapon),
+  );
   const inLoadout = named.filter((w) => loadout?.weapons.some((x) => x.id === w.id));
   return only(inLoadout) ?? only(named);
 }

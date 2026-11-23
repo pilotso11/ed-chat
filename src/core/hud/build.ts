@@ -2,6 +2,7 @@ import { visitOrder, type JournalEvent, type JournalState, type Plan } from "ed-
 import type { Settings } from "../settings.js";
 import {
   gearIdOf,
+  gearToBuy,
   isBuildPlan,
   judgeBuild,
   materialCount,
@@ -479,8 +480,8 @@ const FOOT = new Set<Action["kind"]>([
 ]);
 
 /** An upgrade or modification of gear still to buy: it waits for the buy to give its ID. */
-function waitsForBuy(a: Action): boolean {
-  if (!a.gear) return false;
+function waitsForBuy(a: Action, plan: Plan): boolean {
+  if (!a.gear || !gearToBuy(plan, a.gear)) return false;
   if (a.kind === "upgrade_suit" || a.kind === "modify_suit") return a.suit_id === undefined;
   if (a.kind === "upgrade_weapon" || a.kind === "modify_weapon") return a.weapon_id === undefined;
   return false;
@@ -578,10 +579,10 @@ function need(
     const b = ctx.blockedBy.action;
     return { right: `after ${slotName(b.slot)} G${targetGrade(b)}` };
   }
-  if (waitsForBuy(a)) return { right: "after buy" };
+  if (waitsForBuy(a, plan)) return { right: "after buy" };
   // Owned gear the plan does not name by ID, with more than one that could be it.
   if (
-    !a.gear &&
+    !waitsForBuy(a, plan) &&
     (a.kind === "upgrade_suit" ||
       a.kind === "modify_suit" ||
       a.kind === "upgrade_weapon" ||
@@ -590,11 +591,13 @@ function need(
   ) {
     const suit = a.kind.endsWith("_suit");
     const type = suit ? suitOf(a.suit)?.type : null;
+    const list = suit ? ctx.journal.suits : ctx.journal.weapons;
     const owned = suit
       ? (ctx.journal.suits ?? []).filter((x) => !type || x.type === type).length
-      : (ctx.journal.weapons ?? []).filter((w) => sameWeapon(w.type, w.name, a.weapon)).length;
-    // None owned: there is no ID to give; it needs buying first.
-    if (owned === 0)
+      : (ctx.journal.weapons ?? []).filter((w) => !a.weapon || sameWeapon(w.type, w.name, a.weapon))
+          .length;
+    // None owned (when the journal lists the gear at all): no ID to give; it needs buying first.
+    if (list && owned === 0)
       return { right: "not owned", detail: "buy it first (a buy step in the plan)", tone: "warn" };
     return {
       right: suit ? "which suit?" : "which weapon?",
