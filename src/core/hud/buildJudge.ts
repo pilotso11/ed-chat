@@ -44,6 +44,9 @@ export const isBuildPlan = (plan: Plan | null | undefined): plan is Plan =>
   plan.build?.target !== "suit_loadout" &&
   plan.stops.some((s) => (s.actions?.length ?? 0) > 0);
 
+/** An engineer action's target grade: G5 when the plan gives none. */
+export const targetGrade = (a: Pick<Action, "grade">) => a.grade ?? 5;
+
 /** A module symbol from any event or file in one form (normaliseModule()). */
 export const mod = (v: unknown) => (typeof v === "string" && v ? normaliseModule(v) : null);
 
@@ -321,7 +324,7 @@ function matches(a: Action, r: Role, plan: Plan, boundId: number | null): boolea
         r.kind === "rolled" &&
         same(a.slot, r.slot) &&
         same(a.blueprint, r.blueprint) &&
-        (r.level ?? 0) >= (a.grade ?? 1) &&
+        (r.level ?? 0) >= targetGrade(a) &&
         (!a.module || mod(a.module) === r.item)
       );
     case "experimental":
@@ -409,13 +412,28 @@ type Journal = Pick<JournalState, "materials" | "engineers"> & {
   ship?: Pick<JournalState["ship"], "id" | "type">;
 };
 
-const cache = new WeakMap<
-  Journal,
-  Map<
-    string,
-    { key: string; length: number; last: JournalEvent | undefined; result: BuildJudgement }
-  >
->();
+/** The newest judgement of each plan, by plan ID. */
+const cache = new Map<string, { key: string; result: BuildJudgement }>();
+
+/**
+ * What a judgement depends on in the journal, cheaply: the events (append-only, so their count and
+ * the newest one), the inventory's counts, the engineers unlocked and the ship flown.
+ */
+function journalKey(journal: Journal): string {
+  const counts = Object.values(journal.materials)
+    .map((list) => `${list.length}:${list.reduce((n, m) => n + m.count, 0)}`)
+    .join(",");
+  const unlocked = journal.engineers.filter((e) => e.progress === "Unlocked").length;
+  const last = journal.events.at(-1);
+  return [
+    journal.events.length,
+    last ? JSON.stringify(last) : "",
+    counts,
+    unlocked,
+    journal.ship?.id ?? "",
+    journal.ship?.type ?? "",
+  ].join("|");
+}
 
 /**
  * What a judgement depends on in a plan, cheaply: its ID and updated_at (every store write sets
@@ -439,18 +457,12 @@ const planKey = (plan: Plan) =>
  * poll. The plan is keyed by its content, so the same plan read again is not judged again.
  */
 export function judgeBuild(plan: Plan, journal: Journal): BuildJudgement {
-  // The journal state is read once a poll, so its object stands for its inventory and ship.
-  const events = journal.events;
-  const key = planKey(plan);
-  let m = cache.get(journal);
-  const kept = m?.get(plan.id);
-  const last = events.at(-1);
-  if (kept && kept.key === key && kept.length === events.length && kept.last === last)
-    return kept.result;
+  const key = `${planKey(plan)}#${journalKey(journal)}`;
+  const kept = cache.get(plan.id);
+  if (kept?.key === key) return kept.result;
   const result = judge(plan, journal);
-  if (!m) cache.set(journal, (m = new Map()));
   // One judgement kept for each plan: the newest.
-  m.set(plan.id, { key, length: events.length, last, result });
+  cache.set(plan.id, { key, result });
   return result;
 }
 
@@ -514,6 +526,10 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
       });
     }
   }
+  // Actions marked done by hand take the events before they were marked first; then the open
+  // actions, in plan order.
+  const opens = list.filter((x) => x.mode === "open");
+  const adoptThenOpen = [...list.filter((x) => x.mode === "adopt"), ...opens];
   // done_by claims already in the plan, by event and role: what they took.
   const reserved = new Map<string, { entry: (typeof list)[number]; amount: number }[]>();
   for (const entry of list) {
@@ -611,10 +627,7 @@ function judge(plan: Plan, journal: Journal): BuildJudgement {
       if (left <= 0 || Number.isNaN(t) || t < started || !shipOk(r.ship)) continue;
       // Actions marked done by hand take the events before they were marked first; then the
       // open actions, in plan order.
-      const order = [
-        ...(t <= updated ? list.filter((x) => x.mode === "adopt") : []),
-        ...list.filter((x) => x.mode === "open"),
-      ];
+      const order = t <= updated ? adoptThenOpen : opens;
       for (const entry of order) {
         const need = needOf(entry.action);
         if (entry.taken >= need || !matches(entry.action, r, plan, boundId)) continue;
@@ -720,7 +733,7 @@ function notFitted(
     }
     case "engineer": {
       const here = slot ? fitted.get(slot) : null;
-      return !here || !same(here.blueprint, a.blueprint) || (here.level ?? 0) < (a.grade ?? 1);
+      return !here || !same(here.blueprint, a.blueprint) || (here.level ?? 0) < targetGrade(a);
     }
     case "experimental": {
       const here = slot ? fitted.get(slot) : null;
@@ -747,7 +760,7 @@ export function rollsLeft(
   fitted: Fitted | null,
   rollsPerGrade: number[] = DEFAULT_ROLLS,
 ): Map<number, number> {
-  const target = a.grade ?? 5;
+  const target = targetGrade(a);
   const out = new Map<number, number>();
   const per = (g: number) => rollsPerGrade[g - 1] ?? DEFAULT_ROLLS[g - 1]!;
   const sameBp = !!fitted && same(fitted.blueprint, a.blueprint) && (fitted.level ?? 0) > 0;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Activity, ActionPatch, JournalEvent, JournalState, Plan } from "ed-mcp/journal";
-import { BuildFinisher } from "../src/core/hud/buildStops.js";
+import { BuildFinisher, nextSystem } from "../src/core/hud/buildStops.js";
 
 const T0 = Date.UTC(2026, 10, 22, 12, 0, 0);
 const iso = (s: number) => new Date(T0 + s * 1000).toISOString().replace(/\.\d+Z$/, "Z");
@@ -176,6 +176,23 @@ function setup(start = plan(), o: { activity?: Activity | null; fail?: boolean }
   };
 }
 
+describe("the stop copied after one is done", () => {
+  const stops = (...s: [string, "todo" | "done"][]) =>
+    plan({ stops: s.map(([system, status]) => ({ system, purpose: system, status })) });
+
+  it("is the next open stop after it, not an earlier one still open", () => {
+    // Stop 0 is still open behind you; stop 1 was just finished.
+    expect(nextSystem(stops(["A", "todo"], ["B", "done"], ["C", "todo"]), 1, "B")).toBe("C");
+  });
+
+  it("wraps round to an earlier open stop when none come after", () => {
+    expect(nextSystem(stops(["A", "todo"], ["B", "done"]), 1, "B")).toBe("A");
+    expect(nextSystem(stops(["A", "done"], ["B", "done"]), 1, "B")).toBeNull();
+    // In this system already: nothing to copy.
+    expect(nextSystem(stops(["B", "todo"], ["B", "done"]), 1, "B")).toBeNull();
+  });
+});
+
 describe("BuildFinisher", () => {
   it("marks each action once with its done_by, and the stop on the change, copying the next", async () => {
     const t = setup();
@@ -261,7 +278,7 @@ describe("BuildFinisher", () => {
     expect(t.log.notes).toEqual([]);
     t.closeNotes(false);
     await t.poll(swapped, [python]);
-    expect(t.log.notes).toEqual([{ kind: "engineering", summary: "Krait", plan_id: "py" }]);
+    expect(t.log.notes).toEqual([{ kind: "engineering", summary: "Python build", plan_id: "py" }]);
   });
 
   it("goes on with the other plans when one fails", async () => {
@@ -344,7 +361,7 @@ describe("BuildFinisher", () => {
       ),
       [python],
     );
-    expect(t.log.notes).toEqual([{ kind: "engineering", summary: "Krait", plan_id: "py" }]);
+    expect(t.log.notes).toEqual([{ kind: "engineering", summary: "Python build", plan_id: "py" }]);
     expect(t.log.notices).toEqual(["📋 Python build: now the activity note's plan"]);
   });
 

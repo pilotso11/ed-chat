@@ -7,6 +7,7 @@ import {
   materialsLeft,
   mod,
   rollsLeft,
+  targetGrade,
   type Action,
   type ActionJudgement,
   type BuildJudgement,
@@ -162,14 +163,29 @@ export interface Landed {
 
 const LEAVE_BODY = new Set(["Liftoff", "LeaveBody", "FSDJump", "CarrierJump", "Docked", "Died"]);
 
+/**
+ * Being on a body's surface: a Touchdown, a Disembark on a planet, or the Location a game
+ * restarted on a surface starts with (it has a Latitude, as Location has Docked for a station).
+ */
+export const isLanding = (e: JournalEvent) =>
+  e.event === "Touchdown" ||
+  (e.event === "Disembark" && e.OnPlanet === true) ||
+  (e.event === "Location" && e.Docked !== true && typeof e.Latitude === "number");
+
 export function landedAt(events: JournalEvent[]): Landed | null {
   let found: Landed | null = null;
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!;
     // The ship sent away while the commander is in the SRV or on foot is not leaving the body.
     if (e.event === "Liftoff" && e.PlayerControlled === false) continue;
-    if (LEAVE_BODY.has(e.event) || e.event === "LoadGame") return found;
-    if (e.event === "Touchdown" || (e.event === "Disembark" && e.OnPlanet === true)) {
+    // A relog while landed is the same landing, as a relog while docked is the same docking
+    // (dockedAt()): the Location after it says so, and the landing before it goes on.
+    if (e.event === "LoadGame" || e.event === "Shutdown") {
+      if (found) continue;
+      return null;
+    }
+    if (LEAVE_BODY.has(e.event) || (e.event === "Location" && !isLanding(e))) return found;
+    if (isLanding(e)) {
       const system = str(e.StarSystem);
       const body = str(e.Body);
       if (!system || !body) return found;
@@ -249,7 +265,10 @@ export function chooseBuild(input: {
     const judged = judgeBuild(plan, journal);
     const at =
       visitOrder(plan).find(
-        (i) => stopHere(plan.stops[i]!, dock, landed) && openAt(judged, i).length > 0,
+        (i) =>
+          plan.stops[i]!.status === "todo" &&
+          stopHere(plan.stops[i]!, dock, landed) &&
+          openAt(judged, i).length > 0,
       ) ?? null;
     // Another ship's plan shows only as the note's, or while docked at one of its stops.
     if (plan.id !== noteId && !forShip(plan, judged, journal) && at === null) continue;
@@ -332,7 +351,7 @@ export function buildNow(
     const j = judgeBuild(plan, journal);
     for (const e of j.matched) matched.add(e);
     for (const i of visitOrder(plan))
-      if (openAt(j, i).length) {
+      if (plan.stops[i]!.status === "todo" && openAt(j, i).length) {
         const s = plan.stops[i]!;
         stops.push({ system: s.system, station: s.station, body: s.body, kind: s.kind });
       }
@@ -361,7 +380,7 @@ export function atBuildStop(e: JournalEvent, stops: BuildNow["stops"]): boolean 
     const station = str(e.StationName) ?? "";
     return stops.some((s) => !(s.kind === "gather" && s.body) && stopAt(s, system, station));
   }
-  if (e.event === "Touchdown" || (e.event === "Disembark" && e.OnPlanet === true)) {
+  if (isLanding(e)) {
     const body = str(e.Body) ?? "";
     return stops.some((s) => s.kind === "gather" && !!s.body && onBody(s, system, body));
   }
@@ -417,7 +436,7 @@ function rollText(x: ActionJudgement, rolls: number[] | undefined): string {
     f && same(f.blueprint, x.action.blueprint) && (f.level ?? 0) > 0
       ? `G${f.level} ${pct(f.quality)}`
       : "G0";
-  return `${from} → G${x.action.grade ?? 5} · ~${left} roll${left === 1 ? "" : "s"}`;
+  return `${from} → G${targetGrade(x.action)} · ~${left} roll${left === 1 ? "" : "s"}`;
 }
 
 /** The stop that collects or trades for a material, by its place in visit order. */
@@ -463,7 +482,7 @@ function need(
   const plan = c.plan;
   if (ctx.blockedBy) {
     const b = ctx.blockedBy.action;
-    return { right: `after ${slotName(b.slot)} G${b.grade ?? 5}` };
+    return { right: `after ${slotName(b.slot)} G${targetGrade(b)}` };
   }
   const out: Need = {};
   const right: string[] = [];

@@ -171,12 +171,12 @@ export function journalMode(
     last = Date.parse(e.timestamp) || last;
     const key = `${num(e.SystemAddress)}|${num(e.BodyID)}`;
     // A build event the plan asked for, docking or landing at a build stop, or swapping to a ship
-    // with a build plan. Set first, so the rules below (trade at the same docking) still apply.
+    // with a build plan. Set after the rules below, so landing at a build's gather stop on a body
+    // with biological signals is the build.
     const building =
       build.matched.has(e) ||
       atBuildStop(e, build.stops) ||
       (e.event === "ShipyardSwap" && build.ships.includes(num(e.ShipID) ?? NaN));
-    if (building) set("build");
     switch (e.event) {
       case "FSDJump":
       case "CarrierJump":
@@ -240,6 +240,7 @@ export function journalMode(
         }
         break;
     }
+    if (building) set("build");
   }
   if (massacreActive && massacreAt !== null && on("massacre"))
     return { mode: "massacre", at: massacreAt };

@@ -9,7 +9,7 @@ import {
 } from "ed-mcp/journal";
 import { chooseBuild } from "./build.js";
 import { isBuildPlan, judgeBuild } from "./buildJudge.js";
-import { tradeNextCopy } from "./trade.js";
+import { same } from "./json.js";
 
 // Marking build actions and stops done as the journal shows them: main gives the plan store, the
 // activity note, the clipboard and the notices; the deciding is in build.ts and buildJudge.ts.
@@ -42,6 +42,20 @@ const openStops = (plan: Plan) =>
       s.actions?.some((a) => a.status === "todo") ? [stopId(plan, i)] : [],
     ),
   );
+
+/**
+ * The system to copy after a stop is done: the next open stop after it in visit order (wrapping
+ * round to earlier open stops only when none come after), as the panel's next row shows it, when
+ * it is in another system.
+ */
+export function nextSystem(plan: Plan, done: number, here: string | null): string | null {
+  const order = visitOrder(plan);
+  const at = order.indexOf(done);
+  const open = (i: number) => plan.stops[i]!.status === "todo";
+  const next = order.slice(at + 1).find(open) ?? order.slice(0, at).find(open);
+  const system = next === undefined ? null : plan.stops[next]!.system;
+  return system && !same(system, here) ? system : null;
+}
 
 export class BuildFinisher {
   /** Writes made or being made, by key ("Writing once" in the spec). */
@@ -197,7 +211,7 @@ export class BuildFinisher {
       marked.add(i);
       const name = s.label ?? (s.station ? `${s.system} · ${s.station}` : s.system);
       if (i === current) {
-        const next = tradeNextCopy(updated, journal.location.system);
+        const next = nextSystem(updated, i, journal.location.system);
         if (next) this.deps.copy(next, `${name}: done. Next stop copied: ${next}`);
         else this.deps.notice(`✓ ${name}: done`);
       }
@@ -234,7 +248,11 @@ export class BuildFinisher {
     if (!store || !input.activity) return;
     const activity = await store.get();
     if (!activity || activity.plan_id !== note.id) return seen();
-    await store.set({ kind: activity.kind, summary: activity.summary, plan_id: mine.id });
+    await store.set({
+      kind: activity.kind,
+      summary: (mine.build?.summary ?? mine.name).slice(0, 500),
+      plan_id: mine.id,
+    });
     seen();
     this.deps.notice(`📋 ${mine.name}: now the activity note's plan`);
   }

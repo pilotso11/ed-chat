@@ -278,6 +278,17 @@ describe("the build panel", () => {
     expect(materialsLeft(e.action, e.fitted).find((m) => m.name === "Manganese")?.count).toBe(4);
   });
 
+  it("takes an engineer action with no grade as G5, for done and for the rolls", () => {
+    const a = upgrade().stops[1]!.actions![1]!;
+    const plan = upgrade();
+    delete (plan.stops[1]!.actions![1] as Partial<Action>).grade;
+    const j = atFarseer([craft(20, 4, 1)]);
+    const e = judgeBuild(plan, j).actions.find((x) => x.action.id === "e1")!;
+    expect(e.done).toBe(false);
+    expect(rollsLeft(e.action, e.fitted)).toEqual(rollsLeft(a, e.fitted));
+    expect(judgeBuild(plan, atFarseer([craft(20, 5, 0.1)])).actions[1]!.done).toBe(true);
+  });
+
   it("uses the plan's rolls per grade", () => {
     const a = upgrade().stops[1]!.actions![1]!;
     const fitted = {
@@ -867,6 +878,16 @@ describe("judging ship actions", () => {
     const changed = shop(buys(1));
     changed.stops[0]!.actions![0]!.status = "skipped";
     expect(judgeBuild(changed, j)).not.toBe(a);
+    // The same journal read again as a new object is the same journal.
+    expect(judgeBuild(shop(buys(1)), journal([buy(1)]))).toBe(
+      judgeBuild(shop(buys(1)), journal([buy(1)])),
+    );
+    // Another inventory is judged again.
+    const more = {
+      ...j,
+      materials: { ...j.materials, raw: [{ symbol: "iron", name: "Iron", count: 3 }] },
+    };
+    expect(judgeBuild(shop(buys(1)), more)).not.toBe(judgeBuild(shop(buys(1)), j));
   });
 
   it("judges a transfer and a swap to a ship_id", () => {
@@ -1061,6 +1082,71 @@ describe("the build mode", () => {
       atBuildStop(ev(1, "Touchdown", { StarSystem: "HIP 36601", Body: "HIP 36601 C 4" }), b.stops),
     ).toBe(false);
     expect(journalMode([land], false, false, on, false, undefined, b)?.mode).toBe("build");
+  });
+
+  it("keeps a landing over a relog, and leaves out a stop already marked done", () => {
+    const srv = { StarSystem: "HIP 36601", Body: "HIP 36601 C 3 b", OnPlanet: true };
+    const relog = [
+      ev(1, "Touchdown", srv),
+      ev(2, "Shutdown"),
+      ev(3, "LoadGame", { Ship: "krait_mkii", ShipID: KRAIT }),
+      ev(4, "Location", {
+        StarSystem: "HIP 36601",
+        Body: "HIP 36601 C 3 b",
+        Latitude: 1,
+        Longitude: 2,
+        Docked: false,
+      }),
+    ];
+    expect(landedAt(relog)?.index).toBe(0);
+    // A relog in space is not landed.
+    expect(
+      landedAt([
+        ev(1, "Touchdown", srv),
+        ev(3, "LoadGame"),
+        ev(4, "Location", { StarSystem: "HIP 36601", Docked: false }),
+      ]),
+    ).toBeNull();
+    expect(landedAt([ev(3, "LoadGame")])).toBeNull();
+    // A stop marked done (by a route key) with an action still open is not the stop docked at.
+    const plan = upgrade();
+    plan.stops[1]!.status = "done";
+    expect(chooseBuild({ note: plan, plans: [], journal: atFarseer() })?.current).toBe(0);
+  });
+
+  it("lets build win over exobiology when landing at its gather stop", () => {
+    const stop = {
+      system: "HIP 36601",
+      body: "C 3 b",
+      purpose: "Collect",
+      kind: "gather" as const,
+      status: "todo" as const,
+      actions: [
+        act({
+          id: "c",
+          kind: "collect_material",
+          label: "Collect",
+          material: "Selenium",
+          count: 4,
+        }),
+      ],
+    };
+    const b = now(upgrade({}, [stop]), journal([]));
+    const body = { SystemAddress: 5, BodyID: 7 };
+    const events = [
+      ev(1, "SAASignalsFound", {
+        ...body,
+        Signals: [{ Type: "$SAA_SignalType_Biological;", Count: 2 }],
+      }),
+      ev(2, "Touchdown", {
+        ...body,
+        StarSystem: "HIP 36601",
+        Body: "HIP 36601 C 3 b",
+        OnPlanet: true,
+      }),
+    ];
+    expect(journalMode(events, false, false, on, false, undefined, b)?.mode).toBe("build");
+    expect(journalMode(events, false, false, on)?.mode).toBe("exobiology");
   });
 
   it("takes docking at a gather stop with no body as at the stop, as the panel does", () => {
