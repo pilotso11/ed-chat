@@ -282,15 +282,15 @@ and writes each one done into the plan, with the events that did it, so Claude s
 - Trades and services count only at the stop's own station (in its system, for a stop with no
   station), once the journal shows where you are. A mission counts wherever it is handed in: its
   ID says which it is.
-- An action counts the events after its own start, not one at that very time (a lap starts at
-  the time of the event that finished the last one) (ed-mcp sets one on a mission's actions),
-  else the build's, else the plan's (a trade or mission save sets it, and each lap of a loop
-  moves it on), else when the plan was made.
+- An action counts the events after its own start, not one at that very time (ed-mcp sets one
+  on a mission's actions, and on each action when a loop's lap starts), else the build's, else
+  the plan's (a trade or mission save sets it), else when the plan was made.
 - One event finishes one action of each kind it matches, the first still to do in the plan's
   order; tons and counts are shared out in that order.
 - When a stop's last action is done, the stop is marked done and, when it is the stop shown, the
-  next stop's system is copied. The time of the newest journal event goes with it, so a loop's
-  next lap counts only what comes after; the route keys give it too.
+  next stop's system is copied. The lap's newest claimed event goes with it as the next lap's
+  start, so a loop's next lap counts what comes after it, and nothing the last lap claimed; with
+  no claim, the newest journal event. The route keys give the newest journal event.
 - The panel finishes the activity note's plan and every open build plan. Another plan with
   actions, such as an old trade loop left open, is left alone, or it would take this run's
   trades. A plan whose panel is turned off in `hud.modes` is left alone too.

@@ -21,9 +21,9 @@ export interface ActionStopDeps {
   /** The plan store, or null before the panel's stores are open. */
   plans: () => Pick<PlanStore, "get" | "updateAction" | "updateStop" | "setBuildShip"> | null;
   /**
-   * The newest journal event's time (JournalService.newestEventAt()), given to the store with each
-   * stop marked done: a loop's next lap counts only the events after it. Without it, the poll's
-   * newest event.
+   * The newest journal event's time (JournalService.newestEventAt()), given to the store as the
+   * next lap's start with a stop marked done when the lap claimed no event (else its newest claim
+   * goes). Without it, the poll's newest event.
    */
   newestEventAt?: () => Promise<string | null>;
   /** The activity note's store, for pointing the note at the new ship's plan on a ship swap. */

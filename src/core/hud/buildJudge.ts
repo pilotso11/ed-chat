@@ -553,7 +553,7 @@ export interface ActionJudgement {
   action: Action;
   /** Done in the plan, or judged done now. */
   done: boolean;
-  /** Judged done now, not yet in the plan: the panel writes it (BuildFinisher). */
+  /** Judged done now, not yet in the plan: the panel writes it (ActionFinisher). */
   write: { status?: "done"; done_by?: DoneBy[]; key: string } | null;
   /** The events it claims, with the role and amount. */
   claims: DoneBy[];
@@ -672,7 +672,7 @@ const planKey = (plan: Plan) =>
 
 /**
  * Judges a build plan's actions from the journal (see "Actions" in the build panel spec). Kept
- * for the same journal, plan and inventory: the panel, its mode and BuildFinisher all ask on every
+ * for the same journal, plan and inventory: the panel, its mode and ActionFinisher all ask on every
  * poll. The plan is keyed by its content, so the same plan read again is not judged again.
  */
 export function judgeBuild(plan: Plan, journal: Journal): BuildJudgement {
@@ -995,8 +995,14 @@ function holdDone(x: ActionJudgement, journal: Journal): boolean {
   if (x.taken <= 0 || !cargo) return false;
   if (a.kind === "buy_commodity") {
     const capacity = journal.ship?.cargo_capacity ?? null;
-    // A hold of 0 (no Loadout read yet, or no racks) is not a full one.
-    return capacity !== null && capacity > 0 && used(cargo) >= capacity;
+    // Full, with the goods aboard. A hold of 0 (no Loadout read yet, or no racks) is not full.
+    return (
+      capacity !== null &&
+      capacity > 0 &&
+      !!a.commodity &&
+      held(cargo, a.commodity) > 0 &&
+      used(cargo) >= capacity
+    );
   }
   if (a.kind === "sell_commodity") return !!a.commodity && held(cargo, a.commodity) === 0;
   return false;
