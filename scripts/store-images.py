@@ -10,7 +10,8 @@ The images go to out/store unless out_dir is given. Inputs:
 - docs/store/in-game.jpg: a 1920x1080 crop of a real full-screen capture, overlay included.
 - build/icon.png: the app icon, for the poster.
 
-The text on the images, the captions and the listing text are in docs/store-listing.md.
+The headlines and subtitles on the images, and the chat on slide 02 and the poster, are
+in this script. The Store captions and the listing text are in docs/store-listing.md.
 """
 
 import random
@@ -143,6 +144,8 @@ def load_panel(name):
     box = border.getbbox()
     if box:
         panel = panel.crop(box)
+    else:
+        print(f"warning: no orange border found in {name}; using the whole image", file=sys.stderr)
     m = Image.new("L", panel.size, 0)
     ImageDraw.Draw(m).rounded_rectangle((0, 0, panel.width - 1, panel.height - 1), 10, fill=255)
     panel.putalpha(m)
