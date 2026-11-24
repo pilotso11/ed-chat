@@ -636,13 +636,19 @@ async function main(): Promise<void> {
   }
 
   let hudPolling = false;
+  // A poll asked for while one runs (as after /dismiss-plan): it runs once that one ends.
+  let hudPollAgain = false;
   let lastSystem: string | null = null;
   // The bookmarks plan a key press saved; a poll that started before it read the plan without it.
   let savedBookmarks: SavedBookmarks | null = null;
   // Polls started so far, which dates a save against the polls around it.
   let pollsStarted = 0;
   async function pollHud(): Promise<void> {
-    if (hudPolling || !hudFeed || !settings.hud.enabled) return;
+    if (hudPolling) {
+      hudPollAgain = true;
+      return;
+    }
+    if (!hudFeed || !settings.hud.enabled) return;
     hudPolling = true;
     const poll = ++pollsStarted;
     try {
@@ -673,6 +679,10 @@ async function main(): Promise<void> {
       log.log("warn", `panel: ${message(err)}`);
     } finally {
       hudPolling = false;
+      if (hudPollAgain) {
+        hudPollAgain = false;
+        void pollHud();
+      }
     }
   }
 

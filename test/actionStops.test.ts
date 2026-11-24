@@ -309,6 +309,17 @@ describe("ActionFinisher", () => {
     expect(t.log.copies).toEqual([]);
   });
 
+  it("does not mark done a stop whose actions were all skipped, as by /dismiss-plan all", async () => {
+    const t = setup();
+    await t.poll(journal([]));
+    const p = structuredClone(t.store.get("krait")!);
+    p.stops[1]!.actions![0]!.status = "skipped";
+    p.updated_at = iso(500);
+    t.add(p);
+    await t.poll(journal([]));
+    expect(t.log.writes).toEqual([]);
+  });
+
   it("writes the ShipID found by type, once", async () => {
     const t = setup(
       plan({ build: { target: "ship", scope: "full", ship: "krait_mkii", started_at: iso(0) } }),

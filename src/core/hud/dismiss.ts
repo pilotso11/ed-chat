@@ -10,7 +10,7 @@ export interface DismissDeps {
 export interface Dismissed {
   /** Whether there was an activity note to clear. */
   cleared: boolean;
-  /** The names of the plans with stop actions still to do (after all, those left open). */
+  /** The names of the plans with stop actions still to do (not all only). */
   open: string[];
   /** The names of the plans whose open actions were marked skipped (all only). */
   skipped: string[];
@@ -62,7 +62,6 @@ export async function dismissPlan(deps: DismissDeps, all: boolean): Promise<Dism
       result.failed.push({ name: summary.name, error: message(err) });
     }
   }
-  result.open = result.failed.map((f) => f.name);
   return result;
 }
 
@@ -72,7 +71,7 @@ export function dismissText(d: Dismissed, all: boolean): string {
   if (d.failed.length > 0) {
     const done = d.skipped.length > 0 ? `; skipped what was left of ${d.skipped.join(", ")}` : "";
     const failed = d.failed.map((f) => `${f.name} (${f.error})`).join(", ");
-    return `⚠ ${note ?? "no activity plan"}${done}; could not skip ${failed}`;
+    return `⚠ ${note ?? "no activity plan"}${done}; could not skip all that was left of ${failed}`;
   }
   if (all && d.skipped.length > 0)
     return `✓ ${note ?? "no activity plan"}; skipped what was left of ${d.skipped.join(", ")}`;
@@ -80,5 +79,7 @@ export function dismissText(d: Dismissed, all: boolean): string {
     const still = `${d.open.join(", ")} still ${d.open.length === 1 ? "shows" : "show"} at ${d.open.length === 1 ? "its" : "their"} stops: /dismiss-plan all`;
     return note ? `✓ ${note}; ${still}` : `ⓘ no activity plan; ${still}`;
   }
-  return note ? `✓ ${note}` : "ⓘ no plan to dismiss";
+  if (note) return `✓ ${note}`;
+  // Only finished plans, which the panel may still show as complete: they leave it too.
+  return all && d.forget.length > 0 ? "✓ nothing left to skip" : "ⓘ no plan to dismiss";
 }

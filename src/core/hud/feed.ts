@@ -188,8 +188,6 @@ export class HudFeed {
           return null;
         });
         if (!plan) return null;
-        // forget() ran since this poll started: the plan read may be from before the dismissal.
-        if (forgets !== this.forgets && this.forgotten.has(p.id)) return null;
         this.builds.set(p.id, {
           updated: plan.updated_at,
           plan,
@@ -199,7 +197,13 @@ export class HudFeed {
       }),
     );
     for (const id of this.builds.keys()) if (!keep.has(id)) this.builds.delete(id);
-    if (forgets === this.forgets) this.forgotten.clear();
+    // forget() ran since this poll started: what it read of those plans may be from before the
+    // dismissal, from the store or from what was kept. None of it is kept or shown.
+    if (forgets !== this.forgets) {
+      for (const id of this.forgotten) this.builds.delete(id);
+      return plans.filter((p): p is Plan => p !== null && !this.forgotten.has(p.id));
+    }
+    this.forgotten.clear();
     return plans.filter((p): p is Plan => p !== null);
   }
 

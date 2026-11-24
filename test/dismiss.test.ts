@@ -84,7 +84,6 @@ describe("dismissPlan", () => {
     const r = await dismissPlan(d, true);
     expect(r.skipped).toEqual(["b plan"]);
     expect(r.failed).toEqual([{ name: "a plan", error: "locked" }]);
-    expect(r.open).toEqual(["a plan"]);
     expect(r.forget).toEqual(["a", "b"]);
   });
 });
@@ -108,6 +107,9 @@ describe("dismissText", () => {
         { ...none, cleared: true, skipped: ["b"], failed: [{ name: "a", error: "locked" }] },
         true,
       ),
-    ).toBe("⚠ plan dismissed; skipped what was left of b; could not skip a (locked)");
+    ).toBe(
+      "⚠ plan dismissed; skipped what was left of b; could not skip all that was left of a (locked)",
+    );
+    expect(dismissText({ ...none, forget: ["old"] }, true)).toBe("✓ nothing left to skip");
   });
 });

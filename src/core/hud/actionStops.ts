@@ -238,7 +238,9 @@ export class ActionFinisher {
       const s = now.stops[i]!;
       const id = stopId(now, i);
       const changed = before?.has(id) || (wrote.has(id) && openBefore.has(id));
-      return changed && !open.has(id) && s.status === "todo" && !!s.actions?.length;
+      // A stop whose actions were all skipped (as by /dismiss-plan all) was not done.
+      const did = !!s.actions?.some((a) => a.status === "done");
+      return changed && !open.has(id) && s.status === "todo" && did;
     });
     // The record is updated only once the stops are marked: a stop whose write fails stays in it
     // as open, so the next poll sees the change again and tries once more.
