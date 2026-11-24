@@ -2044,8 +2044,11 @@ async function main(): Promise<void> {
     dispatch({ type: "notice", key: "settings", text: now.error });
     if (now.changed) playerOnly.fileChanged();
     // A read that failed leaves the copy from the last poll, which may be out of date.
-    if (settingsStore.broken || now.error)
-      return { ok: false, error: now.error ?? "settings.json has an error: fix it first" };
+    if (settingsStore.broken || now.readFailed)
+      return {
+        ok: false,
+        error: (now.readFailed && now.error) || "settings.json has an error: fix it first",
+      };
     const r = saveText(settingsStore.text, changes);
     if (!r.ok) return r;
     try {

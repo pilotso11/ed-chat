@@ -239,6 +239,13 @@ describe("hotkey problems", () => {
     expect(keyProblems({ ...h, cancel: ["Tab", "F13"] }, [])).toEqual({
       "hotkeys.cancel": "Tab has no modifier, so the game no longer gets it",
     });
+    expect(keyProblems({ ...h, cancel: ["Pause", "F25"] }, [])).toEqual({
+      "hotkeys.cancel": "F25 has no modifier, so the game no longer gets it",
+    });
+    // A chip key alone: one message for the nine digits.
+    expect(keyProblems({ ...h, copyChip: "{n}" }, [])["hotkeys.copyChip"]).toBe(
+      "{n} has no modifier, so the game no longer gets it",
+    );
   });
 
   it("does not fail on a chip key without {n}", () => {

@@ -22,6 +22,8 @@ import {
 export interface LoadResult {
   changed: boolean;
   error: string | null;
+  /** settings.json could not be read: the settings are still those of the last good read. */
+  readFailed?: true;
 }
 
 export class SettingsStore {
@@ -118,7 +120,11 @@ export class SettingsStore {
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code !== "ENOENT")
-        return { changed: false, error: `⚠ settings.json: ${code ?? String(err)}` };
+        return {
+          changed: false,
+          error: `⚠ settings.json: ${code ?? String(err)}`,
+          readFailed: true,
+        };
       // Only overrides go in settings.json, so a later release's defaults still apply.
       text = newSettingsText();
       await mkdir(path.dirname(this.file), { recursive: true });

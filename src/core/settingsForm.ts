@@ -300,6 +300,12 @@ export function resetAll(sections: FormSection[]): Change[] {
   return allFields(sections).map((f) => ({ path: f.path, value: f.default }));
 }
 
+const SPARE_KEY = /^(F([1-9]|1\d|2[0-4])|Pause|PrintScreen|Scrolllock)$/i;
+
+// A chip key as the setting writes it, with {n}: one message, not one for each digit.
+const shown = (b: { name: string; accelerator: string }) =>
+  b.name.startsWith("copyChip") ? b.accelerator.replace(/\d$/, "{n}") : b.accelerator;
+
 /**
  * The problem with each hotkey field, by path: a key another action already has, or one that
  * Windows would not register (failed, from the last activation, such as a key another app holds).
@@ -329,10 +335,11 @@ export function keyProblems(h: Settings["hotkeys"], failed: string[]): Record<st
     } else if (first === undefined) owner.set(k, b.name);
     if (failedSet.has(k)) add(b.name, `${b.accelerator} is in use by another app`);
     if (h.scope === "always" && !hasModifier(b.accelerator))
-      add(b.name, `${b.accelerator} has no modifier, so scope always leaves it off`);
-    // A key alone, other than F1–F24, is one the game needs: a hotkey takes it from the game.
-    else if (!hasModifier(b.accelerator) && !/^F\d{1,2}$/i.test(b.accelerator))
-      add(b.name, `${b.accelerator} has no modifier, so the game no longer gets it`);
+      add(b.name, `${shown(b)} has no modifier, so scope always leaves it off`);
+    // A key alone is one the game may need: a hotkey takes it from the game. Function keys and
+    // the keys the game does not use are left alone.
+    else if (!hasModifier(b.accelerator) && !SPARE_KEY.test(b.accelerator))
+      add(b.name, `${shown(b)} has no modifier, so the game no longer gets it`);
   }
   if (h.copyChipNumpad && keyList(h.copyChip).includes(NUMPAD_CHIP))
     add("copyChip", `${NUMPAD_CHIP} is set twice`);

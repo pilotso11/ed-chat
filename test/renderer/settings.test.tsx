@@ -300,6 +300,9 @@ describe("hotkey fields", () => {
     fireEvent.click(button);
     keyDown(button, "Tab", "Tab");
     expect(button.textContent).toBe("Ctrl+Alt+N");
+    fireEvent.click(button);
+    keyDown(button, "Tab", "Tab", { shiftKey: true });
+    expect(button.textContent).toBe("Ctrl+Alt+N");
     // A key with no capture going on is the button's own.
     keyDown(button, "x", "KeyX", { ctrlKey: true, altKey: true });
     expect(button.textContent).toBe("Ctrl+Alt+N");
@@ -337,6 +340,10 @@ describe("hotkey fields", () => {
     fireEvent.click(button);
     keyDown(button, "x", "KeyX", { ctrlKey: true, shiftKey: true });
     expect(f.querySelector(".hint")?.textContent).toMatch(/press a digit/);
+    // Clicking away ends the capture, and its hint.
+    fireEvent.blur(button);
+    expect(f.querySelector(".hint")).toBeNull();
+    fireEvent.click(button);
     keyDown(button, "Shift", "ShiftLeft", { ctrlKey: true, shiftKey: true });
     keyDown(button, "!", "Digit1", { ctrlKey: true, shiftKey: true });
     expect(f.querySelector(".hint")).toBeNull();

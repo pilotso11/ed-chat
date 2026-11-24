@@ -66,21 +66,17 @@ function KeysControl({ field, value, onValue }: FieldProps & { value: Keys }) {
   const [capturing, setCapturing] = useState<number | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const set = (next: string[]) => onValue(next.length === 1 ? next[0] : next);
+  const stop = () => {
+    setCapturing(null);
+    setHint(null);
+  };
   const onKeyDown = (e: KeyboardEvent) => {
     if (capturing === null) return;
-    // Tab alone leaves the field, as in any form.
-    if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
-      setCapturing(null);
-      setHint(null);
-      return;
-    }
+    // Tab and Shift+Tab leave the field, as in any form.
+    if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey) return stop();
     e.preventDefault();
     e.stopPropagation();
-    if (e.key === "Escape") {
-      setCapturing(null);
-      setHint(null);
-      return;
-    }
+    if (e.key === "Escape") return stop();
     const k = keyInput(e);
     const acc = chip ? chipPatternFromKey(k) : acceleratorFromKey(k);
     if (!acc) {
@@ -90,8 +86,7 @@ function KeysControl({ field, value, onValue }: FieldProps & { value: Keys }) {
     }
     const next = [...keys];
     next[capturing] = acc;
-    setCapturing(null);
-    setHint(null);
+    stop();
     set([...new Set(next)]);
   };
   return (
@@ -102,7 +97,7 @@ function KeysControl({ field, value, onValue }: FieldProps & { value: Keys }) {
             type="button"
             className={capturing === i ? "capture on" : "capture"}
             onClick={() => setCapturing(i)}
-            onBlur={() => capturing === i && setCapturing(null)}
+            onBlur={() => capturing === i && stop()}
             title="Click, then press the new key"
           >
             {capturing === i ? "Press keys… (Esc cancels)" : k}
@@ -120,7 +115,7 @@ function KeysControl({ field, value, onValue }: FieldProps & { value: Keys }) {
         </span>
       ))}
       {capturing === keys.length ? (
-        <button type="button" className="capture on" autoFocus onBlur={() => setCapturing(null)}>
+        <button type="button" className="capture on" autoFocus onBlur={stop}>
           Press keys… (Esc cancels)
         </button>
       ) : (
@@ -389,7 +384,9 @@ export function SettingsApp() {
       // Text typed while the save ran, still not valid, stays with its error.
       setDrafts((d) =>
         Object.fromEntries(
-          Object.entries(d).filter(([p]) => !saved(p, edits) || p in kept.current.errors),
+          Object.entries(d).filter(
+            ([p]) => !saved(p, kept.current.edits) || p in kept.current.errors,
+          ),
         ),
       );
       setSaveError(null);
