@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.2](https://github.com/pilotso11/ed-chat/compare/v0.9.1...v0.9.2) (2026-11-24)
+
+
+### Features
+
+* settings window, from the tray's Settings… or /settings ([#103](https://github.com/pilotso11/ed-chat/issues/103)) ([afb1103](https://github.com/pilotso11/ed-chat/commit/afb1103d4dd592d8ddf29e69fcaf756f1a606d49))
+
+
+### Miscellaneous Chores
+
+* release 0.9.2 ([#105](https://github.com/pilotso11/ed-chat/issues/105)) ([b91d015](https://github.com/pilotso11/ed-chat/commit/b91d015b0c5eb2dfd60c647feeb475dd0d8e0add))
+
 ## [0.9.1](https://github.com/pilotso11/ed-chat/compare/v0.9.0...v0.9.1) (2026-11-24)
 
 
