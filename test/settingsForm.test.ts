@@ -235,6 +235,10 @@ describe("hotkey problems", () => {
       "hotkeys.cancel": "F5 has no modifier, so scope always leaves it off",
     });
     expect(keyProblems({ ...h, cancel: "F5" }, [])).toEqual({});
+    // In game scope a key alone is taken from the game, except a function key.
+    expect(keyProblems({ ...h, cancel: ["Tab", "F13"] }, [])).toEqual({
+      "hotkeys.cancel": "Tab has no modifier, so the game no longer gets it",
+    });
   });
 
   it("does not fail on a chip key without {n}", () => {

@@ -187,9 +187,12 @@ describe("settings window", () => {
     expect(saveButton()).toHaveProperty("disabled", true);
     fireEvent.click(saveButton());
     expect(api.save).toHaveBeenCalledTimes(1);
-    // An edit made while the save runs stays, to save next.
+    // An edit made while the save runs stays, to save next; so does text not valid yet.
     fireEvent.change(control("card.width"), { target: { value: "500" } });
+    fireEvent.change(control("card.maxLines"), { target: { value: "" } });
     await act(async () => finish({ ok: true }));
+    expect(field("card.maxLines").querySelector(".error")?.textContent).toBe("Enter a number");
+    fireEvent.change(control("card.maxLines"), { target: { value: "4" } });
     expect(field("card.width").className).toContain("edited");
     expect(field("style.theme").className).not.toContain("edited");
     fireEvent.change(control("style.theme"), { target: { value: "green" } });
@@ -292,6 +295,10 @@ describe("hotkey fields", () => {
     expect(button.textContent).toBe("Ctrl+Alt+N");
     fireEvent.click(button);
     fireEvent.blur(button);
+    expect(button.textContent).toBe("Ctrl+Alt+N");
+    // Tab alone leaves the field.
+    fireEvent.click(button);
+    keyDown(button, "Tab", "Tab");
     expect(button.textContent).toBe("Ctrl+Alt+N");
     // A key with no capture going on is the button's own.
     keyDown(button, "x", "KeyX", { ctrlKey: true, altKey: true });

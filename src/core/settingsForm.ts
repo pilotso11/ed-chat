@@ -330,6 +330,9 @@ export function keyProblems(h: Settings["hotkeys"], failed: string[]): Record<st
     if (failedSet.has(k)) add(b.name, `${b.accelerator} is in use by another app`);
     if (h.scope === "always" && !hasModifier(b.accelerator))
       add(b.name, `${b.accelerator} has no modifier, so scope always leaves it off`);
+    // A key alone, other than F1–F24, is one the game needs: a hotkey takes it from the game.
+    else if (!hasModifier(b.accelerator) && !/^F\d{1,2}$/i.test(b.accelerator))
+      add(b.name, `${b.accelerator} has no modifier, so the game no longer gets it`);
   }
   if (h.copyChipNumpad && keyList(h.copyChip).includes(NUMPAD_CHIP))
     add("copyChip", `${NUMPAD_CHIP} is set twice`);

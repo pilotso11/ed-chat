@@ -68,6 +68,12 @@ function KeysControl({ field, value, onValue }: FieldProps & { value: Keys }) {
   const set = (next: string[]) => onValue(next.length === 1 ? next[0] : next);
   const onKeyDown = (e: KeyboardEvent) => {
     if (capturing === null) return;
+    // Tab alone leaves the field, as in any form.
+    if (e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
+      setCapturing(null);
+      setHint(null);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     if (e.key === "Escape") {
@@ -380,7 +386,12 @@ export function SettingsApp() {
       const saved = (path: string, e: Record<string, unknown>) =>
         sent.some((c) => c.path === path && sameValue(c.value, e[path]));
       setEdits((e) => Object.fromEntries(Object.entries(e).filter(([p]) => !saved(p, e))));
-      setDrafts((d) => Object.fromEntries(Object.entries(d).filter(([p]) => !saved(p, edits))));
+      // Text typed while the save ran, still not valid, stays with its error.
+      setDrafts((d) =>
+        Object.fromEntries(
+          Object.entries(d).filter(([p]) => !saved(p, edits) || p in kept.current.errors),
+        ),
+      );
       setSaveError(null);
       setStatus("Saved. The changes are in use.");
       reload();
