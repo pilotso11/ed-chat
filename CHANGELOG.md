@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.1](https://github.com/pilotso11/ed-chat/compare/v0.9.0...v0.9.1) (2026-11-24)
+
+
+### Features
+
+* /dismiss-plan and /dismiss-step put away the panel's plan or its current stop ([#99](https://github.com/pilotso11/ed-chat/issues/99)) ([ef7d80b](https://github.com/pilotso11/ed-chat/commit/ef7d80b60197cab72e2550ae3280dac01d6233a3))
+* on-foot gear in the build panel (suits, weapons, locker resources) ([#98](https://github.com/pilotso11/ed-chat/issues/98)) ([77ccd9e](https://github.com/pilotso11/ed-chat/commit/77ccd9e5c45a0ecf246810c81edae30d322bb152))
+
+
+### Miscellaneous Chores
+
+* release 0.9.1 ([#102](https://github.com/pilotso11/ed-chat/issues/102)) ([ea46a1a](https://github.com/pilotso11/ed-chat/commit/ea46a1a28b1ae88045e23bfd7bb89f740acc2e66))
+
 ## [0.9.0](https://github.com/pilotso11/ed-chat/compare/v0.8.1...v0.9.0) (2026-11-23)
 
 
