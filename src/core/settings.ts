@@ -239,7 +239,8 @@ export function setsKey(text: string, group: string, key: string): boolean {
   }
 }
 
-export type ParseResult = { ok: true; settings: Settings } | { ok: false; error: string };
+export type ParseResult =
+  { ok: true; settings: Settings } | { ok: false; error: string; path?: string };
 
 export function parseSettings(text: string): ParseResult {
   let raw: unknown;
@@ -259,7 +260,11 @@ export function parseSettings(text: string): ParseResult {
   if (r.success) return { ok: true, settings: r.data };
   const issue = r.error.issues[0]!;
   const where = issue.path.length ? issue.path.join(".") : "(top level)";
-  return { ok: false, error: `${where}: ${issue.message}` };
+  return {
+    ok: false,
+    error: `${where}: ${issue.message}`,
+    ...(issue.path.length ? { path: issue.path.join(".") } : {}),
+  };
 }
 
 export const SCHEMA_FILE = "settings.schema.json";

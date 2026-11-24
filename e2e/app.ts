@@ -14,6 +14,10 @@ export interface TestApp {
   hud: Page;
   /** The Elite journal folder the app reads. */
   journalDir: string;
+  /** ED Chat's data folder, with settings.json. */
+  dataDir: string;
+  /** Waits for a window whose page is this file, such as "/settings.html". */
+  page(file: string): Promise<Page>;
   /**
    * With holdVersion, the fake CLI holds its --version answer until this is called; it resolves
    * once the answer is written, plus a moment for the app to handle it.
@@ -148,6 +152,8 @@ export async function launch(
       chat,
       hud,
       journalDir,
+      dataDir,
+      page,
       async releaseVersion() {
         await writeFile(versionGate, "");
         const deadline = Date.now() + 10_000;

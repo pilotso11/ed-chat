@@ -75,6 +75,11 @@ export class SettingsStore {
     return this.lastError !== null || this.lastText === null;
   }
 
+  /** Why settings.json did not parse at the last read, or null. */
+  get error(): string | null {
+    return this.lastError;
+  }
+
   /** The file as last read, without a BOM. */
   get text(): string {
     return this.lastText ?? "";

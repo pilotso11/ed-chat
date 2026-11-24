@@ -4,35 +4,13 @@
 //
 // The values are kept as settings.json writes them, not as parsed settings: a key that the
 // file does not set is absent, so Undo can remove it again and the default applies.
+import { getAt, isObj, sameValue, setAt, type Obj } from "./paths.js";
 import { PLAYER_ONLY_PATHS } from "./settingsDictionary.js";
 
 /** Each player-only setting as settings.json sets it. A setting the file leaves out is absent. */
 export type PlayerOnlyValues = Record<string, unknown>;
 
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => !!v && typeof v === "object" && !Array.isArray(v);
-
-function getAt(o: unknown, path: string): unknown {
-  return path.split(".").reduce<unknown>((v, k) => (isObj(v) ? v[k] : undefined), o);
-}
-
-/** Sets the value at path, creating groups on the way; undefined deletes the key. */
-function setAt(o: Obj, path: string, value: unknown): void {
-  const keys = path.split(".");
-  const last = keys.pop()!;
-  let at = o;
-  for (const k of keys) {
-    if (!isObj(at[k])) {
-      if (value === undefined) return;
-      at[k] = {};
-    }
-    at = at[k] as Obj;
-  }
-  if (value === undefined) delete at[last];
-  else at[last] = structuredClone(value);
-}
-
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const same = sameValue;
 
 /** The player-only settings in settings.json text. Text that is not a JSON object sets none. */
 export function playerOnlyValues(text: string): PlayerOnlyValues {

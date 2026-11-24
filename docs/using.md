@@ -66,7 +66,7 @@ Type `/new` in the chat to start a new conversation, and `/quit` or `/exit` to q
 of ED Chat, the assistant's CLI, the ed-mcp that ED Chat carries for the activity panel
 and the latest ed-mcp on npm, which `npx ed-mcp@latest` runs. Type `/claude` or `/codex`
 to switch between Claude Code and OpenAI's Codex; the tray menu's Assistant item does the
-same. Type `/dismiss-plan` to skip the rest of the plan on the activity panel, and
+same. Type `/settings` to open the settings window. Type `/dismiss-plan` to skip the rest of the plan on the activity panel, and
 `/dismiss-step` to skip its current stop (see
 [Dismissing a plan](activity-panel.md#dismissing-a-plan)). None of these commands goes to
 the assistant.
@@ -88,7 +88,7 @@ The overlay has an orange chat bubble icon in the notification area (system tray
 Windows 11 may hide it under the **^** arrow; drag it to the taskbar to keep it
 in view. Click it for a menu: copy a chip, open the chat, start a new
 conversation, show the hotkeys, switch icon mode, minimize the overlay to the
-tray or restore it, open `settings.json` or the log folder, open ED Chat's home
+tray or restore it, open the settings window (**Settings…**), `settings.json` or the log folder, open ED Chat's home
 page on GitHub (**About ED Chat**), or quit. While the overlay is minimized, the
 hotkeys still work, and the chat and approvals still show.
 
@@ -131,11 +131,12 @@ AltGr+Y, N or A answers a waiting tool request, AltGr+H shows the history and
 AltGr+1…9 copies a chip instead of typing a character: € on a UK keyboard, and
 @, #, {, [, ] or \ on German, French, Spanish, Nordic and other layouts. With
 `hotkeys.scope` set to `"always"` this happens in every app. If that gets in your
-way, set those keys in `settings.json`, for example `"copyChip": "Ctrl+Shift+{n}"`.
+way, set other keys in the settings window, for example Ctrl+Shift+digit for **Copy chip**.
 
 If the overlay shows `⚠ 2 hotkeys not working`, another app already uses those
 keys, or `settings.json` sets the same key for two actions. The tray menu item
-**Hotkey problems** lists them. Set other keys in `settings.json`.
+**Hotkey problems** lists them. Set other keys in the settings window, which marks each
+clash with ⚠.
 
 The status line shows one message at a time. **+2** after it means two more are
 waiting; click it to see them all. A message with a command in it, such as

@@ -94,7 +94,8 @@ function typesText(accelerator: string): boolean {
   return mods.length === 2 && mods.includes("alt") && mods.some((m) => CTRL.has(m));
 }
 
-function normalize(accelerator: string): string {
+/** A key as Windows matches it: modifiers in one order, any case, Control as Ctrl. */
+export function normalizeKey(accelerator: string): string {
   const parts = accelerator.toLowerCase().split("+");
   const key = parts.at(-1) ?? "";
   const mods = parts.slice(0, -1).map((m) => (CTRL.has(m) ? "ctrl" : m));
@@ -107,8 +108,8 @@ function normalize(accelerator: string): string {
  * chord (not AltGr) instead, so keys such as cancel still work while chatting.
  */
 export function chordBinding(all: Binding[], chord: string): Binding | null {
-  const want = normalize(chord);
-  return all.find((b) => typesText(b.accelerator) && normalize(b.accelerator) === want) ?? null;
+  const want = normalizeKey(chord);
+  return all.find((b) => typesText(b.accelerator) && normalizeKey(b.accelerator) === want) ?? null;
 }
 
 /**
@@ -185,7 +186,7 @@ export class HotkeyManager {
     // two actions works for the first only, and the second is reported.
     const owner = new Map<string, string>();
     for (const b of this.current) {
-      const first = owner.get(normalize(b.accelerator));
+      const first = owner.get(normalizeKey(b.accelerator));
       // The same key twice for one action, such as a list that repeats it, is no clash.
       if (first === b.name) continue;
       if (first !== undefined) {
@@ -193,7 +194,7 @@ export class HotkeyManager {
         duplicateKeys.push({ name: b.name, accelerator: b.accelerator });
         continue;
       }
-      owner.set(normalize(b.accelerator), b.name);
+      owner.set(normalizeKey(b.accelerator), b.name);
       let ok = false;
       try {
         ok = this.reg.register(b.accelerator, () => this.run(b.action));

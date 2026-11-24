@@ -27,6 +27,7 @@ describe("local commands", () => {
       "/codex",
       "/dismiss-plan",
       "/dismiss-step",
+      "/settings",
       "/quit",
       "/exit",
     ]);

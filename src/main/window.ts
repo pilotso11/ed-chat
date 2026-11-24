@@ -41,3 +41,32 @@ export function applyWindow(win: BrowserWindow, p: WindowProps, prev: WindowProp
   if (p.show) win.showInactive();
   else win.hide();
 }
+
+/** The settings window: a normal window with a frame, that takes focus, unlike the overlay. */
+export function createSettingsWindow(
+  preload: string,
+  url: string | undefined,
+  html: string,
+  icon: string,
+): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 860,
+    height: 820,
+    minWidth: 560,
+    minHeight: 400,
+    show: false,
+    title: "ED Chat settings",
+    icon,
+    backgroundColor: "#0b0d11",
+    webPreferences: { preload, contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  // No menu: Alt would open it, and its keys would take presses meant for a hotkey field.
+  win.removeMenu();
+  // The page is ED Chat's own; a link must not replace it or open another window.
+  win.webContents.on("will-navigate", (e) => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.once("ready-to-show", () => win.show());
+  if (url) void win.loadURL(url);
+  else void win.loadFile(html);
+  return win;
+}

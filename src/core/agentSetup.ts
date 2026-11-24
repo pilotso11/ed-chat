@@ -15,6 +15,8 @@ export const LOCAL_COMMANDS = [
   // Skip what is left of the plan on the panel, or its current stop.
   "/dismiss-plan",
   "/dismiss-step",
+  // Open the settings window, as the tray menu's Settings does.
+  "/settings",
   // Quit ED Chat, as the tray menu's Quit does.
   "/quit",
   "/exit",
