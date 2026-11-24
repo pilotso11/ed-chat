@@ -19,7 +19,10 @@ import { isTradePlan } from "./trade.js";
 
 export interface ActionStopDeps {
   /** The plan store, or null before the panel's stores are open. */
-  plans: () => Pick<PlanStore, "get" | "updateAction" | "updateStop" | "setBuildShip"> | null;
+  plans: () => Pick<
+    PlanStore,
+    "get" | "updateAction" | "updateStop" | "setBuildShip" | "setGearId"
+  > | null;
   /**
    * The newest journal event's time (JournalService.newestEventAt()), given to the store as the
    * next lap's start with a stop marked done when the lap claimed no event (else its newest claim
@@ -35,9 +38,6 @@ export interface ActionStopDeps {
 }
 
 type Journal = JournalState & { events: JournalEvent[] };
-
-/** A suit loadout's plan: on foot, judged in a later phase. */
-const onFoot = (plan: Plan) => plan.build?.target === "suit_loadout";
 
 export interface FinishInput {
   /** The activity note's plan. */
@@ -94,7 +94,7 @@ const MISSION_ACTIONS = new Set([
 
 /**
  * The panel whose setting decides whether the finisher writes a plan: "build" for a plan with a
- * build (a suit loadout's too, which the finisher leaves alone anyway), "trade" for a trade plan,
+ * build (a ship's or a suit loadout's), "trade" for a trade plan,
  * else null (a mission run is the route's, even with trade stops: always on).
  */
 export function finisherPanel(plan: Plan): "build" | "trade" | null {
@@ -163,9 +163,7 @@ export class ActionFinisher {
     if (!plans || !journal) return;
     const on = input.on ?? (() => true);
     const all = new Map<string, Plan>();
-    // A suit loadout's plan is on foot, a later phase: not judged or written yet.
-    if (hasActions(input.note) && !onFoot(input.note) && on(input.note))
-      all.set(input.note.id, input.note);
+    if (hasActions(input.note) && on(input.note)) all.set(input.note.id, input.note);
     for (const p of input.plans) if (isBuildPlan(p) && on(p) && !all.has(p.id)) all.set(p.id, p);
     // The stop shown as current, before this poll's writes: finishing it copies the next one.
     const shown = chooseBuild({ note: input.note, plans: input.plans, journal });
@@ -248,6 +246,19 @@ export class ActionFinisher {
           this.done.delete(key);
           throw err;
         }
+      }
+    }
+    // On foot: a bought suit's or weapon's ID, into the actions with its gear key, once each.
+    for (const g of judgeBuild(now, journal).gearIds) {
+      const key = `${now.id}|gear|${g.gear}|${g.suit_id ?? g.weapon_id}`;
+      if (this.done.has(key)) continue;
+      this.done.add(key);
+      try {
+        const { gear, ...ids } = g;
+        now = await plans.setGearId(now.id, gear, ids);
+      } catch (err) {
+        this.done.delete(key);
+        throw err;
       }
     }
     // A stop is marked done only on the change: its last open action became done since the last

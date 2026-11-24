@@ -585,7 +585,7 @@ describe("ActionFinisher on trade and mission plans", () => {
     expect(t.log.writes).toContain("loop:stop 0:done");
   });
 
-  it("leaves a suit loadout's plan alone, and writes no ship for a plan that is not a ship build", async () => {
+  it("writes no ship for a plan that is not a ship build", async () => {
     const suit = loop({
       id: "suit",
       build: { target: "suit_loadout", scope: "upgrade" },
@@ -593,7 +593,9 @@ describe("ActionFinisher on trade and mission plans", () => {
     const t = setup(suit);
     await t.poll(at("S", "Port", []));
     await t.poll(at("S", "Port", [market(5, "MarketBuy", 10)]));
-    expect(t.log.writes).toEqual([]);
+    // A suit loadout's plan is judged and written like any other, but it has no ship to bind.
+    expect(t.log.writes.length).toBeGreaterThan(0);
+    expect(t.log.writes.filter((w) => w.includes(":ship "))).toEqual([]);
   });
 
   it("leaves an open trade plan alone unless it is the note's", async () => {

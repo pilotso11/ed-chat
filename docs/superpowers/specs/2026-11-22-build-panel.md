@@ -908,8 +908,27 @@ for on foot. ED Chat pins each.
    - The grade before a module's first roll comes from the newest `Loadout` before it, G0 when
      that shows another blueprint or none. Only docking counts: landing has no outfitting.
 5. **ed-mcp: on foot.** The on-foot action kinds' journal state (`suits`, `locker`, `backpack`), kept
-   events, `build_plan` for a suit loadout with needs given by Claude. Release.
+   events, `build_plan` for a suit loadout with needs given by Claude. Release. **Built** (0.12.0),
+   without `build_plan` (Claude writes the plan, as for ship builds). As built: journal state
+   `suits`, `weapons` and `suit_loadouts` from the suit, weapon and loadout events, and `locker`
+   and `backpack` from `ShipLocker.json` and `Backpack.json` (their events repeat the whole list,
+   about 20 KB each, too often to keep); `journal_on_foot`; `PlanStore.setGearId()`; the
+   bartender events kept.
 6. **ED Chat: on-foot actions.** Their judges, the choice between two open plans, "equip to check".
+   **Built.** As built:
+   - Suit loadout plans are build plans: `isBuildPlan()` takes them, the finisher writes them, and
+     the panel's title names the loadout's suit. They have no ship, so every ship rule passes them.
+   - `buy_suit`, `buy_weapon`, `upgrade_suit`, `upgrade_weapon` by one event each;
+     `trade_resource` and `buy_resource` add up counts (both forms of `BuyMicroResources`: one
+     resource, or several under `Items`); `modify_suit`, `modify_weapon` and `collect_resource`
+     from the journal state. An upgrade the state shows already is done with no event.
+   - A done buy with a `gear` key gives its `SuitID` or `SuitModuleID` (`BuildJudgement.gearIds`),
+     which the finisher writes with `setGearId()` once. Until then the gear's upgrades and
+     modifications match nothing and show "after buy".
+   - "Equip to check": a modification still open after a docking at its stop since the plan
+     started (`BuildJudgement.visited`).
+   - Names (`foot.ts`): suits by game name or journal type, modifications by game name or symbol
+     (the symbols checked against the journals), resources by journal or game name.
 
 **Stop actions for every plan.** ed-mcp 0.11.0 gives the stops of trade routes, mission runs and
 any plan their own actions (`buy_commodity`, `sell_commodity`, `accept_mission`,
