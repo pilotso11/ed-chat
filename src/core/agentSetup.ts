@@ -12,6 +12,9 @@ export const LOCAL_COMMANDS = [
   "/version",
   "/claude",
   "/codex",
+  // Takes the activity note's plan off the panel; "all" skips what is left of the other plans too.
+  "/dismiss-plan",
+  "/dismiss-plan all",
   // Quit ED Chat, as the tray menu's Quit does.
   "/quit",
   "/exit",

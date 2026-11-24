@@ -66,7 +66,10 @@ Type `/new` in the chat to start a new conversation, and `/quit` or `/exit` to q
 of ED Chat, the assistant's CLI, the ed-mcp that ED Chat carries for the activity panel
 and the latest ed-mcp on npm, which `npx ed-mcp@latest` runs. Type `/claude` or `/codex`
 to switch between Claude Code and OpenAI's Codex; the tray menu's Assistant item does the
-same. None of these commands goes to the assistant.
+same. Type `/dismiss-plan` to take the current plan off the activity panel, and
+`/dismiss-plan all` to also put away the build, trade and mission plans that still have
+steps to do (see [Dismissing a plan](activity-panel.md#dismissing-a-plan)). None of these
+commands goes to the assistant.
 
 Each assistant keeps its own conversation. Switching back within 12 hours resumes it.
 With Codex chosen, your messages and tool results go to OpenAI instead of Anthropic.

@@ -89,6 +89,11 @@ export class HudFeed {
     this.lastError = m;
   }
 
+  /** Forgets plans kept for "Build complete", as after /dismiss-plan all: they leave the panel now. */
+  forget(ids: Iterable<string>): void {
+    for (const id of ids) this.builds.delete(id);
+  }
+
   async poll(): Promise<FeedData> {
     const [journal, statusText, navText, marketText, outfittingText, activity] = await Promise.all([
       this.stores.journal.state().catch((err: unknown) => (this.error("journal", err), null)),

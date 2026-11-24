@@ -1009,6 +1009,9 @@ describe("HudFeed bookmarks and a fresh Status.json", () => {
     // Finished at this docking: kept, for "Build complete".
     list = summary(1);
     expect((await feed.poll()).actionPlans).toHaveLength(1);
+    // Forgotten (/dismiss-plan all): gone at once, still docked.
+    feed.forget(["b"]);
+    expect((await feed.poll()).actionPlans).toEqual([]);
     // Undocked: gone.
     events = [
       ...events,

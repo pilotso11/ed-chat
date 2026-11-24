@@ -104,6 +104,7 @@ import {
   syncDirOf,
 } from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
+import { dismissPlan, dismissText } from "../core/hud/dismiss.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import {
   BOOKMARKS_PLAN,
@@ -1476,6 +1477,29 @@ async function main(): Promise<void> {
     return true;
   }
 
+  /** /dismiss-plan: clears the activity note, and with all skips the other plans' open actions. */
+  async function dismiss(all: boolean): Promise<boolean> {
+    if (!hudActivity || !hudPlans) {
+      flash("dismiss", "⚠ the panel's data is not open: turn the panel on first", 6_000);
+      return false;
+    }
+    try {
+      const d = await dismissPlan(
+        { activity: hudActivity, plans: hudPlans },
+        hudData?.actionPlans ?? [],
+        all,
+      );
+      hudFeed?.forget(d.skipped.map((p) => p.id));
+      log.log("info", `dismiss-plan${all ? " all" : ""}: ${dismissText(d, all)}`);
+      flash("dismiss", dismissText(d, all), 6_000);
+      void pollHud();
+      return true;
+    } catch (err) {
+      flash("dismiss", `⚠ /dismiss-plan: ${message(err)}`, 8_000);
+      return false;
+    }
+  }
+
   /** False when the command could not run; the chat then stays open. "quit" quits after it. */
   async function runLocal(command: LocalCommand): Promise<boolean | "quit"> {
     switch (command) {
@@ -1487,6 +1511,9 @@ async function main(): Promise<void> {
       case "/claude":
       case "/codex":
         return chooseAgent(command === "/claude" ? "claude" : "codex");
+      case "/dismiss-plan":
+      case "/dismiss-plan all":
+        return dismiss(command === "/dismiss-plan all");
       case "/quit":
       case "/exit":
         return "quit";

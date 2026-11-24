@@ -354,6 +354,21 @@ note, which the panel follows. Ctrl+Alt+Shift+P chooses a mode yourself: automat
 then each mode that is on in `hud.modes`, then off. Bookmarks are not a mode: they
 show with the modes above.
 
+## Dismissing a plan
+
+The panel can show a plan for two reasons: the activity note names it, or it is a
+build, trade or mission plan with stop actions still to do, at whose stop the ship is
+docked or landed. Type in the chat:
+
+- `/dismiss-plan` to clear the activity note. The note's plan leaves the panel. A
+  plan with open stop actions still shows at its stops.
+- `/dismiss-plan all` to also mark every open stop action of those plans skipped. They
+  leave the panel at once, even while docked at one of their stops.
+
+Neither deletes a plan: ask the assistant to reopen one (set its actions back to todo,
+or set the activity note again). Both commands run in ED Chat and do not go to the
+assistant.
+
 ## ed-mcp
 
 The panel uses the same activity note and plans as ed-mcp. ED Chat finds the

@@ -20,7 +20,16 @@ const home = path.join("C:", "Users", "cmdr");
 describe("local commands", () => {
   it("knows ED Chat's own commands", () => {
     for (const c of LOCAL_COMMANDS) expect(localCommand(c)).toBe(c);
-    expect(LOCAL_COMMANDS).toEqual(["/new", "/version", "/claude", "/codex", "/quit", "/exit"]);
+    expect(LOCAL_COMMANDS).toEqual([
+      "/new",
+      "/version",
+      "/claude",
+      "/codex",
+      "/dismiss-plan",
+      "/dismiss-plan all",
+      "/quit",
+      "/exit",
+    ]);
   });
 
   it("leaves everything else to the assistant", () => {
