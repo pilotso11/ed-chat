@@ -125,7 +125,7 @@ describe("the confirmations", () => {
       "✓ Route dismissed",
     );
     expect(planDismissedText({ name: "Krait", skipped: 0, cleared: false })).toBe(
-      "ⓘ Krait: nothing left to dismiss",
+      "✓ Krait dismissed",
     );
     const p = plan("r", [[]]);
     expect(stepDismissedText({ name: "R", stop: "Port", index: 0, plan: p })).toBe(

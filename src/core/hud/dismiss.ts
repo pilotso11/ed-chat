@@ -53,14 +53,14 @@ export async function dismissPlan(deps: DismissDeps, planId: string): Promise<Pl
   return { name: plan.name, skipped, cleared };
 }
 
+/** Said whatever was left: a finished plan shown as complete leaves the panel too. */
 export function planDismissedText(d: PlanDismissed): string {
-  if (d.skipped === 0 && !d.cleared) return `ⓘ ${d.name}: nothing left to dismiss`;
   return `✓ ${d.name} dismissed`;
 }
 
 export interface StepDismissed {
   name: string;
-  /** The stop skipped, as the panel names it; null when there was none to do. */
+  /** The stop skipped, by its label, else where it is; null when there was none to do. */
   stop: string | null;
   /** Its index in the plan; null with no stop. */
   index: number | null;
@@ -91,7 +91,12 @@ export async function dismissStep(
     { status: "skipped" },
     lapStart ? { lapStart } : undefined,
   );
-  return { name: plan.name, stop: stop.station ?? stop.body ?? stop.system, index, plan: now };
+  return {
+    name: plan.name,
+    stop: stop.label ?? stop.station ?? stop.body ?? stop.system,
+    index,
+    plan: now,
+  };
 }
 
 export function stepDismissedText(d: StepDismissed): string {

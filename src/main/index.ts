@@ -1521,11 +1521,14 @@ async function main(): Promise<void> {
       return false;
     }
     const deps = { activity: hudActivity, plans: hudPlans };
-    // The finisher waits while the actions are skipped, then forgets the plan's open stops, even
-    // when a write failed partway: a skipped stop is not taken as one just finished and marked
-    // done. Reopened or polled again, the plan is noted as on a first poll. The panel forgets a
-    // plan it kept as complete too.
-    const forget = [plan.id];
+    // No finisher acts on a poll started before the dismissal ends; the action finisher waits
+    // while the actions are skipped. It then forgets the plan's open stops after /dismiss-plan,
+    // or after a write that failed partway, so a skipped stop is not taken as one just finished
+    // and marked done: the plan is noted again as on a first poll. After /dismiss-step the stop
+    // is skipped, so the record (which also retries a failed stop write) is kept. The panel
+    // forgets a plan it kept as complete either way.
+    finishFrom = pollsStarted + 1;
+    let forget = what === "plan" ? [plan.id] : [];
     await actionStops.hold();
     try {
       let text: string;
@@ -1553,10 +1556,11 @@ async function main(): Promise<void> {
       flash("dismiss", text, 6_000);
       return true;
     } catch (err) {
+      forget = [plan.id];
       flash("dismiss", `⚠ ${command}: ${message(err)}`, 8_000);
       return false;
     } finally {
-      hudFeed?.forget(forget);
+      hudFeed?.forget([plan.id]);
       actionStops.release(forget);
       finishFrom = pollsStarted + 1;
       void pollHud(true);
