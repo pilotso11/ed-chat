@@ -1510,8 +1510,9 @@ async function main(): Promise<void> {
       const d = await dismissPlan({ activity: hudActivity, plans: hudPlans }, all);
       forget = d.forget;
       if (all) hudFeed?.forget(d.forget);
-      log.log("info", `dismiss-plan${all ? " all" : ""}: ${dismissText(d, all)}`);
-      flash("dismiss", dismissText(d, all), 6_000);
+      const text = dismissText(d, all);
+      log.log("info", `dismiss-plan${all ? " all" : ""}: ${text}`);
+      flash("dismiss", text, 6_000);
       return true;
     } catch (err) {
       flash("dismiss", `⚠ /dismiss-plan: ${message(err)}`, 8_000);

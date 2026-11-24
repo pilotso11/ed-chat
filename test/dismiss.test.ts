@@ -84,7 +84,8 @@ describe("dismissPlan", () => {
     const r = await dismissPlan(d, true);
     expect(r.skipped).toEqual(["b plan"]);
     expect(r.failed).toEqual([{ name: "a plan", error: "locked" }]);
-    expect(r.forget).toEqual(["a", "b"]);
+    // The plan that failed is not forgotten: the panel and the finisher keep it as it was.
+    expect(r.forget).toEqual(["b"]);
   });
 });
 
@@ -101,7 +102,10 @@ describe("dismissText", () => {
     expect(dismissText({ ...none, open: ["a", "b"] }, false)).toBe(
       "ⓘ no activity plan; a, b still show at their stops: /dismiss-plan all",
     );
-    expect(dismissText(none, false)).toBe("ⓘ no plan to dismiss");
+    expect(dismissText(none, false)).toBe(
+      "ⓘ no activity plan to dismiss (/dismiss-plan all also clears finished plans)",
+    );
+    expect(dismissText(none, true)).toBe("ⓘ no plan to dismiss");
     expect(
       dismissText(
         { ...none, cleared: true, skipped: ["b"], failed: [{ name: "a", error: "locked" }] },

@@ -16,7 +16,10 @@ export interface Dismissed {
   skipped: string[];
   /** The plans a write failed for, with the error (all only). */
   failed: { name: string; error: string }[];
-  /** Every plan with stop actions, open or not: the panel forgets the ones it keeps (all only). */
+  /**
+   * The plans the panel and the finisher forget (all only): every plan with stop actions, open or
+   * not, except those whose skip failed, which stay as they were.
+   */
   forget: string[];
 }
 
@@ -60,6 +63,7 @@ export async function dismissPlan(deps: DismissDeps, all: boolean): Promise<Dism
       if (wrote) result.skipped.push(plan.name);
     } catch (err) {
       result.failed.push({ name: summary.name, error: message(err) });
+      result.forget = result.forget.filter((id) => id !== summary.id);
     }
   }
   return result;
@@ -81,5 +85,7 @@ export function dismissText(d: Dismissed, all: boolean): string {
   }
   if (note) return `✓ ${note}`;
   // Only finished plans, which the panel may still show as complete: they leave it too.
-  return all && d.forget.length > 0 ? "✓ nothing left to skip" : "ⓘ no plan to dismiss";
+  if (all) return d.forget.length > 0 ? "✓ nothing left to skip" : "ⓘ no plan to dismiss";
+  // A finished plan the panel still shows as complete goes only with all.
+  return "ⓘ no activity plan to dismiss (/dismiss-plan all also clears finished plans)";
 }
