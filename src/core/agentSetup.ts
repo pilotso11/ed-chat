@@ -12,21 +12,18 @@ export const LOCAL_COMMANDS = [
   "/version",
   "/claude",
   "/codex",
-  // Takes the activity note's plan off the panel; "all" skips what is left of the other plans too.
+  // Skip what is left of the plan on the panel, or its current stop.
   "/dismiss-plan",
-  "/dismiss-plan all",
+  "/dismiss-step",
   // Quit ED Chat, as the tray menu's Quit does.
   "/quit",
   "/exit",
 ] as const;
 export type LocalCommand = (typeof LOCAL_COMMANDS)[number];
 
-/** One of ED Chat's commands, whatever its case or spacing ("/Dismiss-Plan  all"), on one line. */
+/** One of ED Chat's commands, whatever its case ("/Dismiss-Plan"). */
 export function localCommand(text: string): LocalCommand | null {
-  const t = text
-    .trim()
-    .replace(/[ \t]+/g, " ")
-    .toLowerCase();
+  const t = text.trim().toLowerCase();
   return (LOCAL_COMMANDS as readonly string[]).includes(t) ? (t as LocalCommand) : null;
 }
 

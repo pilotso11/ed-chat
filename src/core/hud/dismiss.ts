@@ -1,91 +1,97 @@
-import type { ActivityStore, PlanStore } from "ed-mcp/journal";
+import type { ActivityStore, Plan, PlanStore } from "ed-mcp/journal";
+import { currentStop } from "./panels.js";
 
-// /dismiss-plan: takes plans off the panel without asking the assistant.
+// /dismiss-plan and /dismiss-step: put away the plan on the panel, or its current stop, without
+// asking the assistant. Only that plan is changed. Actions are skipped, not deleted: the plan
+// stays, and the assistant can reopen it.
 
 export interface DismissDeps {
-  activity: Pick<ActivityStore, "clear">;
-  plans: Pick<PlanStore, "list" | "get" | "updateAction">;
-}
-
-export interface Dismissed {
-  /** Whether there was an activity note to clear. */
-  cleared: boolean;
-  /** The names of the plans with stop actions still to do (not all only). */
-  open: string[];
-  /** The names of the plans whose open actions were marked skipped (all only). */
-  skipped: string[];
-  /** The plans a write failed for, with the error (all only). */
-  failed: { name: string; error: string }[];
-  /**
-   * The plans the panel and the finisher forget (all only): every plan with stop actions, open or
-   * not, except those whose skip failed, which stay as they were.
-   */
-  forget: string[];
+  activity: Pick<ActivityStore, "get" | "clear">;
+  plans: Pick<PlanStore, "get" | "updateAction" | "updateStop">;
 }
 
 /** Whether an action is still to do: not done and not skipped. */
 const isOpen = (status: string | undefined) => status !== "done" && status !== "skipped";
 
-const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
-
-/**
- * Clears the activity note, so the panel shows no plan for it. With all, also marks skipped every
- * open stop action of every plan that has some (builds, trade runs, mission plans, wherever their
- * stops are), so docking at one of their stops does not bring them back. Skipped, not deleted:
- * the plans stay, and the assistant can reopen them. The plans are read from the store, not the
- * panel's last poll, so an action finished meanwhile is not marked skipped. A plan whose write
- * fails is reported, and the others go on.
- */
-export async function dismissPlan(deps: DismissDeps, all: boolean): Promise<Dismissed> {
-  const cleared = await deps.activity.clear();
-  const list = (await deps.plans.list()).filter((p) => (p.actions ?? 0) > 0);
-  const openList = list.filter((p) => p.actions! > (p.actions_done ?? 0));
-  const result: Dismissed = { cleared, open: [], skipped: [], failed: [], forget: [] };
-  if (!all) {
-    result.open = openList.map((p) => p.name);
-    return result;
-  }
-  result.forget = list.map((p) => p.id);
-  for (const summary of openList) {
-    try {
-      const plan = await deps.plans.get(summary.id);
-      let wrote = false;
-      for (const [index, stop] of plan.stops.entries())
-        for (const a of stop.actions ?? []) {
-          if (!isOpen(a.status)) continue;
-          await deps.plans.updateAction(
-            plan.id,
-            { stop: { index }, action: a.id },
-            { status: "skipped" },
-          );
-          wrote = true;
-        }
-      if (wrote) result.skipped.push(plan.name);
-    } catch (err) {
-      result.failed.push({ name: summary.name, error: message(err) });
-      result.forget = result.forget.filter((id) => id !== summary.id);
+/** Marks skipped the open actions of the given stops of a plan, as the store has it now. */
+async function skipActions(deps: DismissDeps, plan: Plan, stops: number[]): Promise<number> {
+  let n = 0;
+  for (const index of stops)
+    for (const a of plan.stops[index]?.actions ?? []) {
+      if (!isOpen(a.status)) continue;
+      await deps.plans.updateAction(
+        plan.id,
+        { stop: { index }, action: a.id },
+        { status: "skipped" },
+      );
+      n++;
     }
-  }
-  return result;
+  return n;
 }
 
-/** The confirmation line for a dismissal. */
-export function dismissText(d: Dismissed, all: boolean): string {
-  const note = d.cleared ? "plan dismissed" : null;
-  if (d.failed.length > 0) {
-    const done = d.skipped.length > 0 ? `; skipped what was left of ${d.skipped.join(", ")}` : "";
-    const failed = d.failed.map((f) => `${f.name} (${f.error})`).join(", ");
-    return `⚠ ${note ?? "no activity plan"}${done}; could not skip all that was left of ${failed}`;
-  }
-  if (all && d.skipped.length > 0)
-    return `✓ ${note ?? "no activity plan"}; skipped what was left of ${d.skipped.join(", ")}`;
-  if (!all && d.open.length > 0) {
-    const still = `${d.open.join(", ")} still ${d.open.length === 1 ? "shows" : "show"} at ${d.open.length === 1 ? "its" : "their"} stops: /dismiss-plan all`;
-    return note ? `✓ ${note}; ${still}` : `ⓘ no activity plan; ${still}`;
-  }
-  if (note) return `✓ ${note}`;
-  // Only finished plans, which the panel may still show as complete: they leave it too.
-  if (all) return d.forget.length > 0 ? "✓ nothing left to skip" : "ⓘ no plan to dismiss";
-  // A finished plan the panel still shows as complete goes only with all.
-  return "ⓘ no activity plan to dismiss (/dismiss-plan all also clears finished plans)";
+export interface PlanDismissed {
+  name: string;
+  /** Open actions marked skipped. */
+  skipped: number;
+  /** Whether the activity note named this plan, and was cleared. */
+  cleared: boolean;
+}
+
+/**
+ * /dismiss-plan: marks skipped every open action of the plan on the panel, read fresh from the
+ * store, and clears the activity note when it names that plan. Other plans are left alone.
+ */
+export async function dismissPlan(deps: DismissDeps, planId: string): Promise<PlanDismissed> {
+  const plan = await deps.plans.get(planId);
+  const skipped = await skipActions(
+    deps,
+    plan,
+    plan.stops.map((_, i) => i),
+  );
+  const note = await deps.activity.get();
+  const cleared = note?.plan_id === planId ? await deps.activity.clear() : false;
+  return { name: plan.name, skipped, cleared };
+}
+
+export function planDismissedText(d: PlanDismissed): string {
+  if (d.skipped === 0 && !d.cleared) return `ⓘ ${d.name}: nothing left to dismiss`;
+  return `✓ ${d.name} dismissed`;
+}
+
+export interface StepDismissed {
+  name: string;
+  /** The stop skipped, as the panel names it; null when there was none to do. */
+  stop: string | null;
+  /** The plan after the write. */
+  plan: Plan;
+}
+
+/**
+ * /dismiss-step: marks the plan's current stop skipped, with its open actions, so the plan moves
+ * on to its next stop. current is the stop the panel shows as current, when it gives one.
+ */
+export async function dismissStep(
+  deps: DismissDeps,
+  planId: string,
+  current: number | null | undefined,
+  lapStart: string | null,
+): Promise<StepDismissed> {
+  const plan = await deps.plans.get(planId);
+  // The panel's stop, if still to do in the plan as it is now; else the plan's own current one.
+  const shown = current ?? null;
+  const index = shown !== null && plan.stops[shown]?.status === "todo" ? shown : currentStop(plan);
+  if (index === null) return { name: plan.name, stop: null, plan };
+  const stop = plan.stops[index]!;
+  await skipActions(deps, plan, [index]);
+  const now = await deps.plans.updateStop(
+    plan.id,
+    { index },
+    { status: "skipped" },
+    lapStart ? { lapStart } : undefined,
+  );
+  return { name: plan.name, stop: stop.station ?? stop.body ?? stop.system, plan: now };
+}
+
+export function stepDismissedText(d: StepDismissed): string {
+  return d.stop === null ? `ⓘ ${d.name}: no stop left to do` : `✓ skipped ${d.stop}`;
 }

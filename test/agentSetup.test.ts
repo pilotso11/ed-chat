@@ -26,14 +26,14 @@ describe("local commands", () => {
       "/claude",
       "/codex",
       "/dismiss-plan",
-      "/dismiss-plan all",
+      "/dismiss-step",
       "/quit",
       "/exit",
     ]);
   });
 
-  it("takes a command whatever its case or spacing", () => {
-    expect(localCommand("/Dismiss-Plan  ALL")).toBe("/dismiss-plan all");
+  it("takes a command whatever its case", () => {
+    expect(localCommand("/Dismiss-Plan")).toBe("/dismiss-plan");
     expect(localCommand(" /new ")).toBe("/new");
   });
 
@@ -41,7 +41,6 @@ describe("local commands", () => {
     expect(localCommand("/help")).toBeNull();
     expect(localCommand("new")).toBeNull();
     expect(localCommand("/new please")).toBeNull();
-    expect(localCommand("/dismiss-plan\nall")).toBeNull();
   });
 });
 

@@ -342,7 +342,7 @@ describe("ActionFinisher", () => {
     expect(t.log.writes).toEqual(["krait:stop 1:done"]);
   });
 
-  it("marks no stop that /dismiss-plan all skipped, while held or after", async () => {
+  it("marks no stop that /dismiss-plan skipped, while held or after", async () => {
     const t = setup();
     await t.poll(journal([]));
     await t.finisher.hold();

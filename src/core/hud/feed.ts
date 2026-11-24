@@ -93,7 +93,7 @@ export class HudFeed {
   }
 
   /**
-   * Forgets plans kept for "Build complete", as after /dismiss-plan all: they leave the panel now.
+   * Forgets plans kept for "Build complete", as after /dismiss-plan: they leave the panel now.
    * A poll already running when this is called keeps none of them.
    */
   forget(ids: Iterable<string>): void {

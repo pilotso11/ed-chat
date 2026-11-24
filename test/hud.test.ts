@@ -1009,7 +1009,7 @@ describe("HudFeed bookmarks and a fresh Status.json", () => {
     // Finished at this docking: kept, for "Build complete".
     list = summary(1);
     expect((await feed.poll()).actionPlans).toHaveLength(1);
-    // Forgotten (/dismiss-plan all): gone at once, still docked.
+    // Forgotten (/dismiss-plan): gone at once, still docked.
     feed.forget(["b"]);
     expect((await feed.poll()).actionPlans).toEqual([]);
     // Undocked: gone.
@@ -1057,7 +1057,7 @@ describe("HudFeed bookmarks and a fresh Status.json", () => {
         plans: {
           get: async (id: string) => {
             if (id !== "b") throw new Error(`Plan "${id}" not found`);
-            // /dismiss-plan all runs while this poll reads the plan.
+            // /dismiss-plan runs while this poll reads the plan.
             if (!open) feed!.forget(["b"]);
             return { id, updated_at: open ? "u0" : "u1", stops: [] };
           },

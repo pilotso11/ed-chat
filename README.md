@@ -84,7 +84,8 @@ Then:
 | Ctrl+Alt+P | Show or hide the activity panel |
 
 Type `/new` for a new conversation, `/codex` or `/claude` to switch assistant,
-`/dismiss-plan` to take the current plan off the activity panel, and `/quit` to quit.
+`/dismiss-plan` or `/dismiss-step` to skip the rest of the panel's plan or its current
+stop, and `/quit` to quit.
 
 ## Documentation
 

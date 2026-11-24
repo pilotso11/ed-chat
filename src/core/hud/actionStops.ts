@@ -139,7 +139,7 @@ export class ActionFinisher {
   }
 
   /**
-   * Stops finishing until release(), once the run going on ends: as /dismiss-plan all skips open
+   * Stops finishing until release(), once the run going on ends: as /dismiss-plan skips open
    * actions, a stop whose actions it skipped must not be taken as one just finished and marked done.
    */
   async hold(): Promise<void> {

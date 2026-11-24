@@ -356,19 +356,15 @@ show with the modes above.
 
 ## Dismissing a plan
 
-The panel can show a plan for two reasons: the activity note names it, or it is a
-build, trade or mission plan with stop actions still to do, at whose stop the ship is
-docked or landed. Type in the chat:
+Two chat commands act on the plan the panel shows now, and on no other plan:
 
-- `/dismiss-plan` to clear the activity note. The note's plan leaves the panel. A
-  plan with open stop actions still shows at its stops; the confirmation names those
-  plans.
-- `/dismiss-plan all` to also mark skipped every open stop action of every plan that
-  has some: all builds, trade runs and mission plans, not only the one on the panel.
-  They leave the panel at once, even while docked at one of their stops. The
-  confirmation names each plan it skipped.
+- `/dismiss-plan` marks skipped every open stop action of that plan, and clears the
+  activity note when the note names it. The plan leaves the panel, even while docked at
+  one of its stops.
+- `/dismiss-step` marks the current stop skipped, with its open actions, and copies the
+  next stop's system. A stop skipped is not counted as done.
 
-Neither deletes a plan: ask the assistant to reopen one (set its actions back to todo,
+Neither deletes the plan: ask the assistant to reopen it (set its actions back to todo,
 or set the activity note again). Both commands run in ED Chat and do not go to the
 assistant.
 

@@ -104,7 +104,12 @@ import {
   syncDirOf,
 } from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
-import { dismissPlan, dismissText } from "../core/hud/dismiss.js";
+import {
+  dismissPlan,
+  dismissStep,
+  planDismissedText,
+  stepDismissedText,
+} from "../core/hud/dismiss.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import {
   BOOKMARKS_PLAN,
@@ -644,7 +649,7 @@ async function main(): Promise<void> {
   let savedBookmarks: SavedBookmarks | null = null;
   // Polls started so far, which dates a save against the polls around it.
   let pollsStarted = 0;
-  // The first poll whose data the finishers may act on: one started before /dismiss-plan all
+  // The first poll whose data the finishers may act on: one started before /dismiss-plan or /dismiss-step
   // ended may hold the plans it skipped as they were.
   let finishFrom = 0;
   async function pollHud(again = false): Promise<void> {
@@ -1496,32 +1501,59 @@ async function main(): Promise<void> {
     return true;
   }
 
-  /** /dismiss-plan: clears the activity note, and with all skips the other plans' open actions. */
-  async function dismiss(all: boolean): Promise<boolean> {
+  /**
+   * /dismiss-plan and /dismiss-step: skip what is left of the plan on the panel, or its current
+   * stop. Only that plan changes.
+   */
+  async function dismiss(what: "plan" | "step"): Promise<boolean> {
+    const command = `/dismiss-${what}`;
     if (!hudActivity || !hudPlans) {
       flash("dismiss", "⚠ the panel's data is not open: turn the panel on first", 6_000);
       return false;
     }
+    const plan = followedPlan();
+    if (!plan) {
+      flash("dismiss", "ⓘ no plan on the panel", 4_000);
+      return false;
+    }
+    const deps = { activity: hudActivity, plans: hudPlans };
     let forget: string[] = [];
+    // The finisher waits while the actions are skipped, so a skipped stop is not taken as one
+    // just finished and marked done.
+    await actionStops.hold();
     try {
-      // With all, the finisher waits while the actions are skipped, then forgets those plans'
-      // open stops, so a skipped stop is not taken as one just finished.
-      if (all) await actionStops.hold();
-      const d = await dismissPlan({ activity: hudActivity, plans: hudPlans }, all);
-      forget = d.forget;
-      if (all) hudFeed?.forget(d.forget);
-      const text = dismissText(d, all);
-      log.log("info", `dismiss-plan${all ? " all" : ""}: ${text}`);
+      let text: string;
+      if (what === "plan") {
+        const d = await dismissPlan(deps, plan.id);
+        // Its open stops are forgotten too: reopened later, it is noted as on a first poll.
+        forget = [plan.id];
+        hudFeed?.forget(forget);
+        text = planDismissedText(d);
+      } else {
+        const follow = lastHudView?.follow;
+        const lapStart = await hudJournal?.newestEventAt().catch(() => null);
+        const d = await dismissStep(
+          deps,
+          plan.id,
+          follow?.planId === plan.id ? follow.stop : undefined,
+          lapStart ?? null,
+        );
+        text = stepDismissedText(d);
+        const system = d.stop !== null ? currentSystem(d.plan) : null;
+        if (system) {
+          clipboard.writeText(system);
+          text += ` · 📋 copied ${system}`;
+        }
+      }
+      log.log("info", `${command}: ${text}`);
       flash("dismiss", text, 6_000);
       return true;
     } catch (err) {
-      flash("dismiss", `⚠ /dismiss-plan: ${message(err)}`, 8_000);
+      flash("dismiss", `⚠ ${command}: ${message(err)}`, 8_000);
       return false;
     } finally {
-      if (all) {
-        actionStops.release(forget);
-        finishFrom = pollsStarted + 1;
-      }
+      actionStops.release(forget);
+      finishFrom = pollsStarted + 1;
       void pollHud(true);
     }
   }
@@ -1538,8 +1570,8 @@ async function main(): Promise<void> {
       case "/codex":
         return chooseAgent(command === "/claude" ? "claude" : "codex");
       case "/dismiss-plan":
-      case "/dismiss-plan all":
-        return dismiss(command === "/dismiss-plan all");
+      case "/dismiss-step":
+        return dismiss(command === "/dismiss-plan" ? "plan" : "step");
       case "/quit":
       case "/exit":
         return "quit";

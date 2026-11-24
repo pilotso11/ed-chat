@@ -1,119 +1,133 @@
 import type { Plan } from "ed-mcp/journal";
 import { describe, expect, it, vi } from "vitest";
-import { dismissPlan, dismissText, type Dismissed } from "../src/core/hud/dismiss.js";
+import {
+  dismissPlan,
+  dismissStep,
+  planDismissedText,
+  stepDismissedText,
+} from "../src/core/hud/dismiss.js";
 
-const plan = (id: string, statuses: string[][]): Plan =>
+/** A plan with a stop per list of action statuses; a stop with none has no actions. */
+const plan = (id: string, statuses: string[][], stopStatus: string[] = []): Plan =>
   ({
     id,
     name: `${id} plan`,
     items: [],
     stops: statuses.map((s, i) => ({
-      system: "S",
+      system: `Sys${i}`,
       station: `P${i}`,
       kind: "shop",
-      status: "todo",
-      actions: s.map((status, j) => ({ id: `a${i}${j}`, kind: "buy_module", label: "x", status })),
+      status: stopStatus[i] ?? "todo",
+      ...(s.length > 0 && {
+        actions: s.map((status, j) => ({
+          id: `a${i}${j}`,
+          kind: "buy_module",
+          label: "x",
+          status,
+        })),
+      }),
     })),
     created_at: "2026-11-24T00:00:00Z",
     updated_at: "2026-11-24T00:00:00Z",
   }) as unknown as Plan;
 
-/** The store: each plan's list summary counts its actions, done or skipped ones as done. */
-const deps = (plans: Plan[], cleared = true) => {
-  const summary = (p: Plan) => {
-    const all = p.stops.flatMap((s) => s.actions ?? []);
-    return {
-      id: p.id,
-      name: p.name,
-      items: 0,
-      done: 0,
-      ...(all.length > 0
-        ? {
-            actions: all.length,
-            actions_done: all.filter((a) => a.status === "done" || a.status === "skipped").length,
-          }
-        : {}),
-      next_stop: null,
-      updated_at: p.updated_at,
-    };
-  };
-  return {
-    activity: { clear: vi.fn(async () => cleared) },
-    plans: {
-      list: vi.fn(async () => plans.map(summary)),
-      get: vi.fn(async (id: string) => plans.find((p) => p.id === id)!),
-      updateAction: vi.fn(async () => ({}) as Plan),
-    },
-  };
-};
-
-const none: Dismissed = { cleared: false, open: [], skipped: [], failed: [], forget: [] };
+const deps = (p: Plan, noteFor: string | null = p.id) => ({
+  activity: {
+    get: vi.fn(async () => (noteFor ? { kind: "trading", summary: "s", plan_id: noteFor } : null)),
+    clear: vi.fn(async () => true),
+  },
+  plans: {
+    get: vi.fn(async () => structuredClone(p)),
+    updateAction: vi.fn(async () => p),
+    updateStop: vi.fn(async (_id: string, ref: { index?: number }) => {
+      const now = structuredClone(p);
+      now.stops[ref.index!]!.status = "skipped";
+      return now;
+    }),
+  },
+});
 
 describe("dismissPlan", () => {
-  it("clears the activity note and leaves the plans alone, naming the open ones", async () => {
-    const d = deps([plan("krait", [["todo"]]), plan("route", []), plan("old", [["done"]])]);
-    const r = await dismissPlan(d, false);
-    expect(r).toEqual({ ...none, cleared: true, open: ["krait plan"] });
-    expect(d.activity.clear).toHaveBeenCalledOnce();
-    expect(d.plans.updateAction).not.toHaveBeenCalled();
-  });
-
-  it("with all, skips every open action, as the store has it, and leaves done and skipped ones", async () => {
-    const krait = plan("krait", [["done", "todo"], ["skipped"], ["in_progress"]]);
-    const finished = plan("old", [["done"]]);
-    const d = deps([krait, finished, plan("route", [])]);
-    // The store's copy is read: an action done since the list is not marked skipped.
-    const fresh = plan("krait", [["done", "done"], ["skipped"], ["in_progress"]]);
-    d.plans.get.mockImplementation(async (id) => (id === "krait" ? fresh : finished));
-    const r = await dismissPlan(d, true);
-    expect(r).toEqual({
-      ...none,
+  it("skips every open action of the plan and clears the note naming it", async () => {
+    const p = plan("krait", [["done", "todo"], ["skipped"], ["in_progress"]]);
+    const d = deps(p);
+    expect(await dismissPlan(d as never, "krait")).toEqual({
+      name: "krait plan",
+      skipped: 2,
       cleared: true,
-      skipped: ["krait plan"],
-      forget: ["krait", "old"],
     });
-    expect(d.plans.get.mock.calls).toEqual([["krait"]]);
     expect(d.plans.updateAction.mock.calls).toEqual([
+      ["krait", { stop: { index: 0 }, action: "a01" }, { status: "skipped" }],
       ["krait", { stop: { index: 2 }, action: "a20" }, { status: "skipped" }],
     ]);
+    expect(d.plans.updateStop).not.toHaveBeenCalled();
   });
 
-  it("goes on after a plan whose write fails, and says which", async () => {
-    const d = deps([plan("a", [["todo"]]), plan("b", [["todo"]])]);
-    d.plans.updateAction.mockRejectedValueOnce(new Error("locked"));
-    const r = await dismissPlan(d, true);
-    expect(r.skipped).toEqual(["b plan"]);
-    expect(r.failed).toEqual([{ name: "a plan", error: "locked" }]);
-    // The plan that failed is not forgotten: the panel and the finisher keep it as it was.
-    expect(r.forget).toEqual(["b"]);
+  it("leaves a note that names another plan", async () => {
+    const d = deps(plan("krait", [["todo"]]), "route");
+    expect((await dismissPlan(d as never, "krait")).cleared).toBe(false);
+    expect(d.activity.clear).not.toHaveBeenCalled();
+  });
+
+  it("clears the note of a route plan with no actions", async () => {
+    const d = deps(plan("route", [[], []]));
+    expect(await dismissPlan(d as never, "route")).toEqual({
+      name: "route plan",
+      skipped: 0,
+      cleared: true,
+    });
   });
 });
 
-describe("dismissText", () => {
-  it("says what was dismissed and what is left", () => {
-    expect(dismissText({ ...none, cleared: true, skipped: ["krait plan"] }, true)).toBe(
-      "✓ plan dismissed; skipped what was left of krait plan",
+describe("dismissStep", () => {
+  it("skips the stop the panel shows, with its open actions", async () => {
+    const p = plan("krait", [["todo"], ["done", "todo"], []]);
+    const d = deps(p);
+    const r = await dismissStep(d as never, "krait", 1, "2026-11-24T01:00:00Z");
+    expect(r.stop).toBe("P1");
+    expect(d.plans.updateAction.mock.calls).toEqual([
+      ["krait", { stop: { index: 1 }, action: "a11" }, { status: "skipped" }],
+    ]);
+    expect(d.plans.updateStop.mock.calls).toEqual([
+      ["krait", { index: 1 }, { status: "skipped" }, { lapStart: "2026-11-24T01:00:00Z" }],
+    ]);
+    expect(r.plan.stops[1]!.status).toBe("skipped");
+  });
+
+  it("takes the plan's current stop when the panel gives none, or one no longer to do", async () => {
+    const p = plan("route", [[], [], []], ["done"]);
+    const d = deps(p);
+    expect((await dismissStep(d as never, "route", undefined, null)).stop).toBe("P1");
+    expect((await dismissStep(d as never, "route", 0, null)).stop).toBe("P1");
+    expect(d.plans.updateStop.mock.calls[0]).toEqual([
+      "route",
+      { index: 1 },
+      { status: "skipped" },
+      undefined,
+    ]);
+  });
+
+  it("says so when no stop is left", async () => {
+    const d = deps(plan("route", [[]], ["done"]));
+    const r = await dismissStep(d as never, "route", undefined, null);
+    expect(r.stop).toBeNull();
+    expect(d.plans.updateStop).not.toHaveBeenCalled();
+  });
+});
+
+describe("the confirmations", () => {
+  it("say what was dismissed", () => {
+    expect(planDismissedText({ name: "Krait", skipped: 2, cleared: false })).toBe(
+      "✓ Krait dismissed",
     );
-    expect(dismissText({ ...none, cleared: true }, true)).toBe("✓ plan dismissed");
-    expect(dismissText({ ...none, cleared: true }, false)).toBe("✓ plan dismissed");
-    expect(dismissText({ ...none, cleared: true, open: ["krait plan"] }, false)).toBe(
-      "✓ plan dismissed; krait plan still shows at its stops: /dismiss-plan all",
+    expect(planDismissedText({ name: "Route", skipped: 0, cleared: true })).toBe(
+      "✓ Route dismissed",
     );
-    expect(dismissText({ ...none, open: ["a", "b"] }, false)).toBe(
-      "ⓘ no activity plan; a, b still show at their stops: /dismiss-plan all",
+    expect(planDismissedText({ name: "Krait", skipped: 0, cleared: false })).toBe(
+      "ⓘ Krait: nothing left to dismiss",
     );
-    expect(dismissText(none, false)).toBe(
-      "ⓘ no activity plan to dismiss (/dismiss-plan all also clears finished plans)",
-    );
-    expect(dismissText(none, true)).toBe("ⓘ no plan to dismiss");
-    expect(
-      dismissText(
-        { ...none, cleared: true, skipped: ["b"], failed: [{ name: "a", error: "locked" }] },
-        true,
-      ),
-    ).toBe(
-      "⚠ plan dismissed; skipped what was left of b; could not skip all that was left of a (locked)",
-    );
-    expect(dismissText({ ...none, forget: ["old"] }, true)).toBe("✓ nothing left to skip");
+    const p = plan("r", [[]]);
+    expect(stepDismissedText({ name: "R", stop: "Port", plan: p })).toBe("✓ skipped Port");
+    expect(stepDismissedText({ name: "R", stop: null, plan: p })).toBe("ⓘ R: no stop left to do");
   });
 });
