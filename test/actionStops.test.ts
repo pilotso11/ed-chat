@@ -309,13 +309,33 @@ describe("ActionFinisher", () => {
     expect(t.log.copies).toEqual([]);
   });
 
-  it("does not mark done a stop whose actions were all skipped, as by /dismiss-plan all", async () => {
+  it("marks a stop whose last open action was skipped, as finished", async () => {
     const t = setup();
     await t.poll(journal([]));
     const p = structuredClone(t.store.get("krait")!);
     p.stops[1]!.actions![0]!.status = "skipped";
     p.updated_at = iso(500);
     t.add(p);
+    await t.poll(journal([]));
+    expect(t.log.writes).toEqual(["krait:stop 1:done"]);
+  });
+
+  it("marks no stop that /dismiss-plan all skipped, while held or after", async () => {
+    const t = setup();
+    await t.poll(journal([]));
+    await t.finisher.hold();
+    const p = structuredClone(t.store.get("krait")!);
+    for (const s of p.stops) for (const a of s.actions ?? []) a.status = "skipped";
+    p.updated_at = iso(500);
+    t.add(p);
+    // Held: nothing runs.
+    await t.poll(journal([]));
+    t.finisher.release(["krait"]);
+    // Reopened later: noted as on a first poll, the skipped stops left alone.
+    const again = structuredClone(t.store.get("krait")!);
+    again.stops[0]!.actions![0]!.status = "todo";
+    again.updated_at = iso(600);
+    t.add(again);
     await t.poll(journal([]));
     expect(t.log.writes).toEqual([]);
   });

@@ -114,6 +114,8 @@ export class ActionFinisher {
   private lastError: string | null = null;
   /** The finish() running now: polls come each second, and a write can take longer. */
   private running: Promise<void> | null = null;
+  /** Set by hold(): no finish() runs until release(). */
+  private held = false;
 
   constructor(private readonly deps: ActionStopDeps) {}
 
@@ -128,12 +130,30 @@ export class ActionFinisher {
    * run's trades. `on` leaves out a plan whose panel is turned off.
    */
   finish(input: FinishInput): Promise<void> {
-    if (this.running) return Promise.resolve();
+    if (this.running || this.held) return Promise.resolve();
     const run = this.run(input).finally(() => {
       this.running = null;
     });
     this.running = run;
     return run;
+  }
+
+  /**
+   * Stops finishing until release(), once the run going on ends: as /dismiss-plan all skips open
+   * actions, a stop whose actions it skipped must not be taken as one just finished and marked done.
+   */
+  async hold(): Promise<void> {
+    this.held = true;
+    await this.running;
+  }
+
+  /**
+   * Finishes again, with no record of these plans' open stops: a plan reopened later is noted as
+   * on a first poll, so the stops dismissed are not marked done.
+   */
+  release(forget: Iterable<string>): void {
+    for (const id of forget) this.open.delete(id);
+    this.held = false;
   }
 
   private async run(input: FinishInput): Promise<void> {
@@ -238,9 +258,7 @@ export class ActionFinisher {
       const s = now.stops[i]!;
       const id = stopId(now, i);
       const changed = before?.has(id) || (wrote.has(id) && openBefore.has(id));
-      // A stop whose actions were all skipped (as by /dismiss-plan all) was not done.
-      const did = !!s.actions?.some((a) => a.status === "done");
-      return changed && !open.has(id) && s.status === "todo" && did;
+      return changed && !open.has(id) && s.status === "todo" && !!s.actions?.length;
     });
     // The record is updated only once the stops are marked: a stop whose write fails stays in it
     // as open, so the next poll sees the change again and tries once more.

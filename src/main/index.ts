@@ -636,16 +636,17 @@ async function main(): Promise<void> {
   }
 
   let hudPolling = false;
-  // A poll asked for while one runs (as after /dismiss-plan): it runs once that one ends.
+  // A poll asked for while one runs (again, as after /dismiss-plan): it runs once that one ends.
+  // The timer's polls are not: they would run back to back on a slow poll.
   let hudPollAgain = false;
   let lastSystem: string | null = null;
   // The bookmarks plan a key press saved; a poll that started before it read the plan without it.
   let savedBookmarks: SavedBookmarks | null = null;
   // Polls started so far, which dates a save against the polls around it.
   let pollsStarted = 0;
-  async function pollHud(): Promise<void> {
+  async function pollHud(again = false): Promise<void> {
     if (hudPolling) {
-      hudPollAgain = true;
+      if (again) hudPollAgain = true;
       return;
     }
     if (!hudFeed || !settings.hud.enabled) return;
@@ -681,7 +682,7 @@ async function main(): Promise<void> {
       hudPolling = false;
       if (hudPollAgain) {
         hudPollAgain = false;
-        void pollHud();
+        void pollHud(true);
       }
     }
   }
@@ -1424,7 +1425,10 @@ async function main(): Promise<void> {
     dispatch({ type: "localReply", text: `Switched to ${agent.name}.` });
     scheduleFade();
     log.log("info", `switched to ${agent.cli}`);
-    void openHudFeed().then(pollHud, (err) => log.log("warn", `panel: ${message(err)}`));
+    void openHudFeed().then(
+      () => pollHud(),
+      (err) => log.log("warn", `panel: ${message(err)}`),
+    );
     if (!agentStarted) return;
     await askPermissionMode();
     const cmd = agentCommand(settings);
@@ -1493,16 +1497,22 @@ async function main(): Promise<void> {
       flash("dismiss", "⚠ the panel's data is not open: turn the panel on first", 6_000);
       return false;
     }
+    // The finisher waits while the actions are skipped, then forgets those plans' open stops.
+    await actionStops.hold();
+    let forget: string[] = [];
     try {
       const d = await dismissPlan({ activity: hudActivity, plans: hudPlans }, all);
+      forget = d.forget;
       hudFeed?.forget(d.forget);
       log.log("info", `dismiss-plan${all ? " all" : ""}: ${dismissText(d, all)}`);
       flash("dismiss", dismissText(d, all), 6_000);
-      void pollHud();
       return true;
     } catch (err) {
       flash("dismiss", `⚠ /dismiss-plan: ${message(err)}`, 8_000);
       return false;
+    } finally {
+      actionStops.release(forget);
+      void pollHud(true);
     }
   }
 
@@ -1840,7 +1850,10 @@ async function main(): Promise<void> {
     writeState();
     const change = settingsChange(old, settings, agentId, os.homedir());
     if (change.reopenFeed) {
-      void openHudFeed().then(pollHud, (err) => log.log("warn", `panel: ${message(err)}`));
+      void openHudFeed().then(
+        () => pollHud(),
+        (err) => log.log("warn", `panel: ${message(err)}`),
+      );
     }
     if (change.switchAgent) void switchAgent(settings.agent);
     else if (change.agentSettings) {
