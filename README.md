@@ -74,6 +74,11 @@ Then:
    icon, an orange chat bubble, has the menu.
 3. **Ask.** In the game, press **Ctrl+Alt+Enter**, type, press **Enter**. **Ctrl+\`** shows
    the last reply, then the whole reply, then the chat.
+4. **Change a setting.** Open **Settings…** from the tray menu, or type `/settings`. Every
+   setting is there by section, with what it does. Click a hotkey and press the new keys.
+   **Save** applies the changes at once, with no restart.
+
+   ![The settings window, with the General and Style sections](docs/images/settings.png)
 
 | Key | Action |
 | --- | --- |
@@ -92,7 +97,7 @@ stop, `/settings` to change the settings, and `/quit` to quit.
 - [Using ED Chat](docs/using.md): the overlay's keys and commands, setting up ed-mcp, permissions,
   other model providers and troubleshooting.
 - [The activity panel](docs/activity-panel.md): what each mode shows, how, and its keys.
-- [Settings](docs/settings.md): every setting in `settings.json`.
+- [Settings](docs/settings.md): the settings window, and every setting in `settings.json`.
 
 ## Contributing
 
