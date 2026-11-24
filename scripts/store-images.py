@@ -69,13 +69,16 @@ def font(name, size):
 
 def space_bg(w, h, seed):
     """A dark navy gradient, a seeded star field and a faint orange glow low left."""
-    grad = Image.new("RGB", (w, h))
+    # The gradient is smooth, so it is drawn at 1/8 size and scaled up.
+    sw, sh = w // 8, h // 8
+    grad = Image.new("RGB", (sw, sh))
     px = grad.load()
-    for y in range(h):
-        for x in range(w):
-            dx, dy = (x - w * 0.7) / w, (y - h * 0.45) / h
+    for y in range(sh):
+        for x in range(sw):
+            dx, dy = (x - sw * 0.7) / sw, (y - sh * 0.45) / sh
             d = min(1.0, (dx * dx + dy * dy) ** 0.5 * 1.6)
             px[x, y] = (int(22 - 14 * d), int(28 - 18 * d), int(52 - 34 * d))
+    grad = grad.resize((w, h), Image.BILINEAR)
     rnd = random.Random(seed)
     dr = ImageDraw.Draw(grad)
     for _ in range(w * h // 3000):
@@ -93,12 +96,13 @@ def wrap(draw, text, fnt, width):
     lines, line = [], ""
     for word in text.split():
         t = (line + " " + word).strip()
-        if draw.textlength(t, font=fnt) <= width:
+        if draw.textlength(t, font=fnt) <= width or not line:
             line = t
         else:
             lines.append(line)
             line = word
-    lines.append(line)
+    if line:
+        lines.append(line)
     return lines
 
 
@@ -166,7 +170,9 @@ def reply_card(s=1.0, status=True):
     fs = font("segoeui.ttf", int(22 * s))
     pad, lh, gap = int(18 * s), int(38 * s), int(12 * s)
     d0 = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    w = int(max(d0.textlength(t, font=f) for t in ANSWER) + 2 * pad)
+    widths = [d0.textlength(t, font=f) for t in ANSWER + ["› " + QUESTION]]
+    widths += [d0.textlength(s_ + " · " + st, font=f) + 70 * s for _, s_, st in CHIPS]
+    w = int(max(widths) + 2 * pad)
     qh = lh + 2 * pad
     ch = 2 * pad + lh * len(ANSWER) + int(34 * s) + int(48 * s) * len(CHIPS)
     sh = int(52 * s)
@@ -207,7 +213,11 @@ def reply_card(s=1.0, status=True):
 
 
 def in_game_slide():
-    img = Image.open(ROOT / "docs" / "store" / "in-game.jpg").convert("RGBA").resize((W, H), Image.LANCZOS)
+    img = Image.open(ROOT / "docs" / "store" / "in-game.jpg").convert("RGBA")
+    # Centre-crop to 16:9 first, so a capture that is not quite 16:9 is not stretched.
+    cw, ch = min(img.width, img.height * W // H), min(img.height, img.width * H // W)
+    left, top = (img.width - cw) // 2, (img.height - ch) // 2
+    img = img.crop((left, top, left + cw, top + ch)).resize((W, H), Image.LANCZOS)
     text_block(img, 90, 640, "ED Chat for Elite Dangerous",
                "An AI assistant and live panels on top of your game",
                "Exobiology values on the right, route chips from the assistant below.",

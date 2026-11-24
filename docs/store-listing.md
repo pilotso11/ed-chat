@@ -99,7 +99,7 @@ Since the last Store release:
 • Credits an hour for exploration and exobiology.
 • Combat mission stacks show what each kill still pays.
 • Colour themes that follow the game's HUD colour, and a compact font.
-• All default hotkeys are now on Ctrl+Alt. /quit in the chat quits ED Chat.
+• The main hotkeys are now on Ctrl+Alt. /quit in the chat quits ED Chat.
 
 ## Product features
 
