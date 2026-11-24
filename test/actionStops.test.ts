@@ -309,6 +309,28 @@ describe("ActionFinisher", () => {
     expect(t.log.copies).toEqual([]);
   });
 
+  it("holds until every hold is released, and a failed run does not keep it held", async () => {
+    const t = setup();
+    await t.finisher.hold();
+    await t.finisher.hold();
+    t.finisher.release([]);
+    const p = structuredClone(t.store.get("krait")!);
+    p.stops[1]!.actions![0]!.status = "done";
+    p.stops[1]!.actions![0]!.done_by = [];
+    await t.poll(journal([]));
+    t.add({ ...p, updated_at: iso(500) });
+    // Still held by the second hold: nothing noted or marked.
+    await t.poll(journal([]));
+    expect(t.log.writes).toEqual([]);
+    t.finisher.release([]);
+    const failing = Promise.reject(new Error("boom"));
+    failing.catch(() => {});
+    (t.finisher as unknown as { running: Promise<void> | null }).running = failing;
+    await expect(t.finisher.hold()).resolves.toBeUndefined();
+    (t.finisher as unknown as { running: Promise<void> | null }).running = null;
+    t.finisher.release([]);
+  });
+
   it("marks a stop whose last open action was skipped, as finished", async () => {
     const t = setup();
     await t.poll(journal([]));

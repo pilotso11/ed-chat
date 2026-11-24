@@ -644,6 +644,9 @@ async function main(): Promise<void> {
   let savedBookmarks: SavedBookmarks | null = null;
   // Polls started so far, which dates a save against the polls around it.
   let pollsStarted = 0;
+  // The first poll whose data the finishers may act on: one started before /dismiss-plan all
+  // ended may hold the plans it skipped as they were.
+  let finishFrom = 0;
   async function pollHud(again = false): Promise<void> {
     if (hudPolling) {
       if (again) hudPollAgain = true;
@@ -668,12 +671,14 @@ async function main(): Promise<void> {
       void finishBioBookmarks(hudData).catch((err: unknown) =>
         log.log("warn", `panel bookmarks: ${message(err)}`),
       );
-      void finishTradeStop(hudData).catch((err: unknown) =>
-        log.log("warn", `panel trade stop: ${message(err)}`),
-      );
-      void finishActions(hudData).catch((err: unknown) =>
-        log.log("warn", `panel stop actions: ${message(err)}`),
-      );
+      if (poll >= finishFrom) {
+        void finishTradeStop(hudData).catch((err: unknown) =>
+          log.log("warn", `panel trade stop: ${message(err)}`),
+        );
+        void finishActions(hudData).catch((err: unknown) =>
+          log.log("warn", `panel stop actions: ${message(err)}`),
+        );
+      }
       lastSystem = system;
       renderHud();
     } catch (err) {
@@ -1497,13 +1502,14 @@ async function main(): Promise<void> {
       flash("dismiss", "⚠ the panel's data is not open: turn the panel on first", 6_000);
       return false;
     }
-    // The finisher waits while the actions are skipped, then forgets those plans' open stops.
-    await actionStops.hold();
     let forget: string[] = [];
     try {
+      // With all, the finisher waits while the actions are skipped, then forgets those plans'
+      // open stops, so a skipped stop is not taken as one just finished.
+      if (all) await actionStops.hold();
       const d = await dismissPlan({ activity: hudActivity, plans: hudPlans }, all);
       forget = d.forget;
-      hudFeed?.forget(d.forget);
+      if (all) hudFeed?.forget(d.forget);
       log.log("info", `dismiss-plan${all ? " all" : ""}: ${dismissText(d, all)}`);
       flash("dismiss", dismissText(d, all), 6_000);
       return true;
@@ -1511,7 +1517,10 @@ async function main(): Promise<void> {
       flash("dismiss", `⚠ /dismiss-plan: ${message(err)}`, 8_000);
       return false;
     } finally {
-      actionStops.release(forget);
+      if (all) {
+        actionStops.release(forget);
+        finishFrom = pollsStarted + 1;
+      }
       void pollHud(true);
     }
   }

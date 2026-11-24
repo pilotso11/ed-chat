@@ -114,8 +114,8 @@ export class ActionFinisher {
   private lastError: string | null = null;
   /** The finish() running now: polls come each second, and a write can take longer. */
   private running: Promise<void> | null = null;
-  /** Set by hold(): no finish() runs until release(). */
-  private held = false;
+  /** hold() calls not yet released: no finish() runs while there are any. */
+  private holds = 0;
 
   constructor(private readonly deps: ActionStopDeps) {}
 
@@ -130,7 +130,7 @@ export class ActionFinisher {
    * run's trades. `on` leaves out a plan whose panel is turned off.
    */
   finish(input: FinishInput): Promise<void> {
-    if (this.running || this.held) return Promise.resolve();
+    if (this.running || this.holds > 0) return Promise.resolve();
     const run = this.run(input).finally(() => {
       this.running = null;
     });
@@ -143,8 +143,9 @@ export class ActionFinisher {
    * actions, a stop whose actions it skipped must not be taken as one just finished and marked done.
    */
   async hold(): Promise<void> {
-    this.held = true;
-    await this.running;
+    this.holds++;
+    // A run that failed has said so already: the hold waits only for it to end.
+    await this.running?.catch(() => {});
   }
 
   /**
@@ -153,7 +154,7 @@ export class ActionFinisher {
    */
   release(forget: Iterable<string>): void {
     for (const id of forget) this.open.delete(id);
-    this.held = false;
+    this.holds = Math.max(0, this.holds - 1);
   }
 
   private async run(input: FinishInput): Promise<void> {

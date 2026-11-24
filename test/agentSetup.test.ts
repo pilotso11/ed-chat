@@ -41,6 +41,7 @@ describe("local commands", () => {
     expect(localCommand("/help")).toBeNull();
     expect(localCommand("new")).toBeNull();
     expect(localCommand("/new please")).toBeNull();
+    expect(localCommand("/dismiss-plan\nall")).toBeNull();
   });
 });
 
