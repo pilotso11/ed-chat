@@ -187,7 +187,11 @@ describe("settings window", () => {
     expect(saveButton()).toHaveProperty("disabled", true);
     fireEvent.click(saveButton());
     expect(api.save).toHaveBeenCalledTimes(1);
+    // An edit made while the save runs stays, to save next.
+    fireEvent.change(control("card.width"), { target: { value: "500" } });
     await act(async () => finish({ ok: true }));
+    expect(field("card.width").className).toContain("edited");
+    expect(field("style.theme").className).not.toContain("edited");
     fireEvent.change(control("style.theme"), { target: { value: "green" } });
     api.save.mockRejectedValueOnce(new Error("main is gone"));
     await save();

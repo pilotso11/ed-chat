@@ -370,13 +370,17 @@ export function SettingsApp() {
     if (saving) return;
     setSaving(true);
     try {
-      const r = await api.save(Object.entries(edits).map(([path, value]) => ({ path, value })));
+      const sent = Object.entries(edits).map(([path, value]) => ({ path, value }));
+      const r = await api.save(sent);
       if (!r.ok) {
         setSaveError({ error: r.error, path: r.path });
         return;
       }
-      setEdits({});
-      setDrafts({});
+      // Only what was saved: an edit made while the save ran stays, to save next.
+      const saved = (path: string, e: Record<string, unknown>) =>
+        sent.some((c) => c.path === path && sameValue(c.value, e[path]));
+      setEdits((e) => Object.fromEntries(Object.entries(e).filter(([p]) => !saved(p, e))));
+      setDrafts((d) => Object.fromEntries(Object.entries(d).filter(([p]) => !saved(p, edits))));
       setSaveError(null);
       setStatus("Saved. The changes are in use.");
       reload();

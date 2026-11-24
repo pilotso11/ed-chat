@@ -488,6 +488,8 @@ async function main(): Promise<void> {
         type: "keys",
         rows: keyRows(settings.hotkeys, hotkeys.failedKeys, hotkeys.duplicateKeys),
       });
+    // The settings window marks the keys that did not register.
+    settingsChanged();
   }
 
   let wasGame: boolean | null = null;
@@ -509,6 +511,8 @@ async function main(): Promise<void> {
     renderHud();
   }
   let overlayFocused = false;
+  // The settings window: one at a time. Declared before anything that can reach it.
+  let settingsWin: BrowserWindow | null = null;
   // The settings window has focus: the hotkeys are off, so a hotkey field gets the keys pressed.
   let settingsFocused = false;
   function bindHotkeys(): void {
@@ -1204,7 +1208,7 @@ async function main(): Promise<void> {
         `Ask me: the overlay shows each tool that ${a.name} wants to run, and you allow or ` +
         `deny it with a hotkey.\n\nAuto: ${a.name} decides, and runs most tools without ` +
         "asking, including commands that you ask for.\n\nYou can change this later in " +
-        `settings.json, ${id}.permissionMode.`,
+        "Settings, from the tray menu or /settings.",
       buttons: ["Ask me", "Auto"],
       defaultId: 0,
       cancelId: 0,
@@ -1579,8 +1583,11 @@ async function main(): Promise<void> {
     }
   }
 
-  /** False when the command could not run; the chat then stays open. "quit" quits after it. */
-  async function runLocal(command: LocalCommand): Promise<boolean | "quit"> {
+  /**
+   * False when the command could not run; the chat then stays open. "quit" quits after it;
+   * "settings" opens the settings window once the chat closes.
+   */
+  async function runLocal(command: LocalCommand): Promise<boolean | "quit" | "settings"> {
     switch (command) {
       case "/new":
         newConversation();
@@ -1594,8 +1601,7 @@ async function main(): Promise<void> {
       case "/dismiss-step":
         return dismiss(command === "/dismiss-plan" ? "plan" : "step");
       case "/settings":
-        openSettingsWindow();
-        return true;
+        return "settings";
       case "/quit":
       case "/exit":
         return "quit";
@@ -1613,6 +1619,12 @@ async function main(): Promise<void> {
     if (command) {
       const done = await runLocal(command);
       if (!done) return false;
+      if (done === "settings") {
+        // Focus goes to the new window, not back to the game.
+        dispatch({ type: "closeChat" });
+        openSettingsWindow();
+        return true;
+      }
       const ok = await giveFocusBack();
       dispatch({ type: "closeChat" });
       if (done === "quit") {
@@ -1977,8 +1989,7 @@ async function main(): Promise<void> {
       });
   }
 
-  // The settings window: one at a time, from the tray's Settings or /settings.
-  let settingsWin: BrowserWindow | null = null;
+  // The settings window, from the tray's Settings or /settings.
   function settingsChanged(): void {
     if (settingsWin && !settingsWin.isDestroyed())
       settingsWin.webContents.send(SETTINGS_IPC.changed);
@@ -2011,11 +2022,10 @@ async function main(): Promise<void> {
   }
   const fromSettingsWindow = (e: IpcMainInvokeEvent | IpcMainEvent) =>
     !!settingsWin && !settingsWin.isDestroyed() && e.sender === settingsWin.webContents;
-  let form: ReturnType<typeof settingsForm> | null = null;
   ipcMain.handle(SETTINGS_IPC.load, (e): SettingsSnapshot | null => {
     if (!fromSettingsWindow(e)) return null;
     return {
-      sections: (form ??= settingsForm()),
+      sections: settingsForm(),
       values: settings,
       fileError: settingsStore.broken
         ? (settingsStore.error ?? "⚠ settings.json could not be read")

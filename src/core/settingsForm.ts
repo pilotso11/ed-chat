@@ -241,6 +241,12 @@ export function allFields(sections: FormSection[]): FormField[] {
   return sections.flatMap((s) => [...s.fields, ...allFields(s.sections)]);
 }
 
+/**
+ * Kept in the file even at the default: whether the file sets it is itself a setting. ED Chat
+ * asks for the permission mode at first start only when the file does not set it.
+ */
+const KEEP_AT_DEFAULT = new Set(["claude.permissionMode", "codex.permissionMode"]);
+
 export interface Change {
   path: string;
   value: unknown;
@@ -255,8 +261,9 @@ export function textWithChanges(fileText: string, changes: Change[]): string {
   const raw = JSON.parse(fileText) as unknown;
   if (!isObj(raw)) throw new Error("settings.json is not an object");
   for (const c of changes) {
-    const isDefault = sameValue(c.value, getAt(DEFAULT_SETTINGS, c.path));
-    setAt(raw, c.path, isDefault ? undefined : c.value);
+    const drop =
+      sameValue(c.value, getAt(DEFAULT_SETTINGS, c.path)) && !KEEP_AT_DEFAULT.has(c.path);
+    setAt(raw, c.path, drop ? undefined : c.value);
   }
   return JSON.stringify(raw, null, 2) + "\n";
 }

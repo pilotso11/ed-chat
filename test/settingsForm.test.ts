@@ -105,6 +105,17 @@ describe("saving", () => {
     expect(JSON.parse(text)).toEqual({ $schema: "./settings.schema.json" });
   });
 
+  it("keeps the permission mode at its default: setting it at all answers the first-run question", () => {
+    const text = textWithChanges(FILE, [
+      { path: "claude.permissionMode", value: "auto" },
+      { path: "codex.permissionMode", value: "auto" },
+    ]);
+    expect(JSON.parse(text)).toMatchObject({
+      claude: { permissionMode: "auto" },
+      codex: { permissionMode: "auto" },
+    });
+  });
+
   it("refuses a file that is not an object", () => {
     expect(() => textWithChanges("[]", [])).toThrow(/not an object/);
     expect(saveText("nope", [])).toMatchObject({ ok: false });
@@ -143,7 +154,11 @@ describe("saving", () => {
     expect(changes).toHaveLength(fields.length);
     const r = saveText(FILE, changes);
     if (!r.ok) throw new Error(r.error);
-    expect(JSON.parse(r.text)).toEqual({ $schema: "./settings.schema.json" });
+    expect(JSON.parse(r.text)).toEqual({
+      $schema: "./settings.schema.json",
+      claude: { permissionMode: "auto" },
+      codex: { permissionMode: "auto" },
+    });
     expect(r.settings).toEqual(SettingsSchema.parse({}));
   });
 });
