@@ -309,6 +309,59 @@ describe("ActionFinisher", () => {
     expect(t.log.copies).toEqual([]);
   });
 
+  it("holds until every hold is released, and a failed run does not keep it held", async () => {
+    const t = setup();
+    await t.finisher.hold();
+    await t.finisher.hold();
+    t.finisher.release([]);
+    const p = structuredClone(t.store.get("krait")!);
+    p.stops[1]!.actions![0]!.status = "done";
+    p.stops[1]!.actions![0]!.done_by = [];
+    await t.poll(journal([]));
+    t.add({ ...p, updated_at: iso(500) });
+    // Still held by the second hold: nothing noted or marked.
+    await t.poll(journal([]));
+    expect(t.log.writes).toEqual([]);
+    t.finisher.release([]);
+    const failing = Promise.reject(new Error("boom"));
+    failing.catch(() => {});
+    (t.finisher as unknown as { running: Promise<void> | null }).running = failing;
+    await expect(t.finisher.hold()).resolves.toBeUndefined();
+    (t.finisher as unknown as { running: Promise<void> | null }).running = null;
+    t.finisher.release([]);
+  });
+
+  it("marks a stop whose last open action was skipped, as finished", async () => {
+    const t = setup();
+    await t.poll(journal([]));
+    const p = structuredClone(t.store.get("krait")!);
+    p.stops[1]!.actions![0]!.status = "skipped";
+    p.updated_at = iso(500);
+    t.add(p);
+    await t.poll(journal([]));
+    expect(t.log.writes).toEqual(["krait:stop 1:done"]);
+  });
+
+  it("marks no stop that /dismiss-plan skipped, while held or after", async () => {
+    const t = setup();
+    await t.poll(journal([]));
+    await t.finisher.hold();
+    const p = structuredClone(t.store.get("krait")!);
+    for (const s of p.stops) for (const a of s.actions ?? []) a.status = "skipped";
+    p.updated_at = iso(500);
+    t.add(p);
+    // Held: nothing runs.
+    await t.poll(journal([]));
+    t.finisher.release(["krait"]);
+    // Reopened later: noted as on a first poll, the skipped stops left alone.
+    const again = structuredClone(t.store.get("krait")!);
+    again.stops[0]!.actions![0]!.status = "todo";
+    again.updated_at = iso(600);
+    t.add(again);
+    await t.poll(journal([]));
+    expect(t.log.writes).toEqual([]);
+  });
+
   it("writes the ShipID found by type, once", async () => {
     const t = setup(
       plan({ build: { target: "ship", scope: "full", ship: "krait_mkii", started_at: iso(0) } }),

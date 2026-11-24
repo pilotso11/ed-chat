@@ -374,6 +374,20 @@ note, which the panel follows. Ctrl+Alt+Shift+P chooses a mode yourself: automat
 then each mode that is on in `hud.modes`, then off. Bookmarks are not a mode: they
 show with the modes above.
 
+## Dismissing a plan
+
+Two chat commands act on the plan the panel shows now, and on no other plan:
+
+- `/dismiss-plan` marks skipped every open stop action of that plan, and clears the
+  activity note when the note names it. The plan leaves the panel, even while docked at
+  one of its stops.
+- `/dismiss-step` marks the current stop skipped, with its open actions, and copies the
+  next stop's system. A stop skipped is not counted as done.
+
+Neither deletes the plan: ask the assistant to reopen it (set its actions back to todo,
+or set the activity note again). Both commands run in ED Chat and do not go to the
+assistant.
+
 ## ed-mcp
 
 The panel uses the same activity note and plans as ed-mcp. ED Chat finds the

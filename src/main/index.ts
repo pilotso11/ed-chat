@@ -104,6 +104,12 @@ import {
   syncDirOf,
 } from "../core/edMcp.js";
 import { HudFeed, type FeedData } from "../core/hud/feed.js";
+import {
+  dismissPlan,
+  dismissStep,
+  planDismissedText,
+  stepDismissedText,
+} from "../core/hud/dismiss.js";
 import { KnownBodies, fetchSpansh } from "../core/hud/known.js";
 import {
   BOOKMARKS_PLAN,
@@ -136,7 +142,7 @@ import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.j
 import { HUD_EVENTS } from "../core/hud/mode.js";
 import { shortBody, todoStops } from "../core/hud/panels.js";
 import { TradeStopFinisher } from "../core/hud/tradeStops.js";
-import { ActionFinisher, finisherPanel } from "../core/hud/actionStops.js";
+import { ActionFinisher, finisherPanel, nextSystem } from "../core/hud/actionStops.js";
 import {
   ABOUT_URL,
   noticeMenuItems,
@@ -635,13 +641,23 @@ async function main(): Promise<void> {
   }
 
   let hudPolling = false;
+  // A poll asked for while one runs (again, as after /dismiss-plan): it runs once that one ends.
+  // The timer's polls are not: they would run back to back on a slow poll.
+  let hudPollAgain = false;
   let lastSystem: string | null = null;
   // The bookmarks plan a key press saved; a poll that started before it read the plan without it.
   let savedBookmarks: SavedBookmarks | null = null;
   // Polls started so far, which dates a save against the polls around it.
   let pollsStarted = 0;
-  async function pollHud(): Promise<void> {
-    if (hudPolling || !hudFeed || !settings.hud.enabled) return;
+  // The first poll whose data the finishers may act on: one started before /dismiss-plan or /dismiss-step
+  // ended may hold the plans it skipped as they were.
+  let finishFrom = 0;
+  async function pollHud(again = false): Promise<void> {
+    if (hudPolling) {
+      if (again) hudPollAgain = true;
+      return;
+    }
+    if (!hudFeed || !settings.hud.enabled) return;
     hudPolling = true;
     const poll = ++pollsStarted;
     try {
@@ -660,18 +676,24 @@ async function main(): Promise<void> {
       void finishBioBookmarks(hudData).catch((err: unknown) =>
         log.log("warn", `panel bookmarks: ${message(err)}`),
       );
-      void finishTradeStop(hudData).catch((err: unknown) =>
-        log.log("warn", `panel trade stop: ${message(err)}`),
-      );
-      void finishActions(hudData).catch((err: unknown) =>
-        log.log("warn", `panel stop actions: ${message(err)}`),
-      );
+      if (poll >= finishFrom) {
+        void finishTradeStop(hudData).catch((err: unknown) =>
+          log.log("warn", `panel trade stop: ${message(err)}`),
+        );
+        void finishActions(hudData).catch((err: unknown) =>
+          log.log("warn", `panel stop actions: ${message(err)}`),
+        );
+      }
       lastSystem = system;
       renderHud();
     } catch (err) {
       log.log("warn", `panel: ${message(err)}`);
     } finally {
       hudPolling = false;
+      if (hudPollAgain) {
+        hudPollAgain = false;
+        void pollHud(true);
+      }
     }
   }
 
@@ -1413,7 +1435,10 @@ async function main(): Promise<void> {
     dispatch({ type: "localReply", text: `Switched to ${agent.name}.` });
     scheduleFade();
     log.log("info", `switched to ${agent.cli}`);
-    void openHudFeed().then(pollHud, (err) => log.log("warn", `panel: ${message(err)}`));
+    void openHudFeed().then(
+      () => pollHud(),
+      (err) => log.log("warn", `panel: ${message(err)}`),
+    );
     if (!agentStarted) return;
     await askPermissionMode();
     const cmd = agentCommand(settings);
@@ -1476,6 +1501,72 @@ async function main(): Promise<void> {
     return true;
   }
 
+  /**
+   * /dismiss-plan and /dismiss-step: skip what is left of the plan on the panel, or its current
+   * stop. Only that plan changes.
+   */
+  async function dismiss(what: "plan" | "step"): Promise<boolean> {
+    const command = `/dismiss-${what}`;
+    if (!settings.hud.enabled) {
+      flash("dismiss", "ⓘ the activity panel is off: turn it on to dismiss its plan", 4_000);
+      return false;
+    }
+    if (!hudActivity || !hudPlans) {
+      flash("dismiss", "⚠ the activity panel could not open the journal or ed-mcp", 6_000);
+      return false;
+    }
+    const plan = followedPlan();
+    if (!plan) {
+      flash("dismiss", "ⓘ no plan on the panel", 4_000);
+      return false;
+    }
+    const deps = { activity: hudActivity, plans: hudPlans };
+    // No finisher acts on a poll started before the dismissal ends; the action finisher waits
+    // while the actions are skipped. It then forgets the plan's open stops after /dismiss-plan,
+    // or after a write that failed partway, so a skipped stop is not taken as one just finished
+    // and marked done: the plan is noted again as on a first poll. After /dismiss-step the stop
+    // is skipped, so the record (which also retries a failed stop write) is kept. The panel
+    // forgets a plan it kept as complete either way.
+    finishFrom = pollsStarted + 1;
+    let forget = what === "plan" ? [plan.id] : [];
+    await actionStops.hold();
+    try {
+      let text: string;
+      if (what === "plan") {
+        text = planDismissedText(await dismissPlan(deps, plan.id));
+      } else {
+        const follow = lastHudView?.follow;
+        const lapStart = await hudJournal?.newestEventAt().catch(() => null);
+        const d = await dismissStep(
+          deps,
+          plan.id,
+          follow?.planId === plan.id ? follow.stop : undefined,
+          lapStart ?? null,
+        );
+        text = stepDismissedText(d);
+        // The next stop after the one skipped, in another system, as a finished stop copies it.
+        const here = hudData?.journal?.location.system ?? null;
+        const system = d.index !== null ? nextSystem(d.plan, d.index, here) : null;
+        if (system) {
+          clipboard.writeText(system);
+          text += ` · 📋 copied ${system}`;
+        }
+      }
+      log.log("info", `${command}: ${text}`);
+      flash("dismiss", text, 6_000);
+      return true;
+    } catch (err) {
+      forget = [plan.id];
+      flash("dismiss", `⚠ ${command}: ${message(err)}`, 8_000);
+      return false;
+    } finally {
+      hudFeed?.forget([plan.id]);
+      actionStops.release(forget);
+      finishFrom = pollsStarted + 1;
+      void pollHud(true);
+    }
+  }
+
   /** False when the command could not run; the chat then stays open. "quit" quits after it. */
   async function runLocal(command: LocalCommand): Promise<boolean | "quit"> {
     switch (command) {
@@ -1487,6 +1578,9 @@ async function main(): Promise<void> {
       case "/claude":
       case "/codex":
         return chooseAgent(command === "/claude" ? "claude" : "codex");
+      case "/dismiss-plan":
+      case "/dismiss-step":
+        return dismiss(command === "/dismiss-plan" ? "plan" : "step");
       case "/quit":
       case "/exit":
         return "quit";
@@ -1807,7 +1901,10 @@ async function main(): Promise<void> {
     writeState();
     const change = settingsChange(old, settings, agentId, os.homedir());
     if (change.reopenFeed) {
-      void openHudFeed().then(pollHud, (err) => log.log("warn", `panel: ${message(err)}`));
+      void openHudFeed().then(
+        () => pollHud(),
+        (err) => log.log("warn", `panel: ${message(err)}`),
+      );
     }
     if (change.switchAgent) void switchAgent(settings.agent);
     else if (change.agentSettings) {
