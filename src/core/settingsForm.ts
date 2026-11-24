@@ -1,4 +1,4 @@
-import { bindings, normalizeKey } from "./hotkeys.js";
+import { bindings, hasModifier, normalizeKey } from "./hotkeys.js";
 import {
   DEFAULT_SETTINGS,
   NUMPAD_CHIP,
@@ -19,7 +19,8 @@ export { getAt };
 export type FieldKind =
   | { type: "boolean" }
   | { type: "choice"; options: (string | number)[] }
-  | { type: "number"; integer: boolean; min?: number; max?: number }
+  /** above: the value must be more than this (a zod .positive()). */
+  | { type: "number"; integer: boolean; min?: number; max?: number; above?: number }
   | { type: "text"; nullable: boolean }
   /** One key or a list of keys; chip keys contain {n} for the digit. */
   | { type: "keys"; chip: boolean }
@@ -131,6 +132,7 @@ type Node = JsonSchemaNode & {
   const?: string | number;
   anyOf?: Node[];
   minimum?: number;
+  exclusiveMinimum?: number;
   maximum?: number;
   items?: Node;
   additionalProperties?: unknown;
@@ -152,6 +154,7 @@ function kindOf(path: string, n: Node): FieldKind {
       integer: n.type === "integer",
       min: bound(n.minimum),
       max: bound(n.maximum),
+      ...(n.exclusiveMinimum !== undefined ? { above: n.exclusiveMinimum } : {}),
     };
   if (n.type === "string") return { type: "text", nullable: false };
   if (n.type === "array" && n.items?.type === "string") return { type: "list" };
@@ -198,8 +201,17 @@ function field(path: string, n: Node): FormField {
   };
 }
 
-/** The settings window's sections, in order, each with its fields and its own sections. */
+let built: FormSection[] | null = null;
+
+/**
+ * The settings window's sections, in order, each with its fields and its own sections. Built
+ * once: the schema does not change while ED Chat runs. Read only.
+ */
 export function settingsForm(): FormSection[] {
+  return (built ??= buildForm());
+}
+
+function buildForm(): FormSection[] {
   const schema = JSON.parse(settingsSchemaText()) as Node;
   const general: FormSection = {
     path: GENERAL,
@@ -309,6 +321,8 @@ export function keyProblems(h: Settings["hotkeys"], failed: string[]): Record<st
       add(first, `${b.accelerator} is also ${labelOf(`hotkeys.${nameOf(b.name)}`)}`);
     } else if (first === undefined) owner.set(k, b.name);
     if (failedSet.has(k)) add(b.name, `${b.accelerator} is in use by another app`);
+    if (h.scope === "always" && !hasModifier(b.accelerator))
+      add(b.name, `${b.accelerator} has no modifier, so scope always leaves it off`);
   }
   if (h.copyChipNumpad && keyList(h.copyChip).includes(NUMPAD_CHIP))
     add("copyChip", `${NUMPAD_CHIP} is set twice`);

@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
@@ -17,13 +18,12 @@ import {
   type FormSection,
   type KeyInput,
 } from "../core/settingsForm.js";
+import { sameValue } from "../core/paths.js";
 import type { SettingsSnapshot } from "../shared/settingsIpc.js";
 
 // The settings window. It edits settings.json through main: the form shows the settings in use,
 // keeps the player's edits until Save, and main writes only the values that differ from the
 // defaults. A settings.json that does not parse is never overwritten: the window shows the error.
-
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 const keyInput = (e: KeyboardEvent): KeyInput => ({
   key: e.key,
@@ -178,7 +178,7 @@ function Control(p: FieldProps) {
       );
     }
     case "number": {
-      const { integer, min, max } = f.kind;
+      const { integer, min, max, above } = f.kind;
       return (
         <input
           id={id}
@@ -195,9 +195,11 @@ function Control(p: FieldProps) {
                 ? "Enter a number"
                 : integer && !Number.isInteger(n)
                   ? "Enter a whole number"
-                  : (min !== undefined && n < min) || (max !== undefined && n > max)
-                    ? `From ${min ?? "-∞"} to ${max ?? "∞"}`
-                    : undefined;
+                  : above !== undefined && n <= above
+                    ? `More than ${above}${max !== undefined ? `, up to ${max}` : ""}`
+                    : (min !== undefined && n < min) || (max !== undefined && n > max)
+                      ? `From ${min ?? "-∞"} to ${max ?? "∞"}`
+                      : undefined;
             p.onDraft(e.target.value, bad ? undefined : n, bad);
           }}
         />
@@ -269,9 +271,22 @@ export function SettingsApp() {
   const [saveError, setSaveError] = useState<{ error: string; path?: string } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [saving, setSaving] = useState(false);
+  // For reload, which outlives a render: the edits and errors when the new values arrive.
+  const kept = useRef({ edits, errors });
+  kept.current = { edits, errors };
 
   const reload = useCallback(() => {
-    void api.load().then(setSnap);
+    void api.load().then((s) => {
+      setSnap(s);
+      // Text typed into a field that is not an edit (it matched the old value) would hide the
+      // new value; text that is an edit, or not valid yet, stays.
+      setDrafts((d) =>
+        Object.fromEntries(
+          Object.entries(d).filter(([p]) => p in kept.current.edits || p in kept.current.errors),
+        ),
+      );
+    });
   }, [api]);
   useEffect(() => {
     reload();
@@ -313,7 +328,7 @@ export function SettingsApp() {
     setSaveError(null);
     setEdits((e) => {
       const next = { ...e };
-      if (same(v, getAt(snap.values, path))) delete next[path];
+      if (sameValue(v, getAt(snap.values, path))) delete next[path];
       else next[path] = v;
       return next;
     });
@@ -346,22 +361,30 @@ export function SettingsApp() {
     setStatus("Every setting is set to its default. Save to keep it.");
     const next: Record<string, unknown> = {};
     for (const c of resetAll(snap.sections))
-      if (!same(c.value, getAt(snap.values, c.path))) next[c.path] = c.value;
+      if (!sameValue(c.value, getAt(snap.values, c.path))) next[c.path] = c.value;
     setEdits(next);
   };
   const dirty = Object.keys(edits).length > 0;
   const blocked = Object.keys(errors).length > 0;
   const save = async () => {
-    const r = await api.save(Object.entries(edits).map(([path, value]) => ({ path, value })));
-    if (!r.ok) {
-      setSaveError({ error: r.error, path: r.path });
-      return;
+    if (saving) return;
+    setSaving(true);
+    try {
+      const r = await api.save(Object.entries(edits).map(([path, value]) => ({ path, value })));
+      if (!r.ok) {
+        setSaveError({ error: r.error, path: r.path });
+        return;
+      }
+      setEdits({});
+      setDrafts({});
+      setSaveError(null);
+      setStatus("Saved. The changes are in use.");
+      reload();
+    } catch (err) {
+      setSaveError({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setSaving(false);
     }
-    setEdits({});
-    setDrafts({});
-    setSaveError(null);
-    setStatus("Saved. The changes are in use.");
-    reload();
   };
 
   const q = query.trim().toLowerCase();
@@ -369,7 +392,7 @@ export function SettingsApp() {
   const fieldRow = (f: FormField) => {
     const value = valueOf(f.path);
     const edited = f.path in edits;
-    const isDefault = same(value, f.default);
+    const isDefault = sameValue(value, f.default);
     const err =
       errors[f.path] ??
       (saveError?.path && (saveError.path === f.path || saveError.path.startsWith(`${f.path}.`))
@@ -441,7 +464,12 @@ export function SettingsApp() {
           onChange={(e) => setQuery(e.target.value)}
         />
         <div className="actions">
-          <button type="button" className="primary" disabled={!dirty || blocked} onClick={save}>
+          <button
+            type="button"
+            className="primary"
+            disabled={!dirty || blocked || saving}
+            onClick={save}
+          >
             Save
           </button>
           <button type="button" disabled={!dirty && !blocked} onClick={revert}>

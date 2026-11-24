@@ -154,6 +154,7 @@ describe("settings window", () => {
     check("card.maxLines", "3.5", "Enter a whole number");
     check("card.maxLines", "11", "From 2 to 10");
     check("hud.valuableMin", "-1", "From 0 to ∞");
+    check("hud.mining.sellRadiusLy", "0", "More than 0, up to 1000");
     check("hud.mining.targets", "{", "Not valid JSON");
     fireEvent.click(button("Revert"));
     expect(document.querySelector(".field .error")).toBeNull();
@@ -174,6 +175,23 @@ describe("settings window", () => {
     );
     expect(field("hotkeys.copyChip").querySelector(".error")?.textContent).toMatch(/\{n\}/);
     // The edit stays, to fix and save again.
+    expect(saveButton()).toHaveProperty("disabled", false);
+  });
+
+  it("saves once while a save is running, and shows a save that failed", async () => {
+    const { api } = await setup();
+    let finish!: (r: SettingsSaveResult) => void;
+    api.save.mockImplementationOnce(() => new Promise((r) => (finish = r)));
+    fireEvent.change(control("style.theme"), { target: { value: "blue" } });
+    fireEvent.click(saveButton());
+    expect(saveButton()).toHaveProperty("disabled", true);
+    fireEvent.click(saveButton());
+    expect(api.save).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ ok: true }));
+    fireEvent.change(control("style.theme"), { target: { value: "green" } });
+    api.save.mockRejectedValueOnce(new Error("main is gone"));
+    await save();
+    expect(screen.getByRole("status").textContent).toBe("Not saved: main is gone");
     expect(saveButton()).toHaveProperty("disabled", false);
   });
 
@@ -211,6 +229,16 @@ describe("settings window", () => {
     api.changed();
     await waitFor(() => expect(control<HTMLInputElement>("card.width").value).toBe("700"));
     expect(control<HTMLSelectElement>("style.theme").value).toBe("blue");
+  });
+
+  it("shows the new value of a field typed back to the old one, when the file changes", async () => {
+    const { api } = await setup();
+    // Typed, but the same as the value in use: no edit.
+    fireEvent.change(control("card.width"), { target: { value: "420.0" } });
+    expect(saveButton()).toHaveProperty("disabled", true);
+    api.snap.values.card.width = 700;
+    api.changed();
+    await waitFor(() => expect(control<HTMLInputElement>("card.width").value).toBe("700"));
   });
 
   it("finds settings by name, help text or path", async () => {

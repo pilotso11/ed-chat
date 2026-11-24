@@ -10,8 +10,6 @@ import { PLAYER_ONLY_PATHS } from "./settingsDictionary.js";
 /** Each player-only setting as settings.json sets it. A setting the file leaves out is absent. */
 export type PlayerOnlyValues = Record<string, unknown>;
 
-const same = sameValue;
-
 /** The player-only settings in settings.json text. Text that is not a JSON object sets none. */
 export function playerOnlyValues(text: string): PlayerOnlyValues {
   let raw: unknown;
@@ -42,7 +40,7 @@ export function valuesWith(
 
 /** The player-only settings that differ between the two. */
 export function changedPaths(from: PlayerOnlyValues, to: PlayerOnlyValues): string[] {
-  return PLAYER_ONLY_PATHS.filter((p) => !same(from[p], to[p]));
+  return PLAYER_ONLY_PATHS.filter((p) => !sameValue(from[p], to[p]));
 }
 
 /** settings.json text with the player-only settings set to these values, the rest kept. */
@@ -70,7 +68,7 @@ export function describeChanges(
       const y = isObj(b) ? b : {};
       const keys = [...new Set([...Object.keys(x), ...Object.keys(y)])];
       return keys
-        .filter((k) => !same(x[k], y[k]))
+        .filter((k) => !sameValue(x[k], y[k]))
         .map((k) => `${p}.${k}: ${show(x[k])} → ${show(y[k])}`);
     }
     return [`${p}: ${show(a)} → ${show(b)}`];

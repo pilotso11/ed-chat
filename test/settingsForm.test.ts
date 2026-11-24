@@ -66,6 +66,9 @@ describe("settings form", () => {
       max: undefined,
     });
     expect(fieldAt("claude.model").kind).toEqual({ type: "text", nullable: true });
+    // A positive number: more than 0.
+    expect(fieldAt("hud.mining.sellRadiusLy").kind).toMatchObject({ above: 0, max: 1000 });
+    expect(settingsForm()).toBe(form);
     expect(fieldAt("hotkeys.openChat").kind).toEqual({ type: "keys", chip: false });
     expect(fieldAt("hotkeys.copyChip").kind).toEqual({ type: "keys", chip: true });
     expect(fieldAt("position.display").kind).toEqual({ type: "display" });
@@ -210,6 +213,13 @@ describe("hotkey problems", () => {
   it("marks the numpad chip key set twice", () => {
     const p = keyProblems({ ...h, copyChip: ["Ctrl+num{n}"], copyChipNumpad: true }, []);
     expect(p["hotkeys.copyChip"]).toContain("Ctrl+num{n} is set twice");
+  });
+
+  it("marks a key with no modifier, which scope always leaves off", () => {
+    expect(keyProblems({ ...h, scope: "always", cancel: "F5" }, [])).toEqual({
+      "hotkeys.cancel": "F5 has no modifier, so scope always leaves it off",
+    });
+    expect(keyProblems({ ...h, cancel: "F5" }, [])).toEqual({});
   });
 
   it("does not fail on a chip key without {n}", () => {

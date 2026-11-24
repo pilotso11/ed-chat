@@ -2028,6 +2028,11 @@ async function main(): Promise<void> {
     if (!fromSettingsWindow(e)) return { ok: false, error: "not the settings window" };
     const changes = changesArg(v);
     if (!changes) return { ok: false, error: "the changes could not be read" };
+    // The file as it is now, not as the last poll read it: an edit made since must be kept,
+    // and a file that broke since must not be replaced.
+    const now = await settingsStore.load();
+    dispatch({ type: "notice", key: "settings", text: now.error });
+    if (now.changed) playerOnly.fileChanged();
     if (settingsStore.broken)
       return { ok: false, error: "settings.json has an error: fix it first" };
     const r = saveText(settingsStore.text, changes);
@@ -2036,7 +2041,8 @@ async function main(): Promise<void> {
       // The player's own change, from the window: the player-only values in it are trusted.
       await playerOnly.playerWriteAll(r.text, r.playerOnly);
       await settingsStore.load();
-      applyNewSettings(playerOnly.effective() ?? settingsStore.settings);
+      // Applies the file, and asks about a player-only change still waiting in it.
+      playerOnly.fileChanged();
       log.log("info", `settings saved from the window: ${changes.map((c) => c.path).join(", ")}`);
       return { ok: true };
     } catch (err) {
