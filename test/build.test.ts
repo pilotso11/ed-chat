@@ -171,6 +171,11 @@ const journal = (events: JournalEvent[], o: Partial<Journal> = {}): Journal => (
   missions: [],
   engineers: [],
   stored_modules: null,
+  suits: [],
+  weapons: [],
+  suit_loadouts: [],
+  locker: null,
+  backpack: null,
   as_of: null,
   events,
   ...o,
@@ -1027,10 +1032,10 @@ describe("judging ship actions", () => {
     expect(panelOf(plan, few).rows[2]!.detail).toBe("short 2 Manganese (have 2/4)");
   });
 
-  it("is a build plan only with stop actions for a ship", () => {
+  it("is a build plan only with stop actions, for a ship or a suit loadout", () => {
     expect(isBuildPlan(upgrade())).toBe(true);
     expect(isBuildPlan(upgrade({}, [{ system: "S", purpose: "x", status: "todo" }]))).toBe(false);
-    expect(isBuildPlan(upgrade({ build: { target: "suit_loadout", scope: "full" } }))).toBe(false);
+    expect(isBuildPlan(upgrade({ build: { target: "suit_loadout", scope: "full" } }))).toBe(true);
     expect(isBuildPlan(null)).toBe(false);
   });
 });

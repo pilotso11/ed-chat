@@ -227,6 +227,26 @@ shows (the note's, when both have one), else the one you acted on last. That pla
 the route keys and the arrival copy, and Claude is told it differs from the note. Swapping to a
 ship with its own build plan points the note at that plan.
 
+**On foot.** A suit loadout plan (`build.target` `suit_loadout`) shows the same way, named for
+its suit ("BUILD · Dominator loadout · stop 1/3"). Its actions are judged from ed-mcp 0.12.0's
+journal state and events:
+
+- Buying a suit or weapon (`BuySuit`, `BuyWeapon`, at least the grade asked); upgrading one by
+  its ID (`UpgradeSuit`, `UpgradeWeapon`), or done already when its newest loadout shows the
+  grade; a bartender trade or buy (`TradeMicroResources`, `BuyMicroResources`, adding up the
+  counts); a resource collected (the ship locker and backpack together hold the count).
+- A modification has no event: it is done once the suit's or weapon's next loadout event lists
+  it. After a visit to its stop it shows "equip to check" until then. The modification can be
+  named as in the game (Extra Ammo Capacity) or as the journal writes it
+  (`suit_increasedammoreserves`).
+- Gear still to buy has a `gear` key in the plan. Its upgrades and modifications show "after
+  buy"; once it is bought, the panel writes its ID into every action with that key.
+- Resources a step needs are counted in the ship locker, which upgrades and trades spend from (the
+  backpack's go there when you board): "short 1 Health Monitor
+  (have 1/2) · trade at stop 2". A bartender's offer varies, so a trade shows only what was
+  received; what it pays shows when you are short ("have 3/10 Graphene").
+- None of these events says where you were, so they count wherever you do them.
+
 **With no build plan.** When you are docked where no build plan has work (not at one of its
 stops with an action to do, and nothing done here is one of its actions), buying, selling,
 storing or moving a module, using the shipyard (a ship bought, sold, redeemed or transferred),
@@ -353,6 +373,20 @@ Telling Claude what you are doing ("I'm doing massacres") sets the ed-mcp activi
 note, which the panel follows. Ctrl+Alt+Shift+P chooses a mode yourself: automatic,
 then each mode that is on in `hud.modes`, then off. Bookmarks are not a mode: they
 show with the modes above.
+
+## Dismissing a plan
+
+Two chat commands act on the plan the panel shows now, and on no other plan:
+
+- `/dismiss-plan` marks skipped every open stop action of that plan, and clears the
+  activity note when the note names it. The plan leaves the panel, even while docked at
+  one of its stops.
+- `/dismiss-step` marks the current stop skipped, with its open actions, and copies the
+  next stop's system. A stop skipped is not counted as done.
+
+Neither deletes the plan: ask the assistant to reopen it (set its actions back to todo,
+or set the activity note again). Both commands run in ED Chat and do not go to the
+assistant.
 
 ## ed-mcp
 

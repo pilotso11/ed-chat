@@ -83,8 +83,9 @@ Then:
 | Ctrl+Alt+Y / N | Allow / deny a tool the assistant asks to run |
 | Ctrl+Alt+P | Show or hide the activity panel |
 
-Type `/new` for a new conversation, `/codex` or `/claude` to switch assistant, and `/quit`
-to quit.
+Type `/new` for a new conversation, `/codex` or `/claude` to switch assistant,
+`/dismiss-plan` or `/dismiss-step` to skip the rest of the panel's plan or its current
+stop, and `/quit` to quit.
 
 ## Documentation
 

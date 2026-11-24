@@ -48,6 +48,9 @@ export class HudFeed {
   private outfitting: { text: string; parsed: Outfitting | null } | null = null;
   /** Plans with actions as last read, by ID: read again only when the plan list says one changed. */
   private builds = new Map<string, { updated: string; plan: Plan; openAt: string | null }>();
+  // Plans forget() dropped, and how many times it ran: a poll that started before it keeps none.
+  private forgotten = new Set<string>();
+  private forgets = 0;
 
   constructor(
     private readonly stores: Pick<Stores, "journal" | "activity" | "plans">,
@@ -87,6 +90,18 @@ export class HudFeed {
     // Logged once per new problem: the feed polls every second.
     if (m !== this.lastError) this.opts.onError?.(what, message(err));
     this.lastError = m;
+  }
+
+  /**
+   * Forgets plans kept for "Build complete", as after /dismiss-plan: they leave the panel now.
+   * A poll already running when this is called keeps none of them.
+   */
+  forget(ids: Iterable<string>): void {
+    for (const id of ids) {
+      this.builds.delete(id);
+      this.forgotten.add(id);
+    }
+    this.forgets++;
   }
 
   async poll(): Promise<FeedData> {
@@ -144,6 +159,7 @@ export class HudFeed {
   private async actionPlans(
     journal: (JournalState & { events: JournalEvent[] }) | null,
   ): Promise<Plan[]> {
+    const forgets = this.forgets;
     const list = await this.stores.plans.list();
     // Where the ship is: this docking or landing, named by its event.
     const dock = journal ? dockedAt(journal.events, journal.location) : null;
@@ -181,6 +197,13 @@ export class HudFeed {
       }),
     );
     for (const id of this.builds.keys()) if (!keep.has(id)) this.builds.delete(id);
+    // forget() ran since this poll started: what it read of those plans may be from before the
+    // dismissal, from the store or from what was kept. None of it is kept or shown.
+    if (forgets !== this.forgets) {
+      for (const id of this.forgotten) this.builds.delete(id);
+      return plans.filter((p): p is Plan => p !== null && !this.forgotten.has(p.id));
+    }
+    this.forgotten.clear();
     return plans.filter((p): p is Plan => p !== null);
   }
 
