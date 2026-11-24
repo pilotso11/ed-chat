@@ -1,6 +1,8 @@
 import { visitOrder, type JournalEvent, type JournalState, type Plan } from "ed-mcp/journal";
 import type { Settings } from "../settings.js";
 import {
+  gearIdOf,
+  gearToBuy,
   isBuildPlan,
   judgeBuild,
   materialCount,
@@ -13,6 +15,7 @@ import {
   type BuildJudgement,
   type Stop,
 } from "./buildJudge.js";
+import { resourceCount, sameWeapon, SUIT_NAMES, suitOf } from "./foot.js";
 import { num, objs, same, str } from "./json.js";
 import {
   credits,
@@ -64,11 +67,24 @@ export const BUILD_EVENTS = [
   "Undocked",
   "Location",
   "FSDJump",
-  // Landing at a gather stop, and leaving it.
+  // Landing at a gather stop, and leaving it; coming to a settlement stop.
+  "ApproachSettlement",
   "Touchdown",
   "Liftoff",
   "Disembark",
   "LeaveBody",
+  // On foot: gear bought and upgraded, bartender trades and buys, and the loadouts that show a
+  // modification (none of these is a ship event).
+  "BuySuit",
+  "BuyWeapon",
+  "UpgradeSuit",
+  "UpgradeWeapon",
+  "TradeMicroResources",
+  "BuyMicroResources",
+  "SuitLoadout",
+  "SwitchSuitLoadout",
+  "CreateSuitLoadout",
+  "LoadoutEquipModule",
 ] as const;
 
 /** The game's names for its ship types, as ed-mcp's ships table has them. */
@@ -439,7 +455,54 @@ const VERB: Partial<Record<Action["kind"], string>> = {
   refuel: "refuel",
   repair: "repair",
   restock: "restock",
+  buy_suit: "buy suit",
+  buy_weapon: "buy weapon",
+  upgrade_suit: "upgrade",
+  upgrade_weapon: "upgrade",
+  modify_suit: "modify",
+  modify_weapon: "modify",
+  trade_resource: "trade",
+  buy_resource: "buy",
+  collect_resource: "collect",
 };
+
+/** The on-foot kinds: their needs are resources in the ship locker and backpack. */
+const FOOT = new Set<Action["kind"]>([
+  "buy_suit",
+  "buy_weapon",
+  "upgrade_suit",
+  "upgrade_weapon",
+  "modify_suit",
+  "modify_weapon",
+  "trade_resource",
+  "buy_resource",
+  "collect_resource",
+]);
+
+/** An upgrade or modification of gear still to buy: it waits for the buy to give its ID. */
+function waitsForBuy(a: Action, plan: Plan): boolean {
+  if (!a.gear || !gearToBuy(plan, a.gear)) return false;
+  if (a.kind === "upgrade_suit" || a.kind === "modify_suit") return a.suit_id === undefined;
+  if (a.kind === "upgrade_weapon" || a.kind === "modify_weapon") return a.weapon_id === undefined;
+  return false;
+}
+
+/**
+ * A suit loadout plan's name for the title: its loadout's suit ("Dominator loadout"), else the
+ * loadout's name, else the suit its actions buy or upgrade.
+ */
+function loadoutTitle(plan: Plan, journal: Journal): string | null {
+  const id = plan.build?.loadout_id;
+  const l = id !== undefined ? journal.suit_loadouts?.find((x) => x.id === id) : undefined;
+  const owned = l?.suit_id != null ? journal.suits?.find((x) => x.id === l.suit_id) : undefined;
+  const planned = plan.stops
+    .flatMap((st) => st.actions ?? [])
+    .map((a) => suitOf(a.suit)?.type)
+    .find(Boolean);
+  const type = owned?.type ?? planned;
+  if (type) return `${SUIT_NAMES[type] ?? type} loadout`;
+  return l?.name ? `${l.name} loadout` : null;
+}
 
 /** Short names of the core slots, for "after FSD G5". */
 const SLOTS: Record<string, string> = {
@@ -479,12 +542,15 @@ function sourceOf(plan: Plan, j: BuildJudgement, name: string, symbol?: string):
     const gets =
       a.kind === "collect_material"
         ? a.material
-        : a.kind === "trade_material"
+        : a.kind === "trade_material" || a.kind === "trade_resource"
           ? a.received?.material
-          : undefined;
+          : a.kind === "collect_resource"
+            ? a.resource
+            : undefined;
     if (!gets || !want.has(key(gets))) continue;
     const n = order.indexOf(x.stop) + 1;
-    return `${a.kind === "collect_material" ? "collect" : "trade"} at stop ${n}`;
+    const collect = a.kind === "collect_material" || a.kind === "collect_resource";
+    return `${collect ? "collect" : "trade"} at stop ${n}`;
   }
   return null;
 }
@@ -513,9 +579,39 @@ function need(
     const b = ctx.blockedBy.action;
     return { right: `after ${slotName(b.slot)} G${targetGrade(b)}` };
   }
+  if (waitsForBuy(a, plan)) return { right: "after buy" };
+  // Owned gear the plan does not name by ID, with more than one that could be it.
+  if (
+    !waitsForBuy(a, plan) &&
+    (a.kind === "upgrade_suit" ||
+      a.kind === "modify_suit" ||
+      a.kind === "upgrade_weapon" ||
+      a.kind === "modify_weapon") &&
+    gearIdOf(a, plan, ctx.journal) === null
+  ) {
+    const suit = a.kind.endsWith("_suit");
+    const type = suit ? suitOf(a.suit)?.type : null;
+    const list = suit ? ctx.journal.suits : ctx.journal.weapons;
+    const owned = suit
+      ? (ctx.journal.suits ?? []).filter((x) => !type || x.type === type).length
+      : (ctx.journal.weapons ?? []).filter((w) => !a.weapon || sameWeapon(w.type, w.name, a.weapon))
+          .length;
+    // None owned (when the journal lists the gear at all): no ID to give; it needs buying first.
+    if (list && owned === 0)
+      return { right: "not owned", detail: "buy it first (a buy step in the plan)", tone: "warn" };
+    return {
+      right: suit ? "which suit?" : "which weapon?",
+      detail: `ask Claude to set its ${suit ? "suit_id" : "weapon_id"} (journal_on_foot)`,
+      tone: "warn",
+    };
+  }
   const out: Need = {};
   const right: string[] = [];
   if (a.kind === "engineer") right.push(rollText(x, plan.build?.rolls_per_grade));
+  // No event applies an on-foot modification: the next loadout event shows it, once the suit or
+  // weapon is equipped.
+  if ((a.kind === "modify_suit" || a.kind === "modify_weapon") && c.judged.visited.has(x.stop))
+    right.push("equip to check");
   const price = a.needs?.credits;
   if (price) right.push(credits(price));
   if (a.kind === "retrieve_module" || a.kind === "fetch_module") {
@@ -538,26 +634,39 @@ function need(
     const notes = plan.stops[x.stop]?.notes;
     if (notes) out.detail = notes;
   }
-  if (a.kind === "trade_material" && x.taken > 0)
+  if (a.kind === "collect_resource") {
+    right.push(`${resourceCount(ctx.journal, a.resource)}/${a.count ?? 1}`);
+    const notes = plan.stops[x.stop]?.notes;
+    if (notes) out.detail = notes;
+  }
+  if ((a.kind === "trade_material" || a.kind === "trade_resource") && x.taken > 0)
     right.push(`${x.taken}/${a.received?.count ?? 1} received`);
+  if (a.kind === "buy_resource" && x.taken > 0) right.push(`${x.taken}/${a.count ?? 1} bought`);
+  // Resources on foot, materials for a ship. Upgrades and trades spend from the ship locker only:
+  // the backpack's go to it on boarding.
+  const have = (name: string, symbol?: string) =>
+    FOOT.has(a.kind)
+      ? resourceCount({ locker: ctx.journal.locker }, name, symbol)
+      : materialCount(ctx.journal.materials, name, symbol);
   // The first material short, with the stop that collects or trades for it.
   const mats =
-    a.kind === "trade_material" && a.paid
+    (a.kind === "trade_material" || a.kind === "trade_resource") && a.paid
       ? [{ name: a.paid.material, count: a.paid.count }]
-      : a.kind === "collect_material"
+      : a.kind === "collect_material" || a.kind === "collect_resource"
         ? []
         : materialsLeft(a, x.fitted, plan.build?.rolls_per_grade);
   let short = false;
   for (const m of mats) {
-    const have = materialCount(ctx.journal.materials, m.name, "symbol" in m ? m.symbol : undefined);
-    if (have >= m.count) continue;
+    const got = have(m.name, "symbol" in m && m.symbol !== m.name ? m.symbol : undefined);
+    if (got >= m.count) continue;
     short = true;
-    if (a.kind === "trade_material") out.detail = `have ${have}/${m.count} ${m.name}`;
+    if (a.kind === "trade_material" || a.kind === "trade_resource")
+      out.detail = `have ${got}/${m.count} ${m.name}`;
     else {
       const from = sourceOf(plan, c.judged, m.name, "symbol" in m ? m.symbol : undefined);
       // "(have 0/1)" only repeats the count short.
-      const held = have > 0 ? ` (have ${have}/${m.count})` : "";
-      out.detail = [`short ${m.count - have} ${m.name}${held}`, from].filter(Boolean).join(" · ");
+      const held = got > 0 ? ` (have ${got}/${m.count})` : "";
+      out.detail = [`short ${m.count - got} ${m.name}${held}`, from].filter(Boolean).join(" · ");
     }
     break;
   }
@@ -687,9 +796,10 @@ export function buildPanel(input: {
   }
   if (plan.build?.summary) footer.push(`Target: ${plan.build.summary}`);
 
-  const ship = shipName(
-    plan.build?.ship ?? (j.shipId === journal.ship.id ? journal.ship.type : null),
-  );
+  const ship =
+    plan.build?.target === "suit_loadout"
+      ? loadoutTitle(plan, journal)
+      : shipName(plan.build?.ship ?? (j.shipId === journal.ship.id ? journal.ship.type : null));
   const n = at >= 0 ? at + 1 : null;
   const note =
     c.why && c.noteId
