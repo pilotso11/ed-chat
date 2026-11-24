@@ -2047,7 +2047,9 @@ async function main(): Promise<void> {
     if (settingsStore.broken || now.readFailed)
       return {
         ok: false,
-        error: (now.readFailed && now.error) || "settings.json has an error: fix it first",
+        error: now.readFailed
+          ? (now.error ?? "settings.json could not be read")
+          : (settingsStore.error ?? "settings.json has an error: fix it first"),
       };
     const r = saveText(settingsStore.text, changes);
     if (!r.ok) return r;
