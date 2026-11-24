@@ -48,6 +48,9 @@ export class HudFeed {
   private outfitting: { text: string; parsed: Outfitting | null } | null = null;
   /** Plans with actions as last read, by ID: read again only when the plan list says one changed. */
   private builds = new Map<string, { updated: string; plan: Plan; openAt: string | null }>();
+  // Plans forget() dropped, and how many times it ran: a poll that started before it keeps none.
+  private forgotten = new Set<string>();
+  private forgets = 0;
 
   constructor(
     private readonly stores: Pick<Stores, "journal" | "activity" | "plans">,
@@ -89,9 +92,16 @@ export class HudFeed {
     this.lastError = m;
   }
 
-  /** Forgets plans kept for "Build complete", as after /dismiss-plan all: they leave the panel now. */
+  /**
+   * Forgets plans kept for "Build complete", as after /dismiss-plan all: they leave the panel now.
+   * A poll already running when this is called keeps none of them.
+   */
   forget(ids: Iterable<string>): void {
-    for (const id of ids) this.builds.delete(id);
+    for (const id of ids) {
+      this.builds.delete(id);
+      this.forgotten.add(id);
+    }
+    this.forgets++;
   }
 
   async poll(): Promise<FeedData> {
@@ -149,6 +159,7 @@ export class HudFeed {
   private async actionPlans(
     journal: (JournalState & { events: JournalEvent[] }) | null,
   ): Promise<Plan[]> {
+    const forgets = this.forgets;
     const list = await this.stores.plans.list();
     // Where the ship is: this docking or landing, named by its event.
     const dock = journal ? dockedAt(journal.events, journal.location) : null;
@@ -177,6 +188,8 @@ export class HudFeed {
           return null;
         });
         if (!plan) return null;
+        // forget() ran since this poll started: the plan read may be from before the dismissal.
+        if (forgets !== this.forgets && this.forgotten.has(p.id)) return null;
         this.builds.set(p.id, {
           updated: plan.updated_at,
           plan,
@@ -186,6 +199,7 @@ export class HudFeed {
       }),
     );
     for (const id of this.builds.keys()) if (!keep.has(id)) this.builds.delete(id);
+    if (forgets === this.forgets) this.forgotten.clear();
     return plans.filter((p): p is Plan => p !== null);
   }
 

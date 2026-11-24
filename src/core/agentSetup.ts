@@ -21,8 +21,10 @@ export const LOCAL_COMMANDS = [
 ] as const;
 export type LocalCommand = (typeof LOCAL_COMMANDS)[number];
 
+/** One of ED Chat's commands, whatever its case or spacing ("/Dismiss-Plan  all"). */
 export function localCommand(text: string): LocalCommand | null {
-  return (LOCAL_COMMANDS as readonly string[]).includes(text) ? (text as LocalCommand) : null;
+  const t = text.trim().replace(/\s+/g, " ").toLowerCase();
+  return (LOCAL_COMMANDS as readonly string[]).includes(t) ? (t as LocalCommand) : null;
 }
 
 /** The assistant's CLI arguments from the settings. */

@@ -32,6 +32,11 @@ describe("local commands", () => {
     ]);
   });
 
+  it("takes a command whatever its case or spacing", () => {
+    expect(localCommand("/Dismiss-Plan  ALL")).toBe("/dismiss-plan all");
+    expect(localCommand(" /new ")).toBe("/new");
+  });
+
   it("leaves everything else to the assistant", () => {
     expect(localCommand("/help")).toBeNull();
     expect(localCommand("new")).toBeNull();

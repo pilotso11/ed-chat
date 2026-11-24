@@ -361,9 +361,12 @@ build, trade or mission plan with stop actions still to do, at whose stop the sh
 docked or landed. Type in the chat:
 
 - `/dismiss-plan` to clear the activity note. The note's plan leaves the panel. A
-  plan with open stop actions still shows at its stops.
-- `/dismiss-plan all` to also mark every open stop action of those plans skipped. They
-  leave the panel at once, even while docked at one of their stops.
+  plan with open stop actions still shows at its stops; the confirmation names those
+  plans.
+- `/dismiss-plan all` to also mark skipped every open stop action of every plan that
+  has some: all builds, trade runs and mission plans, not only the one on the panel.
+  They leave the panel at once, even while docked at one of their stops. The
+  confirmation names each plan it skipped.
 
 Neither deletes a plan: ask the assistant to reopen one (set its actions back to todo,
 or set the activity note again). Both commands run in ED Chat and do not go to the

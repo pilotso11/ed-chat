@@ -1484,12 +1484,8 @@ async function main(): Promise<void> {
       return false;
     }
     try {
-      const d = await dismissPlan(
-        { activity: hudActivity, plans: hudPlans },
-        hudData?.actionPlans ?? [],
-        all,
-      );
-      hudFeed?.forget(d.skipped.map((p) => p.id));
+      const d = await dismissPlan({ activity: hudActivity, plans: hudPlans }, all);
+      hudFeed?.forget(d.forget);
       log.log("info", `dismiss-plan${all ? " all" : ""}: ${dismissText(d, all)}`);
       flash("dismiss", dismissText(d, all), 6_000);
       void pollHud();

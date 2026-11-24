@@ -1026,6 +1026,54 @@ describe("HudFeed bookmarks and a fresh Status.json", () => {
     expect((await feed.poll()).actionPlans).toEqual([]);
   });
 
+  it("keeps no plan forgotten while a poll was reading it", async () => {
+    const list = [
+      {
+        id: "b",
+        name: "B",
+        items: 0,
+        done: 0,
+        actions: 1,
+        actions_done: 1,
+        next_stop: null,
+        updated_at: "u1",
+      },
+    ];
+    const events = [
+      { timestamp: "2026-11-22T12:00:00Z", event: "Docked", StarSystem: "S", StationName: "Port" },
+    ];
+    let open = true;
+    let feed: HudFeed | null = null;
+    feed = new HudFeed(
+      {
+        journal: {
+          state: async () => ({
+            events,
+            missions: [],
+            location: { system: "S", station: "Port", docked: true },
+          }),
+        },
+        activity: { get: async () => null },
+        plans: {
+          get: async (id: string) => {
+            if (id !== "b") throw new Error(`Plan "${id}" not found`);
+            // /dismiss-plan all runs while this poll reads the plan.
+            if (!open) feed!.forget(["b"]);
+            return { id, updated_at: open ? "u0" : "u1", stops: [] };
+          },
+          list: async () => (open ? [{ ...list[0]!, actions_done: 0, updated_at: "u0" }] : list),
+        },
+      } as never,
+      "J",
+      { read: async () => "{}" },
+    );
+    expect((await feed.poll()).actionPlans).toHaveLength(1);
+    open = false;
+    // Finished as the dismissal runs: not kept for "Build complete".
+    await feed.poll();
+    expect((await feed.poll()).actionPlans).toEqual([]);
+  });
+
   it("takes no bookmarks plan as none, not as an error", async () => {
     const errors: string[] = [];
     const feed = new HudFeed(
