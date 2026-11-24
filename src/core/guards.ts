@@ -68,3 +68,15 @@ export function describeUnknown(raw: unknown): string | null {
 export function capLines(lines: string[], max = STDERR_CHARS): string[] {
   return lines.map((l) => (l.length > max ? `${l.slice(0, max)}…` : l));
 }
+
+/** The settings window's changes, as sent over IPC: a list of { path, value }. */
+export function changesArg(v: unknown): { path: string; value: unknown }[] | null {
+  if (!Array.isArray(v)) return null;
+  const out: { path: string; value: unknown }[] = [];
+  for (const c of v) {
+    if (!c || typeof c !== "object" || typeof (c as { path?: unknown }).path !== "string")
+      return null;
+    out.push({ path: (c as { path: string }).path, value: (c as { value?: unknown }).value });
+  }
+  return out;
+}

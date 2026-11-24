@@ -29,7 +29,7 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
       // The renderer entries only mount a component into the page.
-      exclude: ["src/renderer/main.tsx", "src/renderer/hud.tsx"],
+      exclude: ["src/renderer/main.tsx", "src/renderer/hud.tsx", "src/renderer/settings.tsx"],
       reporter: ["text-summary", "json-summary", "html"],
       // The Electron main process runs only in Electron; the Playwright tests in e2e/ cover it.
       // The logic in src/core and the React components (test/renderer) must stay well tested.

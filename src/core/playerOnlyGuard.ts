@@ -108,10 +108,18 @@ export class PlayerOnlyGuard {
    * does not ask about them.
    */
   async playerWrite(text: string, path: string, value: unknown): Promise<void> {
+    await this.playerWriteAll(text, [{ path, value }]);
+  }
+
+  /**
+   * The same for several values, as the settings window saves them. A value of undefined is
+   * one the new text leaves out, so its default applies.
+   */
+  async playerWriteAll(text: string, changes: { path: string; value: unknown }[]): Promise<void> {
     const before = this.applied;
-    // Only the value ED Chat sets is trusted: a change in the file that still waits for the
+    // Only the values ED Chat sets are trusted: a change in the file that still waits for the
     // player's answer stays in the file, and still waits.
-    this.trust(valuesWith(this.applied, path, value));
+    this.trust(changes.reduce((v, c) => valuesWith(v, c.path, c.value), this.applied));
     try {
       await this.host.write(text);
     } catch (err) {

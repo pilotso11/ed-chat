@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { launch, type TestApp } from "./app.js";
 
@@ -156,3 +158,32 @@ for (const command of ["/quit", "/exit"]) {
     }
   });
 }
+
+test("/settings opens the settings window, which saves only the changed value", async () => {
+  t = await launch();
+  await expect(t.chat.locator(".strip .state")).toContainText("idle");
+  expect(await t.chat.evaluate(() => window.overlay.send("/settings"))).toBe(true);
+  const settings = await t.page("/settings.html");
+  await settings.waitForLoadState();
+  await expect(settings.locator("h2").first()).toHaveText("General");
+  const strong = () =>
+    t!.chat.evaluate(() =>
+      document.querySelector<HTMLElement>(".overlay")!.style.getPropertyValue("--strong-rgb"),
+    );
+  const before = await strong();
+  const theme = settings.locator('[data-path="style.theme"] select');
+  await theme.selectOption("blue");
+  await settings.getByRole("button", { name: "Save" }).click();
+  await expect(settings.locator(".banner")).toContainText("Saved");
+  const file = JSON.parse(await readFile(path.join(t.dataDir, "settings.json"), "utf8")) as Record<
+    string,
+    unknown
+  >;
+  // The new value, and the test's own values kept; no default written.
+  expect(file.style).toEqual({ theme: "blue" });
+  expect((file.claude as Record<string, unknown>).permissionMode).toBe("auto");
+  expect(file.strip).toBeUndefined();
+  // The overlay uses it at once, with no restart: its colour changes.
+  await expect.poll(strong).not.toBe(before);
+  if (process.env.SETTINGS_SHOT) await settings.screenshot({ path: process.env.SETTINGS_SHOT });
+});

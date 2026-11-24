@@ -85,7 +85,7 @@ Then:
 
 Type `/new` for a new conversation, `/codex` or `/claude` to switch assistant,
 `/dismiss-plan` or `/dismiss-step` to skip the rest of the panel's plan or its current
-stop, and `/quit` to quit.
+stop, `/settings` to change the settings, and `/quit` to quit.
 
 ## Documentation
 

@@ -30,6 +30,7 @@ export type TrayAction =
   | { type: "toggleIcon" }
   | { type: "toggleOverlay" }
   | { type: "openSettings" }
+  | { type: "openSettingsFile" }
   | { type: "openLogs" }
   | { type: "clearBookmarks"; all: boolean }
   | { type: "about" }
@@ -124,7 +125,8 @@ export function trayItems(s: {
       label: s.visible ? "Minimize to tray" : "Restore overlay",
       action: { type: "toggleOverlay" },
     },
-    { label: "Open settings", action: { type: "openSettings" } },
+    { label: "Settings…", action: { type: "openSettings" } },
+    { label: "Open settings.json", action: { type: "openSettingsFile" } },
     { label: "Open log folder", action: { type: "openLogs" } },
     { label: "About ED Chat", action: { type: "about" } },
     { separator: true },

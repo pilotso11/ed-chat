@@ -14,7 +14,10 @@ export default defineConfig({
     // Sandboxed preload scripts must be CommonJS.
     build: {
       rollupOptions: {
-        input: resolve("src/preload/index.ts"),
+        input: {
+          index: resolve("src/preload/index.ts"),
+          settings: resolve("src/preload/settings.ts"),
+        },
         output: { format: "cjs", entryFileNames: "[name].cjs" },
       },
     },
@@ -27,6 +30,7 @@ export default defineConfig({
         input: {
           index: resolve("src/renderer/index.html"),
           hud: resolve("src/renderer/hud.html"),
+          settings: resolve("src/renderer/settings.html"),
         },
       },
     },

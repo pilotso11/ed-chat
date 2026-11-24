@@ -260,6 +260,23 @@ describe("PlayerOnlyGuard", () => {
     expect(g.values).toMatchObject({ claude: { extraArgs: ["--x"] }, agent: "codex" });
   });
 
+  it("trusts each value the settings window saves, and a value it takes out", async () => {
+    const { h, host } = fakeHost(
+      '{"claude":{"permissionMode":"default","model":"opus"},"hotkeys":{"approve":"F1"}}',
+    );
+    const g = new PlayerOnlyGuard(host, null, PLAYER_ONLY_PATHS);
+    // model back to its default leaves the file; the hotkey reset empties its group.
+    await g.playerWriteAll('{"claude":{"permissionMode":"auto"},"agent":"codex"}', [
+      { path: "claude.permissionMode", value: "auto" },
+      { path: "claude.model", value: undefined },
+      { path: "hotkeys.approve", value: undefined },
+      { path: "agent", value: "codex" },
+    ]);
+    g.fileChanged();
+    expect(h.questions).toEqual([]);
+    expect(g.values).toEqual({ claude: { permissionMode: "auto" }, agent: "codex" });
+  });
+
   it("keeps the old values when ED Chat's own write fails", async () => {
     const { host } = fakeHost(START);
     const g = new PlayerOnlyGuard(

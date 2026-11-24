@@ -50,6 +50,6 @@ export function settingsPrompt(settingsFile: string): string {
     "When the player asks to see or change an ED Chat setting, first read settings.schema.json in the same folder: it gives each setting's meaning, default and limits.",
     "settings.json holds only the settings that the player changed; every other setting has its default.",
     "To change a setting, edit settings.json and keep the other settings in it. ED Chat applies the change within a second.",
-    "Never change a setting that the schema marks readOnly. Tell the player to change it from the ED Chat tray menu, Open settings.",
+    "Never change a setting that the schema marks readOnly. Tell the player to change it in the settings window: the ED Chat tray menu, Settings, or /settings in the chat.",
   ].join(" ");
 }

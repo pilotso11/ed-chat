@@ -13,7 +13,7 @@ export interface SettingEntry {
 }
 
 export const PLAYER_ONLY_NOTE =
-  "Player only: the assistant must not change this. The player changes it in settings.json, from the tray menu, Open settings.";
+  "Player only: the assistant must not change this. The player changes it in the settings window: the tray menu, Settings, or /settings in the chat.";
 
 const position = (what: string, prefix: string): Record<string, SettingEntry> => ({
   [prefix]: { text: `Where ${what} sits on the screen.` },

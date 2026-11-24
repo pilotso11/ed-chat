@@ -1,5 +1,16 @@
 # Settings
 
+The easiest way to change a setting is the settings window: the tray menu's
+**Settings…**, or type `/settings` in the chat. It lists every setting by
+section, with what it does, and has a search box. Click a hotkey and press the
+new keys; a key that another action has, or that another app holds, is marked
+⚠. **Reset** puts one setting back to its default, and **Reset all** every
+setting; nothing changes until you press **Save**. The changes apply at once,
+with no restart. The hotkeys are off while the window has focus, so the keys
+you press reach it. Settings marked 🔒 are player only (see below). If
+`settings.json` has an error, the window shows it and does not change the
+file: fix it with **Open settings.json**.
+
 `%APPDATA%\ed-chat\settings.json` holds only the settings you change; every
 other setting uses its default. It starts with only a `$schema` line, which
 gives editors such as VS Code completion and the default of each setting. Add a
@@ -10,7 +21,8 @@ edit that one. Version 0.1.0 wrote every default into `settings.json`, so the
 0.1.0 hotkeys stay in effect there: delete the keys you did not change, or the
 whole file, to get the current defaults.
 
-Changes apply when you save the file. The file is plain JSON. Settings for
+The window saves to this file. You can also edit it by hand, from the tray
+menu's **Open settings.json**; changes apply when you save the file. The file is plain JSON. Settings for
 `claude` or `codex` apply after `/new`; the overlay shows, for example,
 `ⓘ claude settings apply after /new`.
 
@@ -20,7 +32,8 @@ show bio planets worth 2M or more". It knows where `settings.json` is and reads
 limits. It does not change the settings marked player only: `agent`,
 `resumeHours`, `claude`, `codex`, `approval`, `safety`, `journalDir` and
 `hud.edMcpDataDir`. Change those yourself
-from the tray menu, **Open settings**. ED Chat also checks: when one of these
+in the settings window, or in `settings.json`; a change saved from the window is
+yours, so it applies with no question. ED Chat also checks: when one of these
 settings changes in the file, by your edit or the assistant's, ED Chat keeps the old
 value and asks whether to apply the change. **Undo** puts the old value back in
 the file. The other changes in the same save apply at once. ED Chat keeps the

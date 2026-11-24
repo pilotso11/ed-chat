@@ -15,6 +15,8 @@ import {
   screen,
   shell,
   type BrowserWindow,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
   type MenuItemConstructorOptions,
 } from "electron";
 import { chooseDisplay, place, snap, step } from "../core/anchor.js";
@@ -169,10 +171,16 @@ import {
 import { displaySetting, hudWindowSize, onNextDisplay, overlaySize } from "../core/placement.js";
 import { PlayerOnlyGuard } from "../core/playerOnlyGuard.js";
 import { PLAYER_ONLY_PATHS_V0_5 } from "../core/settingsDictionary.js";
+import { saveText, settingsForm } from "../core/settingsForm.js";
 import { buildView, pickNotice, shortTool } from "../core/view.js";
 import { gameMatrixFrom, graphicsOverrideFile, lookVars, type Matrix } from "../core/theme.js";
 import { fetchLatestEdMcp, freshLatest, versionText, type Versions } from "../core/version.js";
 import { IPC } from "../shared/ipc.js";
+import {
+  SETTINGS_IPC,
+  type SettingsSaveResult,
+  type SettingsSnapshot,
+} from "../shared/settingsIpc.js";
 import {
   answerArg,
   boolArg,
@@ -180,11 +188,12 @@ import {
   chipArg,
   describeUnknown,
   heightArg,
+  changesArg,
   hotkeysWanted,
   textArg,
 } from "../core/guards.js";
 import { loadWin32 } from "./win32.js";
-import { applyWindow, createOverlayWindow } from "./window.js";
+import { applyWindow, createOverlayWindow, createSettingsWindow } from "./window.js";
 
 const dataDir = path.join(app.getPath("appData"), "ed-chat");
 app.setPath("userData", dataDir);
@@ -479,6 +488,8 @@ async function main(): Promise<void> {
         type: "keys",
         rows: keyRows(settings.hotkeys, hotkeys.failedKeys, hotkeys.duplicateKeys),
       });
+    // The settings window marks the keys that did not register.
+    settingsChanged();
   }
 
   let wasGame: boolean | null = null;
@@ -500,6 +511,10 @@ async function main(): Promise<void> {
     renderHud();
   }
   let overlayFocused = false;
+  // The settings window: one at a time. Declared before anything that can reach it.
+  let settingsWin: BrowserWindow | null = null;
+  // The settings window has focus: the hotkeys are off, so a hotkey field gets the keys pressed.
+  let settingsFocused = false;
   function bindHotkeys(): void {
     const active = activeBindings(
       bindings(settings.hotkeys),
@@ -516,11 +531,12 @@ async function main(): Promise<void> {
       overlayFocused = f?.isOverlay ?? false;
       bindHotkeys();
     }
-    const want = hotkeysWanted(settings.hotkeys.scope, f);
+    const inScope = hotkeysWanted(settings.hotkeys.scope, f);
+    const want = inScope && !settingsFocused;
     if (want && !hotkeys.active) reportHotkeys(hotkeys.activate());
     if (!want && hotkeys.active) hotkeys.deactivate();
     // Without this, a hotkey pressed away from the game does nothing and says nothing.
-    const scope = scopeNotice(want);
+    const scope = scopeNotice(inScope);
     if ((state.notices.scope ?? null) !== scope)
       dispatch({ type: "notice", key: "scope", text: scope });
   }
@@ -1192,7 +1208,7 @@ async function main(): Promise<void> {
         `Ask me: the overlay shows each tool that ${a.name} wants to run, and you allow or ` +
         `deny it with a hotkey.\n\nAuto: ${a.name} decides, and runs most tools without ` +
         "asking, including commands that you ask for.\n\nYou can change this later in " +
-        `settings.json, ${id}.permissionMode.`,
+        "Settings, from the tray menu or /settings.",
       buttons: ["Ask me", "Auto"],
       defaultId: 0,
       cancelId: 0,
@@ -1567,8 +1583,11 @@ async function main(): Promise<void> {
     }
   }
 
-  /** False when the command could not run; the chat then stays open. "quit" quits after it. */
-  async function runLocal(command: LocalCommand): Promise<boolean | "quit"> {
+  /**
+   * False when the command could not run; the chat then stays open. "quit" quits after it;
+   * "settings" opens the settings window once the chat closes.
+   */
+  async function runLocal(command: LocalCommand): Promise<boolean | "quit" | "settings"> {
     switch (command) {
       case "/new":
         newConversation();
@@ -1581,6 +1600,8 @@ async function main(): Promise<void> {
       case "/dismiss-plan":
       case "/dismiss-step":
         return dismiss(command === "/dismiss-plan" ? "plan" : "step");
+      case "/settings":
+        return "settings";
       case "/quit":
       case "/exit":
         return "quit";
@@ -1598,6 +1619,12 @@ async function main(): Promise<void> {
     if (command) {
       const done = await runLocal(command);
       if (!done) return false;
+      if (done === "settings") {
+        // Focus goes to the new window, not back to the game.
+        dispatch({ type: "closeChat" });
+        openSettingsWindow();
+        return true;
+      }
       const ok = await giveFocusBack();
       dispatch({ type: "closeChat" });
       if (done === "quit") {
@@ -1872,6 +1899,8 @@ async function main(): Promise<void> {
   settingsStore.watch((r) => {
     dispatch({ type: "notice", key: "settings", text: r.error });
     if (r.changed) playerOnly.fileChanged();
+    // Also a file that broke, or was fixed: the window shows the error or the form again.
+    settingsChanged();
   });
   // A change made while ED Chat was closed.
   playerOnly.check();
@@ -1929,6 +1958,7 @@ async function main(): Promise<void> {
       status.start();
     }
     applySettings();
+    settingsChanged();
   }
 
   // Tray: one way to quit, with /quit in the chat, since the overlay has no window frame.
@@ -1950,14 +1980,95 @@ async function main(): Promise<void> {
           "sets the same key for two actions.",
         detail:
           failedHotkeys.join("\n") +
-          "\n\nSet other keys in settings.json, under hotkeys. Each setting takes one key or a list.",
+          "\n\nSet other keys in Settings, under Hotkeys. Each action takes one key or more.",
         buttons: ["Open settings", "OK"],
         defaultId: 1,
       })
       .then((r) => {
-        if (r.response === 0) openPath(settingsFile);
+        if (r.response === 0) openSettingsWindow();
       });
   }
+
+  // The settings window, from the tray's Settings or /settings.
+  function settingsChanged(): void {
+    if (settingsWin && !settingsWin.isDestroyed())
+      settingsWin.webContents.send(SETTINGS_IPC.changed);
+  }
+  function openSettingsWindow(): void {
+    if (settingsWin && !settingsWin.isDestroyed()) {
+      if (settingsWin.isMinimized()) settingsWin.restore();
+      settingsWin.show();
+      settingsWin.focus();
+      return;
+    }
+    const w = createSettingsWindow(
+      path.join(import.meta.dirname, "../preload/settings.cjs"),
+      process.env.ELECTRON_RENDERER_URL && `${process.env.ELECTRON_RENDERER_URL}/settings.html`,
+      path.join(import.meta.dirname, "../renderer/settings.html"),
+      trayIconFile,
+    );
+    settingsWin = w;
+    const focused = (on: boolean) => {
+      if (settingsFocused === on) return;
+      settingsFocused = on;
+      syncHotkeys(focus?.current ?? null);
+    };
+    w.on("focus", () => focused(true));
+    w.on("blur", () => focused(false));
+    w.on("closed", () => {
+      settingsWin = null;
+      focused(false);
+    });
+  }
+  const fromSettingsWindow = (e: IpcMainInvokeEvent | IpcMainEvent) =>
+    !!settingsWin && !settingsWin.isDestroyed() && e.sender === settingsWin.webContents;
+  ipcMain.handle(SETTINGS_IPC.load, (e): SettingsSnapshot | null => {
+    if (!fromSettingsWindow(e)) return null;
+    return {
+      sections: settingsForm(),
+      values: settings,
+      fileError: settingsStore.broken
+        ? (settingsStore.error ?? "⚠ settings.json could not be read")
+        : null,
+      failedKeys: hotkeys.failedKeys,
+      displays: screen.getAllDisplays().length,
+    };
+  });
+  ipcMain.handle(SETTINGS_IPC.save, async (e, v: unknown): Promise<SettingsSaveResult> => {
+    if (!fromSettingsWindow(e)) return { ok: false, error: "not the settings window" };
+    const changes = changesArg(v);
+    if (!changes) return { ok: false, error: "the changes could not be read" };
+    // The file as it is now, not as the last poll read it: an edit made since must be kept,
+    // and a file that broke since must not be replaced.
+    const now = await settingsStore.load();
+    dispatch({ type: "notice", key: "settings", text: now.error });
+    if (now.changed) playerOnly.fileChanged();
+    // A read that failed leaves the copy from the last poll, which may be out of date.
+    if (settingsStore.broken || now.readFailed)
+      return {
+        ok: false,
+        error: now.readFailed
+          ? (now.error ?? "settings.json could not be read")
+          : (settingsStore.error ?? "settings.json has an error: fix it first"),
+      };
+    const r = saveText(settingsStore.text, changes);
+    if (!r.ok) return r;
+    try {
+      // The player's own change, from the window: the player-only values in it are trusted.
+      await playerOnly.playerWriteAll(r.text, r.playerOnly);
+      await settingsStore.load();
+      // Applies the file, and asks about a player-only change still waiting in it.
+      playerOnly.fileChanged();
+      log.log("info", `settings saved from the window: ${changes.map((c) => c.path).join(", ")}`);
+      return { ok: true };
+    } catch (err) {
+      log.log("warn", `settings.json: ${message(err)}`);
+      return { ok: false, error: message(err) };
+    }
+  });
+  ipcMain.on(SETTINGS_IPC.openFile, (e) => {
+    if (fromSettingsWindow(e)) openPath(settingsFile);
+  });
 
   function noticeMenu(): Menu {
     return Menu.buildFromTemplate(
@@ -1992,6 +2103,8 @@ async function main(): Promise<void> {
         runAction({ type: "toggleOverlay" }, "tray");
         return trayIcon.setToolTip(state.visible ? "ED Chat" : "ED Chat (minimized)");
       case "openSettings":
+        return openSettingsWindow();
+      case "openSettingsFile":
         return openPath(settingsFile);
       case "openLogs":
         return openPath(logDir);
