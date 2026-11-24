@@ -142,7 +142,7 @@ import { gameContext, noteIsFresh, withGameContext } from "../core/hud/context.j
 import { HUD_EVENTS } from "../core/hud/mode.js";
 import { shortBody, todoStops } from "../core/hud/panels.js";
 import { TradeStopFinisher } from "../core/hud/tradeStops.js";
-import { ActionFinisher, finisherPanel } from "../core/hud/actionStops.js";
+import { ActionFinisher, finisherPanel, nextSystem } from "../core/hud/actionStops.js";
 import {
   ABOUT_URL,
   noticeMenuItems,
@@ -1507,8 +1507,12 @@ async function main(): Promise<void> {
    */
   async function dismiss(what: "plan" | "step"): Promise<boolean> {
     const command = `/dismiss-${what}`;
+    if (!settings.hud.enabled) {
+      flash("dismiss", "ⓘ the activity panel is off: turn it on to dismiss its plan", 4_000);
+      return false;
+    }
     if (!hudActivity || !hudPlans) {
-      flash("dismiss", "⚠ the panel's data is not open: turn the panel on first", 6_000);
+      flash("dismiss", "⚠ the activity panel could not open the journal or ed-mcp", 6_000);
       return false;
     }
     const plan = followedPlan();
@@ -1517,18 +1521,16 @@ async function main(): Promise<void> {
       return false;
     }
     const deps = { activity: hudActivity, plans: hudPlans };
-    let forget: string[] = [];
-    // The finisher waits while the actions are skipped, so a skipped stop is not taken as one
-    // just finished and marked done.
+    // The finisher waits while the actions are skipped, then forgets the plan's open stops, even
+    // when a write failed partway: a skipped stop is not taken as one just finished and marked
+    // done. Reopened or polled again, the plan is noted as on a first poll. The panel forgets a
+    // plan it kept as complete too.
+    const forget = [plan.id];
     await actionStops.hold();
     try {
       let text: string;
       if (what === "plan") {
-        const d = await dismissPlan(deps, plan.id);
-        // Its open stops are forgotten too: reopened later, it is noted as on a first poll.
-        forget = [plan.id];
-        hudFeed?.forget(forget);
-        text = planDismissedText(d);
+        text = planDismissedText(await dismissPlan(deps, plan.id));
       } else {
         const follow = lastHudView?.follow;
         const lapStart = await hudJournal?.newestEventAt().catch(() => null);
@@ -1539,7 +1541,9 @@ async function main(): Promise<void> {
           lapStart ?? null,
         );
         text = stepDismissedText(d);
-        const system = d.stop !== null ? currentSystem(d.plan) : null;
+        // The next stop after the one skipped, in another system, as a finished stop copies it.
+        const here = hudData?.journal?.location.system ?? null;
+        const system = d.index !== null ? nextSystem(d.plan, d.index, here) : null;
         if (system) {
           clipboard.writeText(system);
           text += ` · 📋 copied ${system}`;
@@ -1552,6 +1556,7 @@ async function main(): Promise<void> {
       flash("dismiss", `⚠ ${command}: ${message(err)}`, 8_000);
       return false;
     } finally {
+      hudFeed?.forget(forget);
       actionStops.release(forget);
       finishFrom = pollsStarted + 1;
       void pollHud(true);

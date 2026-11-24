@@ -62,6 +62,8 @@ export interface StepDismissed {
   name: string;
   /** The stop skipped, as the panel names it; null when there was none to do. */
   stop: string | null;
+  /** Its index in the plan; null with no stop. */
+  index: number | null;
   /** The plan after the write. */
   plan: Plan;
 }
@@ -78,9 +80,9 @@ export async function dismissStep(
 ): Promise<StepDismissed> {
   const plan = await deps.plans.get(planId);
   // The panel's stop, if still to do in the plan as it is now; else the plan's own current one.
-  const shown = current ?? null;
-  const index = shown !== null && plan.stops[shown]?.status === "todo" ? shown : currentStop(plan);
-  if (index === null) return { name: plan.name, stop: null, plan };
+  const index =
+    current != null && plan.stops[current]?.status === "todo" ? current : currentStop(plan);
+  if (index === null) return { name: plan.name, stop: null, index: null, plan };
   const stop = plan.stops[index]!;
   await skipActions(deps, plan, [index]);
   const now = await deps.plans.updateStop(
@@ -89,7 +91,7 @@ export async function dismissStep(
     { status: "skipped" },
     lapStart ? { lapStart } : undefined,
   );
-  return { name: plan.name, stop: stop.station ?? stop.body ?? stop.system, plan: now };
+  return { name: plan.name, stop: stop.station ?? stop.body ?? stop.system, index, plan: now };
 }
 
 export function stepDismissedText(d: StepDismissed): string {

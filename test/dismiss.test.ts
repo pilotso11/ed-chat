@@ -85,6 +85,7 @@ describe("dismissStep", () => {
     const d = deps(p);
     const r = await dismissStep(d as never, "krait", 1, "2026-11-24T01:00:00Z");
     expect(r.stop).toBe("P1");
+    expect(r.index).toBe(1);
     expect(d.plans.updateAction.mock.calls).toEqual([
       ["krait", { stop: { index: 1 }, action: "a11" }, { status: "skipped" }],
     ]);
@@ -127,7 +128,11 @@ describe("the confirmations", () => {
       "ⓘ Krait: nothing left to dismiss",
     );
     const p = plan("r", [[]]);
-    expect(stepDismissedText({ name: "R", stop: "Port", plan: p })).toBe("✓ skipped Port");
-    expect(stepDismissedText({ name: "R", stop: null, plan: p })).toBe("ⓘ R: no stop left to do");
+    expect(stepDismissedText({ name: "R", stop: "Port", index: 0, plan: p })).toBe(
+      "✓ skipped Port",
+    );
+    expect(stepDismissedText({ name: "R", stop: null, index: null, plan: p })).toBe(
+      "ⓘ R: no stop left to do",
+    );
   });
 });
