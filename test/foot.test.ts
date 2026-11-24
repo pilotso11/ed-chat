@@ -206,7 +206,7 @@ describe("judging a suit loadout plan", () => {
   it("takes an upgrade the suit shows already as done, as the loadout is the record", () => {
     const p = loadout();
     p.stops[0]!.actions![1]!.suit_id = 77;
-    const suits = [{ id: 77, type: "tacticalsuit", grade: 4, mods: [] }];
+    const suits = [{ id: 77, type: "tacticalsuit", name: "Dominator", grade: 4, mods: [] }];
     expect(done(p, journal([], { suits }))[1]).toEqual(["up", true]);
   });
 
@@ -221,7 +221,13 @@ describe("judging a suit loadout plan", () => {
         Count: n,
       });
     const suits = [
-      { id: 77, type: "tacticalsuit", grade: 3, mods: ["suit_increasedammoreserves"] },
+      {
+        id: 77,
+        type: "tacticalsuit",
+        name: "Dominator",
+        grade: 3,
+        mods: ["suit_increasedammoreserves"],
+      },
     ];
     const r = judgeBuild(p, journal([trade(5, 1), trade(6, 1)], { suits }));
     expect(r.actions.map((x) => [x.action.id, x.done])).toEqual([
