@@ -8,6 +8,7 @@ import {
   hudVisible,
   moveHint,
   nextHudMode,
+  toggleHud,
   panelCopy,
 } from "../src/core/hud/panelState.js";
 import { DEFAULT_SETTINGS } from "../src/core/settings.js";
@@ -146,6 +147,30 @@ describe("mode hotkey", () => {
       iconMode: true,
       hudHidden: false,
       hudMode: { mode: "massacre", at: now.toISOString() },
+    });
+  });
+});
+
+describe("show/hide hotkey", () => {
+  const off = { mode: "off" as const, at: "2026-11-21T12:00:00.000Z" };
+
+  it("hides a shown panel and shows a hidden one", () => {
+    expect(toggleHud({})).toEqual({ saved: { hudHidden: true }, shown: false });
+    expect(toggleHud({ hudHidden: true })).toEqual({ saved: { hudHidden: false }, shown: true });
+  });
+
+  it("keeps a chosen mode through hide and show", () => {
+    const mode = { mode: "mining" as const, at: off.at };
+    const hidden = toggleHud({ hudMode: mode });
+    expect(hidden.saved).toEqual({ hudMode: mode, hudHidden: true });
+    expect(toggleHud(hidden.saved).saved).toEqual({ hudMode: mode, hudHidden: false });
+  });
+
+  it("treats a panel set to off as hidden: showing it goes back to automatic", () => {
+    expect(toggleHud({ hudMode: off })).toEqual({ saved: { hudHidden: false }, shown: true });
+    expect(toggleHud({ hudMode: off, hudHidden: true, iconMode: true })).toEqual({
+      saved: { iconMode: true, hudHidden: false },
+      shown: true,
     });
   });
 });

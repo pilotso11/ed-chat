@@ -17,7 +17,7 @@ hand in. Analysed species and mapped bodies are green with a ✓ too.
 
 | Key | Action |
 | --- | --- |
-| Ctrl+Alt+P | Show or hide the panel |
+| Ctrl+Alt+P | Show or hide the panel; showing it also undoes a mode set to off |
 | Ctrl+Alt+Shift+P | Choose the mode: automatic, then each mode that is on, then off |
 | Ctrl+Alt+Home | Move the panel: for 15 seconds the move keys move the panel, not the chat |
 | Ctrl+Alt+PageDown / PageUp | Mark the current route stop done / go back one stop, and copy the stop's system |
