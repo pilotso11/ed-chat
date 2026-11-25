@@ -65,6 +65,17 @@ export function hudVisible(canShow: boolean, view: HudView, moving: boolean): bo
 }
 
 /**
+ * The show/hide hotkey. A panel set to off by the mode hotkey counts as hidden: showing it
+ * goes back to automatic, so the key never says "shown" while nothing appears.
+ */
+export function toggleHud(saved: SavedState): { saved: SavedState; shown: boolean } {
+  const off = saved.hudMode?.mode === "off";
+  if (!saved.hudHidden && !off) return { saved: { ...saved, hudHidden: true }, shown: false };
+  const { hudMode: _m, ...rest } = saved;
+  return { saved: { ...(off ? rest : saved), hudHidden: false }, shown: true };
+}
+
+/**
  * The mode hotkey: the next enabled mode, then off, then automatic again. Choosing a mode
  * also shows a hidden panel.
  */

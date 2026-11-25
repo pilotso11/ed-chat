@@ -137,6 +137,7 @@ import {
   hudVisible,
   moveHint,
   nextHudMode,
+  toggleHud,
   panelCopy,
 } from "../core/hud/panelState.js";
 import { arrivalCopy, currentSystem, routeStep } from "../core/hud/routeSteps.js";
@@ -1735,11 +1736,13 @@ async function main(): Promise<void> {
         const next = onNextDisplay(pos, screen.getAllDisplays(), screen.getPrimaryDisplay());
         return hudMoving ? moveHud(next) : movePosition(next);
       }
-      case "hudToggle":
-        saved = { ...saved, hudHidden: !saved.hudHidden };
+      case "hudToggle": {
+        const next = toggleHud(saved);
+        saved = next.saved;
         writeState();
-        flash("hud", saved.hudHidden ? "ⓘ activity panel hidden" : "ⓘ activity panel shown", 2_000);
+        flash("hud", next.shown ? "ⓘ activity panel shown" : "ⓘ activity panel hidden", 2_000);
         return renderHud();
+      }
       case "hudMode": {
         const next = nextHudMode(saved, settings.hud, new Date());
         saved = next.saved;
