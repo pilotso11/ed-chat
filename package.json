@@ -8,7 +8,7 @@
   "type": "module",
   "main": "out/main/index.js",
   "engines": {
-    "node": ">=22.12"
+    "node": ">=22.22.2"
   },
   "scripts": {
     "dev": "electron-vite dev",
@@ -44,7 +44,7 @@
     "electron": "^45.3.3",
     "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
-    "jsdom": "28.1.0",
+    "jsdom": "31.0.1",
     "prettier": "^3.10.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
